@@ -143,13 +143,3 @@ func typeToHTTPStatus(t Type) int {
 	}
 }
 
-func (r *Registry) NewWithCause(code *ErrorCode, cause error) *Error {
-	return &Error{
-		Code:       code.Code,
-		Message:    code.Message,
-		Type:       code.Type,
-		HTTPStatus: code.HTTPStatus,
-		Details:    make(map[string]interface{}),
-		Err:        cause,
-	}
-}
