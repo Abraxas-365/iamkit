@@ -1,0 +1,17 @@
+name: iamkit-test
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: iamkit_test
+      POSTGRES_PASSWORD: iamkit_test
+      POSTGRES_DB: iamkit_test
+    ports:
+      - "127.0.0.1:55434:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iamkit_test -d iamkit_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20

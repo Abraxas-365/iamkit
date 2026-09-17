@@ -1,0 +1,12 @@
+/bin/
+/tmp/
+/uploads/
+/.dev-secrets/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.test
+coverage*
+.DS_Store
