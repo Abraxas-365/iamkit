@@ -1,9 +1,9 @@
 # Recipes
 
 Task-oriented walkthroughs built from the primitives in the [API guide](api.md). Each recipe
-assumes you already completed [bootstrap](../README.md#get-started) and hold an operator
-`ik_mgmt_...` credential. Replace `ENV`, `PROJECT`, IDs, etc. with real UUIDs returned by the
-calls that precede them.
+assumes you already completed [Getting started](getting-started.md) and hold an operator
+`ik_mgmt_...` credential. New to the model? Read [Concepts](concepts.md) first. Replace `ENV`,
+`PROJECT`, IDs, etc. with real UUIDs returned by the calls that precede them.
 
 ## Recipe: onboard a new product (multi-tenant SaaS)
 

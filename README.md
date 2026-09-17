@@ -224,12 +224,19 @@ Modules: `github.com/Abraxas-365/iamkit` and `github.com/Abraxas-365/iamkit/sdk`
 
 ## Go deeper
 
+**[Full documentation index](docs/index.md)** — concepts, getting started, recipes, API/SDK
+reference, configuration, deployment, troubleshooting, architecture and glossary.
+
 | If you're here to… | Start here |
 | :--- | :--- |
+| Understand the mental model before diving in | [Concepts](docs/concepts.md) |
+| Run a local instance end-to-end | [Getting started](docs/getting-started.md) |
 | Walk through every management/identity/OAuth endpoint | [API guide](docs/api.md) |
 | Follow a task end-to-end (Google login, SCIM, service accounts…) | [Recipes](docs/recipes.md) |
-| Check enforced security boundaries and deployment requirements | [Security status](SECURITY.md) |
+| Write Go code against IAMKit | [SDK reference](docs/sdk.md) |
+| Check enforced security boundaries and deployment requirements | [Security status](SECURITY.md) · [Deployment](docs/deployment.md) |
 | Wire permission checks into your own Fiber app | `sdk/authclient/fiberauth` — `Authenticate`, `RequirePermissions`, `RequireOrganization` |
+| Debug a specific error message | [Troubleshooting](docs/troubleshooting.md) |
 
 ## Provenance / license
 
