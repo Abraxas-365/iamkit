@@ -1,11 +1,13 @@
 <div align="center">
 
+<img src="docs/assets/iamkit-banner.svg" alt="IAMKit — Identity and access management with explicit workspace, environment and resource boundaries." width="1200" />
+
 # IAMKit
 
-**Go identity and access management with explicit project isolation.**
+**Identity and access management with clear authority boundaries.**
 
-Workspaces, projects and environments stay separate from end-user organizations, resources and grants.
-Operators administer the system; end users never inherit that authority.
+A self-hosted Go service for isolated projects and environments, resource-scoped permissions,
+and application identity—without treating end users as system administrators.
 
 <p>
   <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.26.6%2B-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Go 1.26.6+" /></a>
@@ -15,7 +17,7 @@ Operators administer the system; end users never inherit that authority.
 </p>
 
 **[Get started](#get-started)** &nbsp; · &nbsp;
-**[Model](#model)** &nbsp; · &nbsp;
+**[Authority model](#your-authority-model-is-the-product)** &nbsp; · &nbsp;
 **[Capabilities](#capabilities)** &nbsp; · &nbsp;
 **[Validation](#validation)** &nbsp; · &nbsp;
 **[Go deeper](#go-deeper)**
@@ -23,6 +25,37 @@ Operators administer the system; end users never inherit that authority.
 </div>
 
 ---
+
+## Your authority model is the product
+
+**Identity systems fail at their boundaries.** IAMKit makes those boundaries explicit: operators manage the workspace; projects contain isolated environments; organizations and memberships model business access; resources define the APIs and permissions an application can use.
+
+No magic `iam` application. No wildcard administrative permission. No inferred authority from a job title, reporting line or matching email address.
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<h3>01 · Separate administration</h3>
+<p>Opaque management credentials belong to workspace operators only. End-user, OAuth, SCIM and machine credentials never administer IAMKit.</p>
+</td>
+<td width="50%" valign="top">
+<h3>02 · Isolate the environment</h3>
+<p>Users, memberships, clients, resources and sessions are bound to an environment. Development, staging and production do not share identity state.</p>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<h3>03 · Make permission local</h3>
+<p>Each API resource owns an audience and an exact permission catalog. Roles and direct grants can only use permissions declared by that resource.</p>
+</td>
+<td width="50%" valign="top">
+<h3>04 · Bind every token</h3>
+<p>Application and machine tokens are restricted to their environment, application, resource and audience. Consumers validate those boundaries before authorizing a request.</p>
+</td>
+</tr>
+</table>
+
+**Operators manage the system. Organizations manage business membership. Resources authorize API access.**
 
 > [!IMPORTANT]
 > **Early development.** Not a certified or independently audited authentication product. Public signup/invitations, passkeys/MFA, a hosted dashboard, distributed abuse controls, full audit coverage and production key rotation are not implemented. Read [security status](SECURITY.md) before any non-local deployment.
@@ -58,6 +91,16 @@ No special `iam` application exists. End-user, machine, OAuth and SCIM credentia
 | **SCIM** | User provisioning, filtering/pagination, discovery schemas, enterprise manager, deactivation and connection-stable credential rotation |
 | **SDK** | Go management, identity, OAuth and SCIM clients, offline/online validation and Fiber middleware |
 | **Migrations** | Embedded, checksummed, ordered database migrations. No automatic legacy data adoption |
+
+## From bootstrap to protected API
+
+| Start with | Then establish |
+| :--- | :--- |
+| **A workspace owner** | Bootstrap a local owner and save the one-time management credential in a new `0600` file |
+| **An isolated environment** | Create a project and development/staging/production environment; identities do not cross the boundary |
+| **An application and resource** | Register your app, define the API audience and permission catalog, then explicitly bind them |
+| **Business access** | Add memberships and issue direct grants or role assignments for the API resource |
+| **A protected consumer** | Validate a token's trusted issuer/audience/environment/application/resource boundaries, then require an exact permission |
 
 See the [functional mapping](docs/functional-migration.md) for intentional breaking changes from any prior implementation. Email OTP is a login method, **not** password-plus-second-factor MFA.
 

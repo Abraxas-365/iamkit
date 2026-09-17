@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="title description">
+  <title id="title">IAMKit — identity boundaries made explicit</title>
+  <desc id="description">A dark blue banner showing IAMKit's workspace, project, environment, resource and identity boundaries. The illustration is a conceptual architecture diagram, not an application screenshot.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#071827"/>
+      <stop offset="1" stop-color="#0b2940"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#42d3c4"/>
+      <stop offset="1" stop-color="#1489a8"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#5c879e" stroke-width="1"/>
+    </pattern>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="400" rx="18" fill="url(#background)"/>
+  <rect width="1200" height="400" rx="18" fill="url(#grid)" opacity=".15"/>
+  <circle cx="1010" cy="84" r="164" fill="#1489a8" opacity=".10"/>
+  <circle cx="1102" cy="332" r="196" fill="#42d3c4" opacity=".06"/>
+
+  <path d="M54 62l11 11-11 11M76 84h16" fill="none" stroke="#42d3c4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="107" y="80" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="3" fill="#93b6c8">IDENTITY BOUNDARIES, EXPLICIT</text>
+  <text x="48" y="198" font-family="Arial, Helvetica, sans-serif" font-size="92" font-weight="700" letter-spacing="-4" fill="#ecf7fb">IAM<tspan fill="#42d3c4">Kit</tspan></text>
+  <text x="54" y="248" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="600" fill="#d3e8ef">Identity and access management with clear authority.</text>
+  <text x="54" y="282" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#93b6c8">Workspace operators, isolated environments, resource-scoped permissions.</text>
+  <text x="54" y="352" font-family="monospace" font-size="12" letter-spacing="1" fill="#7ca5b9">GO SERVICE <tspan fill="#3c687e">/</tspan> POSTGRESQL <tspan fill="#3c687e">/</tspan> OAUTH · OIDC · SCIM</text>
+
+  <g transform="translate(692 48)">
+    <rect x="0" y="0" width="450" height="300" rx="14" fill="#0a2032" stroke="#34637a"/>
+    <path d="M0 44h450" stroke="#34637a"/>
+    <circle cx="22" cy="22" r="5" fill="#fa7062"/><circle cx="40" cy="22" r="5" fill="#f4be62"/><circle cx="58" cy="22" r="5" fill="#42d3c4"/>
+    <text x="426" y="27" text-anchor="end" font-family="monospace" font-size="11" fill="#93b6c8">iamkit / authority map</text>
+
+    <path d="M225 84v23M225 142v22M128 193h194M128 193v26M322 193v26" fill="none" stroke="#4d7b91" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="225" cy="83" r="23" fill="#0d3348" stroke="#42d3c4" stroke-width="2" filter="url(#glow)"/>
+    <path d="M225 68l12 5v9c0 9-5 15-12 19-7-4-12-10-12-19v-9z" fill="url(#shield)"/>
+    <path d="M219 83l4 4 8-9" fill="none" stroke="#071827" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="225" y="123" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#d3e8ef">WORKSPACE</text>
+    <text x="225" y="136" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#93b6c8">operators only</text>
+
+    <rect x="161" y="164" width="128" height="42" rx="7" fill="#11364c" stroke="#39788d"/>
+    <text x="225" y="181" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" fill="#d3e8ef">PROJECT</text>
+    <text x="225" y="195" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#93b6c8">isolated environments</text>
+
+    <rect x="48" y="219" width="160" height="58" rx="8" fill="#0d2c42" stroke="#2b6078"/>
+    <text x="64" y="240" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#42d3c4">ENVIRONMENT</text>
+    <text x="64" y="257" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#d3e8ef">users · organizations</text>
+    <text x="64" y="270" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#93b6c8">memberships · applications</text>
+
+    <rect x="242" y="219" width="160" height="58" rx="8" fill="#0d2c42" stroke="#2b6078"/>
+    <text x="258" y="240" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#42d3c4">RESOURCE</text>
+    <text x="258" y="257" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#d3e8ef">audience · catalog</text>
+    <text x="258" y="270" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#93b6c8">roles · grants · tokens</text>
+
+    <rect x="120" y="289" width="210" height="1" fill="#34637a"/>
+  </g>
+</svg>
