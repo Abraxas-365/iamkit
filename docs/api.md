@@ -2,6 +2,8 @@
 
 JSON request bodies; management endpoints require `Authorization: Bearer ik_mgmt_...`. IDs are UUIDs returned by creation endpoints. Secrets are returned once; keep them server-side. Responses with credentials and identity tokens are sensitive.
 
+For task-oriented, end-to-end walkthroughs (new product onboarding, Google login, SCIM, service accounts, impersonation, OAuth clients), see [Recipes](recipes.md).
+
 ## Errors
 
 Backend errors use `internal/errx`. HTTP failures return a structured envelope:
