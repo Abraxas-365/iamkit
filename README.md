@@ -102,7 +102,7 @@ No special `iam` application exists. End-user, machine, OAuth and SCIM credentia
 | **Business access** | Add memberships and issue direct grants or role assignments for the API resource |
 | **A protected consumer** | Validate a token's trusted issuer/audience/environment/application/resource boundaries, then require an exact permission |
 
-See the [functional mapping](docs/functional-migration.md) for intentional breaking changes from any prior implementation. Email OTP is a login method, **not** password-plus-second-factor MFA.
+Email OTP is a login method, **not** password-plus-second-factor MFA.
 
 ## Get started
 
@@ -227,7 +227,6 @@ Modules: `github.com/Abraxas-365/iamkit` and `github.com/Abraxas-365/iamkit/sdk`
 | If you're here to… | Start here |
 | :--- | :--- |
 | Walk through every management/identity/OAuth endpoint | [API guide](docs/api.md) |
-| Understand what changed from a prior implementation | [Migration notes](docs/migration.md) · [Functional mapping](docs/functional-migration.md) |
 | Check enforced security boundaries and deployment requirements | [Security status](SECURITY.md) |
 | Wire permission checks into your own Fiber app | `sdk/authclient/fiberauth` — `Authenticate`, `RequirePermissions`, `RequireOrganization` |
 
