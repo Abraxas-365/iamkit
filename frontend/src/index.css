@@ -1,0 +1,153 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --font-heading: 'JetBrains Mono Variable', ui-monospace, monospace;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+/* ── Dark mode (default) ── */
+:root {
+  --background: #0c0c0a;
+  --foreground: #d4d0c8;
+  --card: #131311;
+  --card-foreground: #d4d0c8;
+  --popover: #131311;
+  --popover-foreground: #d4d0c8;
+  --primary: #7b9bae;
+  --primary-foreground: #0c0c0a;
+  --secondary: #1c1c18;
+  --secondary-foreground: #a8a49a;
+  --muted: #1a1a16;
+  --muted-foreground: #6b675e;
+  --accent: #1c1c18;
+  --accent-foreground: #d4d0c8;
+  --destructive: #a65d4e;
+  --success: #5a7a4a;
+  --warning: #b8a06a;
+  --border: #222220;
+  --input: #1c1c18;
+  --ring: #7b9bae;
+  --chart-1: #7b9bae;
+  --chart-2: #5a7a4a;
+  --chart-3: #b8a06a;
+  --chart-4: #a65d4e;
+  --chart-5: #8a7b9b;
+  --radius: 0.25rem;
+  --sidebar: #0a0a08;
+  --sidebar-foreground: #6b675e;
+  --sidebar-primary: #7b9bae;
+  --sidebar-primary-foreground: #0c0c0a;
+  --sidebar-accent: #1a1a16;
+  --sidebar-accent-foreground: #d4d0c8;
+  --sidebar-border: #222220;
+  --sidebar-ring: #7b9bae;
+}
+
+/* ── Light mode ── */
+.light {
+  --background: #f2efe8;
+  --foreground: #1a1a16;
+  --card: #faf8f4;
+  --card-foreground: #1a1a16;
+  --popover: #faf8f4;
+  --popover-foreground: #1a1a16;
+  --primary: #567080;
+  --primary-foreground: #faf8f4;
+  --secondary: #e8e4dc;
+  --secondary-foreground: #2a2a24;
+  --muted: #e8e4dc;
+  --muted-foreground: #7a766c;
+  --accent: #e8e4dc;
+  --accent-foreground: #2a2a24;
+  --destructive: #944a3c;
+  --success: #4a6a3a;
+  --warning: #a08a52;
+  --border: #d8d4ca;
+  --input: #d8d4ca;
+  --ring: #567080;
+  --chart-1: #567080;
+  --chart-2: #4a6a3a;
+  --chart-3: #a08a52;
+  --chart-4: #944a3c;
+  --chart-5: #7a6b8a;
+  --sidebar: #eae7e0;
+  --sidebar-foreground: #7a766c;
+  --sidebar-primary: #567080;
+  --sidebar-primary-foreground: #faf8f4;
+  --sidebar-accent: #e0dcd4;
+  --sidebar-accent-foreground: #2a2a24;
+  --sidebar-border: #d8d4ca;
+  --sidebar-ring: #567080;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+  .glow {
+    text-shadow: 0 0 12px color-mix(in srgb, var(--primary) 40%, transparent);
+  }
+  .glow-box {
+    box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 8%, transparent), inset 0 0 8px color-mix(in srgb, var(--primary) 3%, transparent);
+  }
+}
