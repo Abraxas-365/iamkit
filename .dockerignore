@@ -1,0 +1,10 @@
+# Ignore everything, then whitelist what the build needs.
+# Keeps the Docker context small and the build cache stable.
+
+*
+
+!cmd/
+!internal/
+!migrations/
+!go.mod
+!go.sum

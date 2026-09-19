@@ -1,0 +1,60 @@
+# IAMKit — Example Docker Compose
+#
+# Copy this into your project to add authentication, RBAC, federation,
+# SCIM provisioning and OAuth 2.0 as a self-hosted service.
+#
+# Quick start:
+#   1. Generate a JWT signing key:
+#        mkdir -p secrets && openssl genrsa -out secrets/jwt.pem 4096
+#
+#   2. Create a .env file:
+#        OIDC_HMAC_SECRET=change-me-to-something-32-bytes+
+#        IAMKIT_BOOTSTRAP_EMAIL=admin@yourcompany.com
+#        IAMKIT_BOOTSTRAP_PASSWORD=your-secure-password
+#
+#   3. Start:
+#        docker compose -f docker-compose.iamkit.yml up -d
+#
+#   4. View the management API key (printed once on first boot):
+#        docker compose -f docker-compose.iamkit.yml logs iamkit | grep "management API key"
+#
+# On first boot IAMKit automatically runs migrations, creates the admin
+# workspace/operator, and sets the login password. Subsequent boots are
+# idempotent — bootstrap is skipped if a workspace already exists.
+
+services:
+  iamkit-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: iamkit
+      POSTGRES_PASSWORD: ${IAMKIT_DB_PASSWORD:-iamkit_secret}
+      POSTGRES_DB: iamkit
+    volumes:
+      - iamkit_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iamkit -d iamkit"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  iamkit:
+    image: ghcr.io/abraxas-365/iamkit:latest
+    ports:
+      - "${IAMKIT_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: postgres://iamkit:${IAMKIT_DB_PASSWORD:-iamkit_secret}@iamkit-db:5432/iamkit?sslmode=disable
+      SERVER_PORT: "8080"
+      JWT_PRIVATE_KEY_PATH: /secrets/jwt.pem
+      JWT_ISSUER: ${JWT_ISSUER:-http://localhost:8080}
+      OIDC_HMAC_SECRET: ${OIDC_HMAC_SECRET:?Set OIDC_HMAC_SECRET in .env (32+ bytes)}
+      IAMKIT_BOOTSTRAP_EMAIL: ${IAMKIT_BOOTSTRAP_EMAIL:-}
+      IAMKIT_BOOTSTRAP_WORKSPACE: ${IAMKIT_BOOTSTRAP_WORKSPACE:-Default}
+      IAMKIT_BOOTSTRAP_PASSWORD: ${IAMKIT_BOOTSTRAP_PASSWORD:-}
+    volumes:
+      - ./secrets/jwt.pem:/secrets/jwt.pem:ro
+    depends_on:
+      iamkit-db:
+        condition: service_healthy
+
+volumes:
+  iamkit_pgdata:

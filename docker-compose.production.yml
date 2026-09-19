@@ -1,0 +1,69 @@
+# docker-compose.production.yml
+#
+# Self-contained IAMKit stack — just add to your project like RabbitMQ or Redis.
+#
+# Quick start:
+#   1. Generate a JWT signing key:
+#        mkdir -p secrets && openssl genrsa -out secrets/jwt.pem 4096
+#
+#   2. Create a .env (or export these):
+#        OIDC_HMAC_SECRET=my-32-byte-or-longer-secret
+#        IAMKIT_BOOTSTRAP_EMAIL=admin@example.com
+#        IAMKIT_BOOTSTRAP_PASSWORD=my-secure-password
+#
+#   3. Start:
+#        docker compose -f docker-compose.production.yml up -d
+#
+#   On first boot IAMKit will automatically:
+#     • Run database migrations
+#     • Create the workspace + admin operator
+#     • Set the operator password (if IAMKIT_BOOTSTRAP_PASSWORD is set)
+#     • Print the 24h management API key to logs
+#
+#   Subsequent boots skip bootstrap (idempotent).
+#
+#   View the API key:
+#     docker compose -f docker-compose.production.yml logs iamkit | grep "management API key"
+
+name: iamkit
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: iamkit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-iamkit_secret}
+      POSTGRES_DB: iamkit
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iamkit -d iamkit"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  iamkit:
+    build: .
+    # Or use a published image:
+    # image: ghcr.io/abraxas-365/iamkit:latest
+    ports:
+      - "${IAMKIT_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: postgres://iamkit:${POSTGRES_PASSWORD:-iamkit_secret}@postgres:5432/iamkit?sslmode=disable
+      SERVER_PORT: "8080"
+      JWT_PRIVATE_KEY_PATH: /secrets/jwt.pem
+      JWT_ISSUER: ${JWT_ISSUER:-http://localhost:8080}
+      OIDC_HMAC_SECRET: ${OIDC_HMAC_SECRET:?Set OIDC_HMAC_SECRET (32+ bytes)}
+
+      # First-boot auto-bootstrap (ignored if a workspace already exists):
+      IAMKIT_BOOTSTRAP_EMAIL: ${IAMKIT_BOOTSTRAP_EMAIL:-}
+      IAMKIT_BOOTSTRAP_WORKSPACE: ${IAMKIT_BOOTSTRAP_WORKSPACE:-Default}
+      IAMKIT_BOOTSTRAP_PASSWORD: ${IAMKIT_BOOTSTRAP_PASSWORD:-}
+    volumes:
+      - ./secrets/jwt.pem:/secrets/jwt.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
