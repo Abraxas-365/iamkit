@@ -37,11 +37,11 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	return c.Status(201).JSON(out)
 }
 func (h *Handler) List(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c))
+	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
-	return c.JSON(httpx.NewPaginated(c, out))
+	return c.JSON(out)
 }
 func (h *Handler) Revoke(c *fiber.Ctx) error {
 	id, err := identity.ParseAccountID(c.Params("id"))

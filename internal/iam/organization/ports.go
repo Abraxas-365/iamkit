@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Commands interface {
@@ -14,19 +15,19 @@ type Commands interface {
 	RemoveMember(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) error
 }
 type Queries interface {
-	List(ctx context.Context, environment identity.EnvironmentID) ([]Summary, error)
+	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Summary], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Organization, error)
-	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) ([]MemberView, error)
+	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[MemberView], error)
 }
 
 type Repository interface {
 	Create(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, name string) error
-	List(ctx context.Context, environment identity.EnvironmentID) ([]Summary, error)
+	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Summary], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Organization, error)
 	Update(ctx context.Context, m Mutation, organization identity.OrganizationID, input Update) error
 	AddMember(ctx context.Context, environment identity.EnvironmentID, input Membership) error
 	RemoveMember(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) error
-	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) ([]MemberView, error)
+	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[MemberView], error)
 }
 
 type StructureCommands interface {

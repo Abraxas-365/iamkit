@@ -14,15 +14,16 @@ internal/
   bootstrap/             Composition root — only place concrete types are wired
   config/                Constants (TTLs, limits)
   errx/                  Typed application errors (the only error system)
-  httpx/                 Shared HTTP utilities (pagination)
+  httpx/                 HTTP-specific helpers (parse pagination from Fiber ctx)
   identity/              Typed IDs, domain primitives, validation helpers
+  query/                 Pagination types (Pagination, Paginated[T]) — transport-agnostic
   logx/                  Structured logging
   ptrx/                  Pointer helpers
   console/               Embedded SPA assets
   server/                Fiber server, route registration, error middleware
     apiauth/             JWT authentication middleware for /api/v1/*
   iam/
-    <module>/            Domain package (structs + interfaces)
+    <module>/            Domain package (structs + interfaces + filters)
       adapters/
         <mod>http/       Fiber HTTP handlers
         <mod>pg/         PostgreSQL repositories (sqlx)
@@ -115,9 +116,13 @@ var _ application.Queries = (*Service)(nil)
 ```
 
 **Modules with sub-domains** split further. Authorization has separate
-`ResourceCommands`/`ResourceQueries` and `GrantCommands`/`GrantQueries`.
+`ResourceCommands`/`ResourceQueries`/`ResourceRepository` and
+`GrantCommands`/`GrantQueries`/`GrantRepository`.
 Organization has `StructureCommands`/`StructureQueries`. Management has
 `ControlCommands`/`ControlQueries` and `ActivityCommands`/`ActivityQueries`.
+Method names still use standard verbs (`Create`, `List`, `Find`). When a
+single Queries/Repository interface manages multiple entity types, prefix the
+verb with the entity: `ListRoles`, `ListGrants` — the verb always leads.
 
 **The module assembler** exposes only interface types, never the concrete service:
 
@@ -220,7 +225,9 @@ imports anything from `internal/iam/`. Every domain and adapter package imports
 `identity`. This makes it the foundation of the type system.
 
 ```
-stdlib → errx → identity → every domain package → adapters
+stdlib → errx → identity ─┐
+                           ├→ every domain package → adapters
+              query ───────┘
 ```
 
 ### Typed IDs: `ID[T any]`
@@ -322,6 +329,128 @@ is either an `*errx.Error` or gets wrapped into one before leaving a package.
 
 4. **One field → one error message.** Never return "invalid request" for
    multiple fields. Validation errors name the specific field.
+
+---
+
+## `query` — Pagination Foundation Package
+
+`internal/query/` owns the pagination types that appear in domain interfaces.
+It is transport-agnostic — no HTTP or framework imports.
+
+```go
+package query
+
+// Pagination holds limit/offset for paginated queries.
+type Pagination struct {
+    Limit  int
+    Offset int
+}
+
+// Page carries pagination metadata in API responses — the effective
+// limit/offset the server applied (after clamping) plus the total match count.
+type Page struct {
+    Total  int `json:"total"`
+    Limit  int `json:"limit"`
+    Offset int `json:"offset"`
+}
+
+// Paginated is the standard paginated response envelope.
+type Paginated[T any] struct {
+    Items []T  `json:"items"`
+    Page  Page `json:"page"`
+}
+```
+
+Wire format: `{"items": [...], "page": {"total": N, "limit": N, "offset": N}}`.
+This is the one envelope shape for every paginated list endpoint — do not
+invent a flatter or differently-named variant per module.
+
+### Dependency Rule
+
+`query` is a foundation package at the same level as `identity` and `errx`.
+It imports nothing from `internal/`. Every domain package can import it freely
+in `ports.go` without pulling in transport types.
+
+### Paginated Returns Use DB-Level Pagination
+
+List methods that support pagination return `(query.Paginated[T], error)` —
+never bare `([]T, int, error)`. The bare `int` is ambiguous (total? page
+number? items returned?) at every call site:
+
+```go
+// ✗ Bad — ambiguous int
+RoleAssignments(ctx context.Context, environment identity.EnvironmentID,
+    filter RoleAssignmentFilter, page query.Pagination) ([]RoleAssignmentView, int, error)
+
+// ✓ Good — self-documenting, serializes to JSON directly
+RoleAssignments(ctx context.Context, environment identity.EnvironmentID,
+    filter RoleAssignmentFilter, page query.Pagination) (query.Paginated[RoleAssignmentView], error)
+```
+
+The repository does the pagination — `COUNT(*)` for `Page.Total`, then
+`LIMIT`/`OFFSET` for the page of rows — and returns `query.Paginated[T]`
+directly. It never loads the full table and slices in memory. The service
+and handler pass `query.Paginated[T]` straight through without touching it:
+
+```go
+// repository — owns the SQL, assembles the envelope
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID,
+    page query.Pagination) (query.Paginated[User], error) {
+    var total int
+    if err := r.db.GetContext(ctx, &total, `SELECT count(*) FROM users WHERE environment_id=$1`, environment); err != nil {
+        return query.Paginated[User]{}, failure(err)
+    }
+    items := []User{}
+    err := r.db.SelectContext(ctx, &items,
+        `SELECT * FROM users WHERE environment_id=$1 ORDER BY name LIMIT $2 OFFSET $3`,
+        environment, page.Limit, page.Offset)
+    if err != nil {
+        return query.Paginated[User]{}, failure(err)
+    }
+    return query.Paginated[User]{Items: items, Page: query.Page{Total: total, Limit: page.Limit, Offset: page.Offset}}, nil
+}
+
+// handler — no slicing, just forwards the envelope
+func (h *Handler) List(c *fiber.Ctx) error {
+    out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
+    if err != nil {
+        return err
+    }
+    return c.JSON(out)
+}
+```
+
+### Filters Stay in Domain Packages
+
+Filter structs are entity-specific — they reference typed IDs, enums, and
+field names. They live in the domain package alongside the entity they filter,
+**not** in `query`:
+
+```go
+// authorization/filter.go — domain-specific, stays here
+type RoleAssignmentFilter struct {
+    ResourceID     *identity.ResourceID
+    OrganizationID *identity.OrganizationID
+    UserID         *identity.UserID
+}
+```
+
+Moving filters to `query` would force it to import `identity` and know about
+every domain, destroying its foundation status.
+
+### `httpx` — HTTP Bridge Only
+
+`httpx` keeps only the Fiber-specific helper that parses HTTP query params
+into `query.Pagination`. It does **not** build the response envelope — the
+repository already returns `query.Paginated[T]` ready to serialize:
+
+```go
+// httpx/paginate.go
+func PaginationFromCtx(c *fiber.Ctx) query.Pagination { ... }
+```
+
+This is the only package that imports both Fiber and `query`. Domain packages
+and services never import `httpx`.
 
 ---
 
@@ -466,7 +595,7 @@ from the authenticated context.
 | `github.com/coreos/go-oidc/v3` | OIDC discovery | `fedoidc/` only |
 
 **Rule:** Domain packages and services never import framework types. They
-depend only on `identity`, `errx`, and stdlib.
+depend only on `identity`, `query`, `errx`, and stdlib.
 
 ---
 
@@ -488,3 +617,19 @@ depend only on `identity`, `errx`, and stdlib.
   consumers and may diverge (e.g. queries could be served from a read replica).
 - **Don't let Repository generate IDs** — ID generation is a service
   responsibility. The repository receives the ID and persists it.
+- **Don't put filter structs in `query`** — filters are domain-specific (they
+  reference typed IDs and entity fields). `query` only owns `Pagination`,
+  `Page`, and `Paginated[T]`.
+- **Don't return bare `([]T, int, error)` for paginated queries** — use
+  `(query.Paginated[T], error)`. The int is ambiguous at every call site.
+- **Don't put pagination types in `httpx`** — `httpx` imports Fiber, so
+  `ports.go` would need a framework import. Pagination types live in `query`;
+  `httpx` only converts a `*fiber.Ctx` into `query.Pagination`.
+- **Don't flatten the `page` envelope to a bare `total` field** — the wire
+  format is `{"items": [...], "page": {"total", "limit", "offset"}}`. It's
+  documented in the SDK reference and consumed by the frontend; don't change
+  it while relocating the Go types.
+- **Don't paginate by loading the full table and slicing in memory** — every
+  paginated repository method runs `COUNT(*)` for `Page.Total` and
+  `LIMIT`/`OFFSET` for the page of rows. In-memory slicing doesn't scale and
+  makes `Page.Total` wrong once a repository cap is hit.

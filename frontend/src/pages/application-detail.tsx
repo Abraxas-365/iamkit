@@ -4,9 +4,10 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useList } from '@/hooks/use-list'
+import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
 import { ConfirmDialog, DataTable, ID, PageHeader, Status } from '@/components/library/patterns'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -28,7 +29,7 @@ export default function ApplicationDetailPage() {
   const [appLoading, setAppLoading] = useState(true)
   const [appError, setAppError] = useState('')
 
-  const linkedResources = useList<Resource>(`${base}/applications/${appId}/resources`)
+  const linkedResources = usePaginatedList<Resource>(`${base}/applications/${appId}/resources`)
 
   const [linking, setLinking] = useState(false)
   const [unlinking, setUnlinking] = useState<Resource | null>(null)
@@ -79,6 +80,8 @@ export default function ApplicationDetailPage() {
         {canWrite && <Button variant="outline" onClick={() => setLinking(true)}><Plus className="size-4" /> Link resource</Button>}
       </div>
 
+      <PaginationBar state={linkedResources} noun="resources" />
+
       <DataTable
         columns={['Name / ID', 'Prefix', 'Audience', 'Scopes', ...(canWrite ? ['Actions'] : [])]}
         loading={linkedResources.loading}
@@ -102,7 +105,6 @@ export default function ApplicationDetailPage() {
           return cells
         })}
       />
-      <p className="text-xs text-muted-foreground">{linkedResources.data.length} of {linkedResources.total} linked resources</p>
     </div>
 
     {/* Link resource dialog */}

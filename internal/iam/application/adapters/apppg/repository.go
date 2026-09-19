@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/application"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -36,12 +38,24 @@ func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentI
 	}
 	return result, failure(err)
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]application.Application, error) {
-	var rows []application.Application
-	if err := r.db.SelectContext(ctx, &rows, `SELECT id,name,redirect_uris,active FROM applications WHERE environment_id=$1 ORDER BY id`, environment); err != nil {
-		return nil, failure(err)
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[application.Application], error) {
+	base := `FROM applications WHERE environment_id=$1`
+	args := []any{environment}
+	n := 1
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND name ILIKE $%d", n)
+		args = append(args, like)
 	}
-	return rows, nil
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[application.Application]{}, failure(err)
+	}
+	rows := []application.Application{}
+	if err := r.db.SelectContext(ctx, &rows, fmt.Sprintf("SELECT id,name,redirect_uris,active %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+		return query.Paginated[application.Application]{}, failure(err)
+	}
+	return query.NewPaginated(rows, total, page), nil
 }
 func (r *Repository) Update(ctx context.Context, m application.Mutation, id identity.ApplicationID, input application.Update) error {
 	var redirects any

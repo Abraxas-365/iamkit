@@ -39,24 +39,24 @@ func optionalResourceID(c *fiber.Ctx) identity.ResourceID {
 	return id
 }
 func (h *Grants) ListRoles(c *fiber.Ctx) error {
-	out, err := h.queries.Roles(c.Context(), env(c), optionalResourceID(c))
+	out, err := h.queries.ListRoles(c.Context(), env(c), optionalResourceID(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
 	if c.Params("id") != "" {
-		return c.JSON(out[0])
+		return c.JSON(out.Items[0])
 	}
-	return c.JSON(httpx.NewPaginated(c, out))
+	return c.JSON(out)
 }
 func (h *Grants) ListGrants(c *fiber.Ctx) error {
-	out, err := h.queries.Grants(c.Context(), env(c), optionalResourceID(c))
+	out, err := h.queries.ListGrants(c.Context(), env(c), optionalResourceID(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
 	if c.Params("id") != "" {
-		return c.JSON(out[0])
+		return c.JSON(out.Items[0])
 	}
-	return c.JSON(httpx.NewPaginated(c, out))
+	return c.JSON(out)
 }
 func (h *Grants) SaveRole(c *fiber.Ctx) error {
 	var input authorization.Role
@@ -131,12 +131,10 @@ func (h *Grants) RoleAssignments(c *fiber.Ctx) error {
 	resID, _ := identity.ParseResourceID(c.Query("resource_id"))
 	filter := authorization.RoleAssignmentFilter{
 		RoleID: roleID, OrganizationID: orgID, UserID: userID, ResourceID: resID,
-		Search: c.Query("search"),
 	}
-	page := httpx.PaginationFromCtx(c)
-	items, total, err := h.queries.RoleAssignments(c.Context(), env(c), filter, page)
+	out, err := h.queries.RoleAssignments(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
-	return c.JSON(httpx.NewPaginatedDB(items, total, page))
+	return c.JSON(out)
 }

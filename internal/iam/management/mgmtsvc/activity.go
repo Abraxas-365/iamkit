@@ -6,16 +6,17 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Activity struct{ repository management.ActivityRepository }
 
 func NewActivity(r management.ActivityRepository) *Activity { return &Activity{r} }
-func (s *Activity) Sessions(ctx context.Context, environment identity.EnvironmentID) ([]management.Session, error) {
-	return s.repository.Sessions(ctx, environment)
+func (s *Activity) Sessions(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[management.Session], error) {
+	return s.repository.Sessions(ctx, environment, page)
 }
-func (s *Activity) Audit(ctx context.Context, environment identity.EnvironmentID) ([]management.AuditEvent, error) {
-	return s.repository.Audit(ctx, environment)
+func (s *Activity) Audit(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[management.AuditEvent], error) {
+	return s.repository.Audit(ctx, environment, page)
 }
 
 var _ management.ActivityCommands = (*Activity)(nil)

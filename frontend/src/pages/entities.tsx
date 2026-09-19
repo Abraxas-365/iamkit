@@ -4,10 +4,11 @@ import { Plus, Pencil, Trash2, Link as LinkIcon, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useList } from '@/hooks/use-list'
+import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
-import { Input } from '@/components/ui/input'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
 import { PermissionPicker } from '@/components/ui/permission-picker'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -190,10 +191,9 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
   const base = `/environments/${environment}`
   const envBase = `/projects/${project}/environments/${environment}`
   const path = `${base}/${kind}`
-  const list = useList<Entity>(path)
+  const list = usePaginatedList<Entity>(path)
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [search, setSearch] = useState('')
   const [edit, setEdit] = useState<Entity | 'new' | null>(null)
   const openEdit = async (row: Entity) => {
     if (kind === 'users' || kind === 'organizations') {
@@ -216,7 +216,6 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
         { name: 'role_id', label: 'Role', type: 'select' as const, selectPath: `${base}/roles`, selectMap: named },
       ] } : null
   const columns = kind === 'users' ? ['Name / ID', 'Email', 'Status'] : kind === 'applications' ? ['Name / ID', 'Redirect URIs', 'Status'] : kind === 'resources' ? ['Name / ID', 'Prefix', 'Audience', 'Scopes'] : kind === 'roles' ? ['Name / ID', 'Resource', 'Permissions'] : kind === 'grants' ? ['Grant ID', 'Organization / User', 'Resource / Permissions'] : ['Name', 'ID']
-  const filtered = list.data.filter(item => JSON.stringify(item).toLowerCase().includes(search.toLowerCase()))
   const canDelete = kind === 'users' || kind === 'roles' || kind === 'grants'
   return <div className="space-y-6">
     <PageHeader title={titles[kind]} description={descriptions[kind]} actions={canWrite && <div className="flex flex-wrap gap-2">
@@ -224,8 +223,8 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
       {extraConfig && <Button variant="outline" onClick={() => setExtra(true)}><LinkIcon />{extraConfig.title}</Button>}
       <Button onClick={() => setEdit('new')}><Plus />{kind === 'grants' ? 'Set grant' : 'Create'}</Button>
     </div>} />
-    <div className="flex items-center justify-between gap-3"><Input aria-label={`Search ${titles[kind]}`} className="max-w-sm" placeholder="Search loaded records…" value={search} onChange={e => setSearch(e.target.value)} /><span className="text-xs text-muted-foreground">{filtered.length} of {list.total} records</span></div>
-    <DataTable columns={[...columns, ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={filtered.map(row => {
+    <PaginationBar state={list} noun={kind} placeholder={`Search ${titles[kind].toLowerCase()}…`} />
+    <DataTable columns={[...columns, ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(row => {
       const identity = <div className="space-y-1"><p className="font-medium">{row.name}{kind === 'resources' && row.prefix === 'iam' && <span className="ml-2 inline-block rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">System</span>}</p><ID value={row.id} /></div>
       const permissions = row.permissions?.length ? <CollapsibleScopes scopes={row.permissions} /> : <span className="text-xs text-muted-foreground">No permissions</span>
       const cells = kind === 'users' ? [identity, row.email, <Status active={!!row.active} />] :

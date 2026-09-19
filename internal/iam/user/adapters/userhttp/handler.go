@@ -5,6 +5,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -40,7 +41,7 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Handler) List(c *fiber.Ctx) error {
-	users, err := h.queries.List(c.Context(), env(c))
+	users, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -50,11 +51,11 @@ func (h *Handler) List(c *fiber.Ctx) error {
 		Name   string          `json:"name"`
 		Active bool            `json:"active"`
 	}
-	out := make([]summary, 0, len(users))
-	for _, u := range users {
+	out := make([]summary, 0, len(users.Items))
+	for _, u := range users.Items {
 		out = append(out, summary{u.ID, u.Email, u.Name, u.Active})
 	}
-	return c.JSON(httpx.NewPaginated(c, out))
+	return c.JSON(query.Paginated[summary]{Items: out, Page: users.Page})
 }
 func (h *Handler) Find(c *fiber.Ctx) error {
 	id, err := identity.ParseUserID(c.Params("id"))

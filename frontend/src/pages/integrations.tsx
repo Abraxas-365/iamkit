@@ -4,12 +4,13 @@ import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useList } from '@/hooks/use-list'
+import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { SearchSelect } from '@/components/ui/search-select'
 import { PermissionPicker } from '@/components/ui/permission-picker'
+import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ConfirmDialog, DataTable, FormDialog, ID, PageHeader, Status, ErrorState, splitList } from '@/components/library/patterns'
 import type { Field } from '@/components/library/patterns'
@@ -88,18 +89,17 @@ export function ServiceAccountsPage() {
   const { environment } = useParams()
   const base = `/environments/${environment}`
   const path = `${base}/service-accounts`
-  const list = useList<ServiceAccount>(path)
+  const list = usePaginatedList<ServiceAccount>(path)
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [search, setSearch] = useState('')
   const [add, setAdd] = useState(false)
   const [revoke, setRevoke] = useState<ServiceAccount | null>(null)
   const [secret, setSecret] = useState<Credential | null>(null)
 
   return <div className="space-y-6">
     <PageHeader title="Service accounts" description="Machine-to-machine credentials scoped to an application and resource." actions={canWrite && <Button onClick={() => setAdd(true)}><Plus className="size-4" /> Create</Button>} />
-    <Input aria-label="Search service accounts" className="max-w-sm" placeholder="Filter…" value={search} onChange={e => setSearch(e.target.value)} />
-    <DataTable columns={['Name / ID', 'Application', 'Resource', 'Permissions', 'Expires', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.filter(a => JSON.stringify(a).toLowerCase().includes(search.toLowerCase())).map(sa => {
+    <PaginationBar state={list} noun="service accounts" />
+    <DataTable columns={['Name / ID', 'Application', 'Resource', 'Permissions', 'Expires', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(sa => {
       const active = !sa.revoked_at && Date.parse(sa.expires_at) > Date.now()
       const cells: React.ReactNode[] = [
         <div className="space-y-1"><p className="font-medium">{sa.name}</p><ID value={sa.id} /></div>,
@@ -133,10 +133,9 @@ export function FederationPage() {
   const { project, environment } = useParams()
   const base = `/environments/${environment}`
   const path = `${base}/federation-connections`
-  const list = useList<FederationConnection>(path)
+  const list = usePaginatedList<FederationConnection>(path)
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [search, setSearch] = useState('')
   const [add, setAdd] = useState(false)
   const [disable, setDisable] = useState<FederationConnection | null>(null)
 
@@ -144,8 +143,8 @@ export function FederationPage() {
 
   return <div className="space-y-6">
     <PageHeader title="Federation connections" description="External OIDC identity providers. Users authenticate through these connections and are linked to local identities." actions={canWrite && <Button onClick={() => setAdd(true)}><Plus className="size-4" /> Create</Button>} />
-    <Input aria-label="Search connections" className="max-w-sm" placeholder="Filter…" value={search} onChange={e => setSearch(e.target.value)} />
-    <DataTable columns={['Name / ID', 'Issuer', 'Client ID', 'Linked', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.filter(c => JSON.stringify(c).toLowerCase().includes(search.toLowerCase())).map(c => {
+    <PaginationBar state={list} noun="connections" />
+    <DataTable columns={['Name / ID', 'Issuer', 'Client ID', 'Linked', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
       const cells: React.ReactNode[] = [
         <div className="space-y-1"><Link to={detailPath(c.id)} className="block font-medium text-primary hover:underline">{c.name}</Link><ID value={c.id} /></div>,
         <span className="text-xs break-all">{c.issuer}</span>,
@@ -173,10 +172,9 @@ export function OAuthClientsPage() {
   const { environment } = useParams()
   const base = `/environments/${environment}`
   const path = `${base}/oauth-clients`
-  const list = useList<OAuthClient>(path)
+  const list = usePaginatedList<OAuthClient>(path)
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [search, setSearch] = useState('')
   const [add, setAdd] = useState(false)
   const [disable, setDisable] = useState<OAuthClient | null>(null)
   const [secret, setSecret] = useState<{ id: string; client_id: string; client_secret: string } | null>(null)
@@ -190,8 +188,8 @@ export function OAuthClientsPage() {
 
   return <div className="space-y-6">
     <PageHeader title="OAuth clients" description="OIDC/OAuth 2.0 client registrations bound to an application and resource." actions={canWrite && <Button onClick={() => setAdd(true)}><Plus className="size-4" /> Create</Button>} />
-    <Input aria-label="Search OAuth clients" className="max-w-sm" placeholder="Filter…" value={search} onChange={e => setSearch(e.target.value)} />
-    <DataTable columns={['Client ID', 'Application', 'Resource', 'Redirect URIs', 'Type', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.filter(c => JSON.stringify(c).toLowerCase().includes(search.toLowerCase())).map(c => {
+    <PaginationBar state={list} noun="clients" />
+    <DataTable columns={['Client ID', 'Application', 'Resource', 'Redirect URIs', 'Type', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
       const cells: React.ReactNode[] = [
         <ID value={c.id} />,
         <span className="text-sm">{c.application_name || <ID value={c.application_id} />}</span>,
@@ -235,10 +233,9 @@ export function ProvisioningPage() {
   const { environment } = useParams()
   const base = `/environments/${environment}`
   const path = `${base}/provisioning-credentials`
-  const list = useList<ProvCredential>(path)
+  const list = usePaginatedList<ProvCredential>(path)
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [search, setSearch] = useState('')
   const [add, setAdd] = useState(false)
   const [revoke, setRevoke] = useState<ProvCredential | null>(null)
   const [secret, setSecret] = useState<{ id: string; secret: string; expires_at: string; connection_id: string } | null>(null)
@@ -266,8 +263,8 @@ export function ProvisioningPage() {
 
   return <div className="space-y-6">
     <PageHeader title="SCIM provisioning" description="SCIM 2.0 credentials for automated user provisioning from your IdP." actions={canWrite && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setLinkId(true)}>Link identity</Button><Button onClick={() => setAdd(true)}><Plus className="size-4" /> Issue credential</Button></div>} />
-    <Input aria-label="Search credentials" className="max-w-sm" placeholder="Filter…" value={search} onChange={e => setSearch(e.target.value)} />
-    <DataTable columns={['Name / ID', 'Organization', 'Connection', 'Expires', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.filter(c => JSON.stringify(c).toLowerCase().includes(search.toLowerCase())).map(c => {
+    <PaginationBar state={list} noun="credentials" />
+    <DataTable columns={['Name / ID', 'Organization', 'Connection', 'Expires', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
       const active = !c.revoked_at && Date.parse(c.expires_at) > Date.now()
       const cells: React.ReactNode[] = [
         <div className="space-y-1"><p className="font-medium">{c.name}</p><ID value={c.id} /></div>,

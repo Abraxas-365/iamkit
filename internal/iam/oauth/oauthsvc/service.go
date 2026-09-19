@@ -10,6 +10,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Service struct {
@@ -50,8 +51,8 @@ func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id identity.Cli
 	}
 	return s.repository.Disable(ctx, m, id)
 }
-func (s *Service) List(ctx context.Context, environment identity.EnvironmentID) ([]oauth.ClientView, error) {
-	return s.repository.List(ctx, environment)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[oauth.ClientView], error) {
+	return s.repository.List(ctx, environment, page)
 }
 func (s *Service) Client(ctx context.Context, id identity.ClientID) (*oauth.Client, error) {
 	if id.IsZero() {

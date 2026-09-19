@@ -7,6 +7,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Service struct{ repository organization.Repository }
@@ -19,8 +20,8 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	id := identity.NewOrganizationID()
 	return id, s.repository.Create(ctx, environment, id, name)
 }
-func (s *Service) List(ctx context.Context, environment identity.EnvironmentID) ([]organization.Summary, error) {
-	return s.repository.List(ctx, environment)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[organization.Summary], error) {
+	return s.repository.List(ctx, environment, page)
 }
 func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, id identity.OrganizationID) (organization.Organization, error) {
 	if id.IsZero() {
@@ -49,11 +50,11 @@ func (s *Service) RemoveMember(ctx context.Context, environment identity.Environ
 	}
 	return s.repository.RemoveMember(ctx, environment, org, user)
 }
-func (s *Service) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID) ([]organization.MemberView, error) {
+func (s *Service) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, page query.Pagination) (query.Paginated[organization.MemberView], error) {
 	if org.IsZero() {
-		return nil, errx.NotFound("resource not found")
+		return query.Paginated[organization.MemberView]{}, errx.NotFound("resource not found")
 	}
-	return s.repository.Members(ctx, environment, org)
+	return s.repository.Members(ctx, environment, org, page)
 }
 
 var _ organization.Commands = (*Service)(nil)

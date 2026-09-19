@@ -65,11 +65,11 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Handler) list(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c))
+	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
-	return c.JSON(httpx.NewPaginated(c, out))
+	return c.JSON(out)
 }
 func (h *Handler) load(c *fiber.Ctx, id identity.ClientID) (fosite.OAuth2Provider, *oauth.Client, *oauthfosite.Store, error) {
 	client, err := h.flows.Client(c.Context(), id)

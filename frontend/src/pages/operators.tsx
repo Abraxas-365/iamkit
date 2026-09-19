@@ -2,10 +2,11 @@ import { useRef, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useList } from '@/hooks/use-list'
+import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ConfirmDialog, DataTable, ErrorState, ID, PageHeader, Status } from '@/components/library/patterns'
 
@@ -28,10 +29,9 @@ const ttlOptions = [
 ]
 
 export default function OperatorsPage() {
-  const list = useList<Operator>('/operators')
+  const list = usePaginatedList<Operator>('/operators')
   const { principal } = useAuth()
   const isOwner = principal?.role === 'owner'
-  const [search, setSearch] = useState('')
   const [add, setAdd] = useState(false)
   const [disable, setDisable] = useState<Operator | null>(null)
   const [secret, setSecret] = useState<Delegated | null>(null)
@@ -43,8 +43,8 @@ export default function OperatorsPage() {
 
   return <div className="space-y-6">
     <PageHeader title="Operators" description="Console operators and their workspace roles. Only owners can invite or disable operators." actions={isOwner && <Button onClick={() => { setAdd(true); setRole('admin'); setTtl('24h'); setError('') }}><Plus className="size-4" /> Invite operator</Button>} />
-    <Input aria-label="Search operators" className="max-w-sm" placeholder="Filter by email…" value={search} onChange={e => setSearch(e.target.value)} />
-    <DataTable columns={['Email', 'Role', 'Status', 'Operator ID', 'Actions']} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.filter(o => o.email.toLowerCase().includes(search.toLowerCase())).map(op => [
+    <PaginationBar state={list} noun="operators" />
+    <DataTable columns={['Email', 'Role', 'Status', 'Operator ID', 'Actions']} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(op => [
       op.email,
       <span className="capitalize">{op.role}</span>,
       <Status active={op.active} />,

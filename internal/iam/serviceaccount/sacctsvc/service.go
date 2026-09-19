@@ -7,6 +7,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Service struct {
@@ -44,8 +45,8 @@ func (s *Service) Revoke(ctx context.Context, environment identity.EnvironmentID
 	}
 	return s.repository.Revoke(ctx, environment, id)
 }
-func (s *Service) List(ctx context.Context, environment identity.EnvironmentID) ([]serviceaccount.Account, error) {
-	return s.repository.List(ctx, environment)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[serviceaccount.Account], error) {
+	return s.repository.List(ctx, environment, page)
 }
 
 var _ serviceaccount.Commands = (*Service)(nil)

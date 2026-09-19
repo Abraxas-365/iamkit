@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Commands interface {
@@ -12,13 +13,13 @@ type Commands interface {
 	Suspend(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) error
 }
 type Queries interface {
-	List(ctx context.Context, environment identity.EnvironmentID) ([]User, error)
+	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[User], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (User, error)
 }
 
 type Repository interface {
 	Create(ctx context.Context, environment identity.EnvironmentID, input Create, passwordHash string) (identity.UserID, error)
-	List(ctx context.Context, environment identity.EnvironmentID) ([]User, error)
+	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[User], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (User, error)
 	Update(ctx context.Context, m Mutation, user identity.UserID, input Update) error
 	Suspend(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) error

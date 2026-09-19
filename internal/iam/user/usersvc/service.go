@@ -6,6 +6,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Service struct {
@@ -35,8 +36,8 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	input.Password = ""
 	return s.repository.Create(ctx, environment, input, hash)
 }
-func (s *Service) List(ctx context.Context, environment identity.EnvironmentID) ([]user.User, error) {
-	return s.repository.List(ctx, environment)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[user.User], error) {
+	return s.repository.List(ctx, environment, page)
 }
 func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, id identity.UserID) (user.User, error) {
 	if id.IsZero() {

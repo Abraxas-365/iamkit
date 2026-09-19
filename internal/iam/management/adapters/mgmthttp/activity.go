@@ -1,6 +1,7 @@
 package mgmthttp
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
@@ -24,14 +25,14 @@ func (h *Activity) Register(r fiber.Router) {
 	r.Get("/audit-events", h.audit)
 }
 func (h *Activity) sessions(c *fiber.Ctx) error {
-	out, err := h.queries.Sessions(c.Context(), envID(c))
+	out, err := h.queries.Sessions(c.Context(), envID(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
 	return c.JSON(out)
 }
 func (h *Activity) audit(c *fiber.Ctx) error {
-	out, err := h.queries.Audit(c.Context(), envID(c))
+	out, err := h.queries.Audit(c.Context(), envID(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

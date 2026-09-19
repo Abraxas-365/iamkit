@@ -32,8 +32,8 @@ function Shell() {
   const project = matchPath('/projects/:project/*', location.pathname)?.params.project
   const environment = matchPath('/projects/:project/environments/:environment/*', location.pathname)?.params.environment
   const navigate = useNavigate()
-  const projects = useList<Named>('/projects')
-  const environments = useList<Named>(project ? `/projects/${project}/environments` : null)
+  const projects = useList<Named>('/projects?limit=200')
+  const environments = useList<Named>(project ? `/projects/${project}/environments?limit=200` : null)
   const { resolvedTheme, setTheme } = useTheme()
   const [signingOut, setSigningOut] = useState(false)
   const envBase = project && environment ? `/projects/${project}/environments/${environment}` : ''

@@ -6,6 +6,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type ClientRepository interface {
@@ -17,7 +18,7 @@ type Commands interface {
 	Disable(ctx context.Context, m Mutation, client identity.ClientID) error
 }
 type Queries interface {
-	List(ctx context.Context, environment identity.EnvironmentID) ([]ClientView, error)
+	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[ClientView], error)
 }
 type Flows interface {
 	Client(ctx context.Context, client identity.ClientID) (*Client, error)
@@ -38,7 +39,7 @@ type Repository interface {
 	Environment(ctx context.Context, client identity.ClientID) (identity.EnvironmentID, error)
 	Create(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID, input Registration, secretHash []byte) error
 	Disable(ctx context.Context, m Mutation, client identity.ClientID) error
-	List(ctx context.Context, environment identity.EnvironmentID) ([]ClientView, error)
+	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[ClientView], error)
 	SaveTicket(ctx context.Context, ticketHash, bindingHash []byte, client *Client, form string) error
 	Begin(ctx context.Context) (Authorization, error)
 	Access(ctx context.Context, client *Client, subject identity.UserID, session identity.SessionID, organization identity.OrganizationID) (authentication.Access, error)

@@ -96,5 +96,4 @@ type RoleAssignmentFilter struct {
 	OrganizationID identity.OrganizationID
 	UserID         identity.UserID
 	ResourceID     identity.ResourceID
-	Search         string
 }

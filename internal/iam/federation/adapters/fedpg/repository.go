@@ -5,12 +5,14 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -121,7 +123,19 @@ func (r *Repository) Link(ctx context.Context, m federation.Mutation, connection
 func (r *Repository) Disable(ctx context.Context, m federation.Mutation, id identity.ConnectionID) error {
 	return r.mutate(ctx, m, `UPDATE federation_connections SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]federation.ConnectionView, error) {
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[federation.ConnectionView], error) {
+	base := `FROM federation_connections c WHERE c.environment_id=$1`
+	args := []any{environment}
+	n := 1
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND (c.name ILIKE $%d OR c.issuer ILIKE $%d)", n, n)
+		args = append(args, like)
+	}
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[federation.ConnectionView]{}, failure(err)
+	}
 	var rows []struct {
 		ID       identity.ConnectionID `db:"id"`
 		Name     string                `db:"name"`
@@ -130,16 +144,17 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		Active   bool                  `db:"active"`
 		Linked   int                   `db:"linked"`
 	}
-	if err := r.db.SelectContext(ctx, &rows, `SELECT c.id, c.name, c.issuer, c.client_id, c.active,
+	sel := fmt.Sprintf(`SELECT c.id, c.name, c.issuer, c.client_id, c.active,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
-		FROM federation_connections c WHERE c.environment_id=$1 ORDER BY c.name`, environment); err != nil {
-		return nil, failure(err)
+		%s ORDER BY c.name LIMIT %d OFFSET %d`, base, page.Limit, page.Offset)
+	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
+		return query.Paginated[federation.ConnectionView]{}, failure(err)
 	}
 	out := make([]federation.ConnectionView, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, federation.ConnectionView{ID: row.ID, Name: row.Name, Issuer: row.Issuer, ClientID: row.ClientID, Active: row.Active, Linked: row.Linked})
 	}
-	return out, nil
+	return query.NewPaginated(out, total, page), nil
 }
 func (r *Repository) FindDetail(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.ConnectionDetail, error) {
 	var row struct {
@@ -162,14 +177,25 @@ func (r *Repository) FindDetail(ctx context.Context, environment identity.Enviro
 		SecretEnv: row.SecretEnv, Active: row.Active, Linked: row.Linked,
 	}, failure(err)
 }
-func (r *Repository) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID) ([]federation.ExternalIdentityView, error) {
-	rows := []federation.ExternalIdentityView{}
-	if err := r.db.SelectContext(ctx, &rows, `SELECT x.connection_id, x.subject, x.user_id, u.name AS user_name, u.email AS user_email
-		FROM external_identities x JOIN users u ON u.id=x.user_id AND u.environment_id=x.environment_id
-		WHERE x.connection_id=$1 AND x.environment_id=$2 ORDER BY u.name`, connectionID, environment); err != nil {
-		return nil, failure(err)
+func (r *Repository) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID, page query.Pagination) (query.Paginated[federation.ExternalIdentityView], error) {
+	base := `FROM external_identities x JOIN users u ON u.id=x.user_id AND u.environment_id=x.environment_id WHERE x.connection_id=$1 AND x.environment_id=$2`
+	args := []any{connectionID, environment}
+	n := 2
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND (x.subject ILIKE $%d OR u.name ILIKE $%d OR u.email ILIKE $%d)", n, n, n)
+		args = append(args, like)
 	}
-	return rows, nil
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[federation.ExternalIdentityView]{}, failure(err)
+	}
+	rows := []federation.ExternalIdentityView{}
+	sel := fmt.Sprintf("SELECT x.connection_id, x.subject, x.user_id, u.name AS user_name, u.email AS user_email %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
+	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
+		return query.Paginated[federation.ExternalIdentityView]{}, failure(err)
+	}
+	return query.NewPaginated(rows, total, page), nil
 }
 func (r *Repository) Unlink(ctx context.Context, m federation.Mutation, connectionID identity.ConnectionID, userID identity.UserID) error {
 	return r.mutate(ctx, m, `DELETE FROM external_identities WHERE connection_id=$1 AND environment_id=$2 AND user_id=$3`, connectionID, m.Environment, userID)

@@ -4,31 +4,31 @@ import (
 	"context"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
-	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
-type Grants struct{ repository authorization.Grants }
+type Grants struct{ repository authorization.GrantRepository }
 
-func NewGrants(r authorization.Grants) *Grants { return &Grants{r} }
-func (s *Grants) Roles(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) ([]authorization.RoleView, error) {
-	out, err := s.repository.Roles(ctx, environment, id)
-	if err != nil || (!id.IsZero() && len(out) == 0) {
+func NewGrants(r authorization.GrantRepository) *Grants { return &Grants{r} }
+func (s *Grants) ListRoles(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID, page query.Pagination) (query.Paginated[authorization.RoleView], error) {
+	out, err := s.repository.ListRoles(ctx, environment, id, page)
+	if err != nil || (!id.IsZero() && len(out.Items) == 0) {
 		if err != nil {
-			return nil, err
+			return query.Paginated[authorization.RoleView]{}, err
 		}
-		return nil, errx.NotFound("resource not found")
+		return query.Paginated[authorization.RoleView]{}, errx.NotFound("resource not found")
 	}
 	return out, nil
 }
-func (s *Grants) Grants(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) ([]authorization.GrantView, error) {
-	out, err := s.repository.Grants(ctx, environment, id)
-	if err != nil || (!id.IsZero() && len(out) == 0) {
+func (s *Grants) ListGrants(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID, page query.Pagination) (query.Paginated[authorization.GrantView], error) {
+	out, err := s.repository.ListGrants(ctx, environment, id, page)
+	if err != nil || (!id.IsZero() && len(out.Items) == 0) {
 		if err != nil {
-			return nil, err
+			return query.Paginated[authorization.GrantView]{}, err
 		}
-		return nil, errx.NotFound("resource not found")
+		return query.Paginated[authorization.GrantView]{}, errx.NotFound("resource not found")
 	}
 	return out, nil
 }
@@ -88,6 +88,6 @@ func (s *Grants) DeleteGrant(ctx context.Context, environment identity.Environme
 	}
 	return s.repository.DeleteGrant(ctx, environment, id)
 }
-func (s *Grants) RoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter authorization.RoleAssignmentFilter, page httpx.Pagination) ([]authorization.RoleAssignmentView, int, error) {
+func (s *Grants) RoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter authorization.RoleAssignmentFilter, page query.Pagination) (query.Paginated[authorization.RoleAssignmentView], error) {
 	return s.repository.RoleAssignments(ctx, environment, filter, page)
 }

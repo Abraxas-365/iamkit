@@ -6,6 +6,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/application"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Service struct{ repository application.Repository }
@@ -30,8 +31,8 @@ func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, 
 	return s.repository.Find(ctx, environment, id)
 }
 
-func (s *Service) List(ctx context.Context, environment identity.EnvironmentID) ([]application.Application, error) {
-	return s.repository.List(ctx, environment)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[application.Application], error) {
+	return s.repository.List(ctx, environment, page)
 }
 
 func (s *Service) Update(ctx context.Context, m application.Mutation, id identity.ApplicationID, input application.Update) error {

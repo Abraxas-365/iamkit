@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type ManagementAuthenticator interface {
@@ -38,8 +39,8 @@ type ActivityCommands interface {
 	RevokeSession(ctx context.Context, environment identity.EnvironmentID, session identity.SessionID, actor, action, target string) error
 }
 type ActivityQueries interface {
-	Sessions(ctx context.Context, environment identity.EnvironmentID) ([]Session, error)
-	Audit(ctx context.Context, environment identity.EnvironmentID) ([]AuditEvent, error)
+	Sessions(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Session], error)
+	Audit(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[AuditEvent], error)
 }
 
 type Repository interface {
@@ -73,8 +74,8 @@ type ControlRepository interface {
 }
 
 type ActivityRepository interface {
-	Sessions(ctx context.Context, environment identity.EnvironmentID) ([]Session, error)
-	Audit(ctx context.Context, environment identity.EnvironmentID) ([]AuditEvent, error)
+	Sessions(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Session], error)
+	Audit(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[AuditEvent], error)
 	RevokeSession(ctx context.Context, environment identity.EnvironmentID, session identity.SessionID, actor, action, target string) error
 }
 

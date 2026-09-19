@@ -3,9 +3,9 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, UserMinus } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useList } from '@/hooks/use-list'
-import { Input } from '@/components/ui/input'
+import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { Button } from '@/components/ui/button'
+import { PaginationBar } from '@/components/ui/pagination-bar'
 import { ConfirmDialog, DataTable, ID, PageHeader, Status } from '@/components/library/patterns'
 
 interface Member { user_id: string; user_name: string; user_email: string; active: boolean }
@@ -14,10 +14,9 @@ export default function MembersPage() {
   const { project, environment, orgId } = useParams()
   const base = `/environments/${environment}`
   const path = `${base}/organizations/${orgId}/members`
-  const list = useList<Member>(path)
+  const list = usePaginatedList<Member>(path)
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [search, setSearch] = useState('')
   const [removing, setRemoving] = useState<Member | null>(null)
   const [orgName, setOrgName] = useState<string>('')
 
@@ -28,9 +27,6 @@ export default function MembersPage() {
       .catch(() => {})
   }, [environment, orgId, base])
 
-  const filtered = list.data.filter(m =>
-    [m.user_name, m.user_email, m.user_id].some(v => v?.toLowerCase().includes(search.toLowerCase())),
-  )
   const orgsPath = `/projects/${project}/environments/${environment}/organizations`
 
   return <div className="space-y-6">
@@ -47,17 +43,14 @@ export default function MembersPage() {
       />
     </div>
 
-    <div className="flex items-center justify-between gap-3">
-      <Input aria-label="Search members" className="max-w-sm" placeholder="Search members…" value={search} onChange={e => setSearch(e.target.value)} />
-      <span className="text-xs text-muted-foreground">{filtered.length} of {list.total} members</span>
-    </div>
+    <PaginationBar state={list} noun="members" />
 
     <DataTable
       columns={['User', 'Email', 'Status', ...(canWrite ? ['Actions'] : [])]}
       loading={list.loading}
       error={list.error}
       retry={list.reload}
-      rows={filtered.map(m => {
+      rows={list.data.map(m => {
         const cells: React.ReactNode[] = [
           <div className="space-y-1">
             <p className="font-medium">{m.user_name}</p>

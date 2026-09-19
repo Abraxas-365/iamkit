@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -33,13 +35,25 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 	_, err := r.db.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,otp_enabled) VALUES($1,$2,$3,$4,$5,$6)`, id, environment, input.Email, input.Name, hash, input.OTPEnabled)
 	return id, failure(err, "user already exists")
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]user.User, error) {
-	var rows []user.User
-	err := r.db.SelectContext(ctx, &rows, `SELECT id,email,name,active FROM users WHERE environment_id=$1 ORDER BY id LIMIT 100`, environment)
-	if err != nil {
-		return nil, failure(err, "list users")
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[user.User], error) {
+	base := `FROM users WHERE environment_id=$1`
+	args := []any{environment}
+	n := 1
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND (name ILIKE $%d OR email ILIKE $%d)", n, n)
+		args = append(args, like)
 	}
-	return rows, nil
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[user.User]{}, failure(err, "list users")
+	}
+	rows := []user.User{}
+	err := r.db.SelectContext(ctx, &rows, fmt.Sprintf("SELECT id,email,name,active %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...)
+	if err != nil {
+		return query.Paginated[user.User]{}, failure(err, "list users")
+	}
+	return query.NewPaginated(rows, total, page), nil
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.UserID) (user.User, error) {
 	var row user.User

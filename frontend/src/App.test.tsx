@@ -16,7 +16,8 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   fetchMock.mockImplementation(async (url: string, init: RequestInit) => {
     if (init.method === 'PUT') return Response.json({ id: 'grant1' })
-    const path = url.replace('/management/v1', '')
+    const fullPath = url.replace('/management/v1', '')
+    const path = fullPath.split('?')[0]
     const data = path === '/me' ? { operator_id: 'operator1', workspace_id: 'workspace1', role } :
       path === '/projects' ? [{ id: 'project1', name: 'Billing' }] :
         path === '/projects/project1/environments' ? [{ id: 'env1', name: 'Production' }] :

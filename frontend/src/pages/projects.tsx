@@ -21,7 +21,7 @@ export function ProjectsPage() {
   const { project } = useParams()
   const { refreshStructure } = useOutletContext<{ refreshStructure: () => void }>()
   const path = project ? `/projects/${project}/environments` : '/projects'
-  const list = useList<Named>(path)
+  const list = useList<Named>(path + '?limit=200')
   const { principal } = useAuth()
   const [creating, setCreating] = useState(false)
   const singular = project ? 'environment' : 'project'

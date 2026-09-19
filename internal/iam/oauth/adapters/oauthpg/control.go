@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -11,6 +12,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -66,7 +68,19 @@ func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id identity.
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]oauth.ClientView, error) {
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[oauth.ClientView], error) {
+	base := `FROM oauth_clients oc JOIN applications a ON a.id=oc.application_id JOIN resources res ON res.id=oc.resource_id WHERE oc.environment_id=$1`
+	args := []any{environment}
+	n := 1
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND (a.name ILIKE $%d OR res.name ILIKE $%d)", n, n)
+		args = append(args, like)
+	}
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[oauth.ClientView]{}, failure(err)
+	}
 	var rows []struct {
 		ID              identity.ClientID      `db:"id"`
 		Application     identity.ApplicationID `db:"application_id"`
@@ -77,14 +91,15 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		Public          bool                   `db:"public"`
 		Active          bool                   `db:"active"`
 	}
-	if err := r.db.SelectContext(ctx, &rows, `SELECT oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.public, oc.active FROM oauth_clients oc JOIN applications a ON a.id=oc.application_id JOIN resources res ON res.id=oc.resource_id WHERE oc.environment_id=$1 ORDER BY oc.id`, environment); err != nil {
-		return nil, failure(err)
+	sel := fmt.Sprintf("SELECT oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.public, oc.active %s ORDER BY a.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
+	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
+		return query.Paginated[oauth.ClientView]{}, failure(err)
 	}
 	out := make([]oauth.ClientView, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), Public: row.Public, Active: row.Active})
 	}
-	return out, nil
+	return query.NewPaginated(out, total, page), nil
 }
 func (r *Repository) SaveTicket(ctx context.Context, hash, binding []byte, client *oauth.Client, form string) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_authorizations(secret_hash,environment_id,client_id,binding_hash,request_form,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval '5 minutes')`, hash, client.Environment, client.ID, binding, form)

@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ChevronLeft, ChevronRight, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Trash2, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useList } from '@/hooks/use-list'
-import { Input } from '@/components/ui/input'
+import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { Button } from '@/components/ui/button'
+import { PaginationBar } from '@/components/ui/pagination-bar'
 import { ConfirmDialog, DataTable, ID, PageHeader } from '@/components/library/patterns'
 
 interface RoleAssignment {
@@ -18,59 +18,38 @@ interface Named { id: string; name: string }
 
 interface Filters { role: string; organization: string; user: string; resource: string }
 const emptyFilters: Filters = { role: '', organization: '', user: '', resource: '' }
-const PAGE_SIZE = 50
 
 export default function RoleAssignmentsPage() {
   const { project, environment } = useParams()
   const base = `/environments/${environment}`
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [filters, setFilters] = useState<Filters>(emptyFilters)
-  const [offset, setOffset] = useState(0)
   const [removing, setRemoving] = useState<RoleAssignment | null>(null)
 
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(search), 300)
-    return () => clearTimeout(id)
-  }, [search])
+  const extraParams = useMemo(() => {
+    const p: Record<string, string> = {}
+    if (filters.role) p.role_id = filters.role
+    if (filters.organization) p.organization_id = filters.organization
+    if (filters.user) p.user_id = filters.user
+    if (filters.resource) p.resource_id = filters.resource
+    return p
+  }, [filters])
 
-  // Build query string for role-assignments endpoint
-  const queryParams = useMemo(() => {
-    const params = new URLSearchParams()
-    if (filters.role) params.set('role_id', filters.role)
-    if (filters.organization) params.set('organization_id', filters.organization)
-    if (filters.user) params.set('user_id', filters.user)
-    if (filters.resource) params.set('resource_id', filters.resource)
-    if (debouncedSearch) params.set('search', debouncedSearch)
-    params.set('limit', String(PAGE_SIZE))
-    params.set('offset', String(offset))
-    return params.toString()
-  }, [filters, debouncedSearch, offset])
+  const list = usePaginatedList<RoleAssignment>(`${base}/role-assignments`, { extraParams })
 
-  const list = useList<RoleAssignment>(`${base}/role-assignments?${queryParams}`)
+  // Filter dropdown options — use high limit to load all for small enumerable sets
+  const roles = usePaginatedList<Named>(`${base}/roles`, { limit: 200 })
+  const orgs = usePaginatedList<Named>(`${base}/organizations`, { limit: 200 })
+  const users = usePaginatedList<Named>(`${base}/users`, { limit: 200 })
+  const resources = usePaginatedList<Named>(`${base}/resources`, { limit: 200 })
 
-  // Load filter options from existing entity lists (independent of the paginated result set)
-  const roles = useList<Named>(`${base}/roles`)
-  const orgs = useList<Named>(`${base}/organizations`)
-  const users = useList<Named>(`${base}/users`)
-  const resources = useList<Named>(`${base}/resources`)
-
-  const hasFilters = Object.values(filters).some(Boolean) || search !== ''
+  const hasFilters = Object.values(filters).some(Boolean) || list.rawSearch !== ''
   const rolesPath = `/projects/${project}/environments/${environment}/roles`
 
   const updateFilter = useCallback((patch: Partial<Filters>) => {
     setFilters(f => ({ ...f, ...patch }))
-    setOffset(0)
   }, [])
-  const updateSearch = useCallback((value: string) => {
-    setSearch(value)
-    setOffset(0)
-  }, [])
-
-  const showingFrom = list.total === 0 ? 0 : offset + 1
-  const showingTo = Math.min(offset + PAGE_SIZE, list.total)
 
   return <div className="space-y-6">
     <div className="space-y-3">
@@ -84,25 +63,14 @@ export default function RoleAssignmentsPage() {
     </div>
 
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <Input
-          aria-label="Search role assignments"
-          className="max-w-sm"
-          placeholder="Search assignments…"
-          value={search}
-          onChange={e => updateSearch(e.target.value)}
-        />
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {list.total === 0 ? '0 assignments' : `${showingFrom}–${showingTo} of ${list.total} assignments`}
-        </span>
-      </div>
+      <PaginationBar state={list} noun="assignments" />
 
       <div className="flex flex-wrap items-center gap-2">
         <FilterSelect label="Role" value={filters.role} options={roles.data.map(r => [r.id, r.name] as [string, string])} onChange={v => updateFilter({ role: v })} />
         <FilterSelect label="Organization" value={filters.organization} options={orgs.data.map(o => [o.id, o.name] as [string, string])} onChange={v => updateFilter({ organization: v })} />
         <FilterSelect label="User" value={filters.user} options={users.data.map(u => [u.id, u.name] as [string, string])} onChange={v => updateFilter({ user: v })} />
         <FilterSelect label="Resource" value={filters.resource} options={resources.data.map(r => [r.id, r.name] as [string, string])} onChange={v => updateFilter({ resource: v })} />
-        {hasFilters && <Button variant="ghost" size="sm" onClick={() => { setFilters(emptyFilters); setSearch(''); setOffset(0) }}><X className="size-3.5" /> Clear</Button>}
+        {hasFilters && <Button variant="ghost" size="sm" onClick={() => { setFilters(emptyFilters); list.setSearch('') }}><X className="size-3.5" /> Clear</Button>}
       </div>
     </div>
 
@@ -139,17 +107,6 @@ export default function RoleAssignmentsPage() {
         return cells
       })}
     />
-
-    {list.total > PAGE_SIZE && (
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" disabled={offset === 0} onClick={() => setOffset(o => Math.max(0, o - PAGE_SIZE))}>
-          <ChevronLeft className="size-4" /> Previous
-        </Button>
-        <Button variant="outline" size="sm" disabled={offset + PAGE_SIZE >= list.total} onClick={() => setOffset(o => o + PAGE_SIZE)}>
-          Next <ChevronRight className="size-4" />
-        </Button>
-      </div>
-    )}
 
     {removing && (
       <ConfirmDialog

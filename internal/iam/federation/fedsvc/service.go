@@ -10,6 +10,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Service struct {
@@ -55,8 +56,8 @@ func (s *Service) Unlink(ctx context.Context, m federation.Mutation, connectionI
 	}
 	return s.repository.Unlink(ctx, m, connectionID, userID)
 }
-func (s *Service) List(ctx context.Context, environment identity.EnvironmentID) ([]federation.ConnectionView, error) {
-	return s.repository.List(ctx, environment)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[federation.ConnectionView], error) {
+	return s.repository.List(ctx, environment, page)
 }
 func (s *Service) Connection(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID) (federation.ConnectionDetail, error) {
 	if connectionID.IsZero() {
@@ -64,11 +65,11 @@ func (s *Service) Connection(ctx context.Context, environment identity.Environme
 	}
 	return s.repository.FindDetail(ctx, environment, connectionID)
 }
-func (s *Service) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID) ([]federation.ExternalIdentityView, error) {
+func (s *Service) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID, page query.Pagination) (query.Paginated[federation.ExternalIdentityView], error) {
 	if connectionID.IsZero() {
-		return nil, errx.NotFound("federation connection not found")
+		return query.Paginated[federation.ExternalIdentityView]{}, errx.NotFound("federation connection not found")
 	}
-	return s.repository.Identities(ctx, environment, connectionID)
+	return s.repository.Identities(ctx, environment, connectionID, page)
 }
 func (s *Service) Start(ctx context.Context, b authentication.Context, id identity.ConnectionID) (federation.Start, error) {
 	var out federation.Start

@@ -7,6 +7,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Service struct {
@@ -14,7 +15,7 @@ type Service struct {
 }
 
 func New(resources authorization.ResourceRepository) *Service { return &Service{resources} }
-func (s *Service) CreateResource(ctx context.Context, environment identity.EnvironmentID, input authorization.Resource) (identity.ResourceID, error) {
+func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input authorization.Resource) (identity.ResourceID, error) {
 	if err := input.Validate(); err != nil {
 		return identity.ResourceID{}, err
 	}
@@ -28,10 +29,10 @@ func (s *Service) CreateResource(ctx context.Context, environment identity.Envir
 	input.ID = identity.NewResourceID()
 	return input.ID, s.resources.Create(ctx, environment, input)
 }
-func (s *Service) Resources(ctx context.Context, environment identity.EnvironmentID) ([]authorization.Resource, error) {
-	return s.resources.List(ctx, environment)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[authorization.Resource], error) {
+	return s.resources.List(ctx, environment, page)
 }
-func (s *Service) Resource(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) (authorization.Resource, error) {
+func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) (authorization.Resource, error) {
 	if id.IsZero() {
 		return authorization.Resource{}, errx.NotFound("resource not found")
 	}
@@ -65,9 +66,9 @@ func (s *Service) UnlinkApplication(ctx context.Context, environment identity.En
 	}
 	return s.resources.UnlinkApplication(ctx, environment, application, resource)
 }
-func (s *Service) ResourcesByApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID) ([]authorization.Resource, error) {
+func (s *Service) ListByApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, page query.Pagination) (query.Paginated[authorization.Resource], error) {
 	if application.IsZero() {
-		return nil, errx.Validation("application_id must be a valid UUID")
+		return query.Paginated[authorization.Resource]{}, errx.Validation("application_id must be a valid UUID")
 	}
-	return s.resources.ListByApplication(ctx, environment, application)
+	return s.resources.ListByApplication(ctx, environment, application, page)
 }

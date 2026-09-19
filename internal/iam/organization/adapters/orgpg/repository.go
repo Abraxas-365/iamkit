@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -33,12 +35,24 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 	_, err := r.db.ExecContext(ctx, `INSERT INTO organizations(id,environment_id,name) VALUES($1,$2,$3)`, id, environment, name)
 	return failure(err)
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]organization.Summary, error) {
-	out := []organization.Summary{}
-	if err := r.db.SelectContext(ctx, &out, `SELECT id,name FROM organizations WHERE environment_id=$1 ORDER BY id LIMIT 100`, environment); err != nil {
-		return nil, failure(err)
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[organization.Summary], error) {
+	base := `FROM organizations WHERE environment_id=$1`
+	args := []any{environment}
+	n := 1
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND name ILIKE $%d", n)
+		args = append(args, like)
 	}
-	return out, nil
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[organization.Summary]{}, failure(err)
+	}
+	out := []organization.Summary{}
+	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT id,name %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+		return query.Paginated[organization.Summary]{}, failure(err)
+	}
+	return query.NewPaginated(out, total, page), nil
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.OrganizationID) (organization.Organization, error) {
 	var row struct {
@@ -87,12 +101,24 @@ func (r *Repository) RemoveMember(ctx context.Context, environment identity.Envi
 	_, err := r.db.ExecContext(ctx, `UPDATE memberships SET active=false WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user)
 	return failure(err)
 }
-func (r *Repository) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID) ([]organization.MemberView, error) {
-	out := []organization.MemberView{}
-	if err := r.db.SelectContext(ctx, &out, `SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.environment_id=$1 AND m.organization_id=$2 ORDER BY u.name LIMIT 500`, environment, org); err != nil {
-		return nil, failure(err)
+func (r *Repository) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, page query.Pagination) (query.Paginated[organization.MemberView], error) {
+	base := `FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.environment_id=$1 AND m.organization_id=$2`
+	args := []any{environment, org}
+	n := 2
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND (u.name ILIKE $%d OR u.email ILIKE $%d)", n, n)
+		args = append(args, like)
 	}
-	return out, nil
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[organization.MemberView]{}, failure(err)
+	}
+	out := []organization.MemberView{}
+	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+		return query.Paginated[organization.MemberView]{}, failure(err)
+	}
+	return query.NewPaginated(out, total, page), nil
 }
 
 var _ organization.Repository = (*Repository)(nil)

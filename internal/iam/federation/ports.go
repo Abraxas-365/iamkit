@@ -5,6 +5,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Commands interface {
@@ -14,9 +15,9 @@ type Commands interface {
 	Disable(ctx context.Context, m Mutation, connection identity.ConnectionID) error
 }
 type Queries interface {
-	List(ctx context.Context, environment identity.EnvironmentID) ([]ConnectionView, error)
+	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[ConnectionView], error)
 	Connection(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) (ConnectionDetail, error)
-	Identities(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) ([]ExternalIdentityView, error)
+	Identities(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, page query.Pagination) (query.Paginated[ExternalIdentityView], error)
 }
 type Flows interface {
 	Start(ctx context.Context, boundary authentication.Context, connection identity.ConnectionID) (Start, error)
@@ -27,8 +28,8 @@ type Repository interface {
 	Create(ctx context.Context, input Connection) error
 	Find(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) (Connection, error)
 	FindDetail(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) (ConnectionDetail, error)
-	List(ctx context.Context, environment identity.EnvironmentID) ([]ConnectionView, error)
-	Identities(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) ([]ExternalIdentityView, error)
+	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[ConnectionView], error)
+	Identities(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, page query.Pagination) (query.Paginated[ExternalIdentityView], error)
 	SaveState(ctx context.Context, hash []byte, s State) error
 	ConsumeState(ctx context.Context, stateHash, bindingHash []byte) (State, error)
 	LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, identity.UserID, error)

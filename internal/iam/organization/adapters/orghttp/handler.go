@@ -42,11 +42,11 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Handler) List(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c))
+	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
-	return c.JSON(httpx.NewPaginated(c, out))
+	return c.JSON(out)
 }
 func (h *Handler) Find(c *fiber.Ctx) error {
 	id, err := identity.ParseOrganizationID(c.Params("id"))
@@ -89,11 +89,11 @@ func (h *Handler) Members(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	out, err := h.queries.Members(c.Context(), env(c), org)
+	out, err := h.queries.Members(c.Context(), env(c), org, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
-	return c.JSON(httpx.NewPaginated(c, out))
+	return c.JSON(out)
 }
 func (h *Handler) RemoveMember(c *fiber.Ctx) error {
 	org, err := identity.ParseOrganizationID(c.Params("organization"))

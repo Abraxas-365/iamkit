@@ -4,10 +4,11 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { useList } from '@/hooks/use-list'
+import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
-import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
 import { ConfirmDialog, DataTable, ID, PageHeader, Status } from '@/components/library/patterns'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -35,7 +36,7 @@ export default function FederationDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const identities = useList<ExternalIdentity>(`${base}/federation-connections/${connectionId}/identities`)
+  const identities = usePaginatedList<ExternalIdentity>(`${base}/federation-connections/${connectionId}/identities`)
 
   const [linking, setLinking] = useState(false)
   const [unlinking, setUnlinking] = useState<ExternalIdentity | null>(null)
@@ -87,6 +88,8 @@ export default function FederationDetailPage() {
         {canWrite && <Button variant="outline" onClick={() => setLinking(true)}><Plus className="size-4" /> Link identity</Button>}
       </div>
 
+      <PaginationBar state={identities} noun="identities" />
+
       <DataTable
         columns={['User', 'Subject', ...(canWrite ? ['Actions'] : [])]}
         loading={identities.loading}
@@ -109,7 +112,6 @@ export default function FederationDetailPage() {
           return cells
         })}
       />
-      <p className="text-xs text-muted-foreground">{identities.data.length} of {identities.total} linked identities</p>
     </div>
 
     {/* Link identity dialog */}

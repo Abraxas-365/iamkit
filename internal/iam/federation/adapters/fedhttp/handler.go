@@ -77,11 +77,11 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Handler) list(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c))
+	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
-	return c.JSON(httpx.NewPaginated(c, out))
+	return c.JSON(out)
 }
 func (h *Handler) find(c *fiber.Ctx) error {
 	id, err := identity.ParseConnectionID(c.Params("id"))
@@ -99,11 +99,11 @@ func (h *Handler) identities(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("connection not found")
 	}
-	out, err := h.queries.Identities(c.Context(), env(c), id)
+	out, err := h.queries.Identities(c.Context(), env(c), id, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
-	return c.JSON(httpx.NewPaginated(c, out))
+	return c.JSON(out)
 }
 func (h *Handler) unlink(c *fiber.Ctx) error {
 	conn, err := identity.ParseConnectionID(c.Params("connection"))

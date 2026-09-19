@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -38,12 +40,24 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 	_, err := r.db.ExecContext(ctx, `INSERT INTO resources(id,environment_id,name,prefix,audience,permissions) VALUES($1,$2,$3,$4,$5,$6)`, input.ID, environment, input.Name, input.Prefix, input.Audience, array(input.Permissions))
 	return conflict(err)
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]authorization.Resource, error) {
-	var rows []authorization.Resource
-	if err := r.db.SelectContext(ctx, &rows, `SELECT id,name,prefix,audience,permissions FROM resources WHERE environment_id=$1 ORDER BY id`, environment); err != nil {
-		return nil, failure(err)
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[authorization.Resource], error) {
+	base := `FROM resources WHERE environment_id=$1`
+	args := []any{environment}
+	n := 1
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND (name ILIKE $%d OR prefix ILIKE $%d)", n, n)
+		args = append(args, like)
 	}
-	return rows, nil
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[authorization.Resource]{}, failure(err)
+	}
+	rows := []authorization.Resource{}
+	if err := r.db.SelectContext(ctx, &rows, fmt.Sprintf("SELECT id,name,prefix,audience,permissions %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+		return query.Paginated[authorization.Resource]{}, failure(err)
+	}
+	return query.NewPaginated(rows, total, page), nil
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) (authorization.Resource, error) {
 	var row authorization.Resource
@@ -68,12 +82,24 @@ func (r *Repository) UnlinkApplication(ctx context.Context, environment identity
 	}
 	return nil
 }
-func (r *Repository) ListByApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID) ([]authorization.Resource, error) {
-	var rows []authorization.Resource
-	if err := r.db.SelectContext(ctx, &rows, `SELECT r.id, r.name, r.prefix, r.audience, r.permissions FROM resources r JOIN application_resources ar ON ar.resource_id=r.id AND ar.environment_id=r.environment_id WHERE ar.environment_id=$1 AND ar.application_id=$2 ORDER BY r.name`, environment, application); err != nil {
-		return nil, failure(err)
+func (r *Repository) ListByApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, page query.Pagination) (query.Paginated[authorization.Resource], error) {
+	base := `FROM resources r JOIN application_resources ar ON ar.resource_id=r.id AND ar.environment_id=r.environment_id WHERE ar.environment_id=$1 AND ar.application_id=$2`
+	args := []any{environment, application}
+	n := 2
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND (r.name ILIKE $%d OR r.prefix ILIKE $%d)", n, n)
+		args = append(args, like)
 	}
-	return rows, nil
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[authorization.Resource]{}, failure(err)
+	}
+	rows := []authorization.Resource{}
+	if err := r.db.SelectContext(ctx, &rows, fmt.Sprintf("SELECT r.id, r.name, r.prefix, r.audience, r.permissions %s ORDER BY r.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+		return query.Paginated[authorization.Resource]{}, failure(err)
+	}
+	return query.NewPaginated(rows, total, page), nil
 }
 func (r *Repository) UpdateCatalog(ctx context.Context, m authorization.Mutation, id identity.ResourceID, input authorization.Catalog) error {
 	tx, err := r.db.BeginTxx(ctx, nil)

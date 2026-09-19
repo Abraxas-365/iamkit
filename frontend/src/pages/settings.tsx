@@ -21,7 +21,7 @@ const ttlOptions = [
   { label: 'No expiry', value: 'never' },
 ]
 export function KeysPage() {
-  const list = useList<Key>('/keys')
+  const list = useList<Key>('/keys?limit=200')
   const { principal } = useAuth()
   const [secret, setSecret] = useState<Credential | null>(null)
   const [target, setTarget] = useState<Key | null>(null)

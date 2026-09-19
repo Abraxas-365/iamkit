@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -44,13 +46,25 @@ func (r *Repository) Revoke(ctx context.Context, environment identity.Environmen
 	_, err := r.db.ExecContext(ctx, `UPDATE service_accounts SET revoked_at=now() WHERE id=$1 AND environment_id=$2`, id, environment)
 	return failure(err)
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]serviceaccount.Account, error) {
-	var rows []serviceaccount.Account
-	err := r.db.SelectContext(ctx, &rows, `SELECT sa.id, sa.name, sa.application_id, a.name AS application_name, sa.resource_id, res.name AS resource_name, sa.permissions, sa.expires_at, sa.revoked_at FROM service_accounts sa JOIN applications a ON a.id=sa.application_id JOIN resources res ON res.id=sa.resource_id WHERE sa.environment_id=$1 ORDER BY sa.name`, environment)
-	if err != nil {
-		return nil, failure(err)
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[serviceaccount.Account], error) {
+	base := `FROM service_accounts sa JOIN applications a ON a.id=sa.application_id JOIN resources res ON res.id=sa.resource_id WHERE sa.environment_id=$1`
+	args := []any{environment}
+	n := 1
+	if like := query.EscapeLike(page.Search); like != "" {
+		n++
+		base += fmt.Sprintf(" AND sa.name ILIKE $%d", n)
+		args = append(args, like)
 	}
-	return rows, nil
+	var total int
+	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
+		return query.Paginated[serviceaccount.Account]{}, failure(err)
+	}
+	rows := []serviceaccount.Account{}
+	sel := fmt.Sprintf("SELECT sa.id, sa.name, sa.application_id, a.name AS application_name, sa.resource_id, res.name AS resource_name, sa.permissions, sa.expires_at, sa.revoked_at %s ORDER BY sa.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
+	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
+		return query.Paginated[serviceaccount.Account]{}, failure(err)
+	}
+	return query.NewPaginated(rows, total, page), nil
 }
 
 var _ serviceaccount.Repository = (*Repository)(nil)
