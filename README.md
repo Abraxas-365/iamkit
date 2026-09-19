@@ -1,243 +1,379 @@
 <div align="center">
 
-<img src="docs/assets/iamkit-banner.svg" alt="IAMKit — Identity and access management with explicit workspace, environment and resource boundaries." width="1200" />
+<img src="docs/assets/iamkit-banner.svg" alt="IAMKit — identity and access management with explicit boundaries" width="1200" />
 
 # IAMKit
 
-**Identity and access management with clear authority boundaries.**
+**Self-hosted identity and resource-scoped access control for your application's backend.**
 
-A self-hosted Go service for isolated projects and environments, resource-scoped permissions,
-and application identity—without treating end users as system administrators.
+Run IAMKit alongside your app. Your backend manages users and business access;
+your users sign in through the identity API. You own the product experience.
 
-<p>
-  <a href="go.mod"><img src="https://img.shields.io/badge/Go-1.26.6%2B-00ADD8?style=flat-square&amp;logo=go&amp;logoColor=white" alt="Go 1.26.6+" /></a>
-  <a href="docs/api.md"><img src="https://img.shields.io/badge/API-Fiber%20%2B%20PostgreSQL-336791?style=flat-square&amp;logo=postgresql&amp;logoColor=white" alt="Fiber + PostgreSQL" /></a>
-  <a href="SECURITY.md"><img src="https://img.shields.io/badge/Status-Early_development-bdae93?style=flat-square" alt="Early development" /></a>
-  <a href="#provenance--license"><img src="https://img.shields.io/badge/License-Not_asserted-lightgrey?style=flat-square" alt="No license asserted" /></a>
-</p>
-
-**[Get started](#get-started)** &nbsp; · &nbsp;
-**[Authority model](#your-authority-model-is-the-product)** &nbsp; · &nbsp;
-**[Capabilities](#capabilities)** &nbsp; · &nbsp;
-**[Validation](#validation)** &nbsp; · &nbsp;
-**[Go deeper](#go-deeper)**
+**[Run with Docker](#get-started)** · **[Integrate your app](#integrate-your-application)** ·
+**[IAMKit vs Ory and Keycloak](#iamkit-vs-ory-and-keycloak)** · **[Documentation plan](PLAN-documentation.md)**
 
 </div>
 
----
+> [!NOTE]
+> **Integration responsibilities:** your application provides signup/invitation
+> workflows and end-user login/consent pages. Deployment supplies TLS, shared abuse
+> controls and signing-key lifecycle management. Passkeys/MFA are not implemented.
+> See [security requirements](SECURITY.md) and
+> [publication requirements](#provenance--license).
 
-## Your authority model is the product
+## How it fits into your application
 
-**Identity systems fail at their boundaries.** IAMKit makes those boundaries explicit: operators manage the workspace; projects contain isolated environments; organizations and memberships model business access; resources define the APIs and permissions an application can use.
+<img src="docs/assets/application-integration.svg" alt="The browser sends signup requests to your backend, which uses a private management key to provision users, memberships and grants in IAMKit. The browser can also call IAMKit's identity API to sign in. Your API validates access tokens and permissions." width="1200" />
 
-No magic `iam` application. No wildcard administrative permission. No inferred authority from a job title, reporting line or matching email address.
+IAMKit separates **administration** from **authentication**:
 
-<table>
-<tr>
-<td width="50%" valign="top">
-<h3>01 · Separate administration</h3>
-<p>Opaque management credentials belong to workspace operators only. End-user, OAuth, SCIM and machine credentials never administer IAMKit.</p>
-</td>
-<td width="50%" valign="top">
-<h3>02 · Isolate the environment</h3>
-<p>Users, memberships, clients, resources and sessions are bound to an environment. Development, staging and production do not share identity state.</p>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<h3>03 · Make permission local</h3>
-<p>Each API resource owns an audience and an exact permission catalog. Roles and direct grants can only use permissions declared by that resource.</p>
-</td>
-<td width="50%" valign="top">
-<h3>04 · Bind every token</h3>
-<p>Application and machine tokens are restricted to their environment, application, resource and audience. Consumers validate those boundaries before authorizing a request.</p>
-</td>
-</tr>
-</table>
+- **Your app backend** owns signup eligibility, invitations, tenant selection and
+  default access. It calls `/management/v1` using a private `ik_mgmt_…` key to
+  create users, add memberships and assign permissions.
+- **Your frontend** supplies the login UI. Password, email OTP and external OIDC
+  federation are available through `/identity/v1`. These requests do not need a
+  management key. They can also go through your backend/BFF.
+- **Your protected API** validates the access token's signature, issuer, audience
+  and environment/application/resource boundaries, then checks permissions and
+  matches the token's organization to the requested tenant. A successful login
+  is not permission to call every API or access another tenant's data.
+- **IAMKit** stores identities, memberships, grants and sessions in PostgreSQL.
+  A separate React management console is available in [`frontend/`](frontend/README.md).
+  The Docker image contains the backend, **not the console or an end-user UI**.
 
-**Operators manage the system. Organizations manage business membership. Resources authorize API access.**
+**A service account is not a management credential.** It obtains machine tokens
+for your application's APIs; it cannot create IAMKit users or administer IAMKit.
+Management keys belong to workspace operators. Their authority is workspace-wide,
+not restricted to one app or environment. Never expose one in browser code or
+build an unrestricted public proxy to the management API.
 
-> [!IMPORTANT]
-> **Early development.** Not a certified or independently audited authentication product. Public signup/invitations, passkeys/MFA, a hosted dashboard, distributed abuse controls, full audit coverage and production key rotation are not implemented. Read [security status](SECURITY.md) before any non-local deployment.
+For browser calls, use a same-origin reverse proxy or deliberately configure CORS
+at your edge; the API does not install a general CORS middleware. Keep management
+routes out of public signup proxies. Use HTTPS for non-local deployments.
 
-## Model
+## IAMKit vs Ory and Keycloak
 
-```text
-Workspace — operators and opaque management credentials
-└── Project
-    └── Environment — isolated development / staging / production
-        ├── Users → organization memberships
-        ├── Organizations → org units, reporting managers, positions
-        ├── Applications → OAuth clients and client/resource bindings
-        ├── Resources → API audiences, permission catalogs, roles and grants
-        ├── Service accounts → resource-bound machine credentials
-        └── Federation and SCIM provisioning connections
-```
+This is a comparison of approach, not a performance benchmark or a claim of
+feature parity.
 
-No special `iam` application exists. End-user, machine, OAuth and SCIM credentials cannot administer IAMKit. Organization membership, reporting hierarchy and job titles never imply workspace operator authority. Operators are workspace-wide owner/admin/viewer; project-specific operator delegation is not implemented.
+| | IAMKit | Ory | Keycloak |
+| :--- | :--- | :--- | :--- |
+| Approach | One Go backend with a prescribed workspace → environment → organization/application/resource model | Composable identity infrastructure: Kratos for identities, Hydra for OAuth/OIDC, Keto for authorization | Integrated identity server with SSO, administration and account-management experiences |
+| App integration | Your backend provisions access; your app supplies signup/login UX | Assemble the components and integration flows you need; hosted offerings also exist | Register clients and use server-hosted login and account flows |
+| Access model | Explicit API audiences, resource permission catalogs, roles and direct grants | Authorization can be composed with Keto | Roles and authorization services/policies |
+| Good fit | Teams wanting explicit B2B/internal-product boundaries and custom UX | Teams wanting modular identity/auth components | Teams wanting a mature integrated SSO platform, including SAML and LDAP/AD integration |
+| Main trade-off | More onboarding/UX and operational work remains yours; no public self-registration endpoint | You choose and integrate the components appropriate to your architecture | Adopt and configure the platform's client, realm and authentication-flow model |
 
-## Capabilities
+Choose based on requirements, not just container count. If you need ready-made
+self-registration, MFA, broad enterprise federation or a mature operational track
+record today, evaluate those needs against established platforms first.
 
-| Area | What it does |
-| :--- | :--- |
-| **Operators** | Local first-owner bootstrap/recovery, operator delegation, expiring management-key rotation/revocation |
-| **Directory** | Users, organizations, memberships, client/resource registration, catalogs, roles and direct grants |
-| **Org structure** | Configurable org units, ancestry/descendants/tree, reporting-manager cycle checks, positions and assignments |
-| **Login** | Password login, opt-in email OTP login, email verification and password reset; trusted email-delivery webhook |
-| **Tokens** | Fifteen-minute RSA access tokens, JWKS, online introspection, logout, 24-hour session/refresh families, rotation and replay revocation |
-| **Impersonation** | Owner-only, with reason, actor attribution, short expiry, no refresh and audit record |
-| **Federation** | External OIDC federation, single-use browser-bound state, nonce/PKCE, explicit account links and deployment-approved credential bindings |
-| **OAuth/OIDC** | Headless authorization-code server: public/confidential clients, S256 PKCE, discovery, refresh rotation and revocation. An application supplies its own login/consent UI |
-| **SCIM** | User provisioning, filtering/pagination, discovery schemas, enterprise manager, deactivation and connection-stable credential rotation |
-| **SDK** | Go management, identity, OAuth and SCIM clients, offline/online validation and Fiber middleware |
-| **Migrations** | Embedded, checksummed, ordered database migrations. No automatic legacy data adoption |
-
-## From bootstrap to protected API
-
-| Start with | Then establish |
-| :--- | :--- |
-| **A workspace owner** | Bootstrap a local owner and save the one-time management credential in a new `0600` file |
-| **An isolated environment** | Create a project and development/staging/production environment; identities do not cross the boundary |
-| **An application and resource** | Register your app, define the API audience and permission catalog, then explicitly bind them |
-| **Business access** | Add memberships and issue direct grants or role assignments for the API resource |
-| **A protected consumer** | Validate a token's trusted issuer/audience/environment/application/resource boundaries, then require an exact permission |
-
-Email OTP is a login method, **not** password-plus-second-factor MFA.
+Official references: [Ory projects](https://www.ory.com/docs/oss/getting-started),
+[Keycloak capabilities](https://www.keycloak.org/).
 
 ## Get started
 
-### 1. Requirements
+### 1. Build and configure the Docker stack
 
-- Go 1.26.6+
-- Docker Compose
-- OpenSSL
+Requirements: Docker with Compose, OpenSSL and a checkout of this repository.
+**No host Go installation is needed.** Use the source-build Compose file until
+you have a verified published image.
 
-### 2. Local setup
+Create a private `.env.docker` file with the following values, replacing every
+placeholder (do not commit it):
 
-```sh
-cp .env.example .env
-mkdir -p .dev-secrets
-openssl genrsa -out .dev-secrets/jwt.pem 2048
-chmod 600 .dev-secrets/jwt.pem
-docker compose up -d --wait
-set -a
-. ./.env
-set +a
-go run ./cmd/iamkit migrate
-go run ./cmd/iamkit bootstrap --email owner@example.com --workspace Demo --output .dev-secrets/owner.json
-go run ./cmd/iamkit
+```dotenv
+POSTGRES_PASSWORD=REPLACE_WITH_RANDOM_HEX
+OIDC_HMAC_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES
+JWT_ISSUER=http://localhost:8080
+IAMKIT_PORT=8080
+IAMKIT_BOOTSTRAP_EMAIL=owner@example.com
+IAMKIT_BOOTSTRAP_WORKSPACE=Demo
+IAMKIT_BOOTSTRAP_PASSWORD=REPLACE_WITH_UNIQUE_12_TO_72_BYTE_PASSWORD
 ```
 
-> [!NOTE]
-> Only process environment is loaded. Compose uses the `identity_data` volume; it neither upgrades nor deletes old database volumes — **use a fresh database**. The migration runner refuses unmanaged non-empty schemas and verifies applied migration checksums. Never edit applied migrations; add another numbered file. Compose does not apply SQL automatically.
-
-### 3. Rotate or recover management credentials
-
-Management keys expire after 24 hours.
+Generate secrets with `openssl rand -hex 32`. A hex database password avoids
+special-character escaping in the connection URL. The Compose template requires
+`OIDC_HMAC_SECRET` even if you only intend to try password login.
 
 ```sh
-# Rotate: POST /management/v1/keys, then revoke the old key separately.
+chmod 600 .env.docker
+mkdir -p secrets
+chmod 700 secrets
+openssl genrsa -out secrets/jwt.pem 4096
+chmod 600 secrets/jwt.pem
 
-# Trusted local recovery replaces all credentials for an existing active
-# workspace owner, without promoting another user:
-go run ./cmd/iamkit recover-owner --email owner@example.com --workspace WORKSPACE_UUID --output .dev-secrets/recovered.json
+docker compose --env-file .env.docker -f docker-compose.production.yml build
 ```
 
-Bootstrap/recovery use exclusively created `0600` files. Never embed management, service, SCIM or confidential OAuth/provider secrets in browser code.
-
-### 4. Provision a product
-
-Once a management credential exists, follow the [API guide](docs/api.md) to create a project/environment and then users, organizations, applications, resources, grants/roles and service accounts. Short version:
+The image runs as a non-root `iamkit` user. On Linux bind mounts, ensure that user
+can read the key; do **not** make the private key world-readable. For a local
+Docker host with ordinary UID mapping, obtain the image's IDs and set ownership:
 
 ```sh
-GET  /management/v1/me                                            # workspace/operator IDs
-POST /management/v1/projects                                      # {"name":"InvoiceCloud"}
-POST /management/v1/projects/{project}/environments                # {"name":"production"}
-POST /management/v1/environments/{environment}/resources           # {"name":"Billing API","audience":"https://billing.example","permissions":["invoices:read"]}
-PUT  /management/v1/environments/{environment}/grants               # {"organization_id":"ORG","user_id":"USER","resource_id":"RESOURCE","permissions":["invoices:read"]}
+CONTAINER_OWNER=$(docker compose --env-file .env.docker -f docker-compose.production.yml \
+  run --rm --no-deps --entrypoint sh iamkit \
+  -c 'printf "%s:%s" "$(id -u)" "$(id -g)"')
+sudo chown "$CONTAINER_OWNER" secrets/jwt.pem
 ```
 
-An organization owner still needs a resource grant to use that resource; membership alone does not issue a token.
+Rootless Docker, user-namespace remapping and managed container platforms may
+require different ownership/secret-mount configuration. Keep the mount read-only
+and grant access only to the runtime identity.
 
-### 5. OAuth/federation deployments
+### 2. Start IAMKit
 
-For OAuth/federation, use a stable HTTPS issuer, configure `OIDC_HMAC_SECRET` (at least 32 random bytes), and serve the interaction UI over HTTPS: browser-binding cookies use `Secure` and `__Host-` restrictions. Password/machine login and health checks can be exercised over HTTP locally. Optional webhook/federation configuration is described in [`.env.example`](.env.example) and the [API guide](docs/api.md).
+```sh
+docker compose --env-file .env.docker -f docker-compose.production.yml up -d --wait
+curl --fail http://localhost:8080/health
+```
 
-## Validation
+The expected health response is `{"status":"healthy","service":"iamkit"}`.
+PostgreSQL data persists in a named volume. Do not remove that volume to upgrade.
+
+On startup IAMKit runs embedded migrations. With bootstrap variables set and no
+workspace yet, it creates the owner/workspace and sets the operator password.
+Existing workspaces skip bootstrap; changing bootstrap variables is **not** a
+password-reset mechanism. Start with an empty database: unmanaged non-empty
+schemas and modified migration checksums are rejected.
+
+> [!WARNING]
+> **Automatic bootstrap currently prints the initial management key to logs.**
+> View it only in a trusted terminal, move it into secret storage, and rotate/revoke
+> it after setup. Restrict container log access and retention. The initial key
+> expires after 24 hours. Remove bootstrap values after initialization.
+> For deployments that must not log credentials, omit bootstrap variables and use
+> the explicit `iamkit bootstrap … --output /secure/path/owner.json` CLI flow with
+> a writable, restricted output mount. The full deployment runbook is part of the
+> [documentation rebuild](PLAN-documentation.md).
+
+```sh
+docker compose --env-file .env.docker -f docker-compose.production.yml logs iamkit
+```
+
+The sample publishes port 8080 on the host. Restrict it to loopback or a private
+network as appropriate, and put TLS in front before exposing it. HTTP localhost
+is for testing password/machine login and health checks; OAuth, federation and
+operator-console cookies require HTTPS. The Compose filename does not imply
+production hardening.
+
+### 3. Configure optional login services
+
+Configuration is read from **process environment**. Compose's `--env-file` supplies
+interpolation values; it does not automatically inject every variable into the
+container. Add optional settings to the `iamkit.environment` map (or a Compose
+override) as well as your private environment file.
+
+| Container variable | Purpose |
+| :--- | :--- |
+| `DATABASE_URL` | PostgreSQL connection string; supplied by the example Compose stack |
+| `JWT_PRIVATE_KEY_PATH` | Mounted RSA private key; `/secrets/jwt.pem` in the example |
+| `JWT_ISSUER` | Stable public issuer URL; HTTPS outside loopback development |
+| `SERVER_PORT` | API port inside the container; keep 8080 to match the example healthcheck |
+| `OIDC_HMAC_SECRET` | Stable OAuth secret, at least 32 random bytes |
+| `EMAIL_WEBHOOK_URL`, `EMAIL_WEBHOOK_TOKEN` | Trusted HTTPS mail-delivery webhook and its bearer token |
+| `FEDERATION_CREDENTIAL_BINDINGS` | Approved environment/issuer/client/secret-reference combinations |
+| `IAMKIT_PROVIDER_*` | Provider client secrets referenced by federation bindings |
+
+Email OTP, email verification and password reset use the webhook. IAMKit sends
+`{email, purpose, code}`; **your service sends the email**. Delivery configuration
+is currently instance-wide, not per application/resource/environment, and the
+payload does not contain those IDs. Do not log codes or webhook payloads.
+
+Federation supports OIDC providers, not every OAuth-only provider. Create an
+approved connection and explicitly link its provider subject to a local user;
+there is no first-login signup or automatic linking by matching email.
+See [`.env.example`](.env.example) for the deployment binding format.
+
+## Integrate your application
+
+### Example: InvoiceCloud signup and password login
+
+**One-time setup:** create a project/environment, an organization (`Acme`), an
+application (`Web App`) and a resource (`Invoices API`). Define the resource's
+permission catalog and bind the application to it. Use the management console or
+management API as illustrated below.
+
+For example, under `/management/v1/environments/ENV_UUID`, authenticated with your
+backend's management key:
+
+```http
+POST /applications
+{"name":"Web App","redirect_uris":["https://app.example.com/callback"]}
+
+POST /resources
+{"name":"Invoices API","prefix":"invoices","audience":"https://api.example.com","permissions":["invoices:read"]}
+
+POST /application-resources
+{"application_id":"APP_UUID","resource_id":"RESOURCE_UUID"}
+```
+
+These are relative routes and illustrative JSON bodies; replace UUID placeholders
+with IDs returned by creation calls. All JSON requests need `Content-Type:
+application/json`.
+
+**Signup:** Alice submits your signup form to **your backend**, not to an IAMKit
+`/signup` endpoint (there isn't one). Your backend checks eligibility and selects
+the organization/default permissions server-side, then makes these management
+calls under the same environment prefix:
+
+```http
+POST /users
+{"name":"Alice","email":"alice@example.com","password":"example-password-replace-me"}
+
+POST /memberships
+{"organization_id":"ORG_UUID","user_id":"USER_UUID"}
+
+PUT /grants
+{"organization_id":"ORG_UUID","user_id":"USER_UUID","resource_id":"RESOURCE_UUID","permissions":["invoices:read"]}
+```
+
+Each request carries `Authorization: Bearer ik_mgmt_…` **from your backend only**.
+Membership and an appropriate resource grant are prerequisites for this login,
+not optional onboarding decorations. These are separate requests, not one atomic
+signup transaction: handle partial failures/retries in your onboarding workflow.
+Do not trust a public form to select privileged roles, arbitrary orgs or grants.
+Add abuse prevention and email-ownership verification appropriate to your product.
+
+**Sign in:** your frontend (or BFF) sends Alice's credentials and the intended
+boundary to IAMKit. No management key is needed:
+
+```js
+const response = await fetch('/identity/v1/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    environment_id: 'ENV_UUID',
+    organization_id: 'ORG_UUID',
+    application_id: 'APP_UUID',
+    resource_id: 'RESOURCE_UUID',
+    email: 'alice@example.com',
+    password: passwordFromForm,
+  }),
+})
+if (!response.ok) throw new Error('Sign-in failed')
+const { access_token, refresh_token } = await response.json()
+```
+
+This relative URL assumes your app's reverse proxy forwards `/identity/` to
+IAMKit. IDs are identifiers, not secrets; IAMKit checks the requested boundary
+against actual memberships, bindings and grants. Select tenant context through a
+trusted onboarding/invitation flow, not by granting whatever the browser requests.
+
+**Call your API:** send `Authorization: Bearer <access_token>` to the Invoices API.
+The API must validate the token, require `invoices:read`, and match its
+`organization_id` to the requested tenant before returning data. Scope database
+queries to that organization; a permission check alone is not tenant isolation.
+Use the SDK's `RequireOrganization` middleware or an equivalent application check.
+Keep browser tokens in memory or use a BFF with appropriately protected cookies;
+do not log tokens. Treat refresh tokens as secrets and handle rotation.
+
+Use `/.well-known/jwks.json` / the [Go SDK](sdk/README.md) for signature and boundary
+validation. Offline validation cannot see revocation before token expiry; use
+online introspection when you need current session/access status.
+
+### Other ways to sign in
+
+| Method | App flow | Prerequisites |
+| :--- | :--- | :--- |
+| Password | `POST /identity/v1/login` with the full boundary | Active user with a password, membership, app/resource binding and grant |
+| Email OTP | `POST /identity/v1/challenges` with environment, email and `purpose: "login"`; then `/challenges/verify` with challenge ID, 8-character code, purpose and full boundary | User has OTP enabled; email webhook configured; same access prerequisites |
+| Google/Microsoft or another OIDC provider | `POST /identity/v1/federation/start` with connection ID and full boundary; follow provider redirect/callback | Approved connection, explicit external-identity link and appropriate local access |
+| OAuth/OIDC client flow | Register an OAuth client bound to an app/resource, then use authorization code + S256 PKCE | Your login/consent UI and HTTPS; detailed guide planned in the [documentation rebuild](PLAN-documentation.md) |
+
+OAuth clients represent **apps obtaining tokens from IAMKit**; federation
+connections represent **external providers authenticating users to IAMKit**.
+The fixed app/resource mapping is an IAMKit design choice, not a universal OAuth
+requirement. Password/federation specify that boundary at login time; OTP currently
+specifies it at verification time.
+
+One user can have a password, OTP enabled and multiple linked providers. These
+resolve to the same local user, but each successful login creates its own session.
+Email OTP is a login method, **not** a second-factor MFA feature.
+
+Forgot password uses `/challenges` with `purpose: "password_reset"`, followed by
+`/challenges/verify` with environment, challenge ID, code, purpose and the new
+12–72 byte password. Success returns 204, not a login session. It requires an
+existing password and configured email delivery. Your app supplies the UI.
+
+## Model and capabilities
+
+```text
+Workspace — operators and management credentials
+└── Project
+    └── Environment — isolated development / staging / production
+        ├── Users and organization memberships
+        ├── Organizations — units, reporting managers, positions
+        ├── Applications — resource bindings and OAuth clients
+        ├── Resources — audiences, permission catalogs, roles and grants
+        ├── Service accounts — resource-bound machine credentials
+        └── Federation and SCIM provisioning connections
+```
+
+There is no special `iam` application and no wildcard administrative permission.
+Organization membership and job titles never imply workspace operator authority.
+
+Also included: refresh-token rotation/replay revocation, online introspection,
+SCIM provisioning, owner-only audited impersonation, a Go SDK with Fiber middleware,
+and embedded checksummed migrations. See [security boundaries](SECURITY.md).
+Concept guides and the full API reference are included in the
+[documentation rebuild plan](PLAN-documentation.md).
+
+## Container registry and publishing
+
+The registry-oriented example [`docker-compose.iamkit.yml`](docker-compose.iamkit.yml)
+references `ghcr.io/abraxas-365/iamkit:latest`. **That reference is a publishing
+target, not confirmation that a public image is available.** Use the source-build
+quickstart above until a release has been published and verified.
+
+Once published, use that Compose file with the same signing-key setup. It uses
+`IAMKIT_DB_PASSWORD` instead of the source-build file's `POSTGRES_PASSWORD`.
+Replace `latest` with a verified version tag or immutable digest for deployments.
+
+For maintainers, [the existing publishing workflow](.github/workflows/publish.yml):
+
+- Publishes to GHCR under the GitHub repository's image name.
+- Runs on pushes to `main`, `v*` tags and manual dispatch.
+- Requests Linux amd64/arm64 builds and authenticates with `GITHUB_TOKEN`.
+- Produces branch, SHA and semantic-version tags. `main` is not itself a release;
+  verify the resulting tags rather than assuming `latest` exists.
+
+Before triggering publication:
+
+1. Resolve [ownership/license permission](#provenance--license), audit source and
+   image contents for secrets, and review dependency licenses/vulnerabilities.
+2. Verify the workflow builds both requested architectures and that the image
+   boots against a fresh PostgreSQL database.
+3. Publish an approved release, then set/check the GHCR package's public visibility.
+4. Test an anonymous pull of the release tag on a clean machine and record its
+   digest before recommending it to users.
+
+No registry push is required to use a locally built image.
+
+## Development and documentation
+
+The full documentation is being rebuilt according to
+[PLAN-documentation.md](PLAN-documentation.md). Use the Docker and integration
+instructions above in the meantime; the old guides have been removed.
+The default `docker-compose.yml` is for local infrastructure; the Docker
+quickstart above explicitly selects the full-stack file.
 
 ```sh
 make build
 make test              # root and nested SDK
 make vet               # root and nested SDK
-make test-e2e          # disposable PostgreSQL 16; Docker required
-make test-all
+make test-e2e          # disposable PostgreSQL; Docker required
 ```
 
-Plain `go test ./...` skips database tests unless `IAMKIT_TEST_E2E=1`. Enabled infrastructure failures fail the suite. Tests never use the development database. The SDK is a separate module and is explicitly checked by the Makefile.
-
-## Layout
-
-```text
-cmd/iamkit/           Server, migration, bootstrap and recovery commands
-internal/bootstrap/   Composition root: concrete adapters and configuration
-internal/identity/    Shared domain boundaries and validation
-internal/iam/         Domain modules, use cases and named adapters (see below)
-internal/server/      HTTP route composition and shared error handling
-migrations/           Embedded checksummed migrations
-sdk/                  iamclient, authclient, authclient/fiberauth, scimclient
-tests/e2e/            Disposable-database security/functional journeys
-```
-
-<details>
-<summary><strong>Module structure · how each IAM domain is organized</strong></summary>
-
-Each IAM module owns its domain types and ports, its specifically named use-case package, and its infrastructure adapters:
-
-```text
-internal/iam/user/
-  user.go, ports.go       Domain and repository/password ports
-  usersvc/                Use cases and validation
-  adapters/userpg/        PostgreSQL implementation
-  adapters/userhttp/      Fiber request/response mapping
-```
-
-The same structure applies to:
-
-| Module | Packages |
-| :--- | :--- |
-| `organization` | `orgsvc`, `orgpg`, `orghttp` |
-| `oauth` | `oauthsvc`, `oauthpg`, `oauthhttp`, `oauthfosite` |
-| `authentication` | `authsvc`, `authpg`, `authhttp`, `authbcrypt`, `authjwt`, `authmail`, `authsecret` |
-| `authorization` | `authz*` |
-| `management` | `mgmt*` |
-| `federation` | `fed*` |
-| `provisioning` | `prov*` |
-| `application` | `app*` |
-| `serviceaccount` | `sacct*` |
-| `impersonation` | `imp*` |
-
-`adapters/` only groups packages; it is not itself a Go package. Domain and service packages do not import Fiber, SQL drivers, Fosite, bcrypt or concrete adapters. Backend failures use `internal/errx`; the independently consumable SDK uses `sdk/apierror`.
-
-Modules: `github.com/Abraxas-365/iamkit` and `github.com/Abraxas-365/iamkit/sdk`. Existing SDK/API contracts intentionally break between releases. Offline JWT validation cannot observe revocation before expiry; use online introspection for immediate authorization changes.
-
-</details>
-
-## Go deeper
-
-**[Full documentation index](docs/index.md)** — concepts, getting started, recipes, API/SDK
-reference, configuration, deployment, troubleshooting, architecture and glossary.
-
-| If you're here to… | Start here |
-| :--- | :--- |
-| Understand the mental model before diving in | [Concepts](docs/concepts.md) |
-| Run a local instance end-to-end | [Getting started](docs/getting-started.md) |
-| Walk through every management/identity/OAuth endpoint | [API guide](docs/api.md) |
-| Follow a task end-to-end (Google login, SCIM, service accounts…) | [Recipes](docs/recipes.md) |
-| Write Go code against IAMKit | [SDK reference](docs/sdk.md) |
-| Check enforced security boundaries and deployment requirements | [Security status](SECURITY.md) · [Deployment](docs/deployment.md) |
-| Wire permission checks into your own Fiber app | `sdk/authclient/fiberauth` — `Authenticate`, `RequirePermissions`, `RequireOrganization` |
-| Debug a specific error message | [Troubleshooting](docs/troubleshooting.md) |
+Plain `go test ./...` skips database tests unless `IAMKIT_TEST_E2E=1`. Tests must
+not use development data. Current references: [Go SDK](sdk/README.md),
+[management console](frontend/README.md), [configuration example](.env.example)
+and [security requirements](SECURITY.md).
 
 ## Provenance / license
 
-This project adapts local `paframework`, which identified `github.com/Practical-Action-Global/iam`. No upstream root license was found. No distribution license is asserted: confirm ownership/permission and dependency licensing before publishing. Source secrets, deployment infrastructure and Git history were not copied.
+This project adapts local `paframework`, which identified
+`github.com/Practical-Action-Global/iam`. No upstream root license was found.
+No distribution license is asserted: confirm ownership/permission and dependency
+licensing before publishing. Source secrets, deployment infrastructure and Git
+history were not copied.
