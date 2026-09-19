@@ -1,502 +1,389 @@
-# AGENTS.md — Coding Guidelines for IAMKit
+# AGENTS.md — IAMKit Architecture & Coding Guidelines
+
+This document is the single source of truth for architectural decisions.
+Every rule here reflects code that compiles and ships today. Do not add
+aspirational patterns — update this file when the code changes.
+
+---
+
+## Project Structure
+
+```
+cmd/iamkit/              CLI entry point
+internal/
+  bootstrap/             Composition root — only place concrete types are wired
+  config/                Constants (TTLs, limits)
+  errx/                  Typed application errors (the only error system)
+  httpx/                 Shared HTTP utilities (pagination)
+  identity/              Typed IDs, domain primitives, validation helpers
+  logx/                  Structured logging
+  ptrx/                  Pointer helpers
+  console/               Embedded SPA assets
+  server/                Fiber server, route registration, error middleware
+    apiauth/             JWT authentication middleware for /api/v1/*
+  iam/
+    <module>/            Domain package (structs + interfaces)
+      adapters/
+        <mod>http/       Fiber HTTP handlers
+        <mod>pg/         PostgreSQL repositories (sqlx)
+        <mod>*           Other adapters (bcrypt, jwt, oidc, fosite, mail, secrets)
+      <mod>svc/          Service (use-case orchestration)
+      <mod>module/       Module assembler (wires adapters → service → ports)
+```
+
+### Module Inventory
+
+| Module | Domain package | Purpose |
+|--------|---------------|---------|
+| application | `internal/iam/application` | OAuth/OIDC application registration |
+| authentication | `internal/iam/authentication` | Password login, sessions, refresh tokens, challenges |
+| authorization | `internal/iam/authorization` | Resources, roles, grants, role assignments |
+| federation | `internal/iam/federation` | External OIDC identity provider connections |
+| impersonation | `internal/iam/impersonation` | Audited admin impersonation |
+| management | `internal/iam/management` | Workspaces, projects, environments, operators, keys |
+| oauth | `internal/iam/oauth` | OAuth2/OIDC server (authorization code + PKCE) |
+| organization | `internal/iam/organization` | Organizations, memberships, org units, positions |
+| provisioning | `internal/iam/provisioning` | SCIM user provisioning |
+| serviceaccount | `internal/iam/serviceaccount` | Machine-to-machine credentials |
+| user | `internal/iam/user` | End-user CRUD |
+
+---
+
+## Ports & Adapters (Hexagonal Architecture)
+
+Every module follows the same four-package layout:
+
+```
+<module>/
+  ports.go           Interfaces only — Commands, Queries, Repository
+  <entity>.go        Domain structs, Validate() methods, Mutation, constants
+  adapters/
+    <mod>http/       Inbound adapter — HTTP handlers (Fiber)
+    <mod>pg/         Outbound adapter — PostgreSQL (sqlx)
+  <mod>svc/          Service — implements Commands/Queries, depends on Repository interface
+  <mod>module/       Assembler — New(Deps) Module, returns interface values
+```
+
+### Rules
+
+1. **`ports.go` contains only interfaces.** No structs, no constants, no
+   `Validate()` methods. One file, predictable location.
+
+2. **Domain files are named after the aggregate**, not `models.go` or `types.go`:
+   `resource.go`, `grant.go`, `connection.go`, `credential.go`, etc.
+
+3. **Domain structs own their validation.** Every create/update struct gets
+   `Validate() error` on a value receiver. One field → one error message.
+
+4. **Services are thin orchestrators.** They call `input.Validate()`, generate
+   IDs, enforce cross-entity invariants, and delegate to the repository.
+
+5. **Adapters never import other adapters** (except `authpg.Resolve` which is
+   shared SQL reused by `fedpg` and `oauthpg` for session resolution).
+
+6. **Module assemblers are the only place** where concrete adapter types appear
+   together. They return a `Module` struct with interface-typed fields.
+
+7. **The composition root** (`internal/bootstrap/container.go`) calls module
+   assemblers and wires cross-module dependencies (e.g. authentication sessions
+   into federation).
+
+### Interface Parameter Naming
+
+Interface methods **must** name every parameter. Bare positional types are
+not allowed — they are unreadable at the call site:
+
+```go
+// ✗ Bad
+LinkApplication(context.Context, string, string, string) error
+
+// ✓ Good
+LinkApplication(ctx context.Context, environment identity.EnvironmentID,
+    applicationID identity.ApplicationID, resourceID identity.ResourceID) error
+```
+
+Naming conventions:
+- `ctx context.Context` — always first.
+- ID parameters: `environmentID`, `applicationID`, `userID`, `sessionID`, etc.
+  Exception: `environment` (shorter, established throughout codebase).
+- Non-ID strings: `email`, `password`, `name`, `role`, `code`, `purpose`.
+- Struct parameters: `p Principal`, `m Mutation`, `b Boundary`, `input Create`.
+
+---
+
+## `identity` — The Foundation Package
+
+`internal/identity/` is the lowest-level application package. It defines
+**what identities are** — ID types, format validators, domain primitives.
+
+### Dependency Rule
+
+`identity` imports only `errx` and external libraries (`uuid`). It **never**
+imports anything from `internal/iam/`. Every domain and adapter package imports
+`identity`. This makes it the foundation of the type system.
+
+```
+stdlib → errx → identity → every domain package → adapters
+```
+
+### Typed IDs: `ID[T any]`
+
+All entity identifiers use `identity.ID[T]`, a generic struct wrapping
+`uuid.UUID` with a phantom type tag for compile-time discrimination:
+
+```go
+type ID[T any] struct{ v uuid.UUID }
+
+// 20 entity types, each with an unexported tag:
+type environmentTag struct{}
+type userTag        struct{}
+// ...
+
+// Public aliases — these are the types used everywhere:
+type EnvironmentID  = ID[environmentTag]
+type UserID         = ID[userTag]
+// ...
+```
+
+**Why this design:**
+- Compile-time safety: `UserID` and `OrganizationID` cannot be mixed.
+- Zero runtime cost: phantom tags are `struct{}`, aliases avoid wrapper overhead.
+- Unexported tags: external packages cannot construct arbitrary IDs — they must
+  use `ParseXID()` or `NewXID()`.
+
+**API per entity type** (20 sets):
+- `NewUserID() UserID` — generate new UUID
+- `ParseUserID(raw string) (UserID, error)` — validation boundary
+- `MustParseUserID(raw string) UserID` — panics, for tests/static init
+
+**Methods on `ID[T]`:**
+- `String() string` — canonical lowercase UUID
+- `IsZero() bool` — true for zero value (replaces `id == ""` checks)
+- `UUID() uuid.UUID` — unwrap when needed
+- `MarshalText() / UnmarshalText()` — JSON support
+- `Value() / Scan()` — database/sql support (sqlx struct tags work directly)
+
+**Where parsing happens:**
+- HTTP handlers: `identity.ParseUserID(c.Params("id"))` at the boundary
+- JWT codec: `mustParseX` helpers at sign/parse boundary
+- Services receive typed IDs — no parsing needed
+
+### Other `identity` Exports
+
+| Function | Purpose |
+|----------|---------|
+| `Email(string) (string, error)` | Normalize + validate email |
+| `ValidatePermissions([]string, prefix)` | Permission catalog validation |
+| `ValidatePrefix(string)` | Resource prefix format |
+| `ValidateRedirects([]string)` | OAuth redirect URI validation |
+| `Subset(requested, catalog []string)` | Permission subset check |
+| `ParseTTL(*string) (time.Duration, error)` | Credential TTL parsing |
+
+These are **pure validation functions**, not types. Email is a `string` because
+there is only one kind of email — no discrimination problem to solve.
+
+### Shared Domain Structs
+
+`identity.User`, `identity.Membership`, `identity.Access` live in `identity`
+because they cross module boundaries (authentication, federation, provisioning
+all reference them).
+
+---
+
+## `errx` — The Error System
+
+`internal/errx/` is the **only** error system. Every error in the application
+is either an `*errx.Error` or gets wrapped into one before leaving a package.
+
+### Error Types
+
+| Type | HTTP Status | When to use |
+|------|------------|-------------|
+| `errx.Validation(msg)` | 400 | Bad input from client |
+| `errx.Unauthorized(msg)` | 401 | Invalid credentials or token |
+| `errx.Forbidden(msg)` | 403 | Valid identity, insufficient permissions |
+| `errx.NotFound(msg)` | 404 | Entity does not exist |
+| `errx.Conflict(msg)` | 409 | Unique constraint / state conflict |
+| `errx.Business(msg)` | 422 | Domain rule violation |
+| `errx.Internal(msg)` | 500 | System error (database, IO) |
+| `errx.External(msg)` | 502 | Upstream service failure |
+| `errx.Wrap(err, msg, type)` | varies | Wrap a cause with context |
+
+### Rules
+
+1. **Every package boundary wraps errors.** Repository methods wrap database
+   errors: `errx.Wrap(err, "persistence failed", errx.TypeInternal)`. Services
+   return `errx.Validation` for input errors, delegate persistence errors as-is.
+
+2. **The HTTP error middleware** (`internal/server/errors.go`) converts
+   `*errx.Error` to JSON responses. It **never** exposes wrapped causes or
+   internal details to the client. 500s get a generic message.
+
+3. **`identity` uses `errx`** for all parse/scan/unmarshal errors. This ensures
+   a `ParseUserID` failure at the HTTP boundary produces a proper 400, not a
+   bare `fmt.Errorf` that would become a 500.
+
+4. **One field → one error message.** Never return "invalid request" for
+   multiple fields. Validation errors name the specific field.
+
+---
 
 ## Domain Validation Pattern
 
-### Problem
+### `Validate() error` on Domain Structs
 
-Validation logic is scattered across service methods as inline `strings.TrimSpace`
-checks, loose `validID()` helpers duplicated in every `*svc` package, and raw
-`uuid.Parse` calls. Error messages are generic ("invalid request"). Nothing
-enforces validation at the type level.
-
-### Pattern: Validate() on Domain Types, Typed IDs at Boundaries
-
-#### 1. `Validate() error` on domain input structs
-
-Every domain struct that enters a service method through a create/update path
-gets a `Validate() error` method. The method lives in the same file as the
-struct definition (not in the service package).
+Every create/update input struct gets a `Validate() error` method in its
+domain file (not in the service):
 
 ```go
-// resource.go  (authorization package)
-func (r Resource) Validate() error {
-    if strings.TrimSpace(r.Name) == "" {
-        return errx.Validation("resource name is required")
-    }
-    if strings.TrimSpace(r.Audience) == "" {
-        return errx.Validation("resource audience is required")
-    }
-    if strings.TrimSpace(r.Prefix) == "" {
-        return errx.Validation("resource prefix is required")
+// application.go
+func (c Create) Validate() error {
+    if strings.TrimSpace(c.Name) == "" {
+        return errx.Validation("application name is required")
     }
     return nil
 }
 ```
 
 Rules:
-- One field → one error message. Never "invalid request" for multiple fields.
-- Use `errx.Validation(...)` for all domain validation errors.
-- The method is on a **value receiver** (no mutation).
-- Only validate structural invariants the struct owns (non-empty, format).
-  Cross-entity checks (e.g. "permissions exist in catalog") stay in the service.
-- `Update` structs with optional (`*T`) fields validate only non-nil fields.
+- Value receiver (no mutation).
+- Only validates structural invariants the struct owns (non-empty, format).
+- Cross-entity checks (permissions ⊆ catalog, prefix enforcement) stay in services.
+- `Update` structs with `*T` fields validate only non-nil fields.
+- ID fields are typed (`identity.XID`) so they don't need UUID format validation.
 
-#### 2. Typed IDs instead of loose `validID()`
+### Where Validation Happens
 
-Delete all per-package `func validID(id string) bool` helpers. Instead, use a
-single shared helper in the `identity` package:
+| Layer | Validates |
+|-------|-----------|
+| HTTP handler | Parses path/query params via `identity.ParseXID()` |
+| Domain struct | `input.Validate()` — field format, required fields |
+| Service | Cross-entity rules, business invariants |
+| Repository | Nothing — trusts the service layer |
 
-```go
-// internal/identity/model.go
-func ValidID(id string) bool { _, err := uuid.Parse(id); return err == nil }
-```
+---
 
-Service methods call `identity.ValidID(id)` directly. This is the minimal
-change; we are **not** introducing newtype ID wrappers at this stage to keep
-the diff small and avoid interface churn.
+## HTTP Adapter Pattern
 
-#### 3. Service methods become thin orchestrators
+Every `<mod>http/handler.go` follows the same structure:
 
 ```go
-func (s *Service) CreateResource(ctx context.Context, env string, input authorization.Resource) (string, error) {
-    if err := input.Validate(); err != nil {
-        return "", err
-    }
-    // cross-entity / prefix / permissions checks remain here
-    ...
+type Handler struct {
+    commands module.Commands
+    queries  module.Queries
+    actor    func(*fiber.Ctx) string
+}
+
+// env parses the environment path parameter (every handler has this).
+func env(c *fiber.Ctx) identity.EnvironmentID {
+    id, _ := identity.ParseEnvironmentID(c.Params("environment"))
+    return id
 }
 ```
 
-#### 4. `authentication.Context.Validate()`
+- Parse IDs at the boundary: `identity.ParseXID(c.Params("id"))`
+- Return `errx.Validation` / `errx.NotFound` on parse failure
+- Delegate to service — never contain business logic
+- JSON binding via `c.BodyParser(&input)`
 
-`authentication.Context` is validated inline in multiple places across
-authentication, federation, impersonation. Give it a `Validate() error` method:
+---
+
+## PostgreSQL Adapter Pattern
+
+Every `<mod>pg/repository.go`:
 
 ```go
-func (c Context) Validate() error {
-    for _, pair := range []struct{ name, value string }{
-        {"environment_id", c.EnvironmentID},
-        {"organization_id", c.OrganizationID},
-        {"application_id", c.ApplicationID},
-        {"resource_id", c.ResourceID},
-    } {
-        if _, err := uuid.Parse(pair.value); err != nil {
-            return errx.Validation(pair.name + " must be a valid UUID")
-        }
-    }
-    return nil
+type Repository struct{ db *sqlx.DB }
+
+func New(db *sqlx.DB) *Repository { return &Repository{db} }
+
+// Package-level error wrappers
+func failure(err error) error { /* wraps with errx.TypeInternal */ }
+func conflict(err error) error { /* detects pq constraint violations → errx.Conflict */ }
+```
+
+- Scan structs use typed ID fields directly (`identity.UserID` with `db:"id"`)
+  because `ID[T]` implements `sql.Scanner`.
+- Query parameters use typed IDs directly because `ID[T]` implements
+  `driver.Valuer`.
+- `var _ module.Repository = (*Repository)(nil)` — compile-time interface check.
+
+---
+
+## Authentication & JWT
+
+Two separate authentication systems exist:
+
+| System | Audience | Transport | Package |
+|--------|----------|-----------|---------|
+| Application auth | End users | JWT (RS256) | `authentication/`, `apiauth/` |
+| Management auth | Operators | Secret-hash / session cookie | `management/` |
+
+**JWT claims use strings** (wire format). Conversion to/from typed IDs happens
+at the `Sign`/`parse` boundary in `authjwt/codec.go`:
+
+```go
+// Sign: typed ID → string
+claims.SessionID = issued.Session.String()
+
+// Parse: string → typed ID
+session, err := identity.ParseSessionID(claims.SessionID)
+```
+
+**`apiauth` middleware** (`internal/server/apiauth/`) validates JWTs and
+sets `identity.EnvironmentID` on the Fiber context. `apiauth.Environment(c)`
+returns a typed ID. The middleware compares the JWT's environment against the
+path parameter — both are typed, so mismatches are caught at compile time.
+
+---
+
+## Mutation & Audit Trail
+
+Modules that support audited mutations define a `Mutation` struct:
+
+```go
+type Mutation struct {
+    Environment identity.EnvironmentID
+    Actor       string
+    Action      string
+    Target      string
 }
 ```
 
----
-
-## Package File Organization
-
-### Rule: ports.go is interfaces only, domain files hold structs
-
-Every module under `internal/iam/<module>/` follows the same two-file-kind
-convention:
-
-| File | Contains | Never contains |
-|------|----------|----------------|
-| `ports.go` | Interfaces only: `Commands`, `Queries`, `Repository`, `Secrets`, etc. | Structs, `Validate()` methods, constants |
-| Domain files (`resource.go`, `connection.go`, `account.go`, …) | Structs, `Validate()` methods, `Mutation`, constants, view types | Interfaces |
-
-**Naming the domain files**: name them after the aggregate or concept they
-describe, not "models.go" or "types.go". Examples:
-
-```
-authentication/   → ports.go, context.go, token.go
-authorization/    → ports.go, resource.go, grant.go
-application/      → ports.go, application.go
-user/             → ports.go, user.go
-organization/     → ports.go, organization.go, structure.go
-federation/       → ports.go, connection.go
-impersonation/    → ports.go, request.go
-management/       → ports.go, workspace.go, activity.go
-oauth/            → ports.go, client.go, registration.go
-provisioning/     → ports.go, credential.go, scim.go
-serviceaccount/   → ports.go, account.go
-```
-
-### Why
-
-1. **Predictability**: any contributor knows interfaces live in `ports.go` and
-   nowhere else. Grep for behavior contracts in one place.
-2. **Diff clarity**: interface changes (which affect adapters) show up in
-   `ports.go` diffs; struct/validation changes (domain-only) show up in domain
-   file diffs.
-3. **Import cycles**: keeping structs out of `ports.go` makes it easier to add
-   imports like `identity` or `errx` to domain files without pulling them into
-   the interface file.
-
-### Self-documenting interface parameters
-
-Interface methods **must** name every parameter. Bare positional `string` params
-are not allowed — they are unreadable at the call site.
-
-```go
-// ✗ Bad — what are these three strings?
-LinkApplication(context.Context, string, string, string) error
-
-// ✓ Good — self-documenting
-LinkApplication(ctx context.Context, environment, applicationID, resourceID string) error
-```
-
-Rules for naming:
-- `ctx context.Context` — always first, always named `ctx`.
-- ID parameters use the form `<entity>ID`: `environmentID`, `resourceID`, `userID`,
-  `sessionID`, `connectionID`, `operatorID`, `clientID`.
-- Environment is `environment` (it is always an ID but the shorter name is
-  already established throughout the codebase).
-- Non-ID strings use their domain name: `email`, `password`, `name`, `role`,
-  `code`, `purpose`, `audience`.
-- Struct parameters use short lowercase names: `p Principal`, `m Mutation`,
-  `b Boundary`, `input Create`, `input Update`.
-
-This applies to `Commands`, `Queries`, and `Repository` interfaces alike. The
-concrete service and repository implementations already name their params; this
-rule ensures the interface declarations match.
+Repository methods accept `Mutation` and insert into `audit_events` within the
+same transaction as the data change. The HTTP handler constructs `Mutation`
+from the authenticated context.
 
 ---
 
-## Per-Module Refactoring Plan
+## External Dependencies
 
-Each section below is a self-contained unit of work. A smaller model can
-execute one module at a time. Every section lists:
-- **Add `Validate()`** — which structs get the method, which file, which fields.
-- **Replace inline checks** — which service file, which methods, what to remove.
-- **Replace `validID()`** — delete the local helper, import `identity.ValidID`.
+| Dependency | Purpose | Import boundary |
+|-----------|---------|-----------------|
+| `github.com/gofiber/fiber/v2` | HTTP framework | `*http/` adapters + `server/` only |
+| `github.com/jmoiron/sqlx` | SQL extensions | `*pg/` adapters + `bootstrap/` only |
+| `github.com/lib/pq` | PostgreSQL driver | `*pg/` adapters + `server/errors.go` |
+| `github.com/google/uuid` | UUID generation | `identity/` only |
+| `github.com/golang-jwt/jwt/v5` | JWT signing/parsing | `authjwt/` only |
+| `github.com/ory/fosite` | OAuth2 server | `oauthfosite/` only |
+| `github.com/coreos/go-oidc/v3` | OIDC discovery | `fedoidc/` only |
 
----
-
-### Module 0: identity (shared)
-
-**File:** `internal/identity/model.go`
-
-Add:
-```go
-func ValidID(id string) bool { _, err := uuid.Parse(id); return err == nil }
-```
-
-This is the single source of truth. All per-package `validID` functions will be
-deleted in subsequent modules.
-
-**Import needed:** `github.com/google/uuid` (already imported in some files;
-add if missing).
+**Rule:** Domain packages and services never import framework types. They
+depend only on `identity`, `errx`, and stdlib.
 
 ---
 
-### Module 1: authentication
-
-**File:** `internal/iam/authentication/ports.go`
-
-Add `Validate() error` to `Context`:
-- `EnvironmentID` — must be valid UUID
-- `OrganizationID` — must be valid UUID
-- `ApplicationID` — must be valid UUID
-- `ResourceID` — must be valid UUID
-
-**File:** `internal/iam/authentication/authsvc/service.go`
-
-- Delete `func validID(id string) bool`.
-- Delete `func valid(c authentication.Context) bool`.
-- Replace all `validID(...)` → `identity.ValidID(...)`.
-- Replace all `valid(boundary)` → `boundary.Validate() != nil` (invert logic).
-- Methods affected: `Login`, `InitiateChallenge`, `VerifyChallenge`.
-
-**File:** `internal/iam/authentication/authsvc/tokens.go`
-
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- Methods affected: `Validate`, `AddMember`, `UpdateProfile`.
-
----
-
-### Module 2: authorization
-
-**File:** `internal/iam/authorization/resource.go`
-
-Add `Validate() error` to `Resource`:
-- `Name` — non-empty after trim
-- `Audience` — non-empty after trim
-- `Prefix` — non-empty after trim
-
-Add `Validate() error` to `Catalog`:
-- `Name` — non-empty after trim
-
-**File:** `internal/iam/authorization/grant.go`
-
-Add `Validate() error` to `Role`:
-- `Name` — non-empty after trim
-- `Resource` — valid UUID
-
-Add `Validate() error` to `Grant`:
-- `Organization` — valid UUID
-- `User` — valid UUID
-- `Resource` — valid UUID
-
-Add `Validate() error` to `RoleAssignment`:
-- `Organization` — valid UUID
-- `User` — valid UUID
-- `Role` — valid UUID
-
-**File:** `internal/iam/authorization/authzsvc/service.go`
-
-- Delete `func validID(id string) bool`.
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- Replace inline `strings.TrimSpace` checks with `input.Validate()`.
-- Methods affected: `CreateResource`, `Resource`, `UpdateCatalog`, `LinkApplication`.
-
-**File:** `internal/iam/authorization/authzsvc/grants.go`
-
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- Replace inline checks with `input.Validate()` where applicable.
-- Methods affected: `Roles`, `Grants`, `SaveRole`, `DeleteRole`, `AssignRole`,
-  `PutGrant`, `DeleteGrant`.
-
----
-
-### Module 3: application
-
-**File:** `internal/iam/application/application.go`
-
-Add `Validate() error` to `Create`:
-- `Name` — non-empty after trim
-
-Add `Validate() error` to `Update`:
-- `Name` — if non-nil, non-empty after trim
-
-**File:** `internal/iam/application/appsvc/service.go`
-
-- Replace inline `strings.TrimSpace(input.Name) == ""` → `input.Validate()`.
-- Replace `uuid.Parse(id)` → `identity.ValidID(id)`.
-- Methods affected: `Create`, `Find`, `Update`.
-
----
-
-### Module 4: user
-
-**File:** `internal/iam/user/user.go`
-
-Add `Validate() error` to `Create`:
-- `Name` — non-empty after trim
-- `Password` — if non-empty, length 12–72
-
-Add `Validate() error` to `Update`:
-- `Name` — if non-nil, non-empty after trim
-
-**File:** `internal/iam/user/usersvc/service.go`
-
-- Replace inline checks with `input.Validate()`.
-- Replace `uuid.Parse(id)` → `identity.ValidID(id)`.
-- Methods affected: `Create`, `Find`, `Update`, `Suspend`.
-
-Note: `Create.Validate()` does NOT validate email — that uses `identity.Email()`
-which does parsing+normalization and must remain in the service (it mutates the
-value).
-
----
-
-### Module 5: organization
-
-**File:** `internal/iam/organization/organization.go`
-
-Add `Validate() error` to `Update`:
-- `Name` — if non-nil, non-empty after trim
-
-Add `Validate() error` to `Membership`:
-- `Organization` — valid UUID
-- `User` — valid UUID
-
-**File:** `internal/iam/organization/structure.go`
-
-Add `Validate() error` to `Unit`:
-- `Name` — non-empty after trim
-- `Kind` — non-empty after trim
-- `Parent` — if non-nil, valid UUID
-
-Add `Validate() error` to `Position`:
-- `Name` — non-empty after trim
-- `Code` — non-empty after trim
-
-Add `Validate() error` to `Assignment`:
-- `Position` — valid UUID
-- `User` — valid UUID
-- `Unit` — if non-nil, valid UUID
-
-Add `Validate() error` to `Profile`:
-- `Unit` — if non-nil, valid UUID
-- `Manager` — if non-nil, valid UUID
-
-**File:** `internal/iam/organization/orgsvc/service.go`
-
-- Delete `func validID(id string) bool`.
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- Replace inline checks with `input.Validate()` / `identity.ValidID()`.
-- Methods affected: `Create`, `Find`, `Update`, `AddMember`, `RemoveMember`, `Members`.
-
-**File:** `internal/iam/organization/orgsvc/structure.go`
-
-- Delete `func optionalID(id *string) bool`.
-- Replace with inline `id == nil || identity.ValidID(*id)` or call the
-  struct's own `Validate()`.
-- Replace inline checks with `input.Validate()`.
-- Methods affected: `Check`, `View`, `SaveUnit`, `DeleteUnit`, `SetProfile`,
-  `SavePosition`, `DeletePosition`, `AssignPosition`, `DeleteAssignment`.
-
----
-
-### Module 6: federation
-
-**File:** `internal/iam/federation/fedsvc/service.go`
-
-- Delete `func validID(id string) bool`.
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- In `Start`, replace inline 5-UUID check with `b.Validate()` (from
-  `authentication.Context`).
-- Methods affected: `Link`, `Disable`, `Start`.
-
-No new `Validate()` methods needed — `Connection` validation is complex
-(URL parsing, regex) and correctly lives in the service.
-
----
-
-### Module 7: impersonation
-
-**File:** `internal/iam/impersonation/ports.go`
-
-Add `Validate() error` to `Request`:
-- `Organization` — valid UUID
-- `Application` — valid UUID
-- `Resource` — valid UUID
-- `User` — valid UUID
-- `Reason` — trimmed length 10–1000
-
-**File:** `internal/iam/impersonation/impsvc/service.go`
-
-- Replace inline UUID loop + reason check with `input.Validate()`.
-- The `environment` parameter is a raw string — validate with `identity.ValidID(environment)`.
-- Methods affected: `Create`.
-
----
-
-### Module 8: management
-
-**File:** `internal/iam/management/mgmtsvc/control.go`
-
-- Delete `func validID(id string) bool`.
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- Methods affected: `RevokeKey`, `DisableOperator`, `CreateProject`,
-  `CreateEnvironment`, `Environments`.
-
-**File:** `internal/iam/management/mgmtsvc/activity.go`
-
-- Replace `uuid.Parse(id)` → `identity.ValidID(id)`.
-- Methods affected: `RevokeSession`.
-
-**File:** `internal/iam/management/mgmtsvc/service.go`
-
-- Replace `uuid.Parse(workspace)` → `identity.ValidID(workspace)`.
-- Methods affected: `RecoverOwner`.
-
-No new `Validate()` methods — management inputs are mostly primitives (email,
-name, password) with validation that includes side effects (hashing, email
-normalization).
-
----
-
-### Module 9: oauth
-
-**File:** `internal/iam/oauth/control.go`
-
-Add `Validate() error` to `Registration`:
-- `Application` — valid UUID
-- `Resource` — valid UUID
-- `Redirects` — non-empty (length > 0)
-
-**File:** `internal/iam/oauth/oauthsvc/service.go`
-
-- Delete `func validID(id string) bool`.
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- Replace inline checks in `Create` with `input.Validate()`.
-- Methods affected: `Create`, `Disable`, `Client`, `Access`.
-
----
-
-### Module 10: provisioning
-
-**File:** `internal/iam/provisioning/control.go`
-
-Add `Validate() error` to `CredentialInput`:
-- `Organization` — valid UUID
-- `Name` — non-empty after trim
-
-Add `Validate() error` to `Link`:
-- `Connection` — valid UUID
-- `User` — valid UUID
-- `External` — non-empty
-
-**File:** `internal/iam/provisioning/provsvc/service.go`
-
-- Delete `func validID(id string) bool`.
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- Methods affected: `Find`, `Create`, `Update`.
-
-**File:** `internal/iam/provisioning/provsvc/control.go`
-
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- Replace inline checks with `input.Validate()`.
-- Methods affected: `Issue`, `Revoke`, `Link`.
-
----
-
-### Module 11: serviceaccount
-
-**File:** `internal/iam/serviceaccount/ports.go`
-
-Add `Validate() error` to `Input`:
-- `Name` — non-empty after trim
-- `Application` — valid UUID
-- `Resource` — valid UUID
-
-**File:** `internal/iam/serviceaccount/sacctsvc/service.go`
-
-- Delete `func validID(id string) bool`.
-- Replace `validID(...)` → `identity.ValidID(...)`.
-- Replace inline checks in `Create` with `input.Validate()`.
-- Methods affected: `Create`, `Revoke`.
-
----
-
-## Execution Checklist
-
-For each module above:
-
-1. Add `Validate()` methods to the domain struct file(s).
-2. Update the service file: replace inline validation with `Validate()` calls,
-   replace `validID()` / `uuid.Parse()` with `identity.ValidID()`.
-3. Delete the local `validID` / `optionalID` helper if present.
-4. Add `"github.com/Abraxas-365/iamkit/internal/identity"` import where needed;
-   remove unused `"strings"` / `"github.com/google/uuid"` imports if they
-   become unreferenced.
-5. Run `go build ./...` to verify compilation.
-6. Run `go test ./...` to verify behavior.
-
-### Import guidance
-
-- Domain struct files (`resource.go`, `grant.go`, etc.) will need:
-  `"strings"`, `"github.com/Abraxas-365/iamkit/internal/errx"`, and
-  `"github.com/Abraxas-365/iamkit/internal/identity"` (for `ValidID`).
-- Service files will need `"github.com/Abraxas-365/iamkit/internal/identity"`.
-- `uuid` import may still be needed in services for `uuid.NewString()`.
-
-### What NOT to change
-
-- Repository/adapter files — they don't do validation.
-- HTTP handler files — they parse requests, not validate domain rules.
-- `identity.Email()`, `identity.ValidatePermissions()`,
-  `identity.ValidatePrefix()`, `identity.ValidateRedirects()` — these are
-  already correct shared helpers. Don't move them or wrap them.
-- Cross-entity validation (catalog subset checks, prefix enforcement) stays in
-  service methods.
-- The `canonical()` function in `authsvc/service.go` — it normalizes, not validates.
+## What NOT to Change
+
+- **Don't add a `Validate()` to repository/adapter code** — they don't validate.
+- **Don't move validation helpers** (`Email`, `ValidatePermissions`, etc.) out
+  of `identity` — they are shared primitives.
+- **Don't make email a type** — there's only one kind of email, no discrimination
+  problem. `identity.Email()` is a parse function that returns a clean `string`.
+- **Don't rename `identity` to `kernel`/`core`/`base`** — Go names packages
+  after content, not architectural role. `identity.UserID` reads correctly;
+  `kernel.UserID` does not.
+- **Don't import domain packages into `identity`** — it must remain the
+  dependency graph leaf.
+- **Don't use `fmt.Errorf` for application errors** — always use `errx`. The
+  HTTP error middleware only understands `*errx.Error`.
