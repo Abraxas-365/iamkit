@@ -19,4 +19,7 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	s.OAuth.RegisterManagement(e)
 	s.Federation.Register(e)
 	s.ProvisioningControl.Register(e)
+	if s.Delivery != nil {
+		s.Delivery.Register(e)
+	}
 }

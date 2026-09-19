@@ -82,4 +82,12 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	sa.Post("/", s.APIHandlers.ServiceAccounts.Create)
 	sa.Get("/", s.APIHandlers.ServiceAccounts.List)
 	sa.Delete("/:id", s.APIHandlers.ServiceAccounts.Revoke)
+
+	// Delivery config
+	if s.Delivery != nil {
+		delivery := e.Group("/delivery", apiauth.ReadWrite(authorization.PermDeliveryRead, authorization.PermDeliveryWrite))
+		delivery.Get("/", s.Delivery.Get)
+		delivery.Put("/", s.Delivery.Set)
+		delivery.Delete("/", s.Delivery.Delete)
+	}
 }

@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"io/fs"
+
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/adapters/apphttp"
@@ -54,6 +56,7 @@ type Server struct {
 	Auth                *authhttp.Handler
 	OAuth               *oauthhttp.Handler
 	Users               *userhttp.Handler
+	Delivery            *authhttp.DeliveryHandler
 
 	// API routes (/api/v1/*) — JWT-based, permission-scoped.
 	API         *apiauth.Middleware
@@ -68,6 +71,10 @@ type Server struct {
 	// management and API routes. Defaults to 120 if zero.
 	// Env: RATE_LIMIT_PER_MINUTE
 	RateLimitPerMinute int
+
+	// Console is the embedded frontend filesystem (from internal/console).
+	// If nil, no SPA is served and clients must provide their own UI.
+	Console fs.FS
 }
 
 // requestLogger logs every request with method, path, status, and latency.
@@ -144,5 +151,6 @@ func (s *Server) App() *fiber.App {
 	s.Provisioning.Register(app)
 	s.OAuth.Register(app)
 	s.apiRoutes(app, rateLimit)
+	s.spaRoutes(app, s.Console)
 	return app
 }

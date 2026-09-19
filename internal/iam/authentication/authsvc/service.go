@@ -15,15 +15,19 @@ import (
 )
 
 type Service struct {
-	repository authentication.Repository
-	passwords  authentication.Passwords
-	secrets    authentication.Secrets
-	delivery   authentication.Delivery
+	repository  authentication.Repository
+	passwords   authentication.Passwords
+	secrets     authentication.Secrets
+	delivery    authentication.Delivery
+	deliverySvc *DeliveryService // per-environment delivery; nil = global-only
 }
 
 func New(repository authentication.Repository, passwords authentication.Passwords, secrets authentication.Secrets, delivery authentication.Delivery) *Service {
-	return &Service{repository, passwords, secrets, delivery}
+	return &Service{repository: repository, passwords: passwords, secrets: secrets, delivery: delivery}
 }
+
+// SetDeliveryService enables per-environment webhook lookup at challenge time.
+func (s *Service) SetDeliveryService(ds *DeliveryService) { s.deliverySvc = ds }
 func canonical(c authentication.Context) authentication.Context {
 	for _, id := range []*string{&c.EnvironmentID, &c.OrganizationID, &c.ApplicationID, &c.ResourceID} {
 		if parsed, err := uuid.Parse(*id); err == nil {
@@ -127,7 +131,7 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment, email, pur
 	if err != nil || !identity.ValidID(environment) || (purpose != "login" && purpose != "password_reset" && purpose != "email_verification") {
 		return "", errx.Validation("invalid challenge request")
 	}
-	if s.delivery == nil {
+	if s.deliverySvc == nil && s.delivery == nil {
 		return "", errx.External("email delivery is not configured")
 	}
 	id := uuid.NewString()
@@ -157,8 +161,14 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment, email, pur
 	if err = tx.CreateChallenge(ctx, id, environment, user, purpose, s.secrets.Hash(id+":"+code)); err != nil {
 		return "", err
 	}
-	if err = s.delivery.Send(ctx, email, purpose, code); err != nil {
-		// Never log the adapter error: it may contain recipient or challenge data.
+	// Use per-environment delivery if available, otherwise global.
+	var sendErr error
+	if s.deliverySvc != nil {
+		sendErr = s.deliverySvc.Send(ctx, environment, email, purpose, code)
+	} else {
+		sendErr = s.delivery.Send(ctx, email, purpose, code)
+	}
+	if sendErr != nil {
 		slog.ErrorContext(ctx, "challenge delivery failed")
 		return id, nil
 	}

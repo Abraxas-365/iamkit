@@ -1,7 +1,7 @@
 import { Link, matchPath, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { useTheme } from 'next-themes'
-import { Activity, Blocks, Bot, Building2, FolderKanban, Globe, KeyRound, LayoutDashboard, Link2, LogOut, Moon, Server, Settings, Shield, ShieldCheck, Sun, Tags, UserCog, Users } from 'lucide-react'
+import { Activity, Bell, Blocks, Bot, Building2, FolderKanban, Globe, KeyRound, LayoutDashboard, Link2, LogOut, Moon, Server, Settings, Shield, ShieldCheck, Sun, Tags, UserCog, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth'
 import { message } from '@/lib/utils'
@@ -15,6 +15,7 @@ const environmentNav = [
   ['users', 'Users', Users], ['organizations', 'Organizations', Building2], ['applications', 'Applications', Blocks],
   ['resources', 'Resources & scopes', Shield], ['roles', 'Roles', Tags], ['grants', 'Grants', ShieldCheck],
   ['service-accounts', 'Service accounts', Bot], ['federation', 'Federation', Globe], ['oauth-clients', 'OAuth clients', Link2], ['provisioning', 'SCIM provisioning', Server],
+  ['notifications', 'Notifications', Bell],
   ['sessions', 'Sessions', KeyRound], ['audit-events', 'Audit events', Activity],
 ] as const
 export default function AppLayout() {

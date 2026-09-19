@@ -266,4 +266,23 @@ implementation successfully completing the first-user journey.
 
 - [x] Remove previous documentation pages while preserving assets.
 - [x] Define the new information architecture, page standards and acceptance gates.
-- [ ] Execute phases 1–6 and publish the replacement documentation.
+- [x] Write the planned onboarding, concepts, integration, reference, operations
+  and maintainer pages, with a navigable documentation hub.
+- [x] Add onboarding/browser/Go API examples and disposable Docker smoke coverage.
+- [x] Verify fresh Docker runtime, non-root signing-key mount, explicit bootstrap,
+  provisioning/login/introspection, cross-tenant login denial and restart.
+- [x] Replace transitional README links; correct scoped IAM and CORS descriptions.
+- [x] Add local-link/anchor/SVG/hygiene validation and documentation CI workflow.
+- [x] Review source contracts; document scoped API routing blockers and correct
+  delivery override/fallback and user list/detail descriptions.
+- [ ] Correct scoped API environment and permission middleware, with regression
+  tests, before recommending it for isolated administration (backend follow-up).
+- [ ] Complete exhaustive per-route field/status coverage and live SDK envelope
+  compatibility; advanced guides do not yet all meet every tutorial contract.
+- [ ] Exercise public HTTPS browser flows and live Google/Microsoft/mail/directory
+  integrations with deployment-approved accounts and credentials.
+- [ ] Execute isolated restore/incident drills and a named release-pair upgrade.
+- [ ] Validate authorized publication/anonymous pulls and close remaining phase gates.
+
+See [validation record](docs/maintainers/validation.md) for observed results and
+remaining acceptance work. Page creation does not mark all six gates complete.

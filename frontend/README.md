@@ -46,7 +46,7 @@ editing. Several of these need additional backend read contracts for a complete 
    # Use a local, permission-restricted JSON file containing:
    # {"password":"your unique 12–72 byte password"}
    curl --fail-with-body http://localhost:8080/management/v1/password \
-     -H "Authorization: Bearer $MGMT" \
+     -H "X-API-Key: $MGMT" \
      -H 'Content-Type: application/json' \
      --data-binary @/path/to/private-password.json
    ```
@@ -81,7 +81,8 @@ editing. Several of these need additional backend read contracts for a complete 
    `mkcert -install` changes your local trust store; use only on your own development
    machine. An existing trusted HTTPS reverse proxy is an alternative.
 
-The development proxy forwards `/management` to the API. Override its target with
+The development proxy forwards `/management`, `/identity`, `/api`, `/scim`,
+`/health` and `/.well-known` to the API. Override its target with
 `IAMKIT_API_URL=http://localhost:YOUR_PORT` if needed. These are server-side Vite
 configuration variables, not browser credentials. Without TLS variables Vite uses
 HTTP; do not rely on browser-specific localhost exceptions for Secure cookies.
@@ -96,24 +97,24 @@ Only the theme preference is persisted in localStorage.
 
 Login and cookie-authenticated mutations send `X-IAMKit-Console: 1`. The backend
 requires this header and rejects cross-site fetch metadata. Do **not** configure
-credentialed management CORS for untrusted origins. Bearer-key automation does not
+credentialed management CORS for untrusted origins. X-API-Key automation does not
 require the console header. Logout reports revocation failures instead of pretending
 that clearing a cookie invalidated the server session.
 
-Build with `npm run build`. Serve `dist/` over HTTPS at the origin root, proxy
-`/management/*` to Go, and route other non-file frontend paths to `index.html` so
-deep links work. Do not route failed API requests to the SPA fallback. Keep the API
-and console on the same origin. Vite's dev proxy is not a production deployment.
+Build with `npm run build`. In production, the frontend is **embedded into the Go
+binary** via `//go:embed` — the Dockerfile handles this automatically. The server
+serves static assets and falls back to `index.html` for client-side routes. No
+separate static server or proxy configuration is needed. Vite's dev proxy is for
+local development only.
 
-### Existing backend security limitations
+### Recovery and deployment controls
 
-This is an early-development console, not a production-readiness declaration.
-The current backend `recover-owner` flow revokes management keys but does not reset
-operator passwords or invalidate operator sessions. Password changes also do not
-revoke existing sessions. Do not rely on these flows for compromise recovery until
-that lifecycle is hardened. Password login currently assumes one active workspace
-membership per operator; multi-workspace selection is not implemented. Operator MFA
-and distributed rate limiting are also not implemented. See [security status](../SECURITY.md).
+`recover-owner` requires an existing active owner, revokes their management keys
+and console sessions, and clears their password. Re-establish console credentials
+after recovery; see the [incident runbook](../docs/operations/incident-response.md).
+Password login assumes one active workspace membership per operator;
+multi-workspace selection is not implemented. Operator MFA and distributed rate
+limiting are not implemented; use appropriate ingress and operator-access controls.
 
 ## Validation
 

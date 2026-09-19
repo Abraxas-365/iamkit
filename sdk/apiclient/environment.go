@@ -282,3 +282,36 @@ func (e Environment) ServiceAccounts(ctx context.Context) ([]ServiceAccount, err
 func (e Environment) RevokeServiceAccount(ctx context.Context, id string) error {
 	return e.client.Do(ctx, "DELETE", e.path("service-accounts", id), nil, nil)
 }
+
+// ── Delivery Config ──
+
+// DeliveryConfig is the per-environment webhook delivery configuration.
+type DeliveryConfig struct {
+	EnvironmentID string `json:"environment_id"`
+	WebhookURL    string `json:"webhook_url"`
+	HasToken      bool   `json:"has_token"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+// SetDeliveryConfig is the input for creating/replacing a delivery webhook.
+type SetDeliveryConfig struct {
+	WebhookURL   string `json:"webhook_url"`
+	WebhookToken string `json:"webhook_token"`
+}
+
+// DeliveryConfig returns the delivery webhook configuration for this environment.
+func (e Environment) DeliveryConfig(ctx context.Context) (DeliveryConfig, error) {
+	var out DeliveryConfig
+	return out, e.client.Do(ctx, "GET", e.path("delivery"), nil, &out)
+}
+
+// SetDeliveryConfig creates or replaces the delivery webhook for this environment.
+func (e Environment) SetDeliveryConfig(ctx context.Context, input SetDeliveryConfig) error {
+	return e.client.Do(ctx, "PUT", e.path("delivery"), input, nil)
+}
+
+// DeleteDeliveryConfig removes the per-environment delivery webhook.
+func (e Environment) DeleteDeliveryConfig(ctx context.Context) error {
+	return e.client.Do(ctx, "DELETE", e.path("delivery"), nil, nil)
+}

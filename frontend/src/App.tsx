@@ -12,6 +12,7 @@ import MembersPage from '@/pages/members'
 import RoleAssignmentsPage from '@/pages/role-assignments'
 import ApplicationDetailPage from '@/pages/application-detail'
 import FederationDetailPage from '@/pages/federation-detail'
+import NotificationsPage from '@/pages/notifications'
 export default function App() {
   return <Routes>
     <Route path="/login" element={<LoginPage />} />
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="federation/:connectionId" element={<FederationDetailPage />} />
         <Route path="oauth-clients" element={<OAuthClientsPage />} />
         <Route path="provisioning" element={<ProvisioningPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="sessions" element={<ActivityPage />} />
         <Route path="audit-events" element={<ActivityPage audit />} />
       </Route>

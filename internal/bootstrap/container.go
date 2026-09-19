@@ -12,10 +12,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Abraxas-365/iamkit/internal/console"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/adapters/apphttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/appmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authmail"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
@@ -49,6 +51,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, IssueSession: s.IssueSession})
 	s.Tokens = authenticationModule.Tokens
 	s.Auth = authenticationModule.HTTP
+	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService)
 	organizationModule := orgmodule.New(orgmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Structure = organizationModule.Structure
 	s.Organizations = organizationModule.HTTP
@@ -151,6 +154,7 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 			s.RateLimitPerMinute = n
 		}
 	}
+	s.Console = console.Assets()
 	return s, nil
 }
 func GenerateKey() (*rsa.PrivateKey, error) { return rsa.GenerateKey(rand.Reader, 2048) }

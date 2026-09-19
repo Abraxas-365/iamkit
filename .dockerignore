@@ -6,5 +6,8 @@
 !cmd/
 !internal/
 !migrations/
+!frontend/
+frontend/node_modules/
+frontend/dist/
 !go.mod
 !go.sum

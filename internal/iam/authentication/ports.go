@@ -29,6 +29,24 @@ type SessionQueries interface {
 type Delivery interface {
 	Send(ctx context.Context, email, subject, body string) error
 }
+
+// DeliveryConfigCommands manages per-environment webhook delivery settings.
+type DeliveryConfigCommands interface {
+	SetDeliveryConfig(ctx context.Context, environmentID string, input DeliveryConfigInput) error
+	DeleteDeliveryConfig(ctx context.Context, environmentID string) error
+}
+
+// DeliveryConfigQueries reads per-environment webhook delivery settings.
+type DeliveryConfigQueries interface {
+	DeliveryConfig(ctx context.Context, environmentID string) (DeliveryConfig, error)
+}
+
+// DeliveryConfigRepository is the storage interface for delivery configs.
+type DeliveryConfigRepository interface {
+	GetDeliveryConfig(ctx context.Context, environmentID string) (DeliveryConfig, string, error) // config, webhook token, error
+	SetDeliveryConfig(ctx context.Context, environmentID, webhookURL, webhookToken string) error
+	DeleteDeliveryConfig(ctx context.Context, environmentID string) error
+}
 type Passwords interface {
 	Hash(password string) (string, error)
 	Compare(hash, password string) bool

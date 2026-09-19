@@ -13,6 +13,10 @@ export default defineConfig({
       cert: readFileSync(process.env.CONSOLE_TLS_CERT),
       key: readFileSync(process.env.CONSOLE_TLS_KEY),
     } : undefined,
-    proxy: { '/management': { target: process.env.IAMKIT_API_URL || 'http://localhost:8080' } },
+    proxy: Object.fromEntries(
+      ['/management', '/identity', '/api', '/scim', '/health', '/.well-known'].map(
+        p => [p, { target: process.env.IAMKIT_API_URL || 'http://localhost:8080' }]
+      )
+    ),
   },
 })

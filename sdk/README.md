@@ -1,6 +1,8 @@
 # IAMKit Go SDK
 
 Go client libraries for integrating with IAMKit's identity and access management APIs.
+See the [current SDK reference](../docs/reference/sdk/go.md) for version selection,
+API-family boundaries and typed-list response compatibility notes.
 
 ```
 go get github.com/Abraxas-365/iamkit/sdk
@@ -25,12 +27,13 @@ go get github.com/Abraxas-365/iamkit/sdk
             - GET  /identity/v1/me
 ```
 
-The SDK has **three client packages** matching the three credential types:
+The SDK has **four client packages** with distinct API authority:
 
 | Package | Credential | Use case |
 |---------|-----------|----------|
 | `iamclient` | `ik_mgmt_*` | Backend → Management API (users, orgs, resources, grants) |
 | `authclient` | User tokens / `ik_svc_*` | Identity API (login, tokens, profile, federation) |
+| `apiclient` | JWT with explicit IAM permissions | Permission-scoped `/api/v1` management |
 | `scimclient` | `ik_scim_*` | SCIM 2.0 provisioning (enterprise user sync) |
 
 Plus framework integrations:

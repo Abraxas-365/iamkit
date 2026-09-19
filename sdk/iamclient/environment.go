@@ -413,3 +413,38 @@ func (e Environment) PositionAssignments(ctx context.Context, org string) ([]Pos
 func (e Environment) UnassignPosition(ctx context.Context, org, id string) error {
 	return e.operation(ctx, "DELETE", []string{"organizations", org, "position-assignments", id}, nil, nil)
 }
+
+// ── Delivery Config ──
+
+// DeliveryConfig is the per-environment webhook delivery configuration.
+type DeliveryConfig struct {
+	EnvironmentID string `json:"environment_id"`
+	WebhookURL    string `json:"webhook_url"`
+	HasToken      bool   `json:"has_token"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+// SetDeliveryConfig creates or replaces the per-environment delivery webhook.
+type SetDeliveryConfig struct {
+	WebhookURL   string `json:"webhook_url"`
+	WebhookToken string `json:"webhook_token"`
+}
+
+// DeliveryConfig returns the delivery webhook configuration for this environment.
+func (e Environment) DeliveryConfig(ctx context.Context) (DeliveryConfig, error) {
+	var out DeliveryConfig
+	err := e.client.Do(ctx, "GET", e.path("delivery"), nil, &out)
+	return out, err
+}
+
+// SetDeliveryConfig creates or replaces the delivery webhook for this environment.
+func (e Environment) SetDeliveryConfig(ctx context.Context, input SetDeliveryConfig) error {
+	return e.client.Do(ctx, "PUT", e.path("delivery"), input, nil)
+}
+
+// DeleteDeliveryConfig removes the per-environment delivery webhook,
+// falling back to the global EMAIL_WEBHOOK_URL.
+func (e Environment) DeleteDeliveryConfig(ctx context.Context) error {
+	return e.client.Do(ctx, "DELETE", e.path("delivery"), nil, nil)
+}

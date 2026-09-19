@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -117,16 +118,7 @@ func (r *Repository) named(ctx context.Context, query string, args ...any) ([]ma
 func (r *Repository) Projects(ctx context.Context, workspace string) ([]management.Named, error) {
 	return r.named(ctx, `SELECT id,name FROM projects WHERE workspace_id=$1 ORDER BY id`, workspace)
 }
-var iamResourcePermissions = pq.StringArray{
-	"iam:users:read", "iam:users:write",
-	"iam:orgs:read", "iam:orgs:write",
-	"iam:members:read", "iam:members:write",
-	"iam:apps:read", "iam:apps:write",
-	"iam:resources:read", "iam:resources:write",
-	"iam:roles:read", "iam:roles:write",
-	"iam:grants:read", "iam:grants:write",
-	"iam:service-accounts:read", "iam:service-accounts:write",
-}
+var iamResourcePermissions = pq.StringArray(authorization.IAMResourcePermissions)
 
 func (r *Repository) CreateEnvironment(ctx context.Context, workspace, project, id, name string) error {
 	res, err := r.db.ExecContext(ctx, `INSERT INTO environments(id,project_id,name) SELECT $1,id,$2 FROM projects WHERE id=$3 AND workspace_id=$4`, id, name, project, workspace)

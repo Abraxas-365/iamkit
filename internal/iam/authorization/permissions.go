@@ -20,4 +20,21 @@ const (
 	PermGrantsWrite  = "iam:grants:write"
 	PermServiceAccountsRead  = "iam:service-accounts:read"
 	PermServiceAccountsWrite = "iam:service-accounts:write"
+	PermDeliveryRead  = "iam:delivery:read"
+	PermDeliveryWrite = "iam:delivery:write"
 )
+
+// IAMResourcePermissions is the canonical list of all built-in IAM resource
+// permissions. Used when provisioning the system IAM resource for new
+// environments and kept in sync with the constants above.
+var IAMResourcePermissions = []string{
+	PermUsersRead, PermUsersWrite,
+	PermOrgsRead, PermOrgsWrite,
+	PermMembersRead, PermMembersWrite,
+	PermAppsRead, PermAppsWrite,
+	PermResourcesRead, PermResourcesWrite,
+	PermRolesRead, PermRolesWrite,
+	PermGrantsRead, PermGrantsWrite,
+	PermServiceAccountsRead, PermServiceAccountsWrite,
+	PermDeliveryRead, PermDeliveryWrite,
+}

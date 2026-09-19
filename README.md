@@ -10,7 +10,7 @@ Run IAMKit alongside your app. Your backend manages users and business access;
 your users sign in through the identity API. You own the product experience.
 
 **[Run with Docker](#get-started)** · **[Integrate your app](#integrate-your-application)** ·
-**[IAMKit vs Ory and Keycloak](#iamkit-vs-ory-and-keycloak)** · **[Documentation plan](PLAN-documentation.md)**
+**[IAMKit vs Ory and Keycloak](#iamkit-vs-ory-and-keycloak)** · **[Documentation](docs/index.md)**
 
 </div>
 
@@ -38,18 +38,22 @@ IAMKit separates **administration** from **authentication**:
   matches the token's organization to the requested tenant. A successful login
   is not permission to call every API or access another tenant's data.
 - **IAMKit** stores identities, memberships, grants and sessions in PostgreSQL.
-  A separate React management console is available in [`frontend/`](frontend/README.md).
-  The Docker image contains the backend, **not the console or an end-user UI**.
+  The Docker image includes a built-in **operator management console** (React SPA)
+  served at the root URL — no separate frontend deployment needed. The console
+  source lives in [`frontend/`](frontend/README.md).
 
-**A service account is not a management credential.** It obtains machine tokens
-for your application's APIs; it cannot create IAMKit users or administer IAMKit.
-Management keys belong to workspace operators. Their authority is workspace-wide,
-not restricted to one app or environment. Never expose one in browser code or
-build an unrestricted public proxy to the management API.
+**A service account is not a workspace operator credential.** It exchanges its
+secret for a machine JWT. With explicit built-in IAM resource permissions, that
+JWT can administer selected entities through the [scoped IAM API](docs/reference/api/scoped-iam.md).
+That API currently has [environment and permission-routing blockers](docs/reference/api/scoped-iam.md#deployment-blockers):
+keep it restricted until fixed and tested; do not rely on it for environment isolation.
+It cannot replace workspace/federation/OAuth administration through `/management/v1`.
+Management keys belong to workspace operators and carry workspace-wide authority.
+Never expose either secret in browser code or build an unrestricted public proxy.
 
-For browser calls, use a same-origin reverse proxy or deliberately configure CORS
-at your edge; the API does not install a general CORS middleware. Keep management
-routes out of public signup proxies. Use HTTPS for non-local deployments.
+For browser calls, use a same-origin reverse proxy or configure the trusted
+`CORS_ALLOWED_ORIGINS` allowlist. Keep management routes out of public signup
+proxies. Use HTTPS for non-local deployments.
 
 ## IAMKit vs Ory and Keycloak
 
@@ -144,8 +148,8 @@ schemas and modified migration checksums are rejected.
 > expires after 24 hours. Remove bootstrap values after initialization.
 > For deployments that must not log credentials, omit bootstrap variables and use
 > the explicit `iamkit bootstrap … --output /secure/path/owner.json` CLI flow with
-> a writable, restricted output mount. The full deployment runbook is part of the
-> [documentation rebuild](PLAN-documentation.md).
+> a writable, restricted output mount. Follow the [explicit-bootstrap quickstart](docs/start/docker-quickstart.md)
+> and [deployment runbook](docs/operations/deployment.md).
 
 ```sh
 docker compose --env-file .env.docker -f docker-compose.production.yml logs iamkit
@@ -171,14 +175,17 @@ override) as well as your private environment file.
 | `JWT_ISSUER` | Stable public issuer URL; HTTPS outside loopback development |
 | `SERVER_PORT` | API port inside the container; keep 8080 to match the example healthcheck |
 | `OIDC_HMAC_SECRET` | Stable OAuth secret, at least 32 random bytes |
-| `EMAIL_WEBHOOK_URL`, `EMAIL_WEBHOOK_TOKEN` | Trusted HTTPS mail-delivery webhook and its bearer token |
+| `EMAIL_WEBHOOK_URL`, `EMAIL_WEBHOOK_TOKEN` | Default HTTPS mail-delivery webhook and its bearer token (can be overridden per environment from the console) |
 | `FEDERATION_CREDENTIAL_BINDINGS` | Approved environment/issuer/client/secret-reference combinations |
 | `IAMKIT_PROVIDER_*` | Provider client secrets referenced by federation bindings |
 
 Email OTP, email verification and password reset use the webhook. IAMKit sends
-`{email, purpose, code}`; **your service sends the email**. Delivery configuration
-is currently instance-wide, not per application/resource/environment, and the
-payload does not contain those IDs. Do not log codes or webhook payloads.
+`{email, purpose, code}`; **your service sends the email**. The global
+`EMAIL_WEBHOOK_URL` applies to all environments by default; you can override it
+per environment from the operator console (**Notifications** tab) or the
+management API (`PUT /environments/:id/delivery`). Per-environment config takes
+priority; if not set, the global env var is used. Do not log codes or webhook
+payloads.
 
 Federation supports OIDC providers, not every OAuth-only provider. Create an
 approved connection and explicitly link its provider subject to a local user;
@@ -279,7 +286,7 @@ online introspection when you need current session/access status.
 | Password | `POST /identity/v1/login` with the full boundary | Active user with a password, membership, app/resource binding and grant |
 | Email OTP | `POST /identity/v1/challenges` with environment, email and `purpose: "login"`; then `/challenges/verify` with challenge ID, 8-character code, purpose and full boundary | User has OTP enabled; email webhook configured; same access prerequisites |
 | Google/Microsoft or another OIDC provider | `POST /identity/v1/federation/start` with connection ID and full boundary; follow provider redirect/callback | Approved connection, explicit external-identity link and appropriate local access |
-| OAuth/OIDC client flow | Register an OAuth client bound to an app/resource, then use authorization code + S256 PKCE | Your login/consent UI and HTTPS; detailed guide planned in the [documentation rebuild](PLAN-documentation.md) |
+| OAuth/OIDC client flow | Register an OAuth client bound to an app/resource, then use authorization code + S256 PKCE | Your login/consent UI and HTTPS; see the [OAuth guide](docs/guides/oauth-oidc.md) |
 
 OAuth clients represent **apps obtaining tokens from IAMKit**; federation
 connections represent **external providers authenticating users to IAMKit**.
@@ -310,14 +317,16 @@ Workspace — operators and management credentials
         └── Federation and SCIM provisioning connections
 ```
 
-There is no special `iam` application and no wildcard administrative permission.
-Organization membership and job titles never imply workspace operator authority.
+There is no special `iam` application or wildcard administrative permission.
+Each environment has a built-in IAM resource with explicit permissions for the
+scoped management API. Organization membership and job titles never imply
+workspace operator authority.
 
 Also included: refresh-token rotation/replay revocation, online introspection,
 SCIM provisioning, owner-only audited impersonation, a Go SDK with Fiber middleware,
 and embedded checksummed migrations. See [security boundaries](SECURITY.md).
-Concept guides and the full API reference are included in the
-[documentation rebuild plan](PLAN-documentation.md).
+Read the [concept guides](docs/concepts/identity-model.md) and
+[API reference](docs/reference/api/index.md).
 
 ## Container registry and publishing
 
@@ -352,9 +361,14 @@ No registry push is required to use a locally built image.
 
 ## Development and documentation
 
-The full documentation is being rebuilt according to
-[PLAN-documentation.md](PLAN-documentation.md). Use the Docker and integration
-instructions above in the meantime; the old guides have been removed.
+Start at the [documentation hub](docs/index.md):
+[Docker quickstart](docs/start/docker-quickstart.md),
+[first application](docs/start/first-application.md),
+[application integration](docs/guides/application-integration.md),
+[API reference](docs/reference/api/index.md) and
+[operations checklist](docs/operations/launch-checklist.md).
+See the [validation record](docs/maintainers/validation.md) for tested examples
+and remaining deployment acceptance work.
 The default `docker-compose.yml` is for local infrastructure; the Docker
 quickstart above explicitly selects the full-stack file.
 

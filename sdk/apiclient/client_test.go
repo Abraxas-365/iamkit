@@ -154,6 +154,11 @@ func TestAllAPIPaths(t *testing.T) {
 	env.ServiceAccounts(ctx)
 	env.RevokeServiceAccount(ctx, "sa1")
 
+	// Delivery Config
+	env.DeliveryConfig(ctx)
+	env.SetDeliveryConfig(ctx, SetDeliveryConfig{WebhookURL: "https://example.com/hook", WebhookToken: "tok"})
+	env.DeleteDeliveryConfig(ctx)
+
 	expected := []string{
 		// Users
 		"POST /api/v1/environments/env-1/users",
@@ -199,6 +204,10 @@ func TestAllAPIPaths(t *testing.T) {
 		"POST /api/v1/environments/env-1/service-accounts",
 		"GET /api/v1/environments/env-1/service-accounts",
 		"DELETE /api/v1/environments/env-1/service-accounts/sa1",
+		// Delivery Config
+		"GET /api/v1/environments/env-1/delivery",
+		"PUT /api/v1/environments/env-1/delivery",
+		"DELETE /api/v1/environments/env-1/delivery",
 	}
 	if len(paths) != len(expected) {
 		t.Fatalf("paths count %d != %d:\n  got:  %v\n  want: %v", len(paths), len(expected), paths, expected)

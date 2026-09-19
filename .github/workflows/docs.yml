@@ -1,0 +1,37 @@
+name: Documentation
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: docs/examples/go-api/go.mod
+          cache-dependency-path: docs/examples/go-api/go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Check local documentation contracts
+        run: |
+          python3 scripts/check_docs.py
+          bash -n docs/examples/onboarding/run.sh docs/examples/deployment/smoke.sh
+          git diff --check
+      - name: Compile and test protected API example
+        working-directory: docs/examples/go-api
+        run: |
+          go test ./...
+          go vet ./...
+      - name: Build backend image
+        run: docker build -t iamkit-docs-validation:local .
+      - name: Run disposable onboarding and restart smoke test
+        run: bash docs/examples/deployment/smoke.sh
