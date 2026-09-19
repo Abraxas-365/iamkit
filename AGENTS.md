@@ -64,6 +64,100 @@ Every module follows the same four-package layout:
   <mod>module/       Assembler — New(Deps) Module, returns interface values
 ```
 
+### Interface Segregation: Commands, Queries, Repository
+
+Every module in `ports.go` defines **three interface roles**:
+
+```go
+// Commands — write operations exposed to handlers and other modules.
+type Commands interface {
+    Create(ctx context.Context, environment identity.EnvironmentID, input Create) (identity.ApplicationID, error)
+    Update(ctx context.Context, m Mutation, applicationID identity.ApplicationID, input Update) error
+}
+
+// Queries — read operations exposed to handlers and other modules.
+type Queries interface {
+    Find(ctx context.Context, environment identity.EnvironmentID, applicationID identity.ApplicationID) (Application, error)
+    List(ctx context.Context, environment identity.EnvironmentID) ([]Application, error)
+}
+
+// Repository — persistence contract consumed only by the service.
+type Repository interface {
+    Create(ctx context.Context, environment identity.EnvironmentID, applicationID identity.ApplicationID, input Create) error
+    Find(ctx context.Context, environment identity.EnvironmentID, applicationID identity.ApplicationID) (Application, error)
+    List(ctx context.Context, environment identity.EnvironmentID) ([]Application, error)
+    Update(ctx context.Context, m Mutation, applicationID identity.ApplicationID, input Update) error
+}
+```
+
+**The three roles serve different consumers:**
+
+| Interface | Implemented by | Consumed by |
+|-----------|---------------|-------------|
+| `Commands` | Service | HTTP handlers, other modules |
+| `Queries` | Service | HTTP handlers, other modules |
+| `Repository` | PG adapter | Service only |
+
+**Key differences between Commands and Repository:**
+
+- **Commands generate IDs** — `Create` returns `(identity.ApplicationID, error)`.
+  The service calls `identity.NewApplicationID()` and passes it down.
+- **Repository receives IDs** — `Create` takes the ID as a parameter and
+  returns only `error`. It never generates identifiers.
+- **Commands validate** — the service calls `input.Validate()` before
+  delegating. The repository trusts the service layer.
+
+**The service implements both Commands and Queries** with a compile-time check:
+
+```go
+var _ application.Commands = (*Service)(nil)
+var _ application.Queries = (*Service)(nil)
+```
+
+**Modules with sub-domains** split further. Authorization has separate
+`ResourceCommands`/`ResourceQueries` and `GrantCommands`/`GrantQueries`.
+Organization has `StructureCommands`/`StructureQueries`. Management has
+`ControlCommands`/`ControlQueries` and `ActivityCommands`/`ActivityQueries`.
+
+**The module assembler** exposes only interface types, never the concrete service:
+
+```go
+type Module struct {
+    Commands application.Commands
+    Queries  application.Queries
+    HTTP     *apphttp.Handler
+}
+
+func New(deps Deps) Module {
+    service := appsvc.New(apppg.New(deps.DB))
+    return Module{
+        Commands: service,
+        Queries:  service,
+        HTTP:     apphttp.New(service, service, deps.ActorID),
+    }
+}
+```
+
+The HTTP handler constructor takes `Commands` and `Queries` as separate
+parameters — it never sees `*Service` or `Repository`.
+
+### Additional Port Interfaces
+
+Beyond the core three, modules define additional interfaces for
+infrastructure concerns that should be swappable:
+
+| Interface | Module | Purpose |
+|-----------|--------|---------|
+| `Passwords` | authentication, management | `Hash(string) (string, error)`, `Compare(string, string) bool` |
+| `Secrets` | authentication, federation, oauth, provisioning, serviceaccount | Token/key generation and hashing |
+| `Delivery` | authentication | Send verification codes (email webhook) |
+| `Provider` | federation | OIDC provider discovery and credential approval |
+| `TokenCodec` | authentication | JWT sign/parse (combines `TokenIssuer` + `TokenValidator`) |
+| `Transaction` | authentication, oauth | Database transaction handle for multi-step mutations |
+
+These follow the same rule: defined in `ports.go`, implemented by adapters,
+consumed by services.
+
 ### Rules
 
 1. **`ports.go` contains only interfaces.** No structs, no constants, no
@@ -387,3 +481,7 @@ depend only on `identity`, `errx`, and stdlib.
   dependency graph leaf.
 - **Don't use `fmt.Errorf` for application errors** — always use `errx`. The
   HTTP error middleware only understands `*errx.Error`.
+- **Don't merge Commands and Queries into one interface** — they serve different
+  consumers and may diverge (e.g. queries could be served from a read replica).
+- **Don't let Repository generate IDs** — ID generation is a service
+  responsibility. The repository receives the ID and persists it.
