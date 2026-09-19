@@ -34,10 +34,12 @@ are fixed and tested; do not use it as an isolation boundary.
 - Optional HTTPS email delivery service and external provider registrations.
 - Your frontend, signup backend and protected APIs.
 
-The backend image does not serve the console or hosted end-user login pages.
-There is no public self-registration endpoint: use your backend to enforce signup
-policy before making privileged provisioning calls. Memberships, application
-bindings and grants are necessary for scoped login, not just user creation.
+The backend image serves the operator management console at the root URL.
+It does not provide hosted end-user login pages — your application supplies
+the signup and login UI. There is no public self-registration endpoint: use
+your backend to enforce signup policy before making privileged provisioning
+calls. Memberships, application bindings and grants are necessary for scoped
+login, not just user creation.
 
 ## First success
 

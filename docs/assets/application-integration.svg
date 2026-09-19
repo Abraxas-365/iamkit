@@ -1,71 +1,64 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="660" viewBox="0 0 1200 660" role="img" aria-labelledby="title desc">
-  <title id="title">Integrate your application with IAMKit</title>
-  <desc id="desc">A browser sends signup requests to your application backend. The backend holds a private management key and provisions users, memberships and grants through IAMKit's management API. The browser can separately call the identity API for password, OTP and federation login. The application API validates access tokens and permissions. IAMKit stores identity state in PostgreSQL. Browser calls require a same-origin proxy or explicitly configured CORS.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+  <title id="title">Three steps: set up access, sign in, call your APIs</title>
+  <desc id="desc">Your backend provisions users and access in IAMKit with a private management key. Your frontend signs in through IAMKit and receives tokens. The frontend sends an access token to your APIs, which validate it and enforce tenant boundaries and permissions. IAMKit uses PostgreSQL. Browser authentication can go through a backend or a trusted-origin proxy. Never put management keys in the browser.</desc>
   <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#7dd3fc"/></marker>
-    <marker id="mint-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6ee7b7"/></marker>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#7b9bae"/></marker>
     <style>
-      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
-      .title { font-size: 26px; font-weight: 700; fill: #f1f5f9; }
-      .heading { font-size: 21px; font-weight: 650; fill: #f1f5f9; }
-      .body { font-size: 16px; fill: #cbd5e1; }
-      .small { font-size: 14px; fill: #94a3b8; }
-      .label { font-size: 13px; font-weight: 700; letter-spacing: 1px; fill: #7dd3fc; }
-      .code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 14px; fill: #cbd5e1; }
+      text { font-family: Inter, Arial, sans-serif; fill: #d4d0c8; }
+      .heading { font-size: 28px; font-weight: 700; }
+      .label { font-size: 22px; font-weight: 700; }
+      .body { font-size: 18px; fill: #a8a49a; }
+      .small { font-size: 16px; fill: #a8a49a; }
+      .accent { fill: #7b9bae; }
+      .box { fill: #1c1c18; stroke: #45453e; }
+      .line { fill: none; stroke: #7b9bae; stroke-width: 2; marker-end: url(#arrow); }
     </style>
   </defs>
-  <rect width="1200" height="660" rx="20" fill="#0f172a"/>
-  <text x="36" y="49" class="title">Your product experience. IAMKit's identity boundaries.</text>
-  <text x="36" y="78" class="body">Administration stays on your backend. Authentication is available to your app.</text>
+  <rect width="1200" height="640" rx="8" fill="#0c0c0a"/>
+  <text x="36" y="52" class="heading">Your experience. IAMKit's identity and access APIs.</text>
+  <text x="36" y="84" class="body">One app or many services — the same three flows.</text>
 
-  <rect x="36" y="130" width="278" height="260" rx="12" fill="#1e293b" stroke="#475569"/>
-  <text x="58" y="161" class="label">YOUR FRONTEND</text>
-  <text x="58" y="194" class="heading">User's browser</text>
-  <text x="58" y="235" class="body">Signup and login forms</text>
-  <text x="58" y="267" class="body">Password · OTP · Google</text>
-  <text x="58" y="319" class="small">No management credentials</text>
-  <text x="58" y="342" class="small">Your UI, not a hosted login page</text>
+  <rect x="24" y="112" width="1152" height="134" rx="6" fill="#131311"/>
+  <circle cx="58" cy="150" r="18" fill="#7b9bae"/><text x="58" y="157" text-anchor="middle" font-size="20" font-weight="700" style="fill:#0c0c0a">1</text>
+  <text x="90" y="158" class="label">Set up access</text>
+  <text x="90" y="190" class="small">Server-side only</text>
+  <rect x="326" y="130" width="266" height="98" rx="4" class="box"/>
+  <text x="346" y="166" class="label">Your backend</text>
+  <text x="346" y="196" class="body">Signup &amp; invitation policy</text>
+  <path d="M592 183H862" class="line"/>
+  <text x="727" y="164" text-anchor="middle" class="small">Private management key</text>
+  <rect x="866" y="130" width="286" height="98" rx="4" class="box"/>
+  <text x="886" y="166" class="label accent">IAMKit</text>
+  <text x="886" y="196" class="body">Users, memberships, grants</text>
 
-  <rect x="400" y="130" width="330" height="260" rx="12" fill="#1e293b" stroke="#475569"/>
-  <text x="422" y="161" class="label">TRUSTED SERVER</text>
-  <text x="422" y="194" class="heading">Your app backend / API</text>
-  <text x="422" y="231" class="code">Private ik_mgmt_… key</text>
-  <text x="422" y="264" class="body">Enforce signup / tenant policy</text>
-  <text x="422" y="294" class="body">Provision membership and access</text>
-  <line x1="422" y1="313" x2="708" y2="313" stroke="#475569"/>
-  <text x="422" y="341" class="body">Validate API access tokens</text>
-  <text x="422" y="366" class="small">Check tenant, boundary, permissions</text>
+  <rect x="24" y="258" width="1152" height="134" rx="6" fill="#131311"/>
+  <circle cx="58" cy="296" r="18" fill="#7b9bae"/><text x="58" y="303" text-anchor="middle" font-size="20" font-weight="700" style="fill:#0c0c0a">2</text>
+  <text x="90" y="304" class="label">Sign in</text>
+  <text x="90" y="336" class="small">Password · email OTP · OIDC</text>
+  <rect x="326" y="276" width="266" height="98" rx="4" class="box"/>
+  <text x="346" y="312" class="label">Your frontend</text>
+  <text x="346" y="342" class="body">Your login experience</text>
+  <path d="M592 315H862" class="line"/>
+  <text x="727" y="301" text-anchor="middle" class="small">Sign-in request</text>
+  <path d="M866 347H596" class="line"/>
+  <text x="727" y="371" text-anchor="middle" class="small">Tokens</text>
+  <rect x="866" y="276" width="286" height="98" rx="4" class="box"/>
+  <text x="886" y="312" class="label accent">IAMKit</text>
+  <text x="886" y="342" class="body">Authenticate &amp; issue tokens</text>
 
-  <rect x="816" y="130" width="348" height="398" rx="12" fill="#172b3b" stroke="#38bdf8"/>
-  <text x="840" y="165" class="heading">IAMKit</text>
-  <text x="840" y="197" class="small">Self-hosted Go service</text>
-  <text x="840" y="239" class="label">MANAGEMENT API</text>
-  <text x="840" y="270" class="code">POST /users</text>
-  <text x="840" y="297" class="code">POST /memberships</text>
-  <text x="840" y="324" class="code">PUT  /grants</text>
-  <text x="840" y="350" class="small">Under /management/v1/environments/:env</text>
-  <line x1="840" y1="370" x2="1140" y2="370" stroke="#475569"/>
-  <text x="840" y="404" class="label" style="fill:#6ee7b7">IDENTITY API</text>
-  <text x="840" y="435" class="code">POST /identity/v1/login</text>
-  <text x="840" y="461" class="code">POST /identity/v1/challenges</text>
-  <text x="840" y="487" class="small">Federation, refresh, profile and logout</text>
+  <rect x="24" y="404" width="1152" height="134" rx="6" fill="#131311"/>
+  <circle cx="58" cy="442" r="18" fill="#7b9bae"/><text x="58" y="449" text-anchor="middle" font-size="20" font-weight="700" style="fill:#0c0c0a">3</text>
+  <text x="90" y="450" class="label">Call your APIs</text>
+  <text x="90" y="482" class="small">Enforce access on every call</text>
+  <rect x="326" y="422" width="266" height="98" rx="4" class="box"/>
+  <text x="346" y="458" class="label">Your frontend</text>
+  <text x="346" y="488" class="body">Request app data</text>
+  <path d="M592 475H862" class="line"/>
+  <text x="727" y="456" text-anchor="middle" class="small">Access token</text>
+  <rect x="866" y="422" width="286" height="98" rx="4" class="box"/>
+  <text x="886" y="458" class="label">Your APIs / services</text>
+  <text x="886" y="488" class="body">Validate token, tenant, rights</text>
 
-  <path d="M314 228 H400" fill="none" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arrow)"/>
-  <text x="329" y="215" class="small">Signup</text>
-  <path d="M730 228 H816" fill="none" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arrow)"/>
-  <text x="741" y="215" class="small">Manage</text>
-  <path d="M314 349 H400" fill="none" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arrow)"/>
-  <text x="328" y="334" class="small">API calls</text>
-
-  <path d="M175 390 V465 H816" fill="none" stroke="#6ee7b7" stroke-width="2" marker-start="url(#mint-arrow)" marker-end="url(#mint-arrow)"/>
-  <text x="207" y="439" class="body" style="fill:#6ee7b7">Sign in → receive tokens scoped to app + resource</text>
-  <text x="207" y="494" class="small">Same-origin proxy or explicit CORS; a backend/BFF can mediate instead.</text>
-
-  <path d="M990 528 V556" fill="none" stroke="#7dd3fc" stroke-width="2" marker-end="url(#arrow)"/>
-  <rect x="816" y="558" width="348" height="66" rx="10" fill="#1e293b" stroke="#475569"/>
-  <text x="840" y="585" class="heading">PostgreSQL</text>
-  <text x="840" y="610" class="small">Users · memberships · grants · sessions</text>
-  <text x="36" y="580" class="body">Management key ≠ service account</text>
-  <text x="36" y="606" class="small">Machine tokens access your APIs; they cannot administer IAMKit.</text>
-  <text x="36" y="635" class="small">Never ship management keys or provider secrets to the browser.</text>
+  <text x="36" y="576" class="small">IAMKit stores identity state in PostgreSQL. The Docker image includes an operator console.</text>
+  <text x="36" y="604" class="small">Keep management keys server-side. Browser sign-in needs trusted CORS, a same-origin proxy or a backend/BFF.</text>
 </svg>
