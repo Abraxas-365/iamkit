@@ -201,7 +201,6 @@ Naming conventions:
 - **Typed ID parameters use the short entity name** — `environment`, `application`,
   `user`, `session`, `role`, `connection`, `credential`, etc. Do **not** suffix
   with `ID` — the type `identity.ApplicationID` already says it's an ID.
-  Writing `application identity.ApplicationID` is redundant.
 - Non-ID strings: `email`, `password`, `name`, `role`, `code`, `purpose`.
 - Struct parameters: `p Principal`, `m Mutation`, `b Boundary`, `input Create`.
 - When two IDs of the same entity kind appear, disambiguate with a prefix:
