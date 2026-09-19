@@ -23,7 +23,15 @@ your users sign in through the identity API. You own the product experience.
 
 ## How it fits into your application
 
-<img src="docs/assets/application-integration.svg" alt="The browser sends signup requests to your backend, which uses a private management key to provision users, memberships and grants in IAMKit. The browser can also call IAMKit's identity API to sign in. Your API validates access tokens and permissions." width="1200" />
+<img src="docs/assets/application-integration.svg" alt="The browser sends signup requests to your backend, which uses a private management key to provision users, memberships and grants in IAMKit. The browser can also call IAMKit's identity API to sign in. Your API validates access tokens and permissions. Alternatively, registered apps use IAMKit as their OAuth/OIDC provider with authorization code and PKCE; your app supplies the login and consent UI." width="1200" />
+
+**IAMKit can also be your OAuth/OIDC provider.** Register your apps as clients
+and use authorization code + PKCE to obtain access tokens and OIDC ID tokens.
+You still supply the login and consent UI. This is different from
+**external federation**, where IAMKit lets users sign in through Google,
+Microsoft or another OIDC provider.
+See [OAuth/OIDC client integration](docs/guides/oauth-oidc.md) and
+[external federation](docs/guides/federation.md).
 
 IAMKit separates **administration** from **authentication**:
 

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
-  <title id="title">Three steps: set up access, sign in, call your APIs</title>
-  <desc id="desc">Your backend provisions users and access in IAMKit with a private management key. Your frontend signs in through IAMKit and receives tokens. The frontend sends an access token to your APIs, which validate it and enforce tenant boundaries and permissions. IAMKit uses PostgreSQL. Browser authentication can go through a backend or a trusted-origin proxy. Never put management keys in the browser.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="910" viewBox="0 0 1200 910" role="img" aria-labelledby="title desc">
+  <title id="title">Integrate directly or use IAMKit as your OAuth/OIDC provider</title>
+  <desc id="desc">Your backend provisions users and access in IAMKit with a private management key. Your frontend signs in through IAMKit and receives tokens. The frontend sends an access token to your APIs, which validate it and enforce tenant boundaries and permissions. IAMKit uses PostgreSQL. Browser authentication can go through a backend or a trusted-origin proxy. Never put management keys in the browser. Alternatively, registered OAuth clients use IAMKit as their OAuth/OIDC provider with authorization code and PKCE. Your application supplies the login and consent UI. This is distinct from external OIDC federation such as Google or Microsoft sign-in.</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#7b9bae"/></marker>
     <style>
@@ -14,9 +14,9 @@
       .line { fill: none; stroke: #7b9bae; stroke-width: 2; marker-end: url(#arrow); }
     </style>
   </defs>
-  <rect width="1200" height="640" rx="8" fill="#0c0c0a"/>
+  <rect width="1200" height="910" rx="8" fill="#0c0c0a"/>
   <text x="36" y="52" class="heading">Your experience. IAMKit's identity and access APIs.</text>
-  <text x="36" y="84" class="body">One app or many services — the same three flows.</text>
+  <text x="36" y="84" class="body">Direct API integration — from onboarding to protected API calls.</text>
 
   <rect x="24" y="112" width="1152" height="134" rx="6" fill="#131311"/>
   <circle cx="58" cy="150" r="18" fill="#7b9bae"/><text x="58" y="157" text-anchor="middle" font-size="20" font-weight="700" style="fill:#0c0c0a">1</text>
@@ -59,6 +59,21 @@
   <text x="886" y="458" class="label">Your APIs / services</text>
   <text x="886" y="488" class="body">Validate token, tenant, rights</text>
 
-  <text x="36" y="576" class="small">IAMKit stores identity state in PostgreSQL. The Docker image includes an operator console.</text>
-  <text x="36" y="604" class="small">Keep management keys server-side. Browser sign-in needs trusted CORS, a same-origin proxy or a backend/BFF.</text>
+  <rect x="24" y="558" width="1152" height="244" rx="6" fill="#131311" stroke="#7b9bae"/>
+  <text x="48" y="596" class="label accent">Prefer OAuth/OIDC? IAMKit is also your provider.</text>
+  <text x="48" y="626" class="body">An alternative client integration — not an extra step in the flow above.</text>
+  <rect x="48" y="648" width="280" height="98" rx="4" class="box"/>
+  <text x="68" y="684" class="label">Your registered app</text>
+  <text x="68" y="714" class="body">OAuth / OIDC client</text>
+  <path d="M328 681H862" class="line"/>
+  <text x="596" y="670" text-anchor="middle" class="small">Authorize → login &amp; consent → code + PKCE exchange</text>
+  <path d="M866 718H332" class="line"/>
+  <text x="596" y="741" text-anchor="middle" class="small">Access token + ID token (with openid scope)</text>
+  <rect x="866" y="648" width="286" height="98" rx="4" class="box"/>
+  <text x="886" y="684" class="label accent">IAMKit</text>
+  <text x="886" y="714" class="body">OAuth / OIDC provider</text>
+  <text x="48" y="778" class="small">You supply the login &amp; consent UI. External Google / Microsoft sign-in is a separate OIDC federation flow.</text>
+
+  <text x="36" y="846" class="small">IAMKit stores identity state in PostgreSQL. The Docker image includes an operator console.</text>
+  <text x="36" y="874" class="small">Keep management keys server-side. Browser sign-in needs trusted CORS, a same-origin proxy or a backend/BFF.</text>
 </svg>
