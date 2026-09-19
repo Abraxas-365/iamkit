@@ -32,7 +32,10 @@ def headings(text):
 
 def main():
     files = sorted((ROOT / "docs").rglob("*.md"))
-    files += [ROOT / p for p in ("README.md", "SECURITY.md", "sdk/README.md", "frontend/README.md")]
+    for p in ("README.md", "SECURITY.md", "sdk/README.md", "frontend/README.md"):
+        candidate = ROOT / p
+        if candidate.exists():
+            files.append(candidate)
     errors = []
     for path in files:
         text = path.read_text()

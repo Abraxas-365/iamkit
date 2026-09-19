@@ -56,5 +56,5 @@ Typed SDK list helpers need live page-envelope compatibility work; see
 not silent compatibility assumptions in documentation.
 
 Use the [launch checklist](../operations/launch-checklist.md) to record evidence
-for your deployment. The remaining gates in [the plan](../../PLAN-documentation.md)
+for your deployment.
 are deliberately not marked complete by this documentation pass.

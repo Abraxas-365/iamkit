@@ -18,7 +18,7 @@ your users sign in through the identity API. You own the product experience.
 > **Integration responsibilities:** your application provides signup/invitation
 > workflows and end-user login/consent pages. Deployment supplies TLS, shared abuse
 > controls and signing-key lifecycle management. Passkeys/MFA are not implemented.
-> See [security requirements](SECURITY.md) and
+> See
 > [publication requirements](#provenance--license).
 
 ## How it fits into your application
@@ -335,7 +335,7 @@ workspace operator authority.
 
 Also included: refresh-token rotation/replay revocation, online introspection,
 SCIM provisioning, owner-only audited impersonation, a Go SDK with Fiber middleware,
-and embedded checksummed migrations. See [security boundaries](SECURITY.md).
+and embedded checksummed migrations. See the [concept guides](docs/concepts/identity-model.md).
 Read the [concept guides](docs/concepts/identity-model.md) and
 [API reference](docs/reference/api/index.md).
 
@@ -392,9 +392,7 @@ make test-e2e          # disposable PostgreSQL; Docker required
 
 Plain `go test ./...` skips database tests unless `IAMKIT_TEST_E2E=1`. Tests must
 not use development data. Current references: [Go SDK](sdk/README.md),
-[management console](frontend/README.md), [configuration example](.env.example)
-and [security requirements](SECURITY.md).
-
+[management console](frontend/README.md), [configuration example](.env.example).
 ## Provenance / license
 
 This project adapts local `paframework`, which identified
