@@ -5,19 +5,20 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
-func (r *Repository) Sessions(ctx context.Context, environment string) ([]management.Session, error) {
+func (r *Repository) Sessions(ctx context.Context, environment identity.EnvironmentID) ([]management.Session, error) {
 	out := []management.Session{}
 	err := r.db.SelectContext(ctx, &out, `SELECT id,user_id,organization_id,application_id,resource_id,expires_at,revoked_at FROM sessions WHERE environment_id=$1 ORDER BY id LIMIT 1000`, environment)
 	return out, failure(err)
 }
-func (r *Repository) Audit(ctx context.Context, environment string) ([]management.AuditEvent, error) {
+func (r *Repository) Audit(ctx context.Context, environment identity.EnvironmentID) ([]management.AuditEvent, error) {
 	out := []management.AuditEvent{}
 	err := r.db.SelectContext(ctx, &out, `SELECT id,actor_id,action,target_id,created_at FROM audit_events WHERE environment_id=$1 ORDER BY id DESC LIMIT 1000`, environment)
 	return out, failure(err)
 }
-func (r *Repository) RevokeSession(ctx context.Context, environment, id, actor, action, target string) error {
+func (r *Repository) RevokeSession(ctx context.Context, environment identity.EnvironmentID, id identity.SessionID, actor, action, target string) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)

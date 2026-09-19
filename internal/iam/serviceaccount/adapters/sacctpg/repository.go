@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -21,7 +21,7 @@ func failure(err error) error {
 	}
 	return errx.Wrap(err, "service account persistence failed", errx.TypeInternal)
 }
-func (r *Repository) Catalog(ctx context.Context, environment, resource string) ([]string, error) {
+func (r *Repository) Catalog(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID) ([]string, error) {
 	var out pq.StringArray
 	err := r.db.GetContext(ctx, &out, `SELECT permissions FROM resources WHERE id=$1 AND environment_id=$2`, resource, environment)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -29,7 +29,7 @@ func (r *Repository) Catalog(ctx context.Context, environment, resource string) 
 	}
 	return []string(out), failure(err)
 }
-func (r *Repository) Create(ctx context.Context, environment string, input serviceaccount.Input, out serviceaccount.Credential, hash []byte) error {
+func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, input serviceaccount.Input, out serviceaccount.Credential, hash []byte) error {
 	if input.Permissions == nil {
 		input.Permissions = []string{}
 	}
@@ -40,31 +40,17 @@ func (r *Repository) Create(ctx context.Context, environment string, input servi
 	}
 	return failure(err)
 }
-func (r *Repository) Revoke(ctx context.Context, environment, id string) error {
+func (r *Repository) Revoke(ctx context.Context, environment identity.EnvironmentID, id identity.AccountID) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE service_accounts SET revoked_at=now() WHERE id=$1 AND environment_id=$2`, id, environment)
 	return failure(err)
 }
-func (r *Repository) List(ctx context.Context, environment string) ([]serviceaccount.Account, error) {
-	var rows []struct {
-		ID              string         `db:"id"`
-		Name            string         `db:"name"`
-		Application     string         `db:"application_id"`
-		ApplicationName string         `db:"application_name"`
-		Resource        string         `db:"resource_id"`
-		ResourceName    string         `db:"resource_name"`
-		Permissions     pq.StringArray `db:"permissions"`
-		Expires         time.Time      `db:"expires_at"`
-		Revoked         *time.Time     `db:"revoked_at"`
-	}
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]serviceaccount.Account, error) {
+	var rows []serviceaccount.Account
 	err := r.db.SelectContext(ctx, &rows, `SELECT sa.id, sa.name, sa.application_id, a.name AS application_name, sa.resource_id, res.name AS resource_name, sa.permissions, sa.expires_at, sa.revoked_at FROM service_accounts sa JOIN applications a ON a.id=sa.application_id JOIN resources res ON res.id=sa.resource_id WHERE sa.environment_id=$1 ORDER BY sa.name`, environment)
 	if err != nil {
 		return nil, failure(err)
 	}
-	out := make([]serviceaccount.Account, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, serviceaccount.Account{ID: row.ID, Name: row.Name, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Permissions: []string(row.Permissions), Expires: row.Expires, Revoked: row.Revoked})
-	}
-	return out, nil
+	return rows, nil
 }
 
 var _ serviceaccount.Repository = (*Repository)(nil)

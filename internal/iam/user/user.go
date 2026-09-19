@@ -6,10 +6,11 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
 type User struct {
-	ID            string          `json:"id"`
+	ID            identity.UserID `json:"id"`
 	Email         string          `json:"email"`
 	Name          string          `json:"name"`
 	Active        bool            `json:"active"`
@@ -24,8 +25,6 @@ type Create struct {
 	OTPEnabled bool   `json:"otp_enabled"`
 }
 
-// Validate checks the structural invariants Create owns. Email format and
-// normalization is handled separately via identity.Email.
 func (c Create) Validate() error {
 	if strings.TrimSpace(c.Name) == "" {
 		return errx.Validation("user name is required")
@@ -43,7 +42,6 @@ type Update struct {
 	Metadata   json.RawMessage `json:"metadata"`
 }
 
-// Validate checks only the fields explicitly supplied.
 func (u Update) Validate() error {
 	if u.Name != nil && strings.TrimSpace(*u.Name) == "" {
 		return errx.Validation("user name is required")
@@ -51,5 +49,9 @@ func (u Update) Validate() error {
 	return nil
 }
 
-// Mutation identifies the authenticated operator for transactional audit recording.
-type Mutation struct{ Environment, Actor, Action, Target string }
+type Mutation struct {
+	Environment identity.EnvironmentID
+	Actor       string
+	Action      string
+	Target      string
+}

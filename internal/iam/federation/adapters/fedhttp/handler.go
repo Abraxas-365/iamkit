@@ -5,6 +5,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -19,6 +20,10 @@ type Handler struct {
 func New(commands federation.Commands, queries federation.Queries, flows federation.Flows, actor func(*fiber.Ctx) string, issue func(*fiber.Ctx, authentication.Issued) error) *Handler {
 	return &Handler{commands, queries, flows, actor, issue}
 }
+func env(c *fiber.Ctx) identity.EnvironmentID {
+	id, _ := identity.ParseEnvironmentID(c.Params("environment"))
+	return id
+}
 func (h *Handler) Register(e fiber.Router) {
 	e.Post("/federation-connections", h.create)
 	e.Get("/federation-connections", h.list)
@@ -29,7 +34,7 @@ func (h *Handler) Register(e fiber.Router) {
 	e.Delete("/external-identities/:connection/:user", h.unlink)
 }
 func (h *Handler) mutation(c *fiber.Ctx) federation.Mutation {
-	return federation.Mutation{Environment: c.Params("environment"), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
+	return federation.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
 }
 func (h *Handler) create(c *fiber.Ctx) error {
 	var input struct {
@@ -41,7 +46,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.Create(c.Context(), federation.Connection{Environment: c.Params("environment"), Name: input.Name, Issuer: input.Issuer, Client: input.Client, SecretEnv: input.Secret})
+	id, err := h.commands.Create(c.Context(), federation.Connection{Environment: env(c), Name: input.Name, Issuer: input.Issuer, Client: input.Client, SecretEnv: input.Secret})
 	if err != nil {
 		return err
 	}
@@ -49,9 +54,9 @@ func (h *Handler) create(c *fiber.Ctx) error {
 }
 func (h *Handler) link(c *fiber.Ctx) error {
 	var input struct {
-		Connection string `json:"connection_id"`
-		User       string `json:"user_id"`
-		Subject    string `json:"subject"`
+		Connection identity.ConnectionID `json:"connection_id"`
+		User       identity.UserID       `json:"user_id"`
+		Subject    string                `json:"subject"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -62,34 +67,54 @@ func (h *Handler) link(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Handler) disable(c *fiber.Ctx) error {
-	if err := h.commands.Disable(c.Context(), h.mutation(c), c.Params("id")); err != nil {
+	id, err := identity.ParseConnectionID(c.Params("id"))
+	if err != nil {
+		return errx.Validation("invalid connection id")
+	}
+	if err := h.commands.Disable(c.Context(), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 func (h *Handler) list(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), c.Params("environment"))
+	out, err := h.queries.List(c.Context(), env(c))
 	if err != nil {
 		return err
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Handler) find(c *fiber.Ctx) error {
-	out, err := h.queries.Connection(c.Context(), c.Params("environment"), c.Params("id"))
+	id, err := identity.ParseConnectionID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("connection not found")
+	}
+	out, err := h.queries.Connection(c.Context(), env(c), id)
 	if err != nil {
 		return err
 	}
 	return c.JSON(out)
 }
 func (h *Handler) identities(c *fiber.Ctx) error {
-	out, err := h.queries.Identities(c.Context(), c.Params("environment"), c.Params("id"))
+	id, err := identity.ParseConnectionID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("connection not found")
+	}
+	out, err := h.queries.Identities(c.Context(), env(c), id)
 	if err != nil {
 		return err
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Handler) unlink(c *fiber.Ctx) error {
-	if err := h.commands.Unlink(c.Context(), h.mutation(c), c.Params("connection"), c.Params("user")); err != nil {
+	conn, err := identity.ParseConnectionID(c.Params("connection"))
+	if err != nil {
+		return errx.Validation("invalid connection id")
+	}
+	user, err := identity.ParseUserID(c.Params("user"))
+	if err != nil {
+		return errx.Validation("invalid user id")
+	}
+	if err := h.commands.Unlink(c.Context(), h.mutation(c), conn, user); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -97,7 +122,7 @@ func (h *Handler) unlink(c *fiber.Ctx) error {
 func (h *Handler) Start(c *fiber.Ctx) error {
 	var input struct {
 		authentication.Context
-		Connection string `json:"connection_id"`
+		Connection identity.ConnectionID `json:"connection_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")

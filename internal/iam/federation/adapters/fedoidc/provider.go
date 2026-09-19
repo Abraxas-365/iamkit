@@ -27,7 +27,7 @@ func (Provider) Approved(c federation.Connection) bool {
 		return false
 	}
 	for _, entry := range entries {
-		if entry.Environment == c.Environment && entry.Issuer == c.Issuer && entry.Client == c.Client && entry.Secret == c.SecretEnv {
+		if entry.Environment == c.Environment.String() && entry.Issuer == c.Issuer && entry.Client == c.Client && entry.Secret == c.SecretEnv {
 			return true
 		}
 	}

@@ -10,25 +10,24 @@ import (
 )
 
 type Request struct {
-	Organization string `json:"organization_id"`
-	Application  string `json:"application_id"`
-	Resource     string `json:"resource_id"`
-	User         string `json:"user_id"`
-	Reason       string `json:"reason"`
+	Organization identity.OrganizationID `json:"organization_id"`
+	Application  identity.ApplicationID  `json:"application_id"`
+	Resource     identity.ResourceID     `json:"resource_id"`
+	User         identity.UserID         `json:"user_id"`
+	Reason       string                  `json:"reason"`
 }
 
-// Validate checks the structural invariants Request owns.
 func (r Request) Validate() error {
-	if !identity.ValidID(r.Organization) {
+	if r.Organization.IsZero() {
 		return errx.Validation("organization_id must be a valid UUID")
 	}
-	if !identity.ValidID(r.Application) {
+	if r.Application.IsZero() {
 		return errx.Validation("application_id must be a valid UUID")
 	}
-	if !identity.ValidID(r.Resource) {
+	if r.Resource.IsZero() {
 		return errx.Validation("resource_id must be a valid UUID")
 	}
-	if !identity.ValidID(r.User) {
+	if r.User.IsZero() {
 		return errx.Validation("user_id must be a valid UUID")
 	}
 	reason := strings.TrimSpace(r.Reason)
@@ -39,7 +38,10 @@ func (r Request) Validate() error {
 }
 
 type Target struct {
-	Context                      authentication.Context
-	User, Reason, Actor, Session string
-	Expires                      time.Time
+	Context authentication.Context
+	User    identity.UserID
+	Reason  string
+	Actor   identity.OperatorID
+	Session identity.SessionID
+	Expires time.Time
 }

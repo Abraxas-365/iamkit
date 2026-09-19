@@ -4,6 +4,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -31,10 +32,14 @@ func (h *Grants) Register(e fiber.Router) {
 	e.Delete("/grants/:id", h.DeleteGrant)
 }
 func (h *Grants) mutation(c *fiber.Ctx) authorization.Mutation {
-	return authorization.Mutation{Environment: c.Params("environment"), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
+	return authorization.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
+}
+func optionalResourceID(c *fiber.Ctx) identity.ResourceID {
+	id, _ := identity.ParseResourceID(c.Params("id"))
+	return id
 }
 func (h *Grants) ListRoles(c *fiber.Ctx) error {
-	out, err := h.queries.Roles(c.Context(), c.Params("environment"), c.Params("id"))
+	out, err := h.queries.Roles(c.Context(), env(c), optionalResourceID(c))
 	if err != nil {
 		return err
 	}
@@ -44,7 +49,7 @@ func (h *Grants) ListRoles(c *fiber.Ctx) error {
 	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Grants) ListGrants(c *fiber.Ctx) error {
-	out, err := h.queries.Grants(c.Context(), c.Params("environment"), c.Params("id"))
+	out, err := h.queries.Grants(c.Context(), env(c), optionalResourceID(c))
 	if err != nil {
 		return err
 	}
@@ -58,7 +63,8 @@ func (h *Grants) SaveRole(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.SaveRole(c.Context(), h.mutation(c), c.Params("id"), input)
+	roleID, _ := identity.ParseRoleID(c.Params("id"))
+	id, err := h.commands.SaveRole(c.Context(), h.mutation(c), roleID, input)
 	if err != nil {
 		return err
 	}
@@ -68,7 +74,11 @@ func (h *Grants) SaveRole(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Grants) DeleteRole(c *fiber.Ctx) error {
-	if err := h.commands.DeleteRole(c.Context(), h.mutation(c), c.Params("id")); err != nil {
+	id, err := identity.ParseRoleID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("role not found")
+	}
+	if err := h.commands.DeleteRole(c.Context(), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -84,7 +94,10 @@ func (h *Grants) Assign(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Grants) Unassign(c *fiber.Ctx) error {
-	input := authorization.RoleAssignment{Role: c.Params("role"), Organization: c.Params("organization"), User: c.Params("user")}
+	roleID, _ := identity.ParseRoleID(c.Params("role"))
+	orgID, _ := identity.ParseOrganizationID(c.Params("organization"))
+	userID, _ := identity.ParseUserID(c.Params("user"))
+	input := authorization.RoleAssignment{Role: roleID, Organization: orgID, User: userID}
 	if err := h.commands.AssignRole(c.Context(), h.mutation(c), input, true); err != nil {
 		return err
 	}
@@ -95,28 +108,33 @@ func (h *Grants) PutGrant(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.PutGrant(c.Context(), c.Params("environment"), input)
+	id, err := h.commands.PutGrant(c.Context(), env(c), input)
 	if err != nil {
 		return err
 	}
 	return c.JSON(fiber.Map{"id": id})
 }
 func (h *Grants) DeleteGrant(c *fiber.Ctx) error {
-	if err := h.commands.DeleteGrant(c.Context(), c.Params("environment"), c.Params("id")); err != nil {
+	id, err := identity.ParseGrantID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	if err := h.commands.DeleteGrant(c.Context(), env(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 func (h *Grants) RoleAssignments(c *fiber.Ctx) error {
+	roleID, _ := identity.ParseRoleID(c.Query("role_id"))
+	orgID, _ := identity.ParseOrganizationID(c.Query("organization_id"))
+	userID, _ := identity.ParseUserID(c.Query("user_id"))
+	resID, _ := identity.ParseResourceID(c.Query("resource_id"))
 	filter := authorization.RoleAssignmentFilter{
-		RoleID:         c.Query("role_id"),
-		OrganizationID: c.Query("organization_id"),
-		UserID:         c.Query("user_id"),
-		ResourceID:     c.Query("resource_id"),
-		Search:         c.Query("search"),
+		RoleID: roleID, OrganizationID: orgID, UserID: userID, ResourceID: resID,
+		Search: c.Query("search"),
 	}
 	page := httpx.PaginationFromCtx(c)
-	items, total, err := h.queries.RoleAssignments(c.Context(), c.Params("environment"), filter, page)
+	items, total, err := h.queries.RoleAssignments(c.Context(), env(c), filter, page)
 	if err != nil {
 		return err
 	}

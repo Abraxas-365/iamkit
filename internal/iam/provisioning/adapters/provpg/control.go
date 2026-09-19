@@ -6,9 +6,10 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
-func (r *Repository) IssueCredential(ctx context.Context, environment string, input provisioning.CredentialInput, out provisioning.Credential, hash []byte, create bool) error {
+func (r *Repository) IssueCredential(ctx context.Context, environment identity.EnvironmentID, input provisioning.CredentialInput, out provisioning.Credential, hash []byte, create bool) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)
@@ -49,20 +50,20 @@ func (r *Repository) controlMutation(ctx context.Context, m provisioning.Mutatio
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) RevokeCredential(ctx context.Context, m provisioning.Mutation, id string) error {
+func (r *Repository) RevokeCredential(ctx context.Context, m provisioning.Mutation, id identity.CredentialID) error {
 	return r.controlMutation(ctx, m, `UPDATE provisioning_credentials SET revoked_at=now() WHERE environment_id=$1 AND id=$2`, m.Environment, id)
 }
 func (r *Repository) Link(ctx context.Context, m provisioning.Mutation, input provisioning.Link) error {
 	return r.controlMutation(ctx, m, `INSERT INTO provisioned_identities(connection_id,environment_id,user_id,external_id) SELECT p.id,p.environment_id,m.user_id,$4 FROM provisioning_connections p JOIN memberships m ON m.environment_id=p.environment_id AND m.organization_id=p.organization_id WHERE p.environment_id=$1 AND p.id=$2 AND m.user_id=$3`, m.Environment, input.Connection, input.User, input.External)
 }
-func (r *Repository) Credentials(ctx context.Context, environment string) ([]provisioning.CredentialView, error) {
+func (r *Repository) Credentials(ctx context.Context, environment identity.EnvironmentID) ([]provisioning.CredentialView, error) {
 	var rows []struct {
-		ID           string     `db:"id"`
-		Name         string     `db:"name"`
-		Organization string     `db:"organization_id"`
-		Connection   string     `db:"connection_id"`
-		Expires      time.Time  `db:"expires_at"`
-		Revoked      *time.Time `db:"revoked_at"`
+		ID           identity.CredentialID   `db:"id"`
+		Name         string                  `db:"name"`
+		Organization identity.OrganizationID `db:"organization_id"`
+		Connection   identity.ConnectionID   `db:"connection_id"`
+		Expires      time.Time               `db:"expires_at"`
+		Revoked      *time.Time              `db:"revoked_at"`
 	}
 	if err := r.db.SelectContext(ctx, &rows, `SELECT id,name,organization_id,connection_id,expires_at,revoked_at FROM provisioning_credentials WHERE environment_id=$1 ORDER BY id`, environment); err != nil {
 		return nil, failure(err)

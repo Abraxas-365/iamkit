@@ -1,10 +1,12 @@
 package authhttp
 
 import (
+	"strings"
+
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
-	"strings"
 )
 
 type Tokens struct {
@@ -24,8 +26,8 @@ func bearer(c *fiber.Ctx) string {
 	}
 	return parts[1]
 }
-func (h *Tokens) Validate(c *fiber.Ctx, environment, audience string) (authentication.Token, error) {
-	return h.validator.Validate(c.Context(), bearer(c), environment, audience)
+func (h *Tokens) Validate(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
+	return h.validator.Validate(c.Context(), bearer(c), audience, environment)
 }
 func (h *Tokens) Issue(c *fiber.Ctx, t authentication.Token, audience, refresh string) error {
 	raw, err := h.issuer.Issue(t, audience)
@@ -53,8 +55,8 @@ func (h *Tokens) JWKS(c *fiber.Ctx) error { return c.JSON(h.issuer.JWKS()) }
 func (h *Tokens) KeyID() string           { return h.issuer.KeyID() }
 func (h *Tokens) Introspect(c *fiber.Ctx) error {
 	var input struct {
-		Environment string `json:"environment_id"`
-		Audience    string `json:"audience"`
+		Environment identity.EnvironmentID `json:"environment_id"`
+		Audience    string                 `json:"audience"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -68,8 +70,8 @@ func (h *Tokens) Introspect(c *fiber.Ctx) error {
 }
 func (h *Tokens) Logout(c *fiber.Ctx) error {
 	var input struct {
-		Environment string `json:"environment_id"`
-		Audience    string `json:"audience"`
+		Environment identity.EnvironmentID `json:"environment_id"`
+		Audience    string                 `json:"audience"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -84,7 +86,8 @@ func (h *Tokens) Logout(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Tokens) Profile(c *fiber.Ctx) error {
-	token, err := h.Validate(c, c.Query("environment_id"), c.Query("audience"))
+	envID, _ := identity.ParseEnvironmentID(c.Query("environment_id"))
+	token, err := h.Validate(c, envID, c.Query("audience"))
 	if err != nil {
 		return err
 	}
@@ -95,7 +98,8 @@ func (h *Tokens) Profile(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 func (h *Tokens) Organizations(c *fiber.Ctx) error {
-	token, err := h.Validate(c, c.Query("environment_id"), c.Query("audience"))
+	envID, _ := identity.ParseEnvironmentID(c.Query("environment_id"))
+	token, err := h.Validate(c, envID, c.Query("audience"))
 	if err != nil {
 		return err
 	}
@@ -107,9 +111,9 @@ func (h *Tokens) Organizations(c *fiber.Ctx) error {
 }
 func (h *Tokens) UpdateProfile(c *fiber.Ctx) error {
 	var input struct {
-		Environment string `json:"environment_id"`
-		Audience    string `json:"audience"`
-		Name        string `json:"name"`
+		Environment identity.EnvironmentID  `json:"environment_id"`
+		Audience    string                  `json:"audience"`
+		Organization identity.OrganizationID `json:"organization_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -118,16 +122,16 @@ func (h *Tokens) UpdateProfile(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.UpdateProfile(c.Context(), token, input.Name); err != nil {
+	if err = h.commands.UpdateProfile(c.Context(), token, input.Organization); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 func (h *Tokens) AddMember(c *fiber.Ctx) error {
 	var input struct {
-		Environment string `json:"environment_id"`
-		Audience    string `json:"audience"`
-		User        string `json:"user_id"`
+		Environment  identity.EnvironmentID  `json:"environment_id"`
+		Audience     string                  `json:"audience"`
+		Organization identity.OrganizationID `json:"organization_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -136,7 +140,7 @@ func (h *Tokens) AddMember(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.AddMember(c.Context(), token, input.User); err != nil {
+	if err = h.commands.AddMember(c.Context(), token, input.Organization); err != nil {
 		return err
 	}
 	return c.SendStatus(201)

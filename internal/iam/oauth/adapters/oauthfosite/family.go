@@ -47,7 +47,7 @@ func (s *Store) WithTokenLock(ctx context.Context, raw, kind, client string, run
 		return wrap(err, "acquire OAuth family connection")
 	}
 	defer conn.Close()
-	key := s.Environment + ":endpoint:" + family
+	key := s.Environment.String() + ":endpoint:" + family
 	if _, err = conn.ExecContext(ctx, `SELECT pg_advisory_lock(hashtextextended($1,0))`, key); err != nil {
 		return wrap(err, "serialize OAuth token request")
 	}

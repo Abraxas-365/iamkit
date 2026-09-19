@@ -7,6 +7,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -16,17 +17,17 @@ type Repository struct{ db *sqlx.DB }
 func New(db *sqlx.DB) *Repository { return &Repository{db: db} }
 
 type clientRow struct {
-	ID          string         `db:"id"`
-	Environment string         `db:"environment_id"`
-	Application string         `db:"application_id"`
-	Resource    string         `db:"resource_id"`
-	Audience    string         `db:"audience"`
-	Redirects   pq.StringArray `db:"redirect_uris"`
-	Public      bool           `db:"public"`
-	Secret      []byte         `db:"secret_hash"`
+	ID          identity.ClientID      `db:"id"`
+	Environment identity.EnvironmentID `db:"environment_id"`
+	Application identity.ApplicationID `db:"application_id"`
+	Resource    identity.ResourceID    `db:"resource_id"`
+	Audience    string                 `db:"audience"`
+	Redirects   pq.StringArray         `db:"redirect_uris"`
+	Public      bool                   `db:"public"`
+	Secret      []byte                 `db:"secret_hash"`
 }
 
-func (r *Repository) FindActive(ctx context.Context, environment, id string) (*oauth.Client, error) {
+func (r *Repository) FindActive(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID) (*oauth.Client, error) {
 	var row clientRow
 	err := r.db.GetContext(ctx, &row, `SELECT c.id,c.environment_id,c.application_id,c.resource_id,c.redirect_uris,c.public,c.secret_hash,r.audience FROM oauth_clients c JOIN applications a ON a.id=c.application_id AND a.environment_id=c.environment_id JOIN resources r ON r.id=c.resource_id AND r.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND c.active AND a.active`, id, environment)
 	if errors.Is(err, sql.ErrNoRows) {

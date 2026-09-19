@@ -3,13 +3,13 @@ package oauthsvc
 import (
 	"context"
 	"crypto/subtle"
+	"strings"
+	"time"
+
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
-	"github.com/google/uuid"
-	"strings"
-	"time"
 )
 
 type Service struct {
@@ -19,12 +19,12 @@ type Service struct {
 }
 
 func New(r oauth.Repository, s oauth.Secrets, p oauth.Passwords) *Service { return &Service{r, s, p} }
-func (s *Service) Create(ctx context.Context, environment string, input oauth.Registration) (string, string, error) {
+func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input oauth.Registration) (identity.ClientID, string, error) {
 	if err := input.Validate(); err != nil {
-		return "", "", err
+		return identity.ClientID{}, "", err
 	}
 	if err := identity.ValidateRedirects(input.Redirects); err != nil {
-		return "", "", err
+		return identity.ClientID{}, "", err
 	}
 	raw := ""
 	hash := []byte{}
@@ -32,29 +32,29 @@ func (s *Service) Create(ctx context.Context, environment string, input oauth.Re
 	if !input.Public {
 		raw, _, err = s.secrets.Generate("ik_client_")
 		if err != nil {
-			return "", "", err
+			return identity.ClientID{}, "", err
 		}
 		encoded, hashErr := s.passwords.Hash(raw)
 		hash = []byte(encoded)
 		err = hashErr
 		if err != nil {
-			return "", "", err
+			return identity.ClientID{}, "", err
 		}
 	}
-	id := uuid.NewString()
+	id := identity.NewClientID()
 	return id, raw, s.repository.Create(ctx, environment, id, input, hash)
 }
-func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id string) error {
-	if !identity.ValidID(id) {
+func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
+	if id.IsZero() {
 		return errx.Validation("invalid client")
 	}
 	return s.repository.Disable(ctx, m, id)
 }
-func (s *Service) List(ctx context.Context, environment string) ([]oauth.ClientView, error) {
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID) ([]oauth.ClientView, error) {
 	return s.repository.List(ctx, environment)
 }
-func (s *Service) Client(ctx context.Context, id string) (*oauth.Client, error) {
-	if !identity.ValidID(id) {
+func (s *Service) Client(ctx context.Context, id identity.ClientID) (*oauth.Client, error) {
+	if id.IsZero() {
 		return nil, errx.Validation("invalid client")
 	}
 	environment, err := s.repository.Environment(ctx, id)
@@ -75,8 +75,6 @@ func (s *Service) Start(ctx context.Context, client *oauth.Client, form string) 
 	return ticket, binding, s.repository.SaveTicket(ctx, hash, bindingHash, client, form)
 }
 
-// Complete holds the ticket lock through validation and consumption. Protocol
-// parsing occurs in prepare; a failed preparation leaves the ticket untouched.
 func (s *Service) Complete(ctx context.Context, ticket, binding string, approve bool, prepare func(oauth.Ticket, oauth.Authorization) error) error {
 	if !approve {
 		return errx.Forbidden("authorization was not approved")
@@ -101,8 +99,8 @@ func (s *Service) Complete(ctx context.Context, ticket, binding string, approve 
 	}
 	return tx.Commit()
 }
-func (s *Service) Access(ctx context.Context, client *oauth.Client, subject, session, organization string) (authentication.Access, error) {
-	if !identity.ValidID(session) || !identity.ValidID(organization) {
+func (s *Service) Access(ctx context.Context, client *oauth.Client, subject identity.UserID, session identity.SessionID, organization identity.OrganizationID) (authentication.Access, error) {
+	if session.IsZero() || organization.IsZero() {
 		return authentication.Access{}, errx.Unauthorized("invalid session context")
 	}
 	return s.repository.Access(ctx, client, subject, session, organization)
@@ -138,7 +136,7 @@ func ValidateAuthorization(issuer string, client *oauth.Client, query map[string
 	return nil
 }
 func ValidateLogin(access authentication.Token, client *oauth.Client) error {
-	if access.ActorID != "" || access.Purpose != "application" || access.ApplicationID != client.Application || access.ResourceID != client.Resource {
+	if !access.ActorID.IsZero() || access.Purpose != "application" || access.ApplicationID != client.Application || access.ResourceID != client.Resource {
 		return errx.Forbidden("login does not match client")
 	}
 	return nil

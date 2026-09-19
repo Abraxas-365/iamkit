@@ -1,10 +1,20 @@
 package provisioning
 
-// Principal identifies an authenticated SCIM provisioning credential.
-type Principal struct{ ID, Environment, Organization, Connection string }
+import "github.com/Abraxas-365/iamkit/internal/identity"
+
+type Principal struct {
+	ID           identity.CredentialID
+	Environment  identity.EnvironmentID
+	Organization identity.OrganizationID
+	Connection   identity.ConnectionID
+}
 type User struct {
-	ID, Email, Name, External, Manager string
-	Active                             bool
+	ID       identity.UserID
+	Email    string
+	Name     string
+	External string
+	Manager  string
+	Active   bool
 }
 type Update struct {
 	Name    *string

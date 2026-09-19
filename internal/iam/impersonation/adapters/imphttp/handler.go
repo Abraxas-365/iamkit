@@ -5,6 +5,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmthttp"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -22,7 +23,8 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	token, audience, err := h.commands.Create(c.Context(), mgmthttp.Principal(c), c.Params("environment"), input)
+	envID, _ := identity.ParseEnvironmentID(c.Params("environment"))
+	token, audience, err := h.commands.Create(c.Context(), mgmthttp.Principal(c), envID, input)
 	if err != nil {
 		return err
 	}

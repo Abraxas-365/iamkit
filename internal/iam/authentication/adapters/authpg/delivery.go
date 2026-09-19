@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/jmoiron/sqlx"
 )
@@ -17,9 +18,9 @@ func NewDeliveryConfigRepository(db *sqlx.DB) *DeliveryConfigRepository {
 	return &DeliveryConfigRepository{db}
 }
 
-func (r *DeliveryConfigRepository) GetDeliveryConfig(ctx context.Context, environmentID string) (authentication.DeliveryConfig, string, error) {
+func (r *DeliveryConfigRepository) GetDeliveryConfig(ctx context.Context, environmentID identity.EnvironmentID) (authentication.DeliveryConfig, string, error) {
 	var row struct {
-		EnvironmentID string    `db:"environment_id"`
+		EnvironmentID identity.EnvironmentID `db:"environment_id"`
 		WebhookURL    string    `db:"webhook_url"`
 		WebhookToken  string    `db:"webhook_token"`
 		CreatedAt     time.Time `db:"created_at"`
@@ -42,7 +43,7 @@ func (r *DeliveryConfigRepository) GetDeliveryConfig(ctx context.Context, enviro
 	return cfg, row.WebhookToken, nil
 }
 
-func (r *DeliveryConfigRepository) SetDeliveryConfig(ctx context.Context, environmentID, webhookURL, webhookToken string) error {
+func (r *DeliveryConfigRepository) SetDeliveryConfig(ctx context.Context, environmentID identity.EnvironmentID, webhookURL, webhookToken string) error {
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO delivery_configs (environment_id, webhook_url, webhook_token, updated_at)
 		VALUES ($1, $2, $3, now())
@@ -54,7 +55,7 @@ func (r *DeliveryConfigRepository) SetDeliveryConfig(ctx context.Context, enviro
 	return nil
 }
 
-func (r *DeliveryConfigRepository) DeleteDeliveryConfig(ctx context.Context, environmentID string) error {
+func (r *DeliveryConfigRepository) DeleteDeliveryConfig(ctx context.Context, environmentID identity.EnvironmentID) error {
 	res, err := r.db.ExecContext(ctx, `DELETE FROM delivery_configs WHERE environment_id = $1`, environmentID)
 	if err != nil {
 		return errx.Wrap(err, "delete delivery config", errx.TypeInternal)

@@ -9,14 +9,14 @@ import (
 )
 
 type Organization struct {
-	ID       string          `json:"id"`
-	Name     string          `json:"name"`
-	Active   bool            `json:"active"`
-	Metadata json.RawMessage `json:"metadata"`
+	ID       identity.OrganizationID `json:"id"`
+	Name     string                  `json:"name"`
+	Active   bool                    `json:"active"`
+	Metadata json.RawMessage         `json:"metadata"`
 }
 type Summary struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID   identity.OrganizationID `json:"id"`
+	Name string                  `json:"name"`
 }
 type Update struct {
 	Name     *string         `json:"name"`
@@ -24,7 +24,6 @@ type Update struct {
 	Metadata json.RawMessage `json:"metadata"`
 }
 
-// Validate checks only the fields explicitly supplied.
 func (u Update) Validate() error {
 	if u.Name != nil && strings.TrimSpace(*u.Name) == "" {
 		return errx.Validation("organization name is required")
@@ -32,26 +31,30 @@ func (u Update) Validate() error {
 	return nil
 }
 
-type Mutation struct{ Environment, Actor, Action, Target string }
+type Mutation struct {
+	Environment identity.EnvironmentID
+	Actor       string
+	Action      string
+	Target      string
+}
 
 type MemberView struct {
-	User      string `json:"user_id"`
-	UserName  string `json:"user_name"`
-	UserEmail string `json:"user_email"`
-	Active    bool   `json:"active"`
+	User      identity.UserID `json:"user_id"`
+	UserName  string          `json:"user_name"`
+	UserEmail string          `json:"user_email"`
+	Active    bool            `json:"active"`
 }
 
 type Membership struct {
-	Organization string `json:"organization_id"`
-	User         string `json:"user_id"`
+	Organization identity.OrganizationID `json:"organization_id"`
+	User         identity.UserID         `json:"user_id"`
 }
 
-// Validate checks the structural invariants Membership owns.
 func (m Membership) Validate() error {
-	if !identity.ValidID(m.Organization) {
+	if m.Organization.IsZero() {
 		return errx.Validation("organization_id must be a valid UUID")
 	}
-	if !identity.ValidID(m.User) {
+	if m.User.IsZero() {
 		return errx.Validation("user_id must be a valid UUID")
 	}
 	return nil

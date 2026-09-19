@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authjwt"
@@ -35,7 +36,7 @@ type Module struct {
 }
 type federationSessions struct{ service *authsvc.Service }
 
-func (s federationSessions) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user string) (authentication.Issued, error) {
+func (s federationSessions) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Issued, error) {
 	return s.service.NewSession(ctx, tx, boundary, user)
 }
 func New(deps Deps) Module {

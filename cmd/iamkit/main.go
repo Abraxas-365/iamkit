@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/bootstrap"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/migrations"
 )
@@ -50,7 +51,11 @@ func run() error {
 		defer f.Close()
 		var raw string
 		if os.Args[1] == "recover-owner" {
-			raw, err = bootstrap.Management(db).RecoverOwner(context.Background(), *name, *email)
+			wsID, parseErr := identity.ParseWorkspaceID(*name)
+			if parseErr != nil {
+				return parseErr
+			}
+			raw, err = bootstrap.Management(db).RecoverOwner(context.Background(), wsID, *email)
 		} else {
 			raw, err = bootstrap.Management(db).Bootstrap(context.Background(), *email, *name)
 		}

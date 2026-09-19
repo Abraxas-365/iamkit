@@ -9,7 +9,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/identity"
-	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -39,8 +38,8 @@ func (s *Service) Bootstrap(ctx context.Context, email, name string) (string, er
 	}
 	return raw, nil
 }
-func (s *Service) RecoverOwner(ctx context.Context, workspace, email string) (string, error) {
-	if !identity.ValidID(workspace) {
+func (s *Service) RecoverOwner(ctx context.Context, workspace identity.WorkspaceID, email string) (string, error) {
+	if workspace.IsZero() {
 		return "", errx.Validation("workspace UUID required")
 	}
 	email, err := identity.Email(email)
@@ -68,7 +67,7 @@ func (s *Service) AuthenticateSession(ctx context.Context, raw string) (manageme
 	}
 	return s.sessions.AuthenticateSession(ctx, s.secrets.Hash(raw))
 }
-func (s *Service) EnvironmentAllowed(ctx context.Context, p management.Principal, environment string) bool {
+func (s *Service) EnvironmentAllowed(ctx context.Context, p management.Principal, environment identity.EnvironmentID) bool {
 	allowed, err := s.repository.EnvironmentAllowed(ctx, p.WorkspaceID, environment)
 	return err == nil && allowed
 }
@@ -79,7 +78,6 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, ma
 	}
 	p, hash, err := s.sessions.PasswordByEmail(ctx, email)
 	if err != nil {
-		// constant-time: still compare even on lookup failure
 		s.passwords.Compare("", password)
 		return "", management.Principal{}, errx.Unauthorized("invalid credentials")
 	}
@@ -90,7 +88,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, ma
 	if err != nil {
 		return "", management.Principal{}, errx.Wrap(err, "session creation failed", errx.TypeInternal)
 	}
-	id := uuid.NewString()
+	id := identity.NewSessionID()
 	expires := time.Now().Add(config.OperatorSessionTTL)
 	if err = s.sessions.CreateSession(ctx, id, p, secretHash, expires); err != nil {
 		return "", management.Principal{}, err
@@ -114,6 +112,5 @@ func (s *Service) SetPassword(ctx context.Context, p management.Principal, passw
 	if err = s.sessions.SetPassword(ctx, p.OperatorID, hash); err != nil {
 		return err
 	}
-	// Revoke all existing sessions so the new password is the only valid credential.
 	return s.sessions.RevokeOperatorSessions(ctx, p.OperatorID)
 }

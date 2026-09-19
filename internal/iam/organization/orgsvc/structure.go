@@ -7,7 +7,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/Abraxas-365/iamkit/internal/identity"
-	"github.com/google/uuid"
 )
 
 type Structure struct {
@@ -16,7 +15,7 @@ type Structure struct {
 
 func NewStructure(r organization.StructureRepository) *Structure { return &Structure{r} }
 func (s *Structure) Check(ctx context.Context, b organization.Boundary) error {
-	if !identity.ValidID(b.Organization) {
+	if b.Organization.IsZero() {
 		return errx.NotFound("organization not found")
 	}
 	exists, err := s.repository.Exists(ctx, b)
@@ -29,67 +28,57 @@ func (s *Structure) Check(ctx context.Context, b organization.Boundary) error {
 	return nil
 }
 func (s *Structure) View(ctx context.Context, b organization.Boundary, view organization.StructureView, id string) (json.RawMessage, error) {
-	if id != "" && !identity.ValidID(id) {
-		return nil, errx.NotFound("resource not found")
-	}
 	return s.repository.View(ctx, b, view, id)
 }
-func (s *Structure) SaveUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id string, input organization.Unit) (string, error) {
+func (s *Structure) SaveUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.UnitID, input organization.Unit) (identity.UnitID, error) {
 	if err := input.Validate(); err != nil {
-		return "", err
+		return identity.UnitID{}, err
 	}
-	creating := id == ""
-	if creating {
-		id = uuid.NewString()
+	if id.IsZero() {
+		id = identity.NewUnitID()
 	}
-	if !identity.ValidID(id) {
-		return "", errx.Validation("invalid unit")
-	}
-	return id, s.repository.SaveUnit(ctx, b, m, id, input, creating)
+	return id, s.repository.SaveUnit(ctx, b, m, id, input, id.IsZero())
 }
-func (s *Structure) DeleteUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id string) error {
-	if !identity.ValidID(id) {
+func (s *Structure) DeleteUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.UnitID) error {
+	if id.IsZero() {
 		return errx.Validation("invalid unit")
 	}
 	return s.repository.DeleteUnit(ctx, b, m, id)
 }
-func (s *Structure) SetProfile(ctx context.Context, b organization.Boundary, m organization.Mutation, user string, input organization.Profile) error {
-	if !identity.ValidID(user) {
+func (s *Structure) SetProfile(ctx context.Context, b organization.Boundary, m organization.Mutation, userID identity.UserID, input organization.Profile) error {
+	if userID.IsZero() {
 		return errx.Validation("invalid member profile")
 	}
 	if err := input.Validate(); err != nil {
 		return err
 	}
-	return s.repository.SetProfile(ctx, b, m, user, input)
+	return s.repository.SetProfile(ctx, b, m, userID, input)
 }
-func (s *Structure) SavePosition(ctx context.Context, b organization.Boundary, m organization.Mutation, id string, input organization.Position) (string, error) {
+func (s *Structure) SavePosition(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.PositionID, input organization.Position) (identity.PositionID, error) {
 	if err := input.Validate(); err != nil {
-		return "", err
+		return identity.PositionID{}, err
 	}
-	if id == "" {
-		id = uuid.NewString()
+	if id.IsZero() {
+		id = identity.NewPositionID()
 		return id, s.repository.CreatePosition(ctx, b, id, input)
-	}
-	if !identity.ValidID(id) {
-		return "", errx.Validation("invalid position")
 	}
 	return id, s.repository.UpdatePosition(ctx, b, m, id, input)
 }
-func (s *Structure) DeletePosition(ctx context.Context, b organization.Boundary, m organization.Mutation, id string) error {
-	if !identity.ValidID(id) {
+func (s *Structure) DeletePosition(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.PositionID) error {
+	if id.IsZero() {
 		return errx.Validation("invalid position")
 	}
 	return s.repository.DeletePosition(ctx, b, m, id)
 }
-func (s *Structure) AssignPosition(ctx context.Context, b organization.Boundary, input organization.Assignment) (string, error) {
+func (s *Structure) AssignPosition(ctx context.Context, b organization.Boundary, input organization.Assignment) (identity.AssignmentID, error) {
 	if err := input.Validate(); err != nil {
-		return "", err
+		return identity.AssignmentID{}, err
 	}
-	id := uuid.NewString()
+	id := identity.NewAssignmentID()
 	return id, s.repository.AssignPosition(ctx, b, id, input)
 }
-func (s *Structure) DeleteAssignment(ctx context.Context, b organization.Boundary, m organization.Mutation, id string) error {
-	if !identity.ValidID(id) {
+func (s *Structure) DeleteAssignment(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.AssignmentID) error {
+	if id.IsZero() {
 		return errx.Validation("invalid assignment")
 	}
 	return s.repository.DeleteAssignment(ctx, b, m, id)

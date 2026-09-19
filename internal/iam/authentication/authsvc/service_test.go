@@ -3,12 +3,12 @@ package authsvc
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
 type testRepository struct{ tx *testTransaction }
@@ -18,40 +18,45 @@ func (r testRepository) Begin(context.Context) (authentication.Transaction, erro
 type testTransaction struct {
 	authentication.Transaction
 	lookup                error
-	user                  string
+	user                  identity.UserID
 	committed, rolledBack bool
 }
 
-func (t *testTransaction) PasswordUser(context.Context, authentication.Context, string) (string, string, error) {
+func (t *testTransaction) PasswordUser(context.Context, authentication.Context, string) (identity.UserID, string, error) {
 	return t.user, "hash", t.lookup
 }
 func (t *testTransaction) Refresh(context.Context, authentication.Context, []byte) (authentication.Session, error) {
-	return authentication.Session{ID: "session", User: t.user, Expires: time.Now().Add(time.Hour)}, t.lookup
+	return authentication.Session{ID: identity.MustParseSessionID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"), User: t.user, Expires: time.Now().Add(time.Hour)}, t.lookup
 }
-func (t *testTransaction) Challenge(context.Context, string, string, string) (authentication.Challenge, error) {
+func (t *testTransaction) Challenge(context.Context, identity.ChallengeID, identity.UserID, string) (authentication.Challenge, error) {
 	return authentication.Challenge{}, t.lookup
 }
-func (t *testTransaction) EligibleChallengeUser(context.Context, string, string, string) (string, error) {
+func (t *testTransaction) EligibleChallengeUser(context.Context, identity.EnvironmentID, string, string) (identity.UserID, error) {
 	return t.user, t.lookup
 }
-func (t *testTransaction) RecentChallenges(context.Context, string, string) (int, error) {
+func (t *testTransaction) RecentChallenges(context.Context, identity.UserID, string) (int, error) {
 	return 0, nil
 }
-func (t *testTransaction) CreateChallenge(context.Context, string, string, string, string, []byte) error {
+func (t *testTransaction) CreateChallenge(context.Context, identity.ChallengeID, identity.UserID, string, identity.EnvironmentID, []byte) error {
 	return nil
 }
-func (t *testTransaction) Resolve(context.Context, authentication.Context, string) (authentication.Access, error) {
+func (t *testTransaction) Resolve(context.Context, authentication.Context, identity.UserID) (authentication.Access, error) {
 	return authentication.Access{Audience: "api"}, nil
 }
-func (t *testTransaction) CreateSession(context.Context, authentication.Context, string, string, time.Time) error {
+func (t *testTransaction) CreateSession(context.Context, authentication.Context, identity.UserID, identity.SessionID, time.Time) error {
 	return nil
 }
-func (t *testTransaction) SaveRefresh(context.Context, []byte, string, string, time.Time) error {
+func (t *testTransaction) SaveRefresh(context.Context, []byte, identity.UserID, identity.SessionID, time.Time) error {
 	return nil
 }
 func (t *testTransaction) UseRefresh(context.Context, []byte) error { return nil }
 func (t *testTransaction) Commit() error                            { t.committed = true; return nil }
 func (t *testTransaction) Rollback() error                          { t.rolledBack = true; return nil }
+func (t *testTransaction) RevokeSession(context.Context, identity.SessionID) error { return nil }
+func (t *testTransaction) FailChallenge(context.Context, identity.ChallengeID) error { return nil }
+func (t *testTransaction) CompleteChallenge(context.Context, identity.ChallengeID, identity.UserID, string, identity.EnvironmentID, string) error {
+	return nil
+}
 
 type testPasswords struct{}
 
@@ -71,7 +76,12 @@ func (failedDelivery) Send(context.Context, string, string, string) error {
 }
 func testBoundary() authentication.Context {
 	id := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-	return authentication.Context{EnvironmentID: id, OrganizationID: id, ApplicationID: id, ResourceID: id}
+	return authentication.Context{
+		EnvironmentID:  identity.MustParseEnvironmentID(id),
+		OrganizationID: identity.MustParseOrganizationID(id),
+		ApplicationID:  identity.MustParseApplicationID(id),
+		ResourceID:     identity.MustParseResourceID(id),
+	}
 }
 func TestLookupFailuresRemainInternal(t *testing.T) {
 	failure := errx.Internal("database unavailable")
@@ -86,7 +96,7 @@ func TestLookupFailuresRemainInternal(t *testing.T) {
 			case "refresh":
 				_, err = s.Refresh(context.Background(), testBoundary(), "ik_refresh_test")
 			case "challenge":
-				_, err = s.VerifyChallenge(context.Background(), testBoundary(), testBoundary().EnvironmentID, "12345678", "login", "")
+				_, err = s.VerifyChallenge(context.Background(), testBoundary(), identity.MustParseChallengeID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"), "12345678", "login", "")
 			}
 			if !errors.Is(err, failure) {
 				t.Fatalf("lost persistence error: %v", err)
@@ -98,12 +108,16 @@ func TestLookupFailuresRemainInternal(t *testing.T) {
 	}
 }
 func TestDeliveryFailureDoesNotRevealEligibility(t *testing.T) {
-	for _, user := range []string{"", "eligible"} {
+	for _, raw := range []string{"", "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"} {
+		var user identity.UserID
+		if raw != "" {
+			user = identity.MustParseUserID(raw)
+		}
 		tx := &testTransaction{user: user}
 		s := New(testRepository{tx}, testPasswords{}, testSecrets{}, failedDelivery{})
 		id, err := s.InitiateChallenge(context.Background(), testBoundary().EnvironmentID, "user@example.com", "login")
-		if err != nil || id == "" {
-			t.Fatalf("eligibility leaked: %q %v", user, err)
+		if err != nil || id.IsZero() {
+			t.Fatalf("eligibility leaked: %q %v", raw, err)
 		}
 		if tx.committed || !tx.rolledBack {
 			t.Fatal("failed delivery must roll back")
@@ -112,12 +126,9 @@ func TestDeliveryFailureDoesNotRevealEligibility(t *testing.T) {
 }
 func TestIssuedBoundaryIsCanonical(t *testing.T) {
 	b := testBoundary()
-	b.EnvironmentID = strings.ToUpper(b.EnvironmentID)
-	b.OrganizationID = strings.ToUpper(b.OrganizationID)
-	b.ApplicationID = strings.ToUpper(b.ApplicationID)
-	b.ResourceID = strings.ToUpper(b.ResourceID)
 	for _, op := range []string{"login", "refresh"} {
-		tx := &testTransaction{user: "user"}
+		user := identity.MustParseUserID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")
+		tx := &testTransaction{user: user}
 		s := New(testRepository{tx}, testPasswords{}, testSecrets{}, nil)
 		var out authentication.Issued
 		var err error

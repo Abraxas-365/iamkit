@@ -10,6 +10,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -34,19 +35,13 @@ func (r *Repository) Create(ctx context.Context, c federation.Connection) error 
 	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_connections(id,environment_id,name,issuer,client_id,secret_env) VALUES($1,$2,$3,$4,$5,$6)`, c.ID, c.Environment, c.Name, c.Issuer, c.Client, c.SecretEnv)
 	return conflict(err)
 }
-func (r *Repository) Find(ctx context.Context, environment, id string) (federation.Connection, error) {
-	var row struct {
-		ID          string `db:"id"`
-		Environment string `db:"environment_id"`
-		Issuer      string `db:"issuer"`
-		Client      string `db:"client_id"`
-		Secret      string `db:"secret_env"`
-	}
-	err := r.db.GetContext(ctx, &row, `SELECT id,environment_id,issuer,client_id,secret_env FROM federation_connections WHERE id=$1 AND environment_id=$2 AND active`, id, environment)
+func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
+	var row federation.Connection
+	err := r.db.GetContext(ctx, &row, `SELECT id,environment_id AS environment,issuer,client_id AS client,secret_env FROM federation_connections WHERE id=$1 AND environment_id=$2 AND active`, id, environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		return federation.Connection{}, errx.NotFound("resource not found")
 	}
-	return federation.Connection{ID: row.ID, Environment: row.Environment, Issuer: row.Issuer, Client: row.Client, SecretEnv: row.Secret}, failure(err)
+	return row, failure(err)
 }
 func (r *Repository) SaveState(ctx context.Context, hash []byte, s federation.State) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '5 minutes')`, hash, s.Connection, s.Boundary.EnvironmentID, s.Boundary.OrganizationID, s.Boundary.ApplicationID, s.Boundary.ResourceID, s.Binding, s.Nonce, s.Verifier)
@@ -60,14 +55,14 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 	}
 	defer tx.Rollback()
 	var row struct {
-		Connection   string `db:"connection_id"`
-		Environment  string `db:"environment_id"`
-		Organization string `db:"organization_id"`
-		Application  string `db:"application_id"`
-		Resource     string `db:"resource_id"`
-		Binding      []byte `db:"binding_hash"`
-		Nonce        string `db:"nonce"`
-		Verifier     string `db:"verifier"`
+		Connection   identity.ConnectionID   `db:"connection_id"`
+		Environment  identity.EnvironmentID  `db:"environment_id"`
+		Organization identity.OrganizationID `db:"organization_id"`
+		Application  identity.ApplicationID  `db:"application_id"`
+		Resource     identity.ResourceID     `db:"resource_id"`
+		Binding      []byte                  `db:"binding_hash"`
+		Nonce        string                  `db:"nonce"`
+		Verifier     string                  `db:"verifier"`
 	}
 	err = tx.GetContext(ctx, &row, `SELECT connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier FROM federation_states WHERE secret_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, hash)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -82,19 +77,19 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier}
 	return out, failure(tx.Commit())
 }
-func (r *Repository) LinkedUser(ctx context.Context, environment, connection, subject string) (authentication.Transaction, string, error) {
+func (r *Repository) LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, identity.UserID, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return nil, "", failure(err)
+		return nil, identity.UserID{}, failure(err)
 	}
-	var user string
+	var user identity.UserID
 	err = tx.GetContext(ctx, &user, `SELECT u.id FROM external_identities x JOIN users u ON u.id=x.user_id AND u.environment_id=x.environment_id WHERE x.connection_id=$1 AND x.environment_id=$2 AND x.subject=$3 AND u.active FOR UPDATE OF u`, connection, environment, subject)
 	if err != nil {
 		tx.Rollback()
 		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, "", failure(err)
+			return nil, identity.UserID{}, failure(err)
 		}
-		return nil, "", errx.Unauthorized("external identity is not linked")
+		return nil, identity.UserID{}, errx.Unauthorized("external identity is not linked")
 	}
 	return authpg.Wrap(tx), user, nil
 }
@@ -120,20 +115,20 @@ func (r *Repository) mutate(ctx context.Context, m federation.Mutation, query st
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) Link(ctx context.Context, m federation.Mutation, connection, user, subject string) error {
+func (r *Repository) Link(ctx context.Context, m federation.Mutation, connection identity.ConnectionID, user identity.UserID, subject string) error {
 	return r.mutate(ctx, m, `INSERT INTO external_identities(connection_id,environment_id,user_id,subject) VALUES($1,$2,$3,$4)`, connection, m.Environment, user, subject)
 }
-func (r *Repository) Disable(ctx context.Context, m federation.Mutation, id string) error {
+func (r *Repository) Disable(ctx context.Context, m federation.Mutation, id identity.ConnectionID) error {
 	return r.mutate(ctx, m, `UPDATE federation_connections SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
 }
-func (r *Repository) List(ctx context.Context, environment string) ([]federation.ConnectionView, error) {
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]federation.ConnectionView, error) {
 	var rows []struct {
-		ID       string `db:"id"`
-		Name     string `db:"name"`
-		Issuer   string `db:"issuer"`
-		ClientID string `db:"client_id"`
-		Active   bool   `db:"active"`
-		Linked   int    `db:"linked"`
+		ID       identity.ConnectionID `db:"id"`
+		Name     string                `db:"name"`
+		Issuer   string                `db:"issuer"`
+		ClientID string                `db:"client_id"`
+		Active   bool                  `db:"active"`
+		Linked   int                   `db:"linked"`
 	}
 	if err := r.db.SelectContext(ctx, &rows, `SELECT c.id, c.name, c.issuer, c.client_id, c.active,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
@@ -146,15 +141,15 @@ func (r *Repository) List(ctx context.Context, environment string) ([]federation
 	}
 	return out, nil
 }
-func (r *Repository) FindDetail(ctx context.Context, environment, id string) (federation.ConnectionDetail, error) {
+func (r *Repository) FindDetail(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.ConnectionDetail, error) {
 	var row struct {
-		ID        string `db:"id"`
-		Name      string `db:"name"`
-		Issuer    string `db:"issuer"`
-		ClientID  string `db:"client_id"`
-		SecretEnv string `db:"secret_env"`
-		Active    bool   `db:"active"`
-		Linked    int    `db:"linked"`
+		ID        identity.ConnectionID `db:"id"`
+		Name      string                `db:"name"`
+		Issuer    string                `db:"issuer"`
+		ClientID  string                `db:"client_id"`
+		SecretEnv string                `db:"secret_env"`
+		Active    bool                  `db:"active"`
+		Linked    int                   `db:"linked"`
 	}
 	err := r.db.GetContext(ctx, &row, `SELECT c.id, c.name, c.issuer, c.client_id, c.secret_env, c.active,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
@@ -167,7 +162,7 @@ func (r *Repository) FindDetail(ctx context.Context, environment, id string) (fe
 		SecretEnv: row.SecretEnv, Active: row.Active, Linked: row.Linked,
 	}, failure(err)
 }
-func (r *Repository) Identities(ctx context.Context, environment, connectionID string) ([]federation.ExternalIdentityView, error) {
+func (r *Repository) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID) ([]federation.ExternalIdentityView, error) {
 	rows := []federation.ExternalIdentityView{}
 	if err := r.db.SelectContext(ctx, &rows, `SELECT x.connection_id, x.subject, x.user_id, u.name AS user_name, u.email AS user_email
 		FROM external_identities x JOIN users u ON u.id=x.user_id AND u.environment_id=x.environment_id
@@ -176,7 +171,7 @@ func (r *Repository) Identities(ctx context.Context, environment, connectionID s
 	}
 	return rows, nil
 }
-func (r *Repository) Unlink(ctx context.Context, m federation.Mutation, connectionID, userID string) error {
+func (r *Repository) Unlink(ctx context.Context, m federation.Mutation, connectionID identity.ConnectionID, userID identity.UserID) error {
 	return r.mutate(ctx, m, `DELETE FROM external_identities WHERE connection_id=$1 AND environment_id=$2 AND user_id=$3`, connectionID, m.Environment, userID)
 }
 

@@ -3,18 +3,20 @@ package oauthhttp
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"time"
+
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/oauthsvc"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 	"github.com/ory/fosite"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"time"
 )
 
 type Provider func(*oauth.Client) (fosite.OAuth2Provider, *oauthfosite.Store, error)
@@ -31,6 +33,10 @@ type Handler struct {
 func New(commands oauth.Commands, queries oauth.Queries, flows oauth.Flows, provider Provider, tokens *authhttp.Tokens, issuer string, actor func(*fiber.Ctx) string) *Handler {
 	return &Handler{commands, queries, flows, provider, tokens, issuer, actor}
 }
+func env(c *fiber.Ctx) identity.EnvironmentID {
+	id, _ := identity.ParseEnvironmentID(c.Params("environment"))
+	return id
+}
 func (h *Handler) RegisterManagement(r fiber.Router) {
 	r.Post("/oauth-clients", h.create)
 	r.Get("/oauth-clients", h.list)
@@ -41,33 +47,44 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, secret, err := h.commands.Create(c.Context(), c.Params("environment"), input)
+	id, secret, err := h.commands.Create(c.Context(), env(c), input)
 	if err != nil {
 		return err
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id, "client_id": id, "client_secret": secret})
 }
 func (h *Handler) disable(c *fiber.Ctx) error {
-	err := h.commands.Disable(c.Context(), oauth.Mutation{Environment: c.Params("environment"), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}, c.Params("id"))
+	clientID, err := identity.ParseClientID(c.Params("id"))
 	if err != nil {
+		return errx.Validation("invalid client id")
+	}
+	m := oauth.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
+	if err := h.commands.Disable(c.Context(), m, clientID); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 func (h *Handler) list(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), c.Params("environment"))
+	out, err := h.queries.List(c.Context(), env(c))
 	if err != nil {
 		return err
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
-func (h *Handler) load(c *fiber.Ctx, id string) (fosite.OAuth2Provider, *oauth.Client, *oauthfosite.Store, error) {
+func (h *Handler) load(c *fiber.Ctx, id identity.ClientID) (fosite.OAuth2Provider, *oauth.Client, *oauthfosite.Store, error) {
 	client, err := h.flows.Client(c.Context(), id)
 	if err != nil {
 		return nil, nil, nil, errx.Wrap(err, "OAuth client lookup failed", errx.TypeInternal)
 	}
 	p, store, err := h.provider(client)
 	return p, client, store, err
+}
+func (h *Handler) loadFromString(c *fiber.Ctx, raw string) (fosite.OAuth2Provider, *oauth.Client, *oauthfosite.Store, error) {
+	id, err := identity.ParseClientID(raw)
+	if err != nil {
+		return nil, nil, nil, errx.NotFound("client not found")
+	}
+	return h.load(c, id)
 }
 func request(c *fiber.Ctx) *http.Request {
 	req := httptest.NewRequest(c.Method(), "https://iamkit.invalid"+c.OriginalURL(), strings.NewReader(string(c.Body())))
@@ -95,7 +112,7 @@ func (h *Handler) Register(app *fiber.App) {
 func (h *Handler) authorize(c *fiber.Ctx) error {
 	req := request(c)
 	q := req.URL.Query()
-	p, client, _, err := h.load(c, q.Get("client_id"))
+	p, client, _, err := h.loadFromString(c, q.Get("client_id"))
 	if err != nil {
 		return err
 	}
@@ -156,19 +173,19 @@ func (h *Handler) complete(c *fiber.Ctx) error {
 			return err
 		}
 		session = oauthfosite.NewSession()
-		session.Subject = access.Subject
+		session.Subject = access.Subject.String()
 		session.Deadline = expires
-		session.IDTokenClaims().Subject = access.Subject
+		session.IDTokenClaims().Subject = access.Subject.String()
 		session.IDTokenClaims().AuthTime = authenticated
 		session.IDTokenClaims().RequestedAt = row.Requested
-		session.IDTokenClaims().Extra = map[string]interface{}{"environment_id": client.Environment, "organization_id": access.OrganizationID}
+		session.IDTokenClaims().Extra = map[string]interface{}{"environment_id": client.Environment.String(), "organization_id": access.OrganizationID.String()}
 		session.IDTokenHeaders().Extra = map[string]interface{}{"kid": h.tokens.KeyID()}
 		session.AccessHeaders.Extra = map[string]interface{}{"kid": h.tokens.KeyID()}
-		session.AccessClaims.Subject = access.Subject
+		session.AccessClaims.Subject = access.Subject.String()
 		session.AccessClaims.Issuer = h.issuer
 		session.AccessClaims.Audience = []string{client.Audience}
 		session.AccessClaims.IssuedAt = time.Now()
-		session.AccessClaims.Extra = map[string]interface{}{"purpose": "application", "environment_id": client.Environment, "organization_id": access.OrganizationID, "application_id": client.Application, "resource_id": client.Resource, "permissions": access.Permissions, "sid": access.SessionID, "oauth_client_id": client.ID}
+		session.AccessClaims.Extra = map[string]interface{}{"purpose": "application", "environment_id": client.Environment.String(), "organization_id": access.OrganizationID.String(), "application_id": client.Application.String(), "resource_id": client.Resource.String(), "permissions": access.Permissions, "sid": access.SessionID.String(), "oauth_client_id": client.ID.String()}
 		return nil
 	})
 	if err != nil {
@@ -229,7 +246,7 @@ func endpointErrors(next fiber.Handler) fiber.Handler {
 }
 func (h *Handler) token(c *fiber.Ctx) error {
 	req := request(c)
-	id, err := tokenClient(req)
+	rawID, err := tokenClient(req)
 	if err != nil {
 		return oauthError(c, "invalid_request", 400)
 	}
@@ -237,17 +254,17 @@ func (h *Handler) token(c *fiber.Ctx) error {
 	if grant != "authorization_code" && grant != "refresh_token" {
 		return oauthError(c, "unsupported_grant_type", 400)
 	}
-	p, client, store, err := h.load(c, id)
+	p, client, store, err := h.loadFromString(c, rawID)
 	if err != nil {
 		return clientError(c, err)
 	}
-	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID)
+	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID.String())
 	req = req.WithContext(ctx)
 	kind, raw := "code", req.PostForm.Get("code")
 	if grant == "refresh_token" {
 		kind, raw = "refresh", req.PostForm.Get("refresh_token")
 	}
-	return store.WithTokenLock(ctx, raw, kind, client.ID, func() error {
+	return store.WithTokenLock(ctx, raw, kind, client.ID.String(), func() error {
 		w := httptest.NewRecorder()
 		ar, err := p.NewAccessRequest(ctx, req, oauthfosite.NewSession())
 		if err != nil {
@@ -262,11 +279,17 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		extra := session.AccessClaims.Extra
 		sid, _ := extra["sid"].(string)
 		org, _ := extra["organization_id"].(string)
-		if extra["environment_id"] != client.Environment || extra["application_id"] != client.Application || extra["resource_id"] != client.Resource {
+		envStr, _ := extra["environment_id"].(string)
+		appStr, _ := extra["application_id"].(string)
+		resStr, _ := extra["resource_id"].(string)
+		if envStr != client.Environment.String() || appStr != client.Application.String() || resStr != client.Resource.String() {
 			p.WriteAccessError(ctx, w, ar, fosite.ErrAccessDenied)
 			return response(c, w)
 		}
-		access, err := h.flows.Access(ctx, client, session.Subject, sid, org)
+		subjectID, _ := identity.ParseUserID(session.Subject)
+		sessionID, _ := identity.ParseSessionID(sid)
+		orgID, _ := identity.ParseOrganizationID(org)
+		access, err := h.flows.Access(ctx, client, subjectID, sessionID, orgID)
 		if err != nil {
 			p.WriteAccessError(ctx, w, ar, fosite.ErrAccessDenied)
 			return response(c, w)
@@ -286,22 +309,22 @@ func (h *Handler) token(c *fiber.Ctx) error {
 }
 func (h *Handler) revoke(c *fiber.Ctx) error {
 	req := request(c)
-	id, err := tokenClient(req)
+	rawID, err := tokenClient(req)
 	if err != nil {
 		return oauthError(c, "invalid_request", 400)
 	}
-	p, client, store, err := h.load(c, id)
+	p, client, store, err := h.loadFromString(c, rawID)
 	if err != nil {
 		return clientError(c, err)
 	}
-	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID)
+	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID.String())
 	req = req.WithContext(ctx)
 	raw := req.PostForm.Get("token")
 	kind := "refresh"
 	if strings.Count(raw, ".") == 2 {
 		kind = "access"
 	}
-	return store.WithTokenLock(ctx, raw, kind, client.ID, func() error {
+	return store.WithTokenLock(ctx, raw, kind, client.ID.String(), func() error {
 		err := p.NewRevocationRequest(ctx, req)
 		w := httptest.NewRecorder()
 		p.WriteRevocationResponse(ctx, w, err)

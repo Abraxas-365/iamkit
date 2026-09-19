@@ -10,7 +10,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/identity"
-	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -27,56 +26,56 @@ func New(r federation.Repository, p federation.Provider, secrets federation.Secr
 
 var secretName = regexp.MustCompile(`^IAMKIT_PROVIDER_[A-Z0-9_]+$`)
 
-func (s *Service) Create(ctx context.Context, input federation.Connection) (string, error) {
+func (s *Service) Create(ctx context.Context, input federation.Connection) (identity.ConnectionID, error) {
 	u, err := url.Parse(input.Issuer)
 	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || input.Name == "" || input.Client == "" || !secretName.MatchString(input.SecretEnv) {
-		return "", errx.Validation("HTTPS issuer, client ID and IAMKIT_PROVIDER_ secret variable required")
+		return identity.ConnectionID{}, errx.Validation("HTTPS issuer, client ID and IAMKIT_PROVIDER_ secret variable required")
 	}
 	if !s.provider.Approved(input) {
-		return "", errx.Forbidden("provider credential is not approved for this environment, issuer and client")
+		return identity.ConnectionID{}, errx.Forbidden("provider credential is not approved for this environment, issuer and client")
 	}
-	input.ID = uuid.NewString()
+	input.ID = identity.NewConnectionID()
 	return input.ID, s.repository.Create(ctx, input)
 }
-func (s *Service) Link(ctx context.Context, m federation.Mutation, connection, user, subject string) error {
-	if !identity.ValidID(connection) || !identity.ValidID(user) || subject == "" || len(subject) > 512 {
+func (s *Service) Link(ctx context.Context, m federation.Mutation, connectionID identity.ConnectionID, userID identity.UserID, subject string) error {
+	if connectionID.IsZero() || userID.IsZero() || subject == "" || len(subject) > 512 {
 		return errx.Validation("invalid external identity")
 	}
-	return s.repository.Link(ctx, m, connection, user, subject)
+	return s.repository.Link(ctx, m, connectionID, userID, subject)
 }
-func (s *Service) Disable(ctx context.Context, m federation.Mutation, id string) error {
-	if !identity.ValidID(id) {
+func (s *Service) Disable(ctx context.Context, m federation.Mutation, id identity.ConnectionID) error {
+	if id.IsZero() {
 		return errx.Validation("invalid connection")
 	}
 	return s.repository.Disable(ctx, m, id)
 }
-func (s *Service) Unlink(ctx context.Context, m federation.Mutation, connectionID, userID string) error {
-	if !identity.ValidID(connectionID) || !identity.ValidID(userID) {
+func (s *Service) Unlink(ctx context.Context, m federation.Mutation, connectionID identity.ConnectionID, userID identity.UserID) error {
+	if connectionID.IsZero() || userID.IsZero() {
 		return errx.Validation("invalid external identity")
 	}
 	return s.repository.Unlink(ctx, m, connectionID, userID)
 }
-func (s *Service) List(ctx context.Context, environment string) ([]federation.ConnectionView, error) {
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID) ([]federation.ConnectionView, error) {
 	return s.repository.List(ctx, environment)
 }
-func (s *Service) Connection(ctx context.Context, environment, connectionID string) (federation.ConnectionDetail, error) {
-	if !identity.ValidID(connectionID) {
+func (s *Service) Connection(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID) (federation.ConnectionDetail, error) {
+	if connectionID.IsZero() {
 		return federation.ConnectionDetail{}, errx.NotFound("federation connection not found")
 	}
 	return s.repository.FindDetail(ctx, environment, connectionID)
 }
-func (s *Service) Identities(ctx context.Context, environment, connectionID string) ([]federation.ExternalIdentityView, error) {
-	if !identity.ValidID(connectionID) {
+func (s *Service) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID) ([]federation.ExternalIdentityView, error) {
+	if connectionID.IsZero() {
 		return nil, errx.NotFound("federation connection not found")
 	}
 	return s.repository.Identities(ctx, environment, connectionID)
 }
-func (s *Service) Start(ctx context.Context, b authentication.Context, id string) (federation.Start, error) {
+func (s *Service) Start(ctx context.Context, b authentication.Context, id identity.ConnectionID) (federation.Start, error) {
 	var out federation.Start
 	if err := b.Validate(); err != nil {
 		return out, err
 	}
-	if !identity.ValidID(id) {
+	if id.IsZero() {
 		return out, errx.Validation("invalid federation context")
 	}
 	if !strings.HasPrefix(s.issuer, "https://") {

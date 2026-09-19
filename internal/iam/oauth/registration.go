@@ -8,30 +8,28 @@ import (
 )
 
 type ClientView struct {
-	ID              string   `json:"id"`
-	Application     string   `json:"application_id"`
-	ApplicationName string   `json:"application_name"`
-	Resource        string   `json:"resource_id"`
-	ResourceName    string   `json:"resource_name"`
-	Redirects       []string `json:"redirect_uris"`
-	Public          bool     `json:"public"`
-	Active          bool     `json:"active"`
+	ID              identity.ClientID      `json:"id"`
+	Application     identity.ApplicationID `json:"application_id"`
+	ApplicationName string                 `json:"application_name"`
+	Resource        identity.ResourceID    `json:"resource_id"`
+	ResourceName    string                 `json:"resource_name"`
+	Redirects       []string               `json:"redirect_uris"`
+	Public          bool                   `json:"public"`
+	Active          bool                   `json:"active"`
 }
 
 type Registration struct {
-	Application string   `json:"application_id"`
-	Resource    string   `json:"resource_id"`
-	Redirects   []string `json:"redirect_uris"`
-	Public      bool     `json:"public"`
+	Application identity.ApplicationID `json:"application_id"`
+	Resource    identity.ResourceID    `json:"resource_id"`
+	Redirects   []string               `json:"redirect_uris"`
+	Public      bool                   `json:"public"`
 }
 
-// Validate checks the structural invariants Registration owns. Redirect URI
-// format is validated separately via identity.ValidateRedirects.
 func (r Registration) Validate() error {
-	if !identity.ValidID(r.Application) {
+	if r.Application.IsZero() {
 		return errx.Validation("application_id must be a valid UUID")
 	}
-	if !identity.ValidID(r.Resource) {
+	if r.Resource.IsZero() {
 		return errx.Validation("resource_id must be a valid UUID")
 	}
 	if len(r.Redirects) == 0 {
@@ -40,10 +38,15 @@ func (r Registration) Validate() error {
 	return nil
 }
 
-type Mutation struct{ Environment, Actor, Action, Target string }
+type Mutation struct {
+	Environment identity.EnvironmentID
+	Actor       string
+	Action      string
+	Target      string
+}
 type Ticket struct {
-	Client    string    `db:"client_id"`
-	Binding   []byte    `db:"binding_hash"`
-	Form      string    `db:"request_form"`
-	Requested time.Time `db:"requested_at"`
+	Client    identity.ClientID `db:"client_id"`
+	Binding   []byte            `db:"binding_hash"`
+	Form      string            `db:"request_form"`
+	Requested time.Time         `db:"requested_at"`
 }

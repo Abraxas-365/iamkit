@@ -8,22 +8,19 @@ import (
 )
 
 type Context struct {
-	EnvironmentID  string `json:"environment_id"`
-	OrganizationID string `json:"organization_id"`
-	ApplicationID  string `json:"application_id"`
-	ResourceID     string `json:"resource_id"`
+	EnvironmentID  identity.EnvironmentID  `json:"environment_id"`
+	OrganizationID identity.OrganizationID `json:"organization_id"`
+	ApplicationID  identity.ApplicationID  `json:"application_id"`
+	ResourceID     identity.ResourceID     `json:"resource_id"`
 }
 
 // Validate reports whether every field of the boundary context is a valid UUID.
 func (c Context) Validate() error {
-	for _, pair := range []struct{ name, value string }{
-		{"environment_id", c.EnvironmentID},
-		{"organization_id", c.OrganizationID},
-		{"application_id", c.ApplicationID},
-		{"resource_id", c.ResourceID},
+	for _, id := range []interface{ IsZero() bool }{
+		c.EnvironmentID, c.OrganizationID, c.ApplicationID, c.ResourceID,
 	} {
-		if !identity.ValidID(pair.value) {
-			return errx.Validation(pair.name + " must be a valid UUID")
+		if id.IsZero() {
+			return errx.Validation("boundary IDs must be valid UUIDs")
 		}
 	}
 	return nil
@@ -34,17 +31,21 @@ type Access struct {
 	Permissions []string
 }
 type Session struct {
-	ID, User      string
-	Expires       time.Time
-	Used, Revoked bool
+	ID      identity.SessionID
+	User    identity.UserID
+	Expires time.Time
+	Used    bool
+	Revoked bool
 }
 type Challenge struct {
-	User     string
+	User     identity.UserID
 	Hash     []byte
 	Attempts int
 }
 type Issued struct {
-	Context                Context
-	User, Session, Refresh string
-	Access                 Access
+	Context Context
+	User    identity.UserID
+	Session identity.SessionID
+	Refresh string
+	Access  Access
 }

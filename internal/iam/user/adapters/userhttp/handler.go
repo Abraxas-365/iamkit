@@ -4,6 +4,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -16,8 +17,10 @@ type Handler struct {
 func New(commands user.Commands, queries user.Queries, actor func(*fiber.Ctx) string) *Handler {
 	return &Handler{commands: commands, queries: queries, actor: actor}
 }
-
-// Register must receive the already authenticated environment-scoped router.
+func env(c *fiber.Ctx) identity.EnvironmentID {
+	id, _ := identity.ParseEnvironmentID(c.Params("environment"))
+	return id
+}
 func (h *Handler) Register(r fiber.Router) {
 	r.Post("/users", h.Create)
 	r.Get("/users", h.List)
@@ -30,22 +33,22 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request body")
 	}
-	id, err := h.commands.Create(c.Context(), c.Params("environment"), input)
+	id, err := h.commands.Create(c.Context(), env(c), input)
 	if err != nil {
 		return err
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Handler) List(c *fiber.Ctx) error {
-	users, err := h.queries.List(c.Context(), c.Params("environment"))
+	users, err := h.queries.List(c.Context(), env(c))
 	if err != nil {
 		return err
 	}
 	type summary struct {
-		ID     string `json:"id"`
-		Email  string `json:"email"`
-		Name   string `json:"name"`
-		Active bool   `json:"active"`
+		ID     identity.UserID `json:"id"`
+		Email  string          `json:"email"`
+		Name   string          `json:"name"`
+		Active bool            `json:"active"`
 	}
 	out := make([]summary, 0, len(users))
 	for _, u := range users {
@@ -54,7 +57,11 @@ func (h *Handler) List(c *fiber.Ctx) error {
 	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Handler) Find(c *fiber.Ctx) error {
-	u, err := h.queries.Find(c.Context(), c.Params("environment"), c.Params("id"))
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	u, err := h.queries.Find(c.Context(), env(c), id)
 	if err != nil {
 		return err
 	}
@@ -65,14 +72,22 @@ func (h *Handler) Update(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request body")
 	}
-	m := user.Mutation{Environment: c.Params("environment"), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
-	if err := h.commands.Update(c.Context(), m, c.Params("id"), input); err != nil {
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.Validation("invalid user id")
+	}
+	m := user.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
+	if err := h.commands.Update(c.Context(), m, id, input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 func (h *Handler) Suspend(c *fiber.Ctx) error {
-	if err := h.commands.Suspend(c.Context(), c.Params("environment"), c.Params("id")); err != nil {
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	if err := h.commands.Suspend(c.Context(), env(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

@@ -4,18 +4,18 @@ import (
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
 type Resource struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Prefix      string   `json:"prefix"`
-	Audience    string   `json:"audience"`
-	Permissions []string `json:"permissions"`
+	ID          identity.ResourceID `json:"id"`
+	Name        string              `json:"name"`
+	Prefix      string              `json:"prefix"`
+	Audience    string              `json:"audience"`
+	Permissions []string            `json:"permissions"`
 }
 
-// Validate checks the structural invariants Resource owns. Permission catalog
-// and prefix format rules are enforced separately via identity helpers.
+// Validate checks the structural invariants Resource owns.
 func (r Resource) Validate() error {
 	if strings.TrimSpace(r.Name) == "" {
 		return errx.Validation("resource name is required")
@@ -34,7 +34,6 @@ type Catalog struct {
 	Permissions []string `json:"permissions"`
 }
 
-// Validate checks the structural invariants Catalog owns.
 func (c Catalog) Validate() error {
 	if strings.TrimSpace(c.Name) == "" {
 		return errx.Validation("catalog name is required")
@@ -42,4 +41,9 @@ func (c Catalog) Validate() error {
 	return nil
 }
 
-type Mutation struct{ Environment, Actor, Action, Target string }
+type Mutation struct {
+	Environment identity.EnvironmentID
+	Actor       string
+	Action      string
+	Target      string
+}

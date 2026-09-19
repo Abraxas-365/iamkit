@@ -1,24 +1,24 @@
 package application
 
-import "context"
+import (
+	"context"
 
-// Commands are the application-management operations exposed to driving adapters
-// and to other modules. They do not expose persistence.
+	"github.com/Abraxas-365/iamkit/internal/identity"
+)
+
 type Commands interface {
-	Create(ctx context.Context, environment string, input Create) (string, error)
-	Update(ctx context.Context, m Mutation, applicationID string, input Update) error
+	Create(ctx context.Context, environment identity.EnvironmentID, input Create) (identity.ApplicationID, error)
+	Update(ctx context.Context, m Mutation, applicationID identity.ApplicationID, input Update) error
 }
 
-// Queries are the application read operations exposed outside this module.
 type Queries interface {
-	Find(ctx context.Context, environment, applicationID string) (Application, error)
-	List(ctx context.Context, environment string) ([]Application, error)
+	Find(ctx context.Context, environment identity.EnvironmentID, applicationID identity.ApplicationID) (Application, error)
+	List(ctx context.Context, environment identity.EnvironmentID) ([]Application, error)
 }
 
-// Repository is an internal outbound port used only by application use cases.
 type Repository interface {
-	Create(ctx context.Context, environment, applicationID string, input Create) error
-	Find(ctx context.Context, environment, applicationID string) (Application, error)
-	List(ctx context.Context, environment string) ([]Application, error)
-	Update(ctx context.Context, m Mutation, applicationID string, input Update) error
+	Create(ctx context.Context, environment identity.EnvironmentID, applicationID identity.ApplicationID, input Create) error
+	Find(ctx context.Context, environment identity.EnvironmentID, applicationID identity.ApplicationID) (Application, error)
+	List(ctx context.Context, environment identity.EnvironmentID) ([]Application, error)
+	Update(ctx context.Context, m Mutation, applicationID identity.ApplicationID, input Update) error
 }

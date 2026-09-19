@@ -7,22 +7,13 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/application"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
 type Repository struct{ db *sqlx.DB }
 
-type row struct {
-	ID        string         `db:"id"`
-	Name      string         `db:"name"`
-	Redirects pq.StringArray `db:"redirect_uris"`
-	Active    bool           `db:"active"`
-}
-
-func (v row) domain() application.Application {
-	return application.Application{ID: v.ID, Name: v.Name, Redirects: []string(v.Redirects), Active: v.Active}
-}
 func New(db *sqlx.DB) *Repository { return &Repository{db} }
 func failure(err error) error {
 	if err == nil {
@@ -30,33 +21,29 @@ func failure(err error) error {
 	}
 	return errx.Wrap(err, "application persistence failed", errx.TypeInternal)
 }
-func (r *Repository) Create(ctx context.Context, environment, id string, input application.Create) error {
+func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, id identity.ApplicationID, input application.Create) error {
 	if input.Redirects == nil {
 		input.Redirects = []string{}
 	}
 	_, err := r.db.ExecContext(ctx, `INSERT INTO applications(id,environment_id,name,redirect_uris) VALUES($1,$2,$3,$4)`, id, environment, input.Name, pq.Array(input.Redirects))
 	return failure(err)
 }
-func (r *Repository) Find(ctx context.Context, environment, id string) (application.Application, error) {
-	var result row
+func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ApplicationID) (application.Application, error) {
+	var result application.Application
 	err := r.db.GetContext(ctx, &result, `SELECT id,name,redirect_uris,active FROM applications WHERE environment_id=$1 AND id=$2`, environment, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return application.Application{}, errx.NotFound("resource not found")
 	}
-	return result.domain(), failure(err)
+	return result, failure(err)
 }
-func (r *Repository) List(ctx context.Context, environment string) ([]application.Application, error) {
-	var rows []row
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]application.Application, error) {
+	var rows []application.Application
 	if err := r.db.SelectContext(ctx, &rows, `SELECT id,name,redirect_uris,active FROM applications WHERE environment_id=$1 ORDER BY id`, environment); err != nil {
 		return nil, failure(err)
 	}
-	out := make([]application.Application, 0, len(rows))
-	for _, result := range rows {
-		out = append(out, result.domain())
-	}
-	return out, nil
+	return rows, nil
 }
-func (r *Repository) Update(ctx context.Context, m application.Mutation, id string, input application.Update) error {
+func (r *Repository) Update(ctx context.Context, m application.Mutation, id identity.ApplicationID, input application.Update) error {
 	var redirects any
 	if input.Redirects != nil {
 		redirects = pq.Array(*input.Redirects)

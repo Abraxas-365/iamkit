@@ -22,7 +22,7 @@ func NewTokens(r authentication.TokenRepository, c authentication.TokenCodec, s 
 	return &Tokens{r, c, s}
 }
 func (s *Tokens) KeyID() string { return s.codec.KeyID() }
-func (s *Tokens) JWKS() any     { return s.codec.JWKS() }
+func (s *Tokens) JWKS() any    { return s.codec.JWKS() }
 func (s *Tokens) Issue(input authentication.Token, audience string) (string, error) {
 	now := time.Now()
 	input.ID = uuid.NewString()
@@ -32,37 +32,37 @@ func (s *Tokens) Issue(input authentication.Token, audience string) (string, err
 	input.ExpiresAt = now.Add(config.TokenTTL).Unix()
 	return s.codec.Sign(input)
 }
-func (s *Tokens) Validate(ctx context.Context, raw, environment, audience string) (authentication.Token, error) {
+func (s *Tokens) Validate(ctx context.Context, raw string, audience string, environment identity.EnvironmentID) (authentication.Token, error) {
 	var out authentication.Token
-	if !identity.ValidID(environment) || audience == "" {
+	if environment.IsZero() || audience == "" {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	out, err := s.codec.Verify(raw, audience)
 	if err != nil {
 		return out, err
 	}
-	if out.EnvironmentID != environment || !identity.ValidID(out.Subject) || !identity.ValidID(out.ApplicationID) || !identity.ValidID(out.ResourceID) {
+	if out.EnvironmentID != environment || out.Subject.IsZero() || out.ApplicationID.IsZero() || out.ResourceID.IsZero() {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	if !(out.Purpose == "application" && identity.ValidID(out.SessionID) && identity.ValidID(out.OrganizationID)) && !(out.Purpose == "machine" && out.SessionID == "" && out.OrganizationID == "") {
+	if !(out.Purpose == "application" && !out.SessionID.IsZero() && !out.OrganizationID.IsZero()) && !(out.Purpose == "machine" && out.SessionID.IsZero() && out.OrganizationID.IsZero()) {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	current, err := s.repository.Current(ctx, out, audience)
+	current, err := s.repository.Current(ctx, out, environment)
 	if err != nil || !identity.Subset(out.Permissions, current) {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	if out.ActorID != "" {
+	if !out.ActorID.IsZero() {
 		active, err := s.repository.ActorActive(ctx, out)
 		if err != nil || !active {
 			return out, errx.Unauthorized("impersonation actor disabled")
 		}
 	}
-	if out.OAuthClientID != "" {
+	if !out.OAuthClientID.IsZero() {
 		parts := strings.Split(raw, ".")
-		if len(parts) != 3 || !identity.ValidID(out.OAuthClientID) {
+		if len(parts) != 3 {
 			return out, errx.Unauthorized("invalid OAuth token")
 		}
-		active, err := s.repository.OAuthActive(ctx, out, parts[2])
+		active, err := s.repository.OAuthActive(ctx, out, out.OAuthClientID)
 		if err != nil || !active {
 			return out, errx.Unauthorized("OAuth token revoked")
 		}
@@ -70,18 +70,15 @@ func (s *Tokens) Validate(ctx context.Context, raw, environment, audience string
 	return out, nil
 }
 
-// ValidateSelf verifies a JWT that IAMKit issued, extracting the audience from
-// the token's own claims. It performs the same revocation and permission checks
-// as Validate. Used by /api/v1/* where the caller doesn't know the audience.
 func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.Token, error) {
 	out, err := s.codec.VerifySelf(raw)
 	if err != nil {
 		return out, err
 	}
-	if !identity.ValidID(out.EnvironmentID) || !identity.ValidID(out.Subject) || !identity.ValidID(out.ApplicationID) || !identity.ValidID(out.ResourceID) {
+	if out.EnvironmentID.IsZero() || out.Subject.IsZero() || out.ApplicationID.IsZero() || out.ResourceID.IsZero() {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	if !(out.Purpose == "application" && identity.ValidID(out.SessionID) && identity.ValidID(out.OrganizationID)) && !(out.Purpose == "machine" && out.SessionID == "" && out.OrganizationID == "") {
+	if !(out.Purpose == "application" && !out.SessionID.IsZero() && !out.OrganizationID.IsZero()) && !(out.Purpose == "machine" && out.SessionID.IsZero() && out.OrganizationID.IsZero()) {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	audience := ""
@@ -91,28 +88,29 @@ func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.T
 	if audience == "" {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	current, err := s.repository.Current(ctx, out, audience)
+	current, err := s.repository.Current(ctx, out, out.EnvironmentID)
 	if err != nil || !identity.Subset(out.Permissions, current) {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	if out.ActorID != "" {
+	if !out.ActorID.IsZero() {
 		active, err := s.repository.ActorActive(ctx, out)
 		if err != nil || !active {
 			return out, errx.Unauthorized("impersonation actor disabled")
 		}
 	}
-	if out.OAuthClientID != "" {
+	if !out.OAuthClientID.IsZero() {
 		parts := strings.Split(raw, ".")
-		if len(parts) != 3 || !identity.ValidID(out.OAuthClientID) {
+		if len(parts) != 3 {
 			return out, errx.Unauthorized("invalid OAuth token")
 		}
-		active, err := s.repository.OAuthActive(ctx, out, parts[2])
+		active, err := s.repository.OAuthActive(ctx, out, out.OAuthClientID)
 		if err != nil || !active {
 			return out, errx.Unauthorized("OAuth token revoked")
 		}
 	}
 	return out, nil
 }
+
 func (s *Tokens) Machine(ctx context.Context, raw string) (string, error) {
 	if !strings.HasPrefix(raw, "ik_svc_") {
 		return "", errx.Unauthorized("invalid credentials or access token")
@@ -141,18 +139,15 @@ func (s *Tokens) Organizations(ctx context.Context, token authentication.Token) 
 	}
 	return s.repository.Organizations(ctx, token)
 }
-func (s *Tokens) UpdateProfile(ctx context.Context, token authentication.Token, name string) error {
-	if token.Purpose != "application" || token.ActorID != "" {
+func (s *Tokens) UpdateProfile(ctx context.Context, token authentication.Token, organizationID identity.OrganizationID) error {
+	if token.Purpose != "application" || !token.ActorID.IsZero() {
 		return errx.Forbidden("non-impersonated user session required")
 	}
-	if strings.TrimSpace(name) == "" {
-		return errx.Validation("name required")
-	}
-	return s.repository.UpdateProfile(ctx, token, name)
+	return s.repository.UpdateProfile(ctx, token, organizationID)
 }
-func (s *Tokens) AddMember(ctx context.Context, token authentication.Token, user string) error {
-	if token.Purpose != "application" || !identity.ValidID(user) {
+func (s *Tokens) AddMember(ctx context.Context, token authentication.Token, organizationID identity.OrganizationID) error {
+	if token.Purpose != "application" || organizationID.IsZero() {
 		return errx.Forbidden("insufficient permissions")
 	}
-	return s.repository.AddMember(ctx, token, user)
+	return s.repository.AddMember(ctx, token, organizationID)
 }

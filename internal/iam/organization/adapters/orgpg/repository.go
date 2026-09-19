@@ -8,6 +8,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -28,30 +29,23 @@ func conflict(err error) error {
 	}
 	return failure(err)
 }
-func (r *Repository) Create(ctx context.Context, environment, id, name string) error {
+func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, id identity.OrganizationID, name string) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO organizations(id,environment_id,name) VALUES($1,$2,$3)`, id, environment, name)
 	return failure(err)
 }
-func (r *Repository) List(ctx context.Context, environment string) ([]organization.Summary, error) {
-	var rows []struct {
-		ID   string `db:"id"`
-		Name string `db:"name"`
-	}
-	if err := r.db.SelectContext(ctx, &rows, `SELECT id,name FROM organizations WHERE environment_id=$1 ORDER BY id LIMIT 100`, environment); err != nil {
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]organization.Summary, error) {
+	out := []organization.Summary{}
+	if err := r.db.SelectContext(ctx, &out, `SELECT id,name FROM organizations WHERE environment_id=$1 ORDER BY id LIMIT 100`, environment); err != nil {
 		return nil, failure(err)
-	}
-	out := make([]organization.Summary, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, organization.Summary{ID: row.ID, Name: row.Name})
 	}
 	return out, nil
 }
-func (r *Repository) Find(ctx context.Context, environment, id string) (organization.Organization, error) {
+func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.OrganizationID) (organization.Organization, error) {
 	var row struct {
-		ID       string `db:"id"`
-		Name     string `db:"name"`
-		Active   bool   `db:"active"`
-		Metadata []byte `db:"metadata"`
+		ID       identity.OrganizationID `db:"id"`
+		Name     string                  `db:"name"`
+		Active   bool                    `db:"active"`
+		Metadata []byte                  `db:"metadata"`
 	}
 	err := r.db.GetContext(ctx, &row, `SELECT id,name,active,metadata FROM organizations WHERE environment_id=$1 AND id=$2`, environment, id)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -59,7 +53,7 @@ func (r *Repository) Find(ctx context.Context, environment, id string) (organiza
 	}
 	return organization.Organization{ID: row.ID, Name: row.Name, Active: row.Active, Metadata: json.RawMessage(row.Metadata)}, failure(err)
 }
-func (r *Repository) Update(ctx context.Context, m organization.Mutation, id string, input organization.Update) error {
+func (r *Repository) Update(ctx context.Context, m organization.Mutation, id identity.OrganizationID, input organization.Update) error {
 	var metadata any
 	if len(input.Metadata) > 0 {
 		metadata = string(input.Metadata)
@@ -85,27 +79,18 @@ func (r *Repository) Update(ctx context.Context, m organization.Mutation, id str
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) AddMember(ctx context.Context, environment string, input organization.Membership) error {
+func (r *Repository) AddMember(ctx context.Context, environment identity.EnvironmentID, input organization.Membership) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, environment, input.Organization, input.User)
 	return conflict(err)
 }
-func (r *Repository) RemoveMember(ctx context.Context, environment, org, user string) error {
+func (r *Repository) RemoveMember(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, user identity.UserID) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE memberships SET active=false WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user)
 	return failure(err)
 }
-func (r *Repository) Members(ctx context.Context, environment, org string) ([]organization.MemberView, error) {
-	var rows []struct {
-		User      string `db:"user_id"`
-		UserName  string `db:"user_name"`
-		UserEmail string `db:"user_email"`
-		Active    bool   `db:"active"`
-	}
-	if err := r.db.SelectContext(ctx, &rows, `SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.environment_id=$1 AND m.organization_id=$2 ORDER BY u.name LIMIT 500`, environment, org); err != nil {
+func (r *Repository) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID) ([]organization.MemberView, error) {
+	out := []organization.MemberView{}
+	if err := r.db.SelectContext(ctx, &out, `SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.environment_id=$1 AND m.organization_id=$2 ORDER BY u.name LIMIT 500`, environment, org); err != nil {
 		return nil, failure(err)
-	}
-	out := make([]organization.MemberView, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, organization.MemberView{User: row.User, UserName: row.UserName, UserEmail: row.UserEmail, Active: row.Active})
 	}
 	return out, nil
 }

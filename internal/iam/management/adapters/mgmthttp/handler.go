@@ -6,8 +6,8 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 )
 
 const sessionCookie = "__Host-iamkit-operator"
@@ -23,13 +23,9 @@ func New(auth management.ManagementAuthenticator, sessions management.SessionCom
 	return &Handler{auth, sessions, commands, queries}
 }
 func Principal(c *fiber.Ctx) management.Principal { return c.Locals("operator").(management.Principal) }
-func OperatorID(c *fiber.Ctx) string              { return Principal(c).OperatorID }
-
-// Authenticate resolves a Principal from either an X-API-Key header or a session cookie.
+func OperatorID(c *fiber.Ctx) string              { return Principal(c).OperatorID.String() }
 func (h *Handler) Authenticate(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-store")
-
-	// Try X-API-Key header first (SDK / programmatic access).
 	if key := c.Get("X-API-Key"); strings.HasPrefix(key, "ik_mgmt_") {
 		p, err := h.auth.Authenticate(c.Context(), key)
 		if err != nil {
@@ -38,8 +34,6 @@ func (h *Handler) Authenticate(c *fiber.Ctx) error {
 		c.Locals("operator", p)
 		return c.Next()
 	}
-
-	// Try session cookie (dashboard / browser).
 	cookie := c.Cookies(sessionCookie)
 	if cookie != "" {
 		if c.Method() != fiber.MethodGet && c.Method() != fiber.MethodHead {
@@ -54,7 +48,6 @@ func (h *Handler) Authenticate(c *fiber.Ctx) error {
 		c.Locals("operator", p)
 		return c.Next()
 	}
-
 	return errx.Unauthorized("management credential required")
 }
 func requireWrite(c *fiber.Ctx) error {
@@ -67,11 +60,11 @@ func (h *Handler) Environment(c *fiber.Ctx) error {
 	if c.Method() != fiber.MethodGet && !Principal(c).CanWrite() {
 		return errx.Forbidden("insufficient permissions")
 	}
-	id := c.Params("environment")
-	if _, err := uuid.Parse(id); err != nil {
+	envID, err := identity.ParseEnvironmentID(c.Params("environment"))
+	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	if !h.auth.EnvironmentAllowed(c.Context(), Principal(c), id) {
+	if !h.auth.EnvironmentAllowed(c.Context(), Principal(c), envID) {
 		return errx.NotFound("resource not found")
 	}
 	return c.Next()
@@ -91,17 +84,12 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Post("/password", h.setPassword)
 	r.Delete("/sessions/current", h.logout)
 }
-
-// A custom header forces cross-origin browser requests to preflight. Management
-// routes must not enable credentialed cross-origin access for untrusted origins.
 func requireConsoleRequest(c *fiber.Ctx) error {
 	if c.Get("X-IAMKit-Console") != "1" || c.Get("Sec-Fetch-Site") == "cross-site" {
 		return errx.Forbidden("same-origin console request required")
 	}
 	return nil
 }
-
-// Login is registered outside the Authenticate middleware — it is unauthenticated.
 func (h *Handler) Login(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-store")
 	if err := requireConsoleRequest(c); err != nil {
@@ -118,21 +106,9 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	c.Cookie(&fiber.Cookie{
-		Name:     sessionCookie,
-		Value:    raw,
-		Path:     "/",
-		Secure:   true,
-		HTTPOnly: true,
-		SameSite: "Strict",
-		MaxAge:   config.SessionCookieMaxAge,
-	})
+	c.Cookie(&fiber.Cookie{Name: sessionCookie, Value: raw, Path: "/", Secure: true, HTTPOnly: true, SameSite: "Strict", MaxAge: config.SessionCookieMaxAge})
 	c.Set("Cache-Control", "no-store")
-	return c.JSON(fiber.Map{
-		"operator_id":  p.OperatorID,
-		"workspace_id": p.WorkspaceID,
-		"role":         p.Role,
-	})
+	return c.JSON(fiber.Map{"operator_id": p.OperatorID, "workspace_id": p.WorkspaceID, "role": p.Role})
 }
 func (h *Handler) logout(c *fiber.Ctx) error {
 	cookie := c.Cookies(sessionCookie)
@@ -141,21 +117,11 @@ func (h *Handler) logout(c *fiber.Ctx) error {
 			return err
 		}
 	}
-	c.Cookie(&fiber.Cookie{
-		Name:     sessionCookie,
-		Value:    "",
-		Path:     "/",
-		Secure:   true,
-		HTTPOnly: true,
-		SameSite: "Strict",
-		MaxAge:   -1,
-	})
+	c.Cookie(&fiber.Cookie{Name: sessionCookie, Value: "", Path: "/", Secure: true, HTTPOnly: true, SameSite: "Strict", MaxAge: -1})
 	return c.SendStatus(204)
 }
 func (h *Handler) setPassword(c *fiber.Ctx) error {
-	var input struct {
-		Password string `json:"password"`
-	}
+	var input struct{ Password string `json:"password"` }
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
@@ -165,10 +131,7 @@ func (h *Handler) setPassword(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Handler) createKey(c *fiber.Ctx) error {
-	var input struct {
-		ExpiresIn *string `json:"expires_in"`
-	}
-	// Body is optional — empty body means default TTL.
+	var input struct{ ExpiresIn *string `json:"expires_in"` }
 	c.BodyParser(&input)
 	out, err := h.commands.CreateKey(c.Context(), Principal(c), input.ExpiresIn)
 	if err != nil {
@@ -184,7 +147,11 @@ func (h *Handler) keys(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 func (h *Handler) revokeKey(c *fiber.Ctx) error {
-	if err := h.commands.RevokeKey(c.Context(), Principal(c), c.Params("id")); err != nil {
+	id, err := identity.ParseKeyID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	if err := h.commands.RevokeKey(c.Context(), Principal(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -205,7 +172,11 @@ func (h *Handler) delegate(c *fiber.Ctx) error {
 	return c.Status(201).JSON(out)
 }
 func (h *Handler) disable(c *fiber.Ctx) error {
-	if err := h.commands.DisableOperator(c.Context(), Principal(c), c.Params("id")); err != nil {
+	id, err := identity.ParseOperatorID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	if err := h.commands.DisableOperator(c.Context(), Principal(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -218,9 +189,7 @@ func (h *Handler) operators(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 func (h *Handler) createProject(c *fiber.Ctx) error {
-	var input struct {
-		Name string `json:"name"`
-	}
+	var input struct{ Name string `json:"name"` }
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
@@ -238,20 +207,26 @@ func (h *Handler) projects(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 func (h *Handler) createEnvironment(c *fiber.Ctx) error {
-	var input struct {
-		Name string `json:"name"`
-	}
+	var input struct{ Name string `json:"name"` }
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.CreateEnvironment(c.Context(), Principal(c), c.Params("project"), input.Name)
+	projectID, err := identity.ParseProjectID(c.Params("project"))
+	if err != nil {
+		return errx.Validation("invalid project id")
+	}
+	id, err := h.commands.CreateEnvironment(c.Context(), Principal(c), projectID, input.Name)
 	if err != nil {
 		return err
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Handler) environments(c *fiber.Ctx) error {
-	out, err := h.queries.Environments(c.Context(), Principal(c), c.Params("project"))
+	projectID, err := identity.ParseProjectID(c.Params("project"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	out, err := h.queries.Environments(c.Context(), Principal(c), projectID)
 	if err != nil {
 		return err
 	}

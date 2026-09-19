@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/jmoiron/sqlx"
 	"github.com/ory/fosite"
@@ -18,19 +19,24 @@ import (
 
 type Store struct {
 	DB          *sqlx.DB
-	Environment string
+	Environment identity.EnvironmentID
 	Clients     oauth.ClientRepository
 }
 
 func (s *Store) Client(ctx context.Context, id string) (*oauth.Client, error) {
-	return s.Clients.FindActive(ctx, s.Environment, id)
+	clientID, err := identity.ParseClientID(id)
+	if err != nil {
+		return nil, errx.NotFound("client not found")
+	}
+	_ = clientID
+	return s.Clients.FindActive(ctx, s.Environment, clientID)
 }
 func clientDTO(c *oauth.Client) *fosite.DefaultOpenIDConnectClient {
 	method := "client_secret_basic"
 	if c.Public {
 		method = "none"
 	}
-	return &fosite.DefaultOpenIDConnectClient{DefaultClient: &fosite.DefaultClient{ID: c.ID, Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: []string{"openid", "profile", "email", "offline_access"}, Public: c.Public, Audience: []string{c.Audience}, GrantTypes: []string{"authorization_code", "refresh_token"}, ResponseTypes: []string{"code"}}, TokenEndpointAuthMethod: method}
+	return &fosite.DefaultOpenIDConnectClient{DefaultClient: &fosite.DefaultClient{ID: c.ID.String(), Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: []string{"openid", "profile", "email", "offline_access"}, Public: c.Public, Audience: []string{c.Audience}, GrantTypes: []string{"authorization_code", "refresh_token"}, ResponseTypes: []string{"code"}}, TokenEndpointAuthMethod: method}
 }
 func (s *Store) GetClient(ctx context.Context, id string) (fosite.Client, error) {
 	c, err := s.Client(ctx, id)
@@ -277,6 +283,6 @@ func (s *Store) lock(ctx context.Context, id string) error {
 	if _, ok := ctx.Value(txKey{s}).(*sqlx.Tx); !ok {
 		return fosite.ErrServerError
 	}
-	_, err := s.executor(ctx).ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.Environment+":"+id)
+	_, err := s.executor(ctx).ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, s.Environment.String()+":"+id)
 	return wrap(err, "lock OAuth family")
 }

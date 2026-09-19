@@ -7,6 +7,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -37,7 +38,7 @@ type scimUser struct {
 }
 
 func dto(u provisioning.User) scimUser {
-	out := scimUser{Schemas: []string{scimUserSchema}, ID: u.ID, ExternalID: u.External, UserName: u.Email, DisplayName: u.Name, Active: &u.Active}
+	out := scimUser{Schemas: []string{scimUserSchema}, ID: u.ID.String(), ExternalID: u.External, UserName: u.Email, DisplayName: u.Name, Active: &u.Active}
 	if u.Manager != "" {
 		out.Enterprise = &scimEnterprise{}
 		out.Enterprise.Manager.Value = u.Manager
@@ -120,7 +121,11 @@ func (h *Handler) Register(app *fiber.App) {
 	r.Delete("/Users/:id", h.remove)
 }
 func (h *Handler) get(c *fiber.Ctx) error {
-	u, err := h.queries.Find(c.Context(), principal(c), c.Params("id"))
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("user not found")
+	}
+	u, err := h.queries.Find(c.Context(), principal(c), id)
 	if err != nil {
 		return err
 	}
@@ -165,7 +170,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	input.ID = out.ID
+	input.ID = out.ID.String()
 	input.UserName = out.Email
 	input.DisplayName = out.Name
 	input.ExternalID = out.External
@@ -174,7 +179,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	if input.Enterprise != nil {
 		input.Schemas = append(input.Schemas, scimEnterpriseSchema)
 	}
-	c.Set("Location", "/scim/v2/Users/"+out.ID)
+	c.Set("Location", "/scim/v2/Users/"+out.ID.String())
 	return c.Status(201).JSON(input)
 }
 func (h *Handler) replace(c *fiber.Ctx) error {
@@ -183,7 +188,11 @@ func (h *Handler) replace(c *fiber.Ctx) error {
 		return err
 	}
 	normalize(&input)
-	old, err := h.queries.Find(c.Context(), principal(c), c.Params("id"))
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("user not found")
+	}
+	old, err := h.queries.Find(c.Context(), principal(c), id)
 	if err != nil {
 		return err
 	}
@@ -201,10 +210,14 @@ func (h *Handler) replace(c *fiber.Ctx) error {
 	if input.Enterprise != nil {
 		update.Manager = &input.Enterprise.Manager.Value
 	}
-	return h.update(c, update)
+	return h.update(c, id, update)
 }
 func (h *Handler) patch(c *fiber.Ctx) error {
-	if _, err := h.queries.Find(c.Context(), principal(c), c.Params("id")); err != nil {
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("user not found")
+	}
+	if _, err := h.queries.Find(c.Context(), principal(c), id); err != nil {
 		return err
 	}
 	var input struct {
@@ -230,9 +243,7 @@ func (h *Handler) patch(c *fiber.Ctx) error {
 			}
 			update.Manager = &manager
 		case strings.ToLower(scimEnterpriseSchema + ":manager"):
-			var manager struct {
-				Value string `json:"value"`
-			}
+			var manager struct{ Value string `json:"value"` }
 			if err := json.Unmarshal(op.Value, &manager); err != nil {
 				return errx.Validation("invalid manager")
 			}
@@ -267,10 +278,10 @@ func (h *Handler) patch(c *fiber.Ctx) error {
 			return errx.Validation("unsupported patch path")
 		}
 	}
-	return h.update(c, update)
+	return h.update(c, id, update)
 }
-func (h *Handler) update(c *fiber.Ctx, input provisioning.Update) error {
-	out, err := h.commands.Update(c.Context(), principal(c), c.Params("id"), input)
+func (h *Handler) update(c *fiber.Ctx, id identity.UserID, input provisioning.Update) error {
+	out, err := h.commands.Update(c.Context(), principal(c), id, input)
 	if err != nil {
 		return err
 	}
@@ -280,6 +291,10 @@ func (h *Handler) update(c *fiber.Ctx, input provisioning.Update) error {
 	return c.JSON(dto(out))
 }
 func (h *Handler) remove(c *fiber.Ctx) error {
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("user not found")
+	}
 	active := false
-	return h.update(c, provisioning.Update{Active: &active})
+	return h.update(c, id, provisioning.Update{Active: &active})
 }

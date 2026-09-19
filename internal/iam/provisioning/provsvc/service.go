@@ -7,7 +7,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
 	"github.com/Abraxas-365/iamkit/internal/identity"
-	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -24,8 +23,8 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (provisioning.Pr
 	}
 	return s.repository.Authenticate(ctx, s.secrets.Hash(raw))
 }
-func (s *Service) Find(ctx context.Context, p provisioning.Principal, id string) (provisioning.User, error) {
-	if !identity.ValidID(id) {
+func (s *Service) Find(ctx context.Context, p provisioning.Principal, id identity.UserID) (provisioning.User, error) {
+	if id.IsZero() {
 		return provisioning.User{}, errx.NotFound("user not found")
 	}
 	return s.repository.Find(ctx, p, id)
@@ -51,18 +50,12 @@ func (s *Service) Create(ctx context.Context, p provisioning.Principal, input pr
 	if input.External == "" {
 		input.External = email
 	}
-	if input.Manager != "" && !identity.ValidID(input.Manager) {
-		return input, errx.Validation("invalid manager")
-	}
-	input.ID = uuid.NewString()
+	input.ID = identity.NewUserID()
 	return input, s.repository.Create(ctx, p, input)
 }
-func (s *Service) Update(ctx context.Context, p provisioning.Principal, id string, input provisioning.Update) (provisioning.User, error) {
-	if !identity.ValidID(id) {
+func (s *Service) Update(ctx context.Context, p provisioning.Principal, id identity.UserID, input provisioning.Update) (provisioning.User, error) {
+	if id.IsZero() {
 		return provisioning.User{}, errx.NotFound("user not found")
-	}
-	if input.Manager != nil && *input.Manager != "" && !identity.ValidID(*input.Manager) {
-		return provisioning.User{}, errx.Validation("invalid manager")
 	}
 	return s.repository.Update(ctx, p, id, input)
 }

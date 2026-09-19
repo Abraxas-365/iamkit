@@ -3,6 +3,7 @@ package orghttp
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -16,10 +17,12 @@ func NewStructure(commands organization.StructureCommands, queries organization.
 	return &Structure{commands, queries, actor}
 }
 func boundary(c *fiber.Ctx) organization.Boundary {
-	return organization.Boundary{Environment: c.Params("environment"), Organization: c.Params("organization")}
+	envID, _ := identity.ParseEnvironmentID(c.Params("environment"))
+	orgID, _ := identity.ParseOrganizationID(c.Params("organization"))
+	return organization.Boundary{Environment: envID, Organization: orgID}
 }
 func (h *Structure) mutation(c *fiber.Ctx) organization.Mutation {
-	return organization.Mutation{Environment: c.Params("environment"), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
+	return organization.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
 }
 func (h *Structure) Check(c *fiber.Ctx) error {
 	if err := h.commands.Check(c.Context(), boundary(c)); err != nil {
@@ -37,16 +40,11 @@ func (h *Structure) view(view organization.StructureView) fiber.Handler {
 		return c.Send(raw)
 	}
 }
-
-// Register mounts all structure routes under /organizations/:organization (management).
 func (h *Structure) Register(e fiber.Router) {
 	r := e.Group("/organizations/:organization", h.Check)
 	h.RegisterViews(r)
 	h.RegisterMutations(r)
 }
-
-// RegisterViews mounts read-only structure routes. The caller must have already
-// set up the :organization param and any check middleware.
 func (h *Structure) RegisterViews(r fiber.Router) {
 	for _, route := range []struct {
 		path string
@@ -55,8 +53,6 @@ func (h *Structure) RegisterViews(r fiber.Router) {
 		r.Get(route.path, h.view(route.view))
 	}
 }
-
-// RegisterMutations mounts write structure routes.
 func (h *Structure) RegisterMutations(r fiber.Router) {
 	r.Post("/org-units", h.SaveUnit)
 	r.Put("/org-units/:id", h.SaveUnit)
@@ -68,13 +64,13 @@ func (h *Structure) RegisterMutations(r fiber.Router) {
 	r.Post("/position-assignments", h.AssignPosition)
 	r.Delete("/position-assignments/:id", h.UnassignPosition)
 }
-
 func (h *Structure) SaveUnit(c *fiber.Ctx) error {
 	var input organization.Unit
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.SaveUnit(c.Context(), boundary(c), h.mutation(c), c.Params("id"), input)
+	unitID, _ := identity.ParseUnitID(c.Params("id"))
+	id, err := h.commands.SaveUnit(c.Context(), boundary(c), h.mutation(c), unitID, input)
 	if err != nil {
 		return err
 	}
@@ -84,7 +80,11 @@ func (h *Structure) SaveUnit(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Structure) DeleteUnit(c *fiber.Ctx) error {
-	if err := h.commands.DeleteUnit(c.Context(), boundary(c), h.mutation(c), c.Params("id")); err != nil {
+	id, err := identity.ParseUnitID(c.Params("id"))
+	if err != nil {
+		return errx.Validation("invalid unit id")
+	}
+	if err := h.commands.DeleteUnit(c.Context(), boundary(c), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -94,7 +94,11 @@ func (h *Structure) SetProfile(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.commands.SetProfile(c.Context(), boundary(c), h.mutation(c), c.Params("user"), input); err != nil {
+	userID, err := identity.ParseUserID(c.Params("user"))
+	if err != nil {
+		return errx.Validation("invalid user id")
+	}
+	if err := h.commands.SetProfile(c.Context(), boundary(c), h.mutation(c), userID, input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -104,7 +108,8 @@ func (h *Structure) SavePosition(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.SavePosition(c.Context(), boundary(c), h.mutation(c), c.Params("id"), input)
+	posID, _ := identity.ParsePositionID(c.Params("id"))
+	id, err := h.commands.SavePosition(c.Context(), boundary(c), h.mutation(c), posID, input)
 	if err != nil {
 		return err
 	}
@@ -114,7 +119,11 @@ func (h *Structure) SavePosition(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Structure) DeletePosition(c *fiber.Ctx) error {
-	if err := h.commands.DeletePosition(c.Context(), boundary(c), h.mutation(c), c.Params("id")); err != nil {
+	id, err := identity.ParsePositionID(c.Params("id"))
+	if err != nil {
+		return errx.Validation("invalid position id")
+	}
+	if err := h.commands.DeletePosition(c.Context(), boundary(c), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -131,7 +140,11 @@ func (h *Structure) AssignPosition(c *fiber.Ctx) error {
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Structure) UnassignPosition(c *fiber.Ctx) error {
-	if err := h.commands.DeleteAssignment(c.Context(), boundary(c), h.mutation(c), c.Params("id")); err != nil {
+	id, err := identity.ParseAssignmentID(c.Params("id"))
+	if err != nil {
+		return errx.Validation("invalid assignment id")
+	}
+	if err := h.commands.DeleteAssignment(c.Context(), boundary(c), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

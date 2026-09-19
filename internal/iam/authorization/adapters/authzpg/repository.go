@@ -7,6 +7,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -33,46 +34,30 @@ func array(v []string) any {
 	}
 	return pq.Array(v)
 }
-
-type resourceRow struct {
-	ID          string         `db:"id"`
-	Name        string         `db:"name"`
-	Prefix      string         `db:"prefix"`
-	Audience    string         `db:"audience"`
-	Permissions pq.StringArray `db:"permissions"`
-}
-
-func (r resourceRow) domain() authorization.Resource {
-	return authorization.Resource{ID: r.ID, Name: r.Name, Prefix: r.Prefix, Audience: r.Audience, Permissions: []string(r.Permissions)}
-}
-func (r *Repository) Create(ctx context.Context, environment string, input authorization.Resource) error {
+func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, input authorization.Resource) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO resources(id,environment_id,name,prefix,audience,permissions) VALUES($1,$2,$3,$4,$5,$6)`, input.ID, environment, input.Name, input.Prefix, input.Audience, array(input.Permissions))
 	return conflict(err)
 }
-func (r *Repository) List(ctx context.Context, environment string) ([]authorization.Resource, error) {
-	var rows []resourceRow
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]authorization.Resource, error) {
+	var rows []authorization.Resource
 	if err := r.db.SelectContext(ctx, &rows, `SELECT id,name,prefix,audience,permissions FROM resources WHERE environment_id=$1 ORDER BY id`, environment); err != nil {
 		return nil, failure(err)
 	}
-	out := make([]authorization.Resource, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, row.domain())
-	}
-	return out, nil
+	return rows, nil
 }
-func (r *Repository) Find(ctx context.Context, environment, id string) (authorization.Resource, error) {
-	var row resourceRow
+func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) (authorization.Resource, error) {
+	var row authorization.Resource
 	err := r.db.GetContext(ctx, &row, `SELECT id,name,prefix,audience,permissions FROM resources WHERE environment_id=$1 AND id=$2`, environment, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return authorization.Resource{}, errx.NotFound("resource not found")
 	}
-	return row.domain(), failure(err)
+	return row, failure(err)
 }
-func (r *Repository) LinkApplication(ctx context.Context, environment, application, resource string) error {
+func (r *Repository) LinkApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO application_resources(environment_id,application_id,resource_id) VALUES($1,$2,$3)`, environment, application, resource)
 	return conflict(err)
 }
-func (r *Repository) UnlinkApplication(ctx context.Context, environment, application, resource string) error {
+func (r *Repository) UnlinkApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) error {
 	res, err := r.db.ExecContext(ctx, `DELETE FROM application_resources WHERE environment_id=$1 AND application_id=$2 AND resource_id=$3`, environment, application, resource)
 	if err != nil {
 		return failure(err)
@@ -83,18 +68,14 @@ func (r *Repository) UnlinkApplication(ctx context.Context, environment, applica
 	}
 	return nil
 }
-func (r *Repository) ListByApplication(ctx context.Context, environment, application string) ([]authorization.Resource, error) {
-	var rows []resourceRow
+func (r *Repository) ListByApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID) ([]authorization.Resource, error) {
+	var rows []authorization.Resource
 	if err := r.db.SelectContext(ctx, &rows, `SELECT r.id, r.name, r.prefix, r.audience, r.permissions FROM resources r JOIN application_resources ar ON ar.resource_id=r.id AND ar.environment_id=r.environment_id WHERE ar.environment_id=$1 AND ar.application_id=$2 ORDER BY r.name`, environment, application); err != nil {
 		return nil, failure(err)
 	}
-	out := make([]authorization.Resource, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, row.domain())
-	}
-	return out, nil
+	return rows, nil
 }
-func (r *Repository) UpdateCatalog(ctx context.Context, m authorization.Mutation, id string, input authorization.Catalog) error {
+func (r *Repository) UpdateCatalog(ctx context.Context, m authorization.Mutation, id identity.ResourceID, input authorization.Catalog) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)

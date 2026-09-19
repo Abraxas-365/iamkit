@@ -3,40 +3,36 @@
 package identity
 
 import (
-	"github.com/Abraxas-365/iamkit/internal/errx"
-	"github.com/google/uuid"
 	"net/mail"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/Abraxas-365/iamkit/internal/errx"
 )
 
 type User struct {
-	ID            string `json:"id"`
-	EnvironmentID string `json:"environment_id"`
-	Email         string `json:"email"`
-	Name          string `json:"name"`
+	ID            UserID        `json:"id"`
+	EnvironmentID EnvironmentID `json:"environment_id"`
+	Email         string        `json:"email"`
+	Name          string        `json:"name"`
 }
 
 type Membership struct {
-	EnvironmentID  string `json:"environment_id"`
-	OrganizationID string `json:"organization_id"`
-	UserID         string `json:"user_id"`
+	EnvironmentID  EnvironmentID  `json:"environment_id"`
+	OrganizationID OrganizationID `json:"organization_id"`
+	UserID         UserID         `json:"user_id"`
 }
 
 // AccessClaims contain only application authority. Management middleware does not
 // accept JWTs, regardless of their content, issuer, or signature.
 type Access struct {
-	EnvironmentID  string   `json:"environment_id"`
-	OrganizationID string   `json:"organization_id,omitempty"`
-	ApplicationID  string   `json:"application_id"`
-	ResourceID     string   `json:"resource_id"`
-	Permissions    []string `json:"permissions"`
+	EnvironmentID  EnvironmentID  `json:"environment_id"`
+	OrganizationID OrganizationID `json:"organization_id,omitempty"`
+	ApplicationID  ApplicationID  `json:"application_id"`
+	ResourceID     ResourceID     `json:"resource_id"`
+	Permissions    []string       `json:"permissions"`
 }
-
-// ValidID reports whether id is a syntactically valid UUID. It is the single
-// shared identifier check used across all service packages.
-func ValidID(id string) bool { _, err := uuid.Parse(id); return err == nil }
 
 func Email(value string) (string, error) {
 	value = strings.ToLower(strings.TrimSpace(value))

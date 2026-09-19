@@ -4,13 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
+
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
-	"time"
 )
 
 func failure(err error) error {
@@ -32,16 +34,16 @@ func conflict(err error) error {
 	}
 	return failure(err)
 }
-func (r *Repository) Environment(ctx context.Context, id string) (string, error) {
-	var environment string
+func (r *Repository) Environment(ctx context.Context, id identity.ClientID) (identity.EnvironmentID, error) {
+	var environment identity.EnvironmentID
 	err := r.db.GetContext(ctx, &environment, `SELECT environment_id FROM oauth_clients WHERE id=$1 AND active`, id)
 	return environment, lookup(err)
 }
-func (r *Repository) Create(ctx context.Context, environment, id string, input oauth.Registration, hash []byte) error {
+func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID, input oauth.Registration, hash []byte) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash) VALUES($1,$2,$3,$4,$5,$6,$7)`, id, environment, input.Application, input.Resource, pq.Array(input.Redirects), input.Public, hash)
 	return conflict(err)
 }
-func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id string) error {
+func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)
@@ -64,16 +66,16 @@ func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id string) e
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) List(ctx context.Context, environment string) ([]oauth.ClientView, error) {
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID) ([]oauth.ClientView, error) {
 	var rows []struct {
-		ID              string         `db:"id"`
-		Application     string         `db:"application_id"`
-		ApplicationName string         `db:"application_name"`
-		Resource        string         `db:"resource_id"`
-		ResourceName    string         `db:"resource_name"`
-		Redirects       pq.StringArray `db:"redirect_uris"`
-		Public          bool           `db:"public"`
-		Active          bool           `db:"active"`
+		ID              identity.ClientID      `db:"id"`
+		Application     identity.ApplicationID `db:"application_id"`
+		ApplicationName string                 `db:"application_name"`
+		Resource        identity.ResourceID    `db:"resource_id"`
+		ResourceName    string                 `db:"resource_name"`
+		Redirects       pq.StringArray         `db:"redirect_uris"`
+		Public          bool                   `db:"public"`
+		Active          bool                   `db:"active"`
 	}
 	if err := r.db.SelectContext(ctx, &rows, `SELECT oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.public, oc.active FROM oauth_clients oc JOIN applications a ON a.id=oc.application_id JOIN resources res ON res.id=oc.resource_id WHERE oc.environment_id=$1 ORDER BY oc.id`, environment); err != nil {
 		return nil, failure(err)
@@ -103,7 +105,7 @@ func (t *authorization) Ticket(ctx context.Context, hash []byte) (oauth.Ticket, 
 	err := t.tx.GetContext(ctx, &row, `SELECT client_id,binding_hash,request_form,requested_at FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL FOR UPDATE`, hash)
 	return row, lookup(err)
 }
-func (t *authorization) SessionTimes(ctx context.Context, id string) (time.Time, time.Time, error) {
+func (t *authorization) SessionTimes(ctx context.Context, id identity.SessionID) (time.Time, time.Time, error) {
 	var row struct {
 		Expires       time.Time `db:"expires_at"`
 		Authenticated time.Time `db:"authenticated_at"`
@@ -117,7 +119,7 @@ func (t *authorization) Consume(ctx context.Context, hash []byte) error {
 }
 func (t *authorization) Commit() error   { return failure(t.tx.Commit()) }
 func (t *authorization) Rollback() error { return failure(t.tx.Rollback()) }
-func (r *Repository) Access(ctx context.Context, client *oauth.Client, subject, session, organization string) (authentication.Access, error) {
+func (r *Repository) Access(ctx context.Context, client *oauth.Client, subject identity.UserID, session identity.SessionID, organization identity.OrganizationID) (authentication.Access, error) {
 	var live bool
 	err := r.db.GetContext(ctx, &live, `SELECT EXISTS(SELECT 1 FROM sessions WHERE id=$1 AND environment_id=$2 AND user_id=$3 AND organization_id=$4 AND application_id=$5 AND resource_id=$6 AND revoked_at IS NULL AND expires_at>now())`, session, client.Environment, subject, organization, client.Application, client.Resource)
 	if err != nil {

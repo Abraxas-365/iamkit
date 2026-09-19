@@ -8,6 +8,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
@@ -50,7 +51,7 @@ func (r *Repository) Bootstrap(ctx context.Context, email, name string, hash []b
 	}
 	return nil
 }
-func (r *Repository) RecoverOwner(ctx context.Context, workspace, email string, hash []byte, expires time.Time) error {
+func (r *Repository) RecoverOwner(ctx context.Context, workspace identity.WorkspaceID, email string, hash []byte, expires time.Time) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return errx.Wrap(err, "owner recovery failed", errx.TypeInternal)
@@ -83,9 +84,9 @@ func (r *Repository) RecoverOwner(ctx context.Context, workspace, email string, 
 }
 func (r *Repository) Authenticate(ctx context.Context, hash []byte) (management.Principal, error) {
 	var row struct {
-		Workspace string `db:"workspace_id"`
-		Operator  string `db:"operator_id"`
-		Role      string `db:"role"`
+		Workspace identity.WorkspaceID `db:"workspace_id"`
+		Operator  identity.OperatorID  `db:"operator_id"`
+		Role      string               `db:"role"`
 	}
 	err := r.db.GetContext(ctx, &row, `SELECT k.workspace_id,k.operator_id,m.role FROM management_keys k JOIN workspace_members m USING(workspace_id,operator_id) WHERE k.secret_hash=$1 AND m.active AND k.revoked_at IS NULL AND k.expires_at>now()`, hash)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -96,7 +97,7 @@ func (r *Repository) Authenticate(ctx context.Context, hash []byte) (management.
 	}
 	return management.Principal{WorkspaceID: row.Workspace, OperatorID: row.Operator, Role: row.Role}, nil
 }
-func (r *Repository) EnvironmentAllowed(ctx context.Context, workspace, environment string) (bool, error) {
+func (r *Repository) EnvironmentAllowed(ctx context.Context, workspace identity.WorkspaceID, environment identity.EnvironmentID) (bool, error) {
 	var allowed bool
 	err := r.db.GetContext(ctx, &allowed, `SELECT EXISTS(SELECT 1 FROM environments e JOIN projects p ON p.id=e.project_id WHERE e.id=$1 AND p.workspace_id=$2)`, environment, workspace)
 	if err != nil {
@@ -110,10 +111,10 @@ var _ management.SessionRepository = (*Repository)(nil)
 
 func (r *Repository) PasswordByEmail(ctx context.Context, email string) (management.Principal, string, error) {
 	var row struct {
-		Workspace    string `db:"workspace_id"`
-		Operator     string `db:"operator_id"`
-		Role         string `db:"role"`
-		PasswordHash string `db:"password_hash"`
+		Workspace    identity.WorkspaceID `db:"workspace_id"`
+		Operator     identity.OperatorID  `db:"operator_id"`
+		Role         string               `db:"role"`
+		PasswordHash string               `db:"password_hash"`
 	}
 	err := r.db.GetContext(ctx, &row, `SELECT m.workspace_id, m.operator_id, m.role, o.password_hash FROM operators o JOIN workspace_members m ON m.operator_id=o.id WHERE o.email=$1 AND m.active`, email)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -124,15 +125,15 @@ func (r *Repository) PasswordByEmail(ctx context.Context, email string) (managem
 	}
 	return management.Principal{WorkspaceID: row.Workspace, OperatorID: row.Operator, Role: row.Role}, row.PasswordHash, nil
 }
-func (r *Repository) CreateSession(ctx context.Context, id string, p management.Principal, hash []byte, expires time.Time) error {
+func (r *Repository) CreateSession(ctx context.Context, id identity.SessionID, p management.Principal, hash []byte, expires time.Time) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO operator_sessions(id,workspace_id,operator_id,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5)`, id, p.WorkspaceID, p.OperatorID, hash, expires)
 	return failure(err)
 }
 func (r *Repository) AuthenticateSession(ctx context.Context, hash []byte) (management.Principal, error) {
 	var row struct {
-		Workspace string `db:"workspace_id"`
-		Operator  string `db:"operator_id"`
-		Role      string `db:"role"`
+		Workspace identity.WorkspaceID `db:"workspace_id"`
+		Operator  identity.OperatorID  `db:"operator_id"`
+		Role      string               `db:"role"`
 	}
 	err := r.db.GetContext(ctx, &row, `SELECT s.workspace_id, s.operator_id, m.role FROM operator_sessions s JOIN workspace_members m USING(workspace_id,operator_id) WHERE s.secret_hash=$1 AND m.active AND s.revoked_at IS NULL AND s.expires_at>now()`, hash)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -147,15 +148,15 @@ func (r *Repository) RevokeSessionByHash(ctx context.Context, hash []byte) error
 	_, err := r.db.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE secret_hash=$1 AND revoked_at IS NULL`, hash)
 	return failure(err)
 }
-func (r *Repository) SetPassword(ctx context.Context, operatorID, hash string) error {
+func (r *Repository) SetPassword(ctx context.Context, operatorID identity.OperatorID, hash string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE operators SET password_hash=$1 WHERE id=$2`, hash, operatorID)
 	return failure(err)
 }
-func (r *Repository) ResetPassword(ctx context.Context, operatorID string) error {
+func (r *Repository) ResetPassword(ctx context.Context, operatorID identity.OperatorID) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE operators SET password_hash='' WHERE id=$1`, operatorID)
 	return failure(err)
 }
-func (r *Repository) RevokeOperatorSessions(ctx context.Context, operatorID string) error {
+func (r *Repository) RevokeOperatorSessions(ctx context.Context, operatorID identity.OperatorID) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE operator_id=$1 AND revoked_at IS NULL`, operatorID)
 	return failure(err)
 }

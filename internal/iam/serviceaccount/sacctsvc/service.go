@@ -7,7 +7,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount"
 	"github.com/Abraxas-365/iamkit/internal/identity"
-	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -16,7 +15,7 @@ type Service struct {
 }
 
 func New(r serviceaccount.Repository, s serviceaccount.Secrets) *Service { return &Service{r, s} }
-func (s *Service) Create(ctx context.Context, environment string, input serviceaccount.Input) (serviceaccount.Credential, error) {
+func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input serviceaccount.Input) (serviceaccount.Credential, error) {
 	var out serviceaccount.Credential
 	if err := input.Validate(); err != nil {
 		return out, err
@@ -36,16 +35,16 @@ func (s *Service) Create(ctx context.Context, environment string, input servicea
 	if err != nil {
 		return out, err
 	}
-	out = serviceaccount.Credential{ID: uuid.NewString(), Secret: raw, Expires: time.Now().Add(ttl)}
+	out = serviceaccount.Credential{ID: identity.NewAccountID(), Secret: raw, Expires: time.Now().Add(ttl)}
 	return out, s.repository.Create(ctx, environment, input, out, hash)
 }
-func (s *Service) Revoke(ctx context.Context, environment, id string) error {
-	if !identity.ValidID(id) {
+func (s *Service) Revoke(ctx context.Context, environment identity.EnvironmentID, id identity.AccountID) error {
+	if id.IsZero() {
 		return errx.NotFound("resource not found")
 	}
 	return s.repository.Revoke(ctx, environment, id)
 }
-func (s *Service) List(ctx context.Context, environment string) ([]serviceaccount.Account, error) {
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID) ([]serviceaccount.Account, error) {
 	return s.repository.List(ctx, environment)
 }
 

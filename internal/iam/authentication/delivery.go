@@ -6,17 +6,18 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
 // DeliveryConfig is a per-environment webhook configuration for challenge
 // code delivery (OTP, password reset, email verification). When set, it
 // overrides the global EMAIL_WEBHOOK_URL for that environment.
 type DeliveryConfig struct {
-	EnvironmentID string    `json:"environment_id"`
-	WebhookURL    string    `json:"webhook_url"`
-	HasToken      bool      `json:"has_token"` // true if a token is configured (never expose the raw/hash)
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	EnvironmentID identity.EnvironmentID `json:"environment_id"`
+	WebhookURL    string                 `json:"webhook_url"`
+	HasToken      bool                   `json:"has_token"`
+	CreatedAt     time.Time              `json:"created_at"`
+	UpdatedAt     time.Time              `json:"updated_at"`
 }
 
 // DeliveryConfigInput is the write payload for creating or updating a

@@ -2,12 +2,12 @@ package mgmtsvc
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/identity"
-	"github.com/google/uuid"
-	"strings"
-	"time"
 )
 
 type Control struct {
@@ -21,7 +21,7 @@ func (s *Control) CreateKey(ctx context.Context, p management.Principal, expires
 	if err != nil {
 		return management.Credential{}, err
 	}
-	out := management.Credential{ID: uuid.NewString(), Expires: time.Now().Add(ttl)}
+	out := management.Credential{ID: identity.NewKeyID(), Expires: time.Now().Add(ttl)}
 	raw, hash, err := s.secrets.Generate("ik_mgmt_")
 	if err != nil {
 		return out, err
@@ -32,8 +32,8 @@ func (s *Control) CreateKey(ctx context.Context, p management.Principal, expires
 func (s *Control) Keys(ctx context.Context, p management.Principal) ([]management.Key, error) {
 	return s.repository.Keys(ctx, p)
 }
-func (s *Control) RevokeKey(ctx context.Context, p management.Principal, id string) error {
-	if !identity.ValidID(id) {
+func (s *Control) RevokeKey(ctx context.Context, p management.Principal, id identity.KeyID) error {
+	if id.IsZero() {
 		return errx.NotFound("resource not found")
 	}
 	return s.repository.RevokeKey(ctx, p, id)
@@ -55,38 +55,38 @@ func (s *Control) Delegate(ctx context.Context, p management.Principal, email, r
 	if err != nil {
 		return out, err
 	}
-	out = management.Delegated{Key: uuid.NewString(), Secret: raw, Expires: time.Now().Add(ttl)}
+	out = management.Delegated{Key: identity.NewKeyID(), Secret: raw, Expires: time.Now().Add(ttl)}
 	out.Operator, err = s.repository.Delegate(ctx, p, email, role, out.Key, hash, out.Expires)
 	return out, err
 }
-func (s *Control) DisableOperator(ctx context.Context, p management.Principal, id string) error {
+func (s *Control) DisableOperator(ctx context.Context, p management.Principal, id identity.OperatorID) error {
 	if p.Role != "owner" {
 		return errx.Forbidden("insufficient permissions")
 	}
-	if !identity.ValidID(id) {
+	if id.IsZero() {
 		return errx.NotFound("resource not found")
 	}
 	return s.repository.DisableOperator(ctx, p, id)
 }
-func (s *Control) CreateProject(ctx context.Context, p management.Principal, name string) (string, error) {
+func (s *Control) CreateProject(ctx context.Context, p management.Principal, name string) (identity.ProjectID, error) {
 	if strings.TrimSpace(name) == "" {
-		return "", errx.Validation("invalid request")
+		return identity.ProjectID{}, errx.Validation("invalid request")
 	}
-	id := uuid.NewString()
+	id := identity.NewProjectID()
 	return id, s.repository.CreateProject(ctx, p.WorkspaceID, id, name)
 }
 func (s *Control) Projects(ctx context.Context, p management.Principal) ([]management.Named, error) {
 	return s.repository.Projects(ctx, p.WorkspaceID)
 }
-func (s *Control) CreateEnvironment(ctx context.Context, p management.Principal, project, name string) (string, error) {
-	if !identity.ValidID(project) || strings.TrimSpace(name) == "" {
-		return "", errx.Validation("invalid request")
+func (s *Control) CreateEnvironment(ctx context.Context, p management.Principal, project identity.ProjectID, name string) (identity.EnvironmentID, error) {
+	if project.IsZero() || strings.TrimSpace(name) == "" {
+		return identity.EnvironmentID{}, errx.Validation("invalid request")
 	}
-	id := uuid.NewString()
+	id := identity.NewEnvironmentID()
 	return id, s.repository.CreateEnvironment(ctx, p.WorkspaceID, project, id, name)
 }
-func (s *Control) Environments(ctx context.Context, p management.Principal, project string) ([]management.Named, error) {
-	if !identity.ValidID(project) {
+func (s *Control) Environments(ctx context.Context, p management.Principal, project identity.ProjectID) ([]management.Named, error) {
+	if project.IsZero() {
 		return nil, errx.NotFound("resource not found")
 	}
 	return s.repository.Environments(ctx, p.WorkspaceID, project)

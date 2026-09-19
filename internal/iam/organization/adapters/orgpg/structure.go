@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/jmoiron/sqlx"
 )
@@ -72,7 +73,7 @@ func (r *Repository) mutate(ctx context.Context, m organization.Mutation, query 
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) SaveUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id string, input organization.Unit, creating bool) error {
+func (r *Repository) SaveUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.UnitID, input organization.Unit, creating bool) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)
@@ -114,10 +115,10 @@ func (r *Repository) SaveUnit(ctx context.Context, b organization.Boundary, m or
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) DeleteUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id string) error {
+func (r *Repository) DeleteUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.UnitID) error {
 	return r.mutate(ctx, m, `DELETE FROM org_units WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, b.Environment, b.Organization, id)
 }
-func (r *Repository) SetProfile(ctx context.Context, b organization.Boundary, m organization.Mutation, user string, input organization.Profile) error {
+func (r *Repository) SetProfile(ctx context.Context, b organization.Boundary, m organization.Mutation, user identity.UserID, input organization.Profile) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)
@@ -152,21 +153,21 @@ func (r *Repository) SetProfile(ctx context.Context, b organization.Boundary, m 
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) CreatePosition(ctx context.Context, b organization.Boundary, id string, input organization.Position) error {
+func (r *Repository) CreatePosition(ctx context.Context, b organization.Boundary, id identity.PositionID, input organization.Position) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO positions(id,environment_id,organization_id,name,code) VALUES($1,$2,$3,$4,$5)`, id, b.Environment, b.Organization, input.Name, input.Code)
 	return conflict(err)
 }
-func (r *Repository) UpdatePosition(ctx context.Context, b organization.Boundary, m organization.Mutation, id string, input organization.Position) error {
+func (r *Repository) UpdatePosition(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.PositionID, input organization.Position) error {
 	return r.mutate(ctx, m, `UPDATE positions SET name=$4,code=$5 WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, b.Environment, b.Organization, id, input.Name, input.Code)
 }
-func (r *Repository) DeletePosition(ctx context.Context, b organization.Boundary, m organization.Mutation, id string) error {
+func (r *Repository) DeletePosition(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.PositionID) error {
 	return r.mutate(ctx, m, `DELETE FROM positions WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, b.Environment, b.Organization, id)
 }
-func (r *Repository) AssignPosition(ctx context.Context, b organization.Boundary, id string, input organization.Assignment) error {
+func (r *Repository) AssignPosition(ctx context.Context, b organization.Boundary, id identity.AssignmentID, input organization.Assignment) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO position_assignments(id,environment_id,organization_id,position_id,user_id,org_unit_id) VALUES($1,$2,$3,$4,$5,$6)`, id, b.Environment, b.Organization, input.Position, input.User, input.Unit)
 	return conflict(err)
 }
-func (r *Repository) DeleteAssignment(ctx context.Context, b organization.Boundary, m organization.Mutation, id string) error {
+func (r *Repository) DeleteAssignment(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.AssignmentID) error {
 	return r.mutate(ctx, m, `DELETE FROM position_assignments WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, b.Environment, b.Organization, id)
 }
 

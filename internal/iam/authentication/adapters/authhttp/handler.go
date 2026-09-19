@@ -3,6 +3,7 @@ package authhttp
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -45,9 +46,9 @@ func (h *Handler) Refresh(c *fiber.Ctx) error {
 }
 func (h *Handler) InitiateChallenge(c *fiber.Ctx) error {
 	var input struct {
-		Environment string `json:"environment_id"`
-		Email       string `json:"email"`
-		Purpose     string `json:"purpose"`
+		Environment identity.EnvironmentID `json:"environment_id"`
+		Email       string                 `json:"email"`
+		Purpose     string                 `json:"purpose"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -62,10 +63,10 @@ func (h *Handler) InitiateChallenge(c *fiber.Ctx) error {
 func (h *Handler) VerifyChallenge(c *fiber.Ctx) error {
 	var input struct {
 		authentication.Context
-		ID       string `json:"challenge_id"`
-		Code     string `json:"code"`
-		Purpose  string `json:"purpose"`
-		Password string `json:"password"`
+		ID       identity.ChallengeID `json:"challenge_id"`
+		Code     string               `json:"code"`
+		Purpose  string               `json:"purpose"`
+		Password string               `json:"password"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")

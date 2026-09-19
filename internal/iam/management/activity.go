@@ -1,15 +1,19 @@
 package management
 
-import "time"
+import (
+	"time"
+
+	"github.com/Abraxas-365/iamkit/internal/identity"
+)
 
 type Session struct {
-	ID           string     `json:"id" db:"id"`
-	User         string     `json:"user_id" db:"user_id"`
-	Organization string     `json:"organization_id" db:"organization_id"`
-	Application  string     `json:"application_id" db:"application_id"`
-	Resource     string     `json:"resource_id" db:"resource_id"`
-	Expires      time.Time  `json:"expires_at" db:"expires_at"`
-	Revoked      *time.Time `json:"revoked_at" db:"revoked_at"`
+	ID           identity.SessionID      `json:"id" db:"id"`
+	User         identity.UserID         `json:"user_id" db:"user_id"`
+	Organization identity.OrganizationID `json:"organization_id" db:"organization_id"`
+	Application  identity.ApplicationID  `json:"application_id" db:"application_id"`
+	Resource     identity.ResourceID     `json:"resource_id" db:"resource_id"`
+	Expires      time.Time               `json:"expires_at" db:"expires_at"`
+	Revoked      *time.Time              `json:"revoked_at" db:"revoked_at"`
 }
 type AuditEvent struct {
 	ID      string    `json:"id" db:"id"`

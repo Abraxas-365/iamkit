@@ -9,10 +9,11 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/lib/pq"
 )
 
-func (r *Repository) Catalog(ctx context.Context, environment, id string) ([]string, error) {
+func (r *Repository) Catalog(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) ([]string, error) {
 	var catalog pq.StringArray
 	err := r.db.GetContext(ctx, &catalog, `SELECT permissions FROM resources WHERE environment_id=$1 AND id=$2`, environment, id)
 	if err == sql.ErrNoRows {
@@ -20,17 +21,10 @@ func (r *Repository) Catalog(ctx context.Context, environment, id string) ([]str
 	}
 	return []string(catalog), failure(err)
 }
-func (r *Repository) Roles(ctx context.Context, environment, id string) ([]authorization.RoleView, error) {
-	type row struct {
-		ID           string         `db:"id"`
-		Name         string         `db:"name"`
-		Resource     string         `db:"resource_id"`
-		ResourceName string         `db:"resource_name"`
-		Permissions  pq.StringArray `db:"permissions"`
-	}
-	rows := []row{}
+func (r *Repository) Roles(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) ([]authorization.RoleView, error) {
+	rows := []authorization.RoleView{}
 	query, args := `SELECT r.id, r.name, r.resource_id, res.name AS resource_name, r.permissions FROM roles r JOIN resources res ON res.id=r.resource_id WHERE r.environment_id=$1`, []any{environment}
-	if id != "" {
+	if !id.IsZero() {
 		query += " AND r.id=$2"
 		args = append(args, id)
 	}
@@ -38,26 +32,12 @@ func (r *Repository) Roles(ctx context.Context, environment, id string) ([]autho
 	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, failure(err)
 	}
-	out := make([]authorization.RoleView, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, authorization.RoleView{ID: row.ID, Name: row.Name, Resource: row.Resource, ResourceName: row.ResourceName, Permissions: []string(row.Permissions)})
-	}
-	return out, nil
+	return rows, nil
 }
-func (r *Repository) Grants(ctx context.Context, environment, id string) ([]authorization.GrantView, error) {
-	type row struct {
-		ID               string         `db:"id"`
-		Organization     string         `db:"organization_id"`
-		OrganizationName string         `db:"organization_name"`
-		User             string         `db:"user_id"`
-		UserName         string         `db:"user_name"`
-		Resource         string         `db:"resource_id"`
-		ResourceName     string         `db:"resource_name"`
-		Permissions      pq.StringArray `db:"permissions"`
-	}
-	rows := []row{}
+func (r *Repository) Grants(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) ([]authorization.GrantView, error) {
+	rows := []authorization.GrantView{}
 	query, args := `SELECT g.id, g.organization_id, o.name AS organization_name, g.user_id, u.name AS user_name, g.resource_id, res.name AS resource_name, g.permissions FROM grants g JOIN organizations o ON o.id=g.organization_id JOIN users u ON u.id=g.user_id JOIN resources res ON res.id=g.resource_id WHERE g.environment_id=$1`, []any{environment}
-	if id != "" {
+	if !id.IsZero() {
 		query += " AND g.id=$2"
 		args = append(args, id)
 	}
@@ -65,11 +45,7 @@ func (r *Repository) Grants(ctx context.Context, environment, id string) ([]auth
 	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, failure(err)
 	}
-	out := make([]authorization.GrantView, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, authorization.GrantView{ID: row.ID, Organization: row.Organization, OrganizationName: row.OrganizationName, User: row.User, UserName: row.UserName, Resource: row.Resource, ResourceName: row.ResourceName, Permissions: []string(row.Permissions)})
-	}
-	return out, nil
+	return rows, nil
 }
 func (r *Repository) mutate(ctx context.Context, m authorization.Mutation, query string, args ...any) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -93,14 +69,14 @@ func (r *Repository) mutate(ctx context.Context, m authorization.Mutation, query
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) SaveRole(ctx context.Context, m authorization.Mutation, id string, input authorization.Role, creating bool) error {
+func (r *Repository) SaveRole(ctx context.Context, m authorization.Mutation, id identity.RoleID, input authorization.Role, creating bool) error {
 	if !creating {
 		return r.mutate(ctx, m, `UPDATE roles SET name=$3,permissions=$4 WHERE environment_id=$1 AND id=$2 AND resource_id=$5`, m.Environment, id, input.Name, array(input.Permissions), input.Resource)
 	}
 	_, err := r.db.ExecContext(ctx, `INSERT INTO roles(id,environment_id,resource_id,name,permissions) VALUES($1,$2,$3,$4,$5)`, id, m.Environment, input.Resource, input.Name, array(input.Permissions))
 	return conflict(err)
 }
-func (r *Repository) DeleteRole(ctx context.Context, m authorization.Mutation, id string) error {
+func (r *Repository) DeleteRole(ctx context.Context, m authorization.Mutation, id identity.RoleID) error {
 	return r.mutate(ctx, m, `DELETE FROM roles WHERE environment_id=$1 AND id=$2`, m.Environment, id)
 }
 func (r *Repository) AssignRole(ctx context.Context, m authorization.Mutation, input authorization.RoleAssignment) error {
@@ -109,7 +85,7 @@ func (r *Repository) AssignRole(ctx context.Context, m authorization.Mutation, i
 func (r *Repository) UnassignRole(ctx context.Context, m authorization.Mutation, input authorization.RoleAssignment) error {
 	return r.mutate(ctx, m, `DELETE FROM role_assignments WHERE environment_id=$1 AND role_id=$2 AND organization_id=$3 AND user_id=$4`, m.Environment, input.Role, input.Organization, input.User)
 }
-func (r *Repository) RoleAssignments(ctx context.Context, environment string, filter authorization.RoleAssignmentFilter, page httpx.Pagination) ([]authorization.RoleAssignmentView, int, error) {
+func (r *Repository) RoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter authorization.RoleAssignmentFilter, page httpx.Pagination) ([]authorization.RoleAssignmentView, int, error) {
 	base := `FROM role_assignments a
 		JOIN organizations o ON o.id=a.organization_id
 		JOIN users u ON u.id=a.user_id
@@ -119,22 +95,22 @@ func (r *Repository) RoleAssignments(ctx context.Context, environment string, fi
 	args := []any{environment}
 	n := 1
 
-	if filter.RoleID != "" {
+	if !filter.RoleID.IsZero() {
 		n++
 		base += fmt.Sprintf(" AND a.role_id=$%d", n)
 		args = append(args, filter.RoleID)
 	}
-	if filter.OrganizationID != "" {
+	if !filter.OrganizationID.IsZero() {
 		n++
 		base += fmt.Sprintf(" AND a.organization_id=$%d", n)
 		args = append(args, filter.OrganizationID)
 	}
-	if filter.UserID != "" {
+	if !filter.UserID.IsZero() {
 		n++
 		base += fmt.Sprintf(" AND a.user_id=$%d", n)
 		args = append(args, filter.UserID)
 	}
-	if filter.ResourceID != "" {
+	if !filter.ResourceID.IsZero() {
 		n++
 		base += fmt.Sprintf(" AND a.resource_id=$%d", n)
 		args = append(args, filter.ResourceID)
@@ -162,20 +138,20 @@ func (r *Repository) RoleAssignments(ctx context.Context, environment string, fi
 	}
 	return rows, total, nil
 }
-func (r *Repository) PutGrant(ctx context.Context, environment, id string, input authorization.Grant) (string, error) {
+func (r *Repository) PutGrant(ctx context.Context, environment identity.EnvironmentID, id identity.GrantID, input authorization.Grant) (identity.GrantID, error) {
 	err := r.db.GetContext(ctx, &id, `INSERT INTO grants(id,environment_id,organization_id,user_id,resource_id,permissions) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(organization_id,user_id,resource_id) DO UPDATE SET permissions=EXCLUDED.permissions RETURNING id`, id, environment, input.Organization, input.User, input.Resource, array(input.Permissions))
 	return id, conflict(err)
 }
-func (r *Repository) DeleteGrant(ctx context.Context, environment, id string) error {
+func (r *Repository) DeleteGrant(ctx context.Context, environment identity.EnvironmentID, id identity.GrantID) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)
 	}
 	defer tx.Rollback()
 	var row struct {
-		Organization string `db:"organization_id"`
-		User         string `db:"user_id"`
-		Resource     string `db:"resource_id"`
+		Organization identity.OrganizationID `db:"organization_id"`
+		User         identity.UserID         `db:"user_id"`
+		Resource     identity.ResourceID     `db:"resource_id"`
 	}
 	err = tx.GetContext(ctx, &row, `DELETE FROM grants WHERE id=$1 AND environment_id=$2 RETURNING organization_id,user_id,resource_id`, id, environment)
 	if err == sql.ErrNoRows {

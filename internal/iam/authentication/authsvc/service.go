@@ -11,7 +11,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
-	"github.com/google/uuid"
 )
 
 type Service struct {
@@ -19,23 +18,14 @@ type Service struct {
 	passwords   authentication.Passwords
 	secrets     authentication.Secrets
 	delivery    authentication.Delivery
-	deliverySvc *DeliveryService // per-environment delivery; nil = global-only
+	deliverySvc *DeliveryService
 }
 
 func New(repository authentication.Repository, passwords authentication.Passwords, secrets authentication.Secrets, delivery authentication.Delivery) *Service {
 	return &Service{repository: repository, passwords: passwords, secrets: secrets, delivery: delivery}
 }
-
-// SetDeliveryService enables per-environment webhook lookup at challenge time.
 func (s *Service) SetDeliveryService(ds *DeliveryService) { s.deliverySvc = ds }
-func canonical(c authentication.Context) authentication.Context {
-	for _, id := range []*string{&c.EnvironmentID, &c.OrganizationID, &c.ApplicationID, &c.ResourceID} {
-		if parsed, err := uuid.Parse(*id); err == nil {
-			*id = parsed.String()
-		}
-	}
-	return c
-}
+
 func (s *Service) Login(ctx context.Context, boundary authentication.Context, email, password string) (authentication.Issued, error) {
 	var out authentication.Issued
 	email, err := identity.Email(email)
@@ -58,36 +48,38 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 	return s.NewSession(ctx, tx, boundary, user)
 }
 
-// NewSession participates in an existing transaction with the user already locked.
-func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user string) (authentication.Issued, error) {
-	out := authentication.Issued{Context: canonical(boundary), User: user, Session: uuid.NewString()}
+func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Issued, error) {
+	sessionID := identity.NewSessionID()
+	out := authentication.Issued{Context: boundary, User: user, Session: sessionID}
 	access, err := tx.Resolve(ctx, boundary, user)
 	if err != nil {
 		return out, err
 	}
 	out.Access = access
 	expires := time.Now().Add(config.SessionTTL)
-	if err = tx.CreateSession(ctx, boundary, user, out.Session, expires); err != nil {
+	if err = tx.CreateSession(ctx, boundary, user, sessionID, expires); err != nil {
 		return out, err
 	}
-	out.Refresh, err = s.saveRefresh(ctx, tx, out.Session, boundary.EnvironmentID, expires)
+	out.Refresh, err = s.saveRefresh(ctx, tx, user, sessionID, expires)
 	if err != nil {
 		return out, err
 	}
 	return out, tx.Commit()
 }
-func (s *Service) saveRefresh(ctx context.Context, tx authentication.Transaction, session, environment string, expires time.Time) (string, error) {
+
+func (s *Service) saveRefresh(ctx context.Context, tx authentication.Transaction, user identity.UserID, session identity.SessionID, expires time.Time) (string, error) {
 	raw, hash, err := s.secrets.Generate("ik_refresh_")
 	if err != nil {
 		return "", err
 	}
-	if err = tx.SaveRefresh(ctx, hash, session, environment, expires); err != nil {
+	if err = tx.SaveRefresh(ctx, hash, user, session, expires); err != nil {
 		return "", err
 	}
 	return raw, nil
 }
+
 func (s *Service) Refresh(ctx context.Context, boundary authentication.Context, token string) (authentication.Issued, error) {
-	out := authentication.Issued{Context: canonical(boundary)}
+	out := authentication.Issued{Context: boundary}
 	if boundary.Validate() != nil || !strings.HasPrefix(token, "ik_refresh_") {
 		return out, errx.Unauthorized("invalid refresh token")
 	}
@@ -120,48 +112,48 @@ func (s *Service) Refresh(ctx context.Context, boundary authentication.Context, 
 		return out, err
 	}
 	out.User, out.Session = row.User, row.ID
-	out.Refresh, err = s.saveRefresh(ctx, tx, row.ID, boundary.EnvironmentID, row.Expires)
+	out.Refresh, err = s.saveRefresh(ctx, tx, row.User, row.ID, row.Expires)
 	if err != nil {
 		return out, err
 	}
 	return out, tx.Commit()
 }
-func (s *Service) InitiateChallenge(ctx context.Context, environment, email, purpose string) (string, error) {
+
+func (s *Service) InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose string) (identity.ChallengeID, error) {
 	email, err := identity.Email(email)
-	if err != nil || !identity.ValidID(environment) || (purpose != "login" && purpose != "password_reset" && purpose != "email_verification") {
-		return "", errx.Validation("invalid challenge request")
+	if err != nil || environment.IsZero() || (purpose != "login" && purpose != "password_reset" && purpose != "email_verification") {
+		return identity.ChallengeID{}, errx.Validation("invalid challenge request")
 	}
 	if s.deliverySvc == nil && s.delivery == nil {
-		return "", errx.External("email delivery is not configured")
+		return identity.ChallengeID{}, errx.External("email delivery is not configured")
 	}
-	id := uuid.NewString()
+	id := identity.NewChallengeID()
 	tx, err := s.repository.Begin(ctx)
 	if err != nil {
-		return "", err
+		return identity.ChallengeID{}, err
 	}
 	defer tx.Rollback()
 	user, err := tx.EligibleChallengeUser(ctx, environment, email, purpose)
 	if err != nil {
-		return "", err
+		return identity.ChallengeID{}, err
 	}
-	if user == "" {
+	if user.IsZero() {
 		return id, nil
 	}
-	recent, err := tx.RecentChallenges(ctx, environment, user)
+	recent, err := tx.RecentChallenges(ctx, user, purpose)
 	if err != nil {
-		return "", err
+		return identity.ChallengeID{}, err
 	}
 	if recent >= 5 {
 		return id, nil
 	}
 	code, err := s.secrets.Code()
 	if err != nil {
-		return "", err
+		return identity.ChallengeID{}, err
 	}
-	if err = tx.CreateChallenge(ctx, id, environment, user, purpose, s.secrets.Hash(id+":"+code)); err != nil {
-		return "", err
+	if err = tx.CreateChallenge(ctx, id, user, purpose, environment, s.secrets.Hash(id.String()+":"+code)); err != nil {
+		return identity.ChallengeID{}, err
 	}
-	// Use per-environment delivery if available, otherwise global.
 	var sendErr error
 	if s.deliverySvc != nil {
 		sendErr = s.deliverySvc.Send(ctx, environment, email, purpose, code)
@@ -174,9 +166,10 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment, email, pur
 	}
 	return id, tx.Commit()
 }
-func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.Context, id, code, purpose, password string) (authentication.Issued, error) {
+
+func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.Context, challengeID identity.ChallengeID, code, purpose, password string) (authentication.Issued, error) {
 	var out authentication.Issued
-	if !identity.ValidID(boundary.EnvironmentID) || !identity.ValidID(id) || len(code) != 8 {
+	if boundary.EnvironmentID.IsZero() || challengeID.IsZero() || len(code) != 8 {
 		return out, errx.Unauthorized("invalid challenge")
 	}
 	if purpose == "login" && boundary.Validate() != nil {
@@ -198,15 +191,15 @@ func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.C
 		return out, err
 	}
 	defer tx.Rollback()
-	row, err := tx.Challenge(ctx, boundary.EnvironmentID, id, purpose)
+	row, err := tx.Challenge(ctx, challengeID, identity.UserID{}, purpose)
 	if err != nil {
 		return out, err
 	}
 	if row.Attempts >= 5 {
 		return out, errx.Unauthorized("invalid challenge")
 	}
-	if subtle.ConstantTimeCompare(row.Hash, s.secrets.Hash(id+":"+code)) != 1 {
-		if err = tx.FailChallenge(ctx, id); err != nil {
+	if subtle.ConstantTimeCompare(row.Hash, s.secrets.Hash(challengeID.String()+":"+code)) != 1 {
+		if err = tx.FailChallenge(ctx, challengeID); err != nil {
 			return out, err
 		}
 		if err = tx.Commit(); err != nil {
@@ -214,7 +207,7 @@ func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.C
 		}
 		return out, errx.Unauthorized("invalid challenge")
 	}
-	if err = tx.CompleteChallenge(ctx, boundary.EnvironmentID, row.User, id, purpose, hash); err != nil {
+	if err = tx.CompleteChallenge(ctx, challengeID, row.User, purpose, boundary.EnvironmentID, hash); err != nil {
 		return out, err
 	}
 	if purpose == "login" {

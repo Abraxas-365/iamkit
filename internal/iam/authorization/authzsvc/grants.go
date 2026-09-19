@@ -7,18 +7,14 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/identity"
-	"github.com/google/uuid"
 )
 
 type Grants struct{ repository authorization.Grants }
 
 func NewGrants(r authorization.Grants) *Grants { return &Grants{r} }
-func (s *Grants) Roles(ctx context.Context, environment, id string) ([]authorization.RoleView, error) {
-	if id != "" && !identity.ValidID(id) {
-		return nil, errx.NotFound("resource not found")
-	}
+func (s *Grants) Roles(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) ([]authorization.RoleView, error) {
 	out, err := s.repository.Roles(ctx, environment, id)
-	if err != nil || (id != "" && len(out) == 0) {
+	if err != nil || (!id.IsZero() && len(out) == 0) {
 		if err != nil {
 			return nil, err
 		}
@@ -26,12 +22,9 @@ func (s *Grants) Roles(ctx context.Context, environment, id string) ([]authoriza
 	}
 	return out, nil
 }
-func (s *Grants) Grants(ctx context.Context, environment, id string) ([]authorization.GrantView, error) {
-	if id != "" && !identity.ValidID(id) {
-		return nil, errx.NotFound("resource not found")
-	}
+func (s *Grants) Grants(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) ([]authorization.GrantView, error) {
 	out, err := s.repository.Grants(ctx, environment, id)
-	if err != nil || (id != "" && len(out) == 0) {
+	if err != nil || (!id.IsZero() && len(out) == 0) {
 		if err != nil {
 			return nil, err
 		}
@@ -39,7 +32,7 @@ func (s *Grants) Grants(ctx context.Context, environment, id string) ([]authoriz
 	}
 	return out, nil
 }
-func (s *Grants) permissions(ctx context.Context, environment, resource string, permissions []string) error {
+func (s *Grants) permissions(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, permissions []string) error {
 	if err := identity.ValidatePermissions(permissions, ""); err != nil {
 		return err
 	}
@@ -52,24 +45,21 @@ func (s *Grants) permissions(ctx context.Context, environment, resource string, 
 	}
 	return nil
 }
-func (s *Grants) SaveRole(ctx context.Context, m authorization.Mutation, id string, input authorization.Role) (string, error) {
+func (s *Grants) SaveRole(ctx context.Context, m authorization.Mutation, id identity.RoleID, input authorization.Role) (identity.RoleID, error) {
 	if err := input.Validate(); err != nil {
-		return "", err
+		return identity.RoleID{}, err
 	}
 	if err := s.permissions(ctx, m.Environment, input.Resource, input.Permissions); err != nil {
-		return "", err
+		return identity.RoleID{}, err
 	}
-	creating := id == ""
+	creating := id.IsZero()
 	if creating {
-		id = uuid.NewString()
-	}
-	if !identity.ValidID(id) {
-		return "", errx.Validation("invalid role")
+		id = identity.NewRoleID()
 	}
 	return id, s.repository.SaveRole(ctx, m, id, input, creating)
 }
-func (s *Grants) DeleteRole(ctx context.Context, m authorization.Mutation, id string) error {
-	if !identity.ValidID(id) {
+func (s *Grants) DeleteRole(ctx context.Context, m authorization.Mutation, id identity.RoleID) error {
+	if id.IsZero() {
 		return errx.NotFound("role not found")
 	}
 	return s.repository.DeleteRole(ctx, m, id)
@@ -83,21 +73,21 @@ func (s *Grants) AssignRole(ctx context.Context, m authorization.Mutation, input
 	}
 	return s.repository.AssignRole(ctx, m, input)
 }
-func (s *Grants) PutGrant(ctx context.Context, environment string, input authorization.Grant) (string, error) {
+func (s *Grants) PutGrant(ctx context.Context, environment identity.EnvironmentID, input authorization.Grant) (identity.GrantID, error) {
 	if err := input.Validate(); err != nil {
-		return "", err
+		return identity.GrantID{}, err
 	}
 	if err := s.permissions(ctx, environment, input.Resource, input.Permissions); err != nil {
-		return "", err
+		return identity.GrantID{}, err
 	}
-	return s.repository.PutGrant(ctx, environment, uuid.NewString(), input)
+	return s.repository.PutGrant(ctx, environment, identity.NewGrantID(), input)
 }
-func (s *Grants) DeleteGrant(ctx context.Context, environment, id string) error {
-	if !identity.ValidID(id) {
+func (s *Grants) DeleteGrant(ctx context.Context, environment identity.EnvironmentID, id identity.GrantID) error {
+	if id.IsZero() {
 		return errx.NotFound("resource not found")
 	}
 	return s.repository.DeleteGrant(ctx, environment, id)
 }
-func (s *Grants) RoleAssignments(ctx context.Context, environment string, filter authorization.RoleAssignmentFilter, page httpx.Pagination) ([]authorization.RoleAssignmentView, int, error) {
+func (s *Grants) RoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter authorization.RoleAssignmentFilter, page httpx.Pagination) ([]authorization.RoleAssignmentView, int, error) {
 	return s.repository.RoleAssignments(ctx, environment, filter, page)
 }

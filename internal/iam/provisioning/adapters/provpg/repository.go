@@ -7,6 +7,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -28,27 +29,14 @@ func conflict(err error) error {
 	return failure(err)
 }
 
-type userRow struct {
-	ID       string `db:"id"`
-	Email    string `db:"email"`
-	Name     string `db:"name"`
-	Active   bool   `db:"active"`
-	External string `db:"external_id"`
-	Manager  string `db:"manager_id"`
-}
-
-func (r userRow) domain() provisioning.User {
-	return provisioning.User{ID: r.ID, Email: r.Email, Name: r.Name, Active: r.Active, External: r.External, Manager: r.Manager}
-}
-
 const selectUser = `SELECT u.id,u.email,coalesce(m.display_name,u.name) AS name,(u.active AND m.active) AS active,i.external_id,coalesce(m.manager_id::text,'') AS manager_id FROM provisioned_identities i JOIN users u ON u.id=i.user_id AND u.environment_id=i.environment_id JOIN memberships m ON m.user_id=u.id AND m.environment_id=u.environment_id AND m.organization_id=$3 WHERE i.connection_id=$1 AND i.environment_id=$2`
 
 func (r *Repository) Authenticate(ctx context.Context, hash []byte) (provisioning.Principal, error) {
 	var row struct {
-		ID           string `db:"id"`
-		Environment  string `db:"environment_id"`
-		Organization string `db:"organization_id"`
-		Connection   string `db:"connection_id"`
+		ID           identity.CredentialID   `db:"id"`
+		Environment  identity.EnvironmentID  `db:"environment_id"`
+		Organization identity.OrganizationID `db:"organization_id"`
+		Connection   identity.ConnectionID   `db:"connection_id"`
 	}
 	err := r.db.GetContext(ctx, &row, `SELECT k.id,k.environment_id,k.organization_id,k.connection_id FROM provisioning_credentials k JOIN organizations o ON o.id=k.organization_id AND o.environment_id=k.environment_id WHERE k.secret_hash=$1 AND k.revoked_at IS NULL AND k.expires_at>now() AND o.active`, hash)
 	if err != nil {
@@ -59,19 +47,19 @@ func (r *Repository) Authenticate(ctx context.Context, hash []byte) (provisionin
 	}
 	return provisioning.Principal{ID: row.ID, Environment: row.Environment, Organization: row.Organization, Connection: row.Connection}, nil
 }
-func find(ctx context.Context, q sqlx.QueryerContext, p provisioning.Principal, id string) (provisioning.User, error) {
-	var row userRow
+func find(ctx context.Context, q sqlx.QueryerContext, p provisioning.Principal, id identity.UserID) (provisioning.User, error) {
+	var row provisioning.User
 	err := sqlx.GetContext(ctx, q, &row, selectUser+` AND u.id=$4`, p.Connection, p.Environment, p.Organization, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return provisioning.User{}, errx.NotFound("user not found")
 	}
-	return row.domain(), failure(err)
+	return row, failure(err)
 }
-func (r *Repository) Find(ctx context.Context, p provisioning.Principal, id string) (provisioning.User, error) {
+func (r *Repository) Find(ctx context.Context, p provisioning.Principal, id identity.UserID) (provisioning.User, error) {
 	return find(ctx, r.db, p, id)
 }
 func (r *Repository) List(ctx context.Context, p provisioning.Principal, f provisioning.Filter) ([]provisioning.User, int, error) {
-	var rows []userRow
+	var rows []provisioning.User
 	err := r.db.SelectContext(ctx, &rows, selectUser+` AND ($4='' OR ($4='userName' AND u.email=lower($5)) OR ($4='externalId' AND i.external_id=$5)) ORDER BY u.id LIMIT $6 OFFSET $7`, p.Connection, p.Environment, p.Organization, f.Field, f.Value, f.Count, f.Start-1)
 	if err != nil {
 		return nil, 0, failure(err)
@@ -81,11 +69,7 @@ func (r *Repository) List(ctx context.Context, p provisioning.Principal, f provi
 	if err != nil {
 		return nil, 0, failure(err)
 	}
-	out := make([]provisioning.User, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, row.domain())
-	}
-	return out, total, nil
+	return rows, total, nil
 }
 func (r *Repository) Create(ctx context.Context, p provisioning.Principal, u provisioning.User) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -112,7 +96,7 @@ func (r *Repository) Create(ctx context.Context, p provisioning.Principal, u pro
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) Update(ctx context.Context, p provisioning.Principal, id string, input provisioning.Update) (provisioning.User, error) {
+func (r *Repository) Update(ctx context.Context, p provisioning.Principal, id identity.UserID, input provisioning.Update) (provisioning.User, error) {
 	var out provisioning.User
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -143,7 +127,7 @@ func (r *Repository) Update(ctx context.Context, p provisioning.Principal, id st
 	}
 	return out, failure(tx.Commit())
 }
-func setManager(ctx context.Context, tx *sqlx.Tx, p provisioning.Principal, user, manager string) error {
+func setManager(ctx context.Context, tx *sqlx.Tx, p provisioning.Principal, user identity.UserID, manager string) error {
 	if _, err := tx.ExecContext(ctx, `SELECT id FROM organizations WHERE id=$1 AND environment_id=$2 FOR UPDATE`, p.Organization, p.Environment); err != nil {
 		return failure(err)
 	}

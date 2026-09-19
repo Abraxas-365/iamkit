@@ -1,12 +1,12 @@
-// Package oauth defines environment-bound OAuth client registration.
 package oauth
 
-// Client is independent of persistence and OAuth protocol libraries.
+import "github.com/Abraxas-365/iamkit/internal/identity"
+
 type Client struct {
-	ID          string
-	Environment string
-	Application string
-	Resource    string
+	ID          identity.ClientID
+	Environment identity.EnvironmentID
+	Application identity.ApplicationID
+	Resource    identity.ResourceID
 	Audience    string
 	Redirects   []string
 	Public      bool
