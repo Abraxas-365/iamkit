@@ -11,6 +11,7 @@ module's version imports it. In this checkout the runnable example uses a local
 | `apiclient` | Permission-scoped `/api/v1` via JWT |
 | `authclient` | Identity login/challenges/token checks and OAuth helpers |
 | `authclient/fiberauth` | Fiber v2 authorization middleware |
+| `authclient/httpauth` | Framework-neutral `net/http` authorization middleware |
 | `scimclient` | Scoped SCIM user operations |
 | `apierror` | Structured ordinary API errors |
 
@@ -27,7 +28,7 @@ prove live response compatibility. `iamclient.Do` rejects query strings in its
 path; filtered/paginated requests may require direct HTTP with URL encoding.
 
 See [management](management.md), [authentication](authentication.md),
-[Fiber](fiber.md), [SCIM](scim.md) and the
+[Fiber](fiber.md), [net/http](http.md), [SCIM](scim.md) and the
 [compilable API example](../../examples/go-api/main.go).
 
 Build/test the SDK independently: `cd sdk && go test ./... && go vet ./...`.

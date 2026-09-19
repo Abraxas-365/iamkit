@@ -38,6 +38,7 @@ The SDK has **four client packages** with distinct API authority:
 
 Plus framework integrations:
 - `authclient/fiberauth` — Fiber v2 middleware for token validation
+- `authclient/httpauth` — framework-neutral `net/http` middleware for token validation
 
 ---
 
@@ -443,6 +444,44 @@ app.Get("/org/:id/data", fiberauth.RequireOrganization(orgID), handler)
 // Access claims in handlers
 func handler(c *fiber.Ctx) error {
     claims := fiberauth.Claims(c)
+    fmt.Println(claims.Subject, claims.Permissions)
+}
+```
+
+### net/http Middleware (framework-neutral)
+
+Use this instead of `fiberauth` for stdlib `net/http`, chi, gorilla/mux, or
+any router built on `http.Handler` (gin and echo can wrap it via their own
+`gin.WrapH`/`echo.WrapMiddleware` adapters). Same claims type, same JSON
+error format, same `Authenticate`/`RequirePermissions`/`RequireOrganization`
+shape as `fiberauth`.
+
+```go
+import "github.com/Abraxas-365/iamkit/sdk/authclient/httpauth"
+
+validate := func(ctx context.Context, token string) (*authclient.Claims, error) {
+    return client.Introspect(ctx, token, issuer, audience, env, app, resource) // or authclient.Validate for offline
+}
+
+// Direct handler wrapping
+mux := http.NewServeMux()
+mux.Handle("/invoices", httpauth.Authenticate(validate,
+    httpauth.RequireOrganization(
+        httpauth.RequirePermissions(invoicesHandler, "invoices:read"),
+        orgID,
+    ),
+))
+
+// Middleware-chain style (chi, gorilla/mux, etc.)
+r.Use(httpauth.Middleware(validate))
+r.With(
+    httpauth.RequireOrganizationMiddleware(orgID),
+    httpauth.RequirePermissionsMiddleware("invoices:read"),
+).Get("/invoices", invoicesHandler)
+
+// Access claims in handlers
+func invoicesHandler(w http.ResponseWriter, r *http.Request) {
+    claims := httpauth.Claims(r)
     fmt.Println(claims.Subject, claims.Permissions)
 }
 ```

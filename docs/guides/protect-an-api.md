@@ -47,12 +47,16 @@ cannot observe revocation until expiry. Define key-cache refresh and failure pol
 The SDK's `authclient.Validate` checks environment/app/resource and purpose, but
 **you still must compare organization IDs**. Fiber users can compose
 `Authenticate`, `RequirePermissions("invoices:read")` and
-`RequireOrganization(trustedOrganizationID)`. Do not hardcode a tenant from a
-request parameter without comparing it to claims.
+`RequireOrganization(trustedOrganizationID)` from `authclient/fiberauth`.
+Any other Go HTTP stack (stdlib `net/http`, chi, gorilla/mux, or gin/echo via
+their standard-middleware adapters) can compose the same three checks from
+`authclient/httpauth` — see [net/http middleware](../reference/sdk/http.md).
+Do not hardcode a tenant from a request parameter without comparing it to
+claims.
 
 Impersonated tokens include `actor_id`; restrict sensitive actions if your policy
 requires. Machine tokens have no organization or user session: give them separate
 routes/policies rather than pretending they are tenant-user tokens.
 
-Source: [example](../examples/go-api/main.go), `sdk/authclient/validator.go` and
-`sdk/authclient/fiberauth/middleware.go`.
+Source: [example](../examples/go-api/main.go), `sdk/authclient/validator.go`,
+`sdk/authclient/fiberauth/middleware.go` and `sdk/authclient/httpauth/middleware.go`.
