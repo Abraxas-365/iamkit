@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount"
@@ -59,10 +60,25 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
 		return query.Paginated[serviceaccount.Account]{}, failure(err)
 	}
-	rows := []serviceaccount.Account{}
+	type accountRow struct {
+		ID              identity.AccountID     `db:"id"`
+		Name            string                 `db:"name"`
+		Application     identity.ApplicationID `db:"application_id"`
+		ApplicationName string                 `db:"application_name"`
+		Resource        identity.ResourceID    `db:"resource_id"`
+		ResourceName    string                 `db:"resource_name"`
+		Permissions     pq.StringArray         `db:"permissions"`
+		Expires         time.Time              `db:"expires_at"`
+		Revoked         *time.Time             `db:"revoked_at"`
+	}
+	dbRows := []accountRow{}
 	sel := fmt.Sprintf("SELECT sa.id, sa.name, sa.application_id, a.name AS application_name, sa.resource_id, res.name AS resource_name, sa.permissions, sa.expires_at, sa.revoked_at %s ORDER BY sa.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
-	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
+	if err := r.db.SelectContext(ctx, &dbRows, sel, args...); err != nil {
 		return query.Paginated[serviceaccount.Account]{}, failure(err)
+	}
+	rows := make([]serviceaccount.Account, len(dbRows))
+	for i, row := range dbRows {
+		rows[i] = serviceaccount.Account{ID: row.ID, Name: row.Name, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Permissions: []string(row.Permissions), Expires: row.Expires, Revoked: row.Revoked}
 	}
 	return query.NewPaginated(rows, total, page), nil
 }

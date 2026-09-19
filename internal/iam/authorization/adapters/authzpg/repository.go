@@ -36,6 +36,21 @@ func array(v []string) any {
 	}
 	return pq.Array(v)
 }
+
+// resourceRow mirrors authorization.Resource but scans the Postgres text[]
+// permissions column into pq.StringArray — sqlx cannot scan a driver.Value
+// directly into a plain []string.
+type resourceRow struct {
+	ID          identity.ResourceID `db:"id"`
+	Name        string              `db:"name"`
+	Prefix      string              `db:"prefix"`
+	Audience    string              `db:"audience"`
+	Permissions pq.StringArray      `db:"permissions"`
+}
+
+func (row resourceRow) toDomain() authorization.Resource {
+	return authorization.Resource{ID: row.ID, Name: row.Name, Prefix: row.Prefix, Audience: row.Audience, Permissions: []string(row.Permissions)}
+}
 func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, input authorization.Resource) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO resources(id,environment_id,name,prefix,audience,permissions) VALUES($1,$2,$3,$4,$5,$6)`, input.ID, environment, input.Name, input.Prefix, input.Audience, array(input.Permissions))
 	return conflict(err)
@@ -53,19 +68,23 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
 		return query.Paginated[authorization.Resource]{}, failure(err)
 	}
-	rows := []authorization.Resource{}
-	if err := r.db.SelectContext(ctx, &rows, fmt.Sprintf("SELECT id,name,prefix,audience,permissions %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+	dbRows := []resourceRow{}
+	if err := r.db.SelectContext(ctx, &dbRows, fmt.Sprintf("SELECT id,name,prefix,audience,permissions %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
 		return query.Paginated[authorization.Resource]{}, failure(err)
+	}
+	rows := make([]authorization.Resource, len(dbRows))
+	for i, row := range dbRows {
+		rows[i] = row.toDomain()
 	}
 	return query.NewPaginated(rows, total, page), nil
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID) (authorization.Resource, error) {
-	var row authorization.Resource
+	var row resourceRow
 	err := r.db.GetContext(ctx, &row, `SELECT id,name,prefix,audience,permissions FROM resources WHERE environment_id=$1 AND id=$2`, environment, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return authorization.Resource{}, errx.NotFound("resource not found")
 	}
-	return row, failure(err)
+	return row.toDomain(), failure(err)
 }
 func (r *Repository) LinkApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO application_resources(environment_id,application_id,resource_id) VALUES($1,$2,$3)`, environment, application, resource)
@@ -95,9 +114,13 @@ func (r *Repository) ListByApplication(ctx context.Context, environment identity
 	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
 		return query.Paginated[authorization.Resource]{}, failure(err)
 	}
-	rows := []authorization.Resource{}
-	if err := r.db.SelectContext(ctx, &rows, fmt.Sprintf("SELECT r.id, r.name, r.prefix, r.audience, r.permissions %s ORDER BY r.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+	dbRows := []resourceRow{}
+	if err := r.db.SelectContext(ctx, &dbRows, fmt.Sprintf("SELECT r.id, r.name, r.prefix, r.audience, r.permissions %s ORDER BY r.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
 		return query.Paginated[authorization.Resource]{}, failure(err)
+	}
+	rows := make([]authorization.Resource, len(dbRows))
+	for i, row := range dbRows {
+		rows[i] = row.toDomain()
 	}
 	return query.NewPaginated(rows, total, page), nil
 }

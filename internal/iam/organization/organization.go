@@ -39,10 +39,10 @@ type Mutation struct {
 }
 
 type MemberView struct {
-	User      identity.UserID `json:"user_id"`
-	UserName  string          `json:"user_name"`
-	UserEmail string          `json:"user_email"`
-	Active    bool            `json:"active"`
+	User      identity.UserID `json:"user_id" db:"user_id"`
+	UserName  string          `json:"user_name" db:"user_name"`
+	UserEmail string          `json:"user_email" db:"user_email"`
+	Active    bool            `json:"active" db:"active"`
 }
 
 type Membership struct {

@@ -17,6 +17,20 @@ import (
 type Repository struct{ db *sqlx.DB }
 
 func New(db *sqlx.DB) *Repository { return &Repository{db} }
+
+// applicationRow mirrors application.Application but scans the Postgres
+// text[] redirect_uris column into pq.StringArray — sqlx cannot scan a
+// driver.Value directly into a plain []string.
+type applicationRow struct {
+	ID        identity.ApplicationID `db:"id"`
+	Name      string                 `db:"name"`
+	Redirects pq.StringArray         `db:"redirect_uris"`
+	Active    bool                   `db:"active"`
+}
+
+func (row applicationRow) toDomain() application.Application {
+	return application.Application{ID: row.ID, Name: row.Name, Redirects: []string(row.Redirects), Active: row.Active}
+}
 func failure(err error) error {
 	if err == nil {
 		return nil
@@ -31,12 +45,12 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 	return failure(err)
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ApplicationID) (application.Application, error) {
-	var result application.Application
-	err := r.db.GetContext(ctx, &result, `SELECT id,name,redirect_uris,active FROM applications WHERE environment_id=$1 AND id=$2`, environment, id)
+	var row applicationRow
+	err := r.db.GetContext(ctx, &row, `SELECT id,name,redirect_uris,active FROM applications WHERE environment_id=$1 AND id=$2`, environment, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return application.Application{}, errx.NotFound("resource not found")
 	}
-	return result, failure(err)
+	return row.toDomain(), failure(err)
 }
 func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[application.Application], error) {
 	base := `FROM applications WHERE environment_id=$1`
@@ -51,9 +65,13 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
 		return query.Paginated[application.Application]{}, failure(err)
 	}
-	rows := []application.Application{}
-	if err := r.db.SelectContext(ctx, &rows, fmt.Sprintf("SELECT id,name,redirect_uris,active %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+	dbRows := []applicationRow{}
+	if err := r.db.SelectContext(ctx, &dbRows, fmt.Sprintf("SELECT id,name,redirect_uris,active %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
 		return query.Paginated[application.Application]{}, failure(err)
+	}
+	rows := make([]application.Application, len(dbRows))
+	for i, row := range dbRows {
+		rows[i] = row.toDomain()
 	}
 	return query.NewPaginated(rows, total, page), nil
 }

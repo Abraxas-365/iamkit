@@ -38,10 +38,21 @@ func (r *Repository) ListRoles(ctx context.Context, environment identity.Environ
 	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
 		return query.Paginated[authorization.RoleView]{}, failure(err)
 	}
-	rows := []authorization.RoleView{}
+	type roleRow struct {
+		ID           identity.RoleID     `db:"id"`
+		Name         string              `db:"name"`
+		Resource     identity.ResourceID `db:"resource_id"`
+		ResourceName string              `db:"resource_name"`
+		Permissions  pq.StringArray      `db:"permissions"`
+	}
+	dbRows := []roleRow{}
 	sel := fmt.Sprintf("SELECT r.id, r.name, r.resource_id, res.name AS resource_name, r.permissions %s ORDER BY r.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
-	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
+	if err := r.db.SelectContext(ctx, &dbRows, sel, args...); err != nil {
 		return query.Paginated[authorization.RoleView]{}, failure(err)
+	}
+	rows := make([]authorization.RoleView, len(dbRows))
+	for i, row := range dbRows {
+		rows[i] = authorization.RoleView{ID: row.ID, Name: row.Name, Resource: row.Resource, ResourceName: row.ResourceName, Permissions: []string(row.Permissions)}
 	}
 	return query.NewPaginated(rows, total, page), nil
 }
@@ -63,10 +74,24 @@ func (r *Repository) ListGrants(ctx context.Context, environment identity.Enviro
 	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
 		return query.Paginated[authorization.GrantView]{}, failure(err)
 	}
-	rows := []authorization.GrantView{}
+	type grantRow struct {
+		ID               identity.GrantID        `db:"id"`
+		Organization     identity.OrganizationID `db:"organization_id"`
+		OrganizationName string                  `db:"organization_name"`
+		User             identity.UserID         `db:"user_id"`
+		UserName         string                  `db:"user_name"`
+		Resource         identity.ResourceID     `db:"resource_id"`
+		ResourceName     string                  `db:"resource_name"`
+		Permissions      pq.StringArray          `db:"permissions"`
+	}
+	dbRows := []grantRow{}
 	sel := fmt.Sprintf("SELECT g.id, g.organization_id, o.name AS organization_name, g.user_id, u.name AS user_name, g.resource_id, res.name AS resource_name, g.permissions %s ORDER BY g.id LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
-	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
+	if err := r.db.SelectContext(ctx, &dbRows, sel, args...); err != nil {
 		return query.Paginated[authorization.GrantView]{}, failure(err)
+	}
+	rows := make([]authorization.GrantView, len(dbRows))
+	for i, row := range dbRows {
+		rows[i] = authorization.GrantView{ID: row.ID, Organization: row.Organization, OrganizationName: row.OrganizationName, User: row.User, UserName: row.UserName, Resource: row.Resource, ResourceName: row.ResourceName, Permissions: []string(row.Permissions)}
 	}
 	return query.NewPaginated(rows, total, page), nil
 }
