@@ -72,21 +72,21 @@ Every module in `ports.go` defines **three interface roles**:
 // Commands — write operations exposed to handlers and other modules.
 type Commands interface {
     Create(ctx context.Context, environment identity.EnvironmentID, input Create) (identity.ApplicationID, error)
-    Update(ctx context.Context, m Mutation, applicationID identity.ApplicationID, input Update) error
+    Update(ctx context.Context, m Mutation, application identity.ApplicationID, input Update) error
 }
 
 // Queries — read operations exposed to handlers and other modules.
 type Queries interface {
-    Find(ctx context.Context, environment identity.EnvironmentID, applicationID identity.ApplicationID) (Application, error)
+    Find(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID) (Application, error)
     List(ctx context.Context, environment identity.EnvironmentID) ([]Application, error)
 }
 
 // Repository — persistence contract consumed only by the service.
 type Repository interface {
-    Create(ctx context.Context, environment identity.EnvironmentID, applicationID identity.ApplicationID, input Create) error
-    Find(ctx context.Context, environment identity.EnvironmentID, applicationID identity.ApplicationID) (Application, error)
+    Create(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, input Create) error
+    Find(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID) (Application, error)
     List(ctx context.Context, environment identity.EnvironmentID) ([]Application, error)
-    Update(ctx context.Context, m Mutation, applicationID identity.ApplicationID, input Update) error
+    Update(ctx context.Context, m Mutation, application identity.ApplicationID, input Update) error
 }
 ```
 
@@ -188,20 +188,24 @@ Interface methods **must** name every parameter. Bare positional types are
 not allowed — they are unreadable at the call site:
 
 ```go
-// ✗ Bad
-LinkApplication(context.Context, string, string, string) error
+// ✗ Bad — unnamed, unreadable
+LinkApplication(context.Context, identity.EnvironmentID, identity.ApplicationID, identity.ResourceID) error
 
-// ✓ Good
+// ✓ Good — short names, the type carries the "ID" semantics
 LinkApplication(ctx context.Context, environment identity.EnvironmentID,
-    applicationID identity.ApplicationID, resourceID identity.ResourceID) error
+    application identity.ApplicationID, resource identity.ResourceID) error
 ```
 
 Naming conventions:
 - `ctx context.Context` — always first.
-- ID parameters: `environmentID`, `applicationID`, `userID`, `sessionID`, etc.
-  Exception: `environment` (shorter, established throughout codebase).
+- **Typed ID parameters use the short entity name** — `environment`, `application`,
+  `user`, `session`, `role`, `connection`, `credential`, etc. Do **not** suffix
+  with `ID` — the type `identity.ApplicationID` already says it's an ID.
+  Writing `application identity.ApplicationID` is redundant.
 - Non-ID strings: `email`, `password`, `name`, `role`, `code`, `purpose`.
 - Struct parameters: `p Principal`, `m Mutation`, `b Boundary`, `input Create`.
+- When two IDs of the same entity kind appear, disambiguate with a prefix:
+  `sourceUser identity.UserID, targetUser identity.UserID`.
 
 ---
 
