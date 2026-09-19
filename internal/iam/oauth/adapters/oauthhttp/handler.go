@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
@@ -19,6 +20,7 @@ import (
 type Provider func(*oauth.Client) (fosite.OAuth2Provider, *oauthfosite.Store, error)
 type Handler struct {
 	commands oauth.Commands
+	queries  oauth.Queries
 	flows    oauth.Flows
 	provider Provider
 	tokens   *authhttp.Tokens
@@ -26,11 +28,12 @@ type Handler struct {
 	actor    func(*fiber.Ctx) string
 }
 
-func New(commands oauth.Commands, flows oauth.Flows, provider Provider, tokens *authhttp.Tokens, issuer string, actor func(*fiber.Ctx) string) *Handler {
-	return &Handler{commands, flows, provider, tokens, issuer, actor}
+func New(commands oauth.Commands, queries oauth.Queries, flows oauth.Flows, provider Provider, tokens *authhttp.Tokens, issuer string, actor func(*fiber.Ctx) string) *Handler {
+	return &Handler{commands, queries, flows, provider, tokens, issuer, actor}
 }
 func (h *Handler) RegisterManagement(r fiber.Router) {
 	r.Post("/oauth-clients", h.create)
+	r.Get("/oauth-clients", h.list)
 	r.Delete("/oauth-clients/:id", h.disable)
 }
 func (h *Handler) create(c *fiber.Ctx) error {
@@ -50,6 +53,13 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(204)
+}
+func (h *Handler) list(c *fiber.Ctx) error {
+	out, err := h.queries.List(c.Context(), c.Params("environment"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Handler) load(c *fiber.Ctx, id string) (fosite.OAuth2Provider, *oauth.Client, *oauthfosite.Store, error) {
 	client, err := h.flows.Client(c.Context(), id)

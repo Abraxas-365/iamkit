@@ -5,7 +5,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
-	"github.com/google/uuid"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
 type Activity struct{ repository management.ActivityRepository }
@@ -22,7 +22,7 @@ var _ management.ActivityCommands = (*Activity)(nil)
 var _ management.ActivityQueries = (*Activity)(nil)
 
 func (s *Activity) RevokeSession(ctx context.Context, environment, id, actor, action, target string) error {
-	if _, err := uuid.Parse(id); err != nil {
+	if !identity.ValidID(id) {
 		return errx.NotFound("session not found")
 	}
 	return s.repository.RevokeSession(ctx, environment, id, actor, action, target)

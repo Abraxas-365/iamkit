@@ -56,7 +56,7 @@ func (r *Repository) Profile(ctx context.Context, t authentication.Token) (authe
 }
 func (r *Repository) Organizations(ctx context.Context, t authentication.Token) ([]authentication.Organization, error) {
 	out := []authentication.Organization{}
-	err := r.db.SelectContext(ctx, &out, `SELECT o.id,o.name,m.role,m.org_unit_id,m.manager_id FROM organizations o JOIN memberships m ON m.organization_id=o.id AND m.environment_id=o.environment_id WHERE m.user_id=$1 AND m.environment_id=$2 AND m.active AND o.active ORDER BY o.id`, t.Subject, t.EnvironmentID)
+	err := r.db.SelectContext(ctx, &out, `SELECT o.id,o.name,m.org_unit_id,m.manager_id FROM organizations o JOIN memberships m ON m.organization_id=o.id AND m.environment_id=o.environment_id WHERE m.user_id=$1 AND m.environment_id=$2 AND m.active AND o.active ORDER BY o.id`, t.Subject, t.EnvironmentID)
 	return out, failure(err)
 }
 func (r *Repository) UpdateProfile(ctx context.Context, t authentication.Token, name string) error {
@@ -64,7 +64,13 @@ func (r *Repository) UpdateProfile(ctx context.Context, t authentication.Token, 
 	return failure(err)
 }
 func (r *Repository) AddMember(ctx context.Context, t authentication.Token, user string) error {
-	res, err := r.db.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id,role) SELECT $1,$2,$3,'member' FROM memberships WHERE environment_id=$1 AND organization_id=$2 AND user_id=$4 AND active AND role IN ('owner','admin')`, t.EnvironmentID, t.OrganizationID, user, t.Subject)
+	res, err := r.db.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id)
+SELECT $1,$2,$3 WHERE EXISTS(
+  SELECT 1 FROM effective_grants eg
+  JOIN resources res ON res.id=eg.resource_id AND res.environment_id=eg.environment_id AND res.prefix='iam'
+  WHERE eg.environment_id=$1 AND eg.organization_id=$2 AND eg.user_id=$4
+  AND 'iam:members:write' = ANY(eg.permissions)
+)`, t.EnvironmentID, t.OrganizationID, user, t.Subject)
 	if err != nil {
 		var pg *pq.Error
 		if errors.As(err, &pg) && pg.Code.Class() == "23" {

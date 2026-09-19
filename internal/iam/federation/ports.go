@@ -2,47 +2,49 @@ package federation
 
 import (
 	"context"
+
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 )
 
-type Connection struct{ ID, Environment, Name, Issuer, Client, SecretEnv string }
-type State struct {
-	Connection      string
-	Boundary        authentication.Context
-	Binding         []byte
-	Nonce, Verifier string
-}
-type Start struct{ URL, Binding string }
-type Mutation struct{ Environment, Actor, Action, Target string }
 type Commands interface {
-	Create(context.Context, Connection) (string, error)
-	Link(context.Context, Mutation, string, string, string) error
-	Disable(context.Context, Mutation, string) error
+	Create(ctx context.Context, input Connection) (string, error)
+	Link(ctx context.Context, m Mutation, connectionID, userID, subject string) error
+	Unlink(ctx context.Context, m Mutation, connectionID, userID string) error
+	Disable(ctx context.Context, m Mutation, connectionID string) error
+}
+type Queries interface {
+	List(ctx context.Context, environment string) ([]ConnectionView, error)
+	Connection(ctx context.Context, environment, connectionID string) (ConnectionDetail, error)
+	Identities(ctx context.Context, environment, connectionID string) ([]ExternalIdentityView, error)
 }
 type Flows interface {
-	Start(context.Context, authentication.Context, string) (Start, error)
-	Callback(context.Context, string, string, string) (authentication.Issued, error)
+	Start(ctx context.Context, boundary authentication.Context, connectionID string) (Start, error)
+	Callback(ctx context.Context, code, state, binding string) (authentication.Issued, error)
 }
 
 type Repository interface {
-	Create(context.Context, Connection) error
-	Find(context.Context, string, string) (Connection, error)
-	SaveState(context.Context, []byte, State) error
-	ConsumeState(context.Context, []byte, []byte) (State, error)
-	LinkedUser(context.Context, string, string, string) (authentication.Transaction, string, error)
-	Link(context.Context, Mutation, string, string, string) error
-	Disable(context.Context, Mutation, string) error
+	Create(ctx context.Context, input Connection) error
+	Find(ctx context.Context, environment, connectionID string) (Connection, error)
+	FindDetail(ctx context.Context, environment, connectionID string) (ConnectionDetail, error)
+	List(ctx context.Context, environment string) ([]ConnectionView, error)
+	Identities(ctx context.Context, environment, connectionID string) ([]ExternalIdentityView, error)
+	SaveState(ctx context.Context, hash []byte, s State) error
+	ConsumeState(ctx context.Context, stateHash, bindingHash []byte) (State, error)
+	LinkedUser(ctx context.Context, environment, connectionID, subject string) (authentication.Transaction, string, error)
+	Link(ctx context.Context, m Mutation, connectionID, userID, subject string) error
+	Unlink(ctx context.Context, m Mutation, connectionID, userID string) error
+	Disable(ctx context.Context, m Mutation, connectionID string) error
 }
 type Provider interface {
-	Approved(Connection) bool
-	Authorize(context.Context, Connection, string, string, string) (string, error)
-	Verify(context.Context, Connection, string, string, string) (string, error)
+	Approved(c Connection) bool
+	Authorize(ctx context.Context, c Connection, redirectURI, nonce, verifier string) (string, error)
+	Verify(ctx context.Context, c Connection, code, redirectURI, verifier string) (string, error)
 	Verifier() string
 }
 type Secrets interface {
-	Generate(string) (string, []byte, error)
-	Hash(string) []byte
+	Generate(prefix string) (string, []byte, error)
+	Hash(raw string) []byte
 }
 type Sessions interface {
-	NewSession(context.Context, authentication.Transaction, authentication.Context, string) (authentication.Issued, error)
+	NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, userID string) (authentication.Issued, error)
 }

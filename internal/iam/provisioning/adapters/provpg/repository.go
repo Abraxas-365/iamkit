@@ -98,7 +98,7 @@ func (r *Repository) Create(ctx context.Context, p provisioning.Principal, u pro
 		args []any
 	}{
 		{`INSERT INTO users(id,environment_id,email,name,password_hash) VALUES($1,$2,$3,$4,'')`, []any{u.ID, p.Environment, u.Email, u.Name}},
-		{`INSERT INTO memberships(environment_id,organization_id,user_id,role,active) VALUES($1,$2,$3,'member',$4)`, []any{p.Environment, p.Organization, u.ID, u.Active}},
+		{`INSERT INTO memberships(environment_id,organization_id,user_id,active) VALUES($1,$2,$3,$4)`, []any{p.Environment, p.Organization, u.ID, u.Active}},
 		{`INSERT INTO provisioned_identities(connection_id,environment_id,user_id,external_id) VALUES($1,$2,$3,$4)`, []any{p.Connection, p.Environment, u.ID, u.External}},
 	} {
 		if _, err = tx.ExecContext(ctx, q.sql, q.args...); err != nil {

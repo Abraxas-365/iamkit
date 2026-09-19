@@ -37,20 +37,21 @@ func array(v []string) any {
 type resourceRow struct {
 	ID          string         `db:"id"`
 	Name        string         `db:"name"`
+	Prefix      string         `db:"prefix"`
 	Audience    string         `db:"audience"`
 	Permissions pq.StringArray `db:"permissions"`
 }
 
 func (r resourceRow) domain() authorization.Resource {
-	return authorization.Resource{ID: r.ID, Name: r.Name, Audience: r.Audience, Permissions: []string(r.Permissions)}
+	return authorization.Resource{ID: r.ID, Name: r.Name, Prefix: r.Prefix, Audience: r.Audience, Permissions: []string(r.Permissions)}
 }
 func (r *Repository) Create(ctx context.Context, environment string, input authorization.Resource) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO resources(id,environment_id,name,audience,permissions) VALUES($1,$2,$3,$4,$5)`, input.ID, environment, input.Name, input.Audience, array(input.Permissions))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO resources(id,environment_id,name,prefix,audience,permissions) VALUES($1,$2,$3,$4,$5,$6)`, input.ID, environment, input.Name, input.Prefix, input.Audience, array(input.Permissions))
 	return conflict(err)
 }
 func (r *Repository) List(ctx context.Context, environment string) ([]authorization.Resource, error) {
 	var rows []resourceRow
-	if err := r.db.SelectContext(ctx, &rows, `SELECT id,name,audience,permissions FROM resources WHERE environment_id=$1 ORDER BY id`, environment); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, `SELECT id,name,prefix,audience,permissions FROM resources WHERE environment_id=$1 ORDER BY id`, environment); err != nil {
 		return nil, failure(err)
 	}
 	out := make([]authorization.Resource, 0, len(rows))
@@ -61,7 +62,7 @@ func (r *Repository) List(ctx context.Context, environment string) ([]authorizat
 }
 func (r *Repository) Find(ctx context.Context, environment, id string) (authorization.Resource, error) {
 	var row resourceRow
-	err := r.db.GetContext(ctx, &row, `SELECT id,name,audience,permissions FROM resources WHERE environment_id=$1 AND id=$2`, environment, id)
+	err := r.db.GetContext(ctx, &row, `SELECT id,name,prefix,audience,permissions FROM resources WHERE environment_id=$1 AND id=$2`, environment, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return authorization.Resource{}, errx.NotFound("resource not found")
 	}
@@ -70,6 +71,28 @@ func (r *Repository) Find(ctx context.Context, environment, id string) (authoriz
 func (r *Repository) LinkApplication(ctx context.Context, environment, application, resource string) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO application_resources(environment_id,application_id,resource_id) VALUES($1,$2,$3)`, environment, application, resource)
 	return conflict(err)
+}
+func (r *Repository) UnlinkApplication(ctx context.Context, environment, application, resource string) error {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM application_resources WHERE environment_id=$1 AND application_id=$2 AND resource_id=$3`, environment, application, resource)
+	if err != nil {
+		return failure(err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return errx.NotFound("application-resource link not found")
+	}
+	return nil
+}
+func (r *Repository) ListByApplication(ctx context.Context, environment, application string) ([]authorization.Resource, error) {
+	var rows []resourceRow
+	if err := r.db.SelectContext(ctx, &rows, `SELECT r.id, r.name, r.prefix, r.audience, r.permissions FROM resources r JOIN application_resources ar ON ar.resource_id=r.id AND ar.environment_id=r.environment_id WHERE ar.environment_id=$1 AND ar.application_id=$2 ORDER BY r.name`, environment, application); err != nil {
+		return nil, failure(err)
+	}
+	out := make([]authorization.Resource, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row.domain())
+	}
+	return out, nil
 }
 func (r *Repository) UpdateCatalog(ctx context.Context, m authorization.Mutation, id string, input authorization.Catalog) error {
 	tx, err := r.db.BeginTxx(ctx, nil)

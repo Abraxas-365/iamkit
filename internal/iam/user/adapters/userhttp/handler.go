@@ -2,6 +2,7 @@ package userhttp
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/gofiber/fiber/v2"
 )
@@ -50,7 +51,7 @@ func (h *Handler) List(c *fiber.Ctx) error {
 	for _, u := range users {
 		out = append(out, summary{u.ID, u.Email, u.Name, u.Active})
 	}
-	return c.JSON(out)
+	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Handler) Find(c *fiber.Ctx) error {
 	u, err := h.queries.Find(c.Context(), c.Params("environment"), c.Params("id"))

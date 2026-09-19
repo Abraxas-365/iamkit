@@ -5,73 +5,86 @@ import (
 	"time"
 )
 
-type Context struct {
-	EnvironmentID  string `json:"environment_id"`
-	OrganizationID string `json:"organization_id"`
-	ApplicationID  string `json:"application_id"`
-	ResourceID     string `json:"resource_id"`
-}
-type Access struct {
-	Audience    string
-	Permissions []string
-}
-type Session struct {
-	ID, User      string
-	Expires       time.Time
-	Used, Revoked bool
-}
-type Challenge struct {
-	User     string
-	Hash     []byte
-	Attempts int
-}
-type Issued struct {
-	Context                Context
-	User, Session, Refresh string
-	Access                 Access
-}
 type Commands interface {
-	Login(context.Context, Context, string, string) (Issued, error)
-	Refresh(context.Context, Context, string) (Issued, error)
-	InitiateChallenge(context.Context, string, string, string) (string, error)
-	VerifyChallenge(context.Context, Context, string, string, string, string) (Issued, error)
+	Login(ctx context.Context, boundary Context, email, password string) (Issued, error)
+	Refresh(ctx context.Context, boundary Context, token string) (Issued, error)
+	InitiateChallenge(ctx context.Context, environment, email, purpose string) (string, error)
+	VerifyChallenge(ctx context.Context, boundary Context, id, code, purpose, password string) (Issued, error)
 }
 
 type SessionCreator interface {
-	NewSession(context.Context, Transaction, Context, string) (Issued, error)
+	NewSession(ctx context.Context, tx Transaction, boundary Context, userID string) (Issued, error)
+}
+
+type SessionCommands interface {
+	Logout(ctx context.Context, token Token) error
+	UpdateProfile(ctx context.Context, token Token, organizationID string) error
+	AddMember(ctx context.Context, token Token, organizationID string) error
+}
+type SessionQueries interface {
+	Profile(ctx context.Context, token Token) (Profile, error)
+	Organizations(ctx context.Context, token Token) ([]Organization, error)
 }
 
 type Delivery interface {
-	Send(context.Context, string, string, string) error
+	Send(ctx context.Context, email, subject, body string) error
 }
 type Passwords interface {
-	Hash(string) (string, error)
-	Compare(string, string) bool
+	Hash(password string) (string, error)
+	Compare(hash, password string) bool
 }
 type Secrets interface {
-	Generate(string) (string, []byte, error)
-	Hash(string) []byte
+	Generate(prefix string) (string, []byte, error)
+	Hash(raw string) []byte
 	Code() (string, error)
+}
+
+type TokenIssuer interface {
+	Issue(token Token, audience string) (string, error)
+	KeyID() string
+	JWKS() any
+	Machine(ctx context.Context, raw string) (string, error)
+}
+type TokenValidator interface {
+	Validate(ctx context.Context, raw, audience, environment string) (Token, error)
+}
+type TokenCodec interface {
+	Sign(token Token) (string, error)
+	Verify(raw, audience string) (Token, error)
+	KeyID() string
+	JWKS() any
 }
 
 // Transactions retain the original user/session/challenge lock ordering.
 type Repository interface {
-	Begin(context.Context) (Transaction, error)
+	Begin(ctx context.Context) (Transaction, error)
 }
 type Transaction interface {
-	PasswordUser(context.Context, Context, string) (string, string, error)
-	Resolve(context.Context, Context, string) (Access, error)
-	CreateSession(context.Context, Context, string, string, time.Time) error
-	SaveRefresh(context.Context, []byte, string, string, time.Time) error
-	Refresh(context.Context, Context, []byte) (Session, error)
-	RevokeSession(context.Context, string) error
-	UseRefresh(context.Context, []byte) error
-	EligibleChallengeUser(context.Context, string, string, string) (string, error)
-	RecentChallenges(context.Context, string, string) (int, error)
-	CreateChallenge(context.Context, string, string, string, string, []byte) error
-	Challenge(context.Context, string, string, string) (Challenge, error)
-	FailChallenge(context.Context, string) error
-	CompleteChallenge(context.Context, string, string, string, string, string) error
+	PasswordUser(ctx context.Context, boundary Context, email string) (string, string, error)
+	Resolve(ctx context.Context, boundary Context, userID string) (Access, error)
+	CreateSession(ctx context.Context, boundary Context, userID, sessionID string, expires time.Time) error
+	SaveRefresh(ctx context.Context, hash []byte, userID, sessionID string, expires time.Time) error
+	Refresh(ctx context.Context, boundary Context, hash []byte) (Session, error)
+	RevokeSession(ctx context.Context, sessionID string) error
+	UseRefresh(ctx context.Context, hash []byte) error
+	EligibleChallengeUser(ctx context.Context, environment, email, purpose string) (string, error)
+	RecentChallenges(ctx context.Context, userID, purpose string) (int, error)
+	CreateChallenge(ctx context.Context, challengeID, userID, purpose, environment string, hash []byte) error
+	Challenge(ctx context.Context, challengeID, userID, purpose string) (Challenge, error)
+	FailChallenge(ctx context.Context, challengeID string) error
+	CompleteChallenge(ctx context.Context, challengeID, userID, purpose, environment, password string) error
 	Commit() error
 	Rollback() error
+}
+
+type TokenRepository interface {
+	Current(ctx context.Context, token Token, environment string) ([]string, error)
+	ActorActive(ctx context.Context, token Token) (bool, error)
+	OAuthActive(ctx context.Context, token Token, clientID string) (bool, error)
+	Machine(ctx context.Context, hash []byte) (Token, string, error)
+	Revoke(ctx context.Context, environment, sessionID string) error
+	Profile(ctx context.Context, token Token) (Profile, error)
+	Organizations(ctx context.Context, token Token) ([]Organization, error)
+	UpdateProfile(ctx context.Context, token Token, organizationID string) error
+	AddMember(ctx context.Context, token Token, organizationID string) error
 }

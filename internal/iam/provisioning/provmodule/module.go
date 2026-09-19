@@ -27,5 +27,5 @@ func New(deps Deps) Module {
 	repository := provpg.New(deps.DB)
 	service := provsvc.New(repository, mgmtsecret.Generator{})
 	control := provsvc.NewControl(repository, mgmtsecret.Generator{})
-	return Module{Commands: service, Queries: service, ControlCommands: control, HTTP: provhttp.New(service, service), Control: provhttp.NewControl(control, deps.ActorID)}
+	return Module{Commands: service, Queries: service, ControlCommands: control, HTTP: provhttp.New(service, service), Control: provhttp.NewControl(control, control, deps.ActorID)}
 }

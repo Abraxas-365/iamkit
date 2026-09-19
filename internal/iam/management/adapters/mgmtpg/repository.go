@@ -67,6 +67,12 @@ func (r *Repository) RecoverOwner(ctx context.Context, workspace, email string, 
 	if _, err = tx.ExecContext(ctx, `UPDATE management_keys SET revoked_at=now() WHERE workspace_id=$1 AND operator_id=$2`, workspace, operator); err != nil {
 		return errx.Wrap(err, "owner recovery failed", errx.TypeInternal)
 	}
+	if _, err = tx.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE workspace_id=$1 AND operator_id=$2 AND revoked_at IS NULL`, workspace, operator); err != nil {
+		return errx.Wrap(err, "owner recovery failed", errx.TypeInternal)
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE operators SET password_hash='' WHERE id=$1`, operator); err != nil {
+		return errx.Wrap(err, "owner recovery failed", errx.TypeInternal)
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO management_keys(id,workspace_id,operator_id,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5)`, uuid.NewString(), workspace, operator, hash, expires); err != nil {
 		return errx.Wrap(err, "owner recovery failed", errx.TypeInternal)
 	}
@@ -100,3 +106,56 @@ func (r *Repository) EnvironmentAllowed(ctx context.Context, workspace, environm
 }
 
 var _ management.Repository = (*Repository)(nil)
+var _ management.SessionRepository = (*Repository)(nil)
+
+func (r *Repository) PasswordByEmail(ctx context.Context, email string) (management.Principal, string, error) {
+	var row struct {
+		Workspace    string `db:"workspace_id"`
+		Operator     string `db:"operator_id"`
+		Role         string `db:"role"`
+		PasswordHash string `db:"password_hash"`
+	}
+	err := r.db.GetContext(ctx, &row, `SELECT m.workspace_id, m.operator_id, m.role, o.password_hash FROM operators o JOIN workspace_members m ON m.operator_id=o.id WHERE o.email=$1 AND m.active`, email)
+	if errors.Is(err, sql.ErrNoRows) {
+		return management.Principal{}, "", errx.Unauthorized("invalid credentials")
+	}
+	if err != nil {
+		return management.Principal{}, "", failure(err)
+	}
+	return management.Principal{WorkspaceID: row.Workspace, OperatorID: row.Operator, Role: row.Role}, row.PasswordHash, nil
+}
+func (r *Repository) CreateSession(ctx context.Context, id string, p management.Principal, hash []byte, expires time.Time) error {
+	_, err := r.db.ExecContext(ctx, `INSERT INTO operator_sessions(id,workspace_id,operator_id,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5)`, id, p.WorkspaceID, p.OperatorID, hash, expires)
+	return failure(err)
+}
+func (r *Repository) AuthenticateSession(ctx context.Context, hash []byte) (management.Principal, error) {
+	var row struct {
+		Workspace string `db:"workspace_id"`
+		Operator  string `db:"operator_id"`
+		Role      string `db:"role"`
+	}
+	err := r.db.GetContext(ctx, &row, `SELECT s.workspace_id, s.operator_id, m.role FROM operator_sessions s JOIN workspace_members m USING(workspace_id,operator_id) WHERE s.secret_hash=$1 AND m.active AND s.revoked_at IS NULL AND s.expires_at>now()`, hash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return management.Principal{}, errx.Unauthorized("invalid session")
+	}
+	if err != nil {
+		return management.Principal{}, failure(err)
+	}
+	return management.Principal{WorkspaceID: row.Workspace, OperatorID: row.Operator, Role: row.Role}, nil
+}
+func (r *Repository) RevokeSessionByHash(ctx context.Context, hash []byte) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE secret_hash=$1 AND revoked_at IS NULL`, hash)
+	return failure(err)
+}
+func (r *Repository) SetPassword(ctx context.Context, operatorID, hash string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE operators SET password_hash=$1 WHERE id=$2`, hash, operatorID)
+	return failure(err)
+}
+func (r *Repository) ResetPassword(ctx context.Context, operatorID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE operators SET password_hash='' WHERE id=$1`, operatorID)
+	return failure(err)
+}
+func (r *Repository) RevokeOperatorSessions(ctx context.Context, operatorID string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE operator_id=$1 AND revoked_at IS NULL`, operatorID)
+	return failure(err)
+}

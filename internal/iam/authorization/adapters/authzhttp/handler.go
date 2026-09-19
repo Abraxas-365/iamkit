@@ -2,6 +2,7 @@ package authzhttp
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/gofiber/fiber/v2"
 )
@@ -21,6 +22,8 @@ func (h *Handler) Register(e fiber.Router) {
 	e.Get("/resources/:id", h.find)
 	e.Put("/resources/:id", h.update)
 	e.Post("/application-resources", h.link)
+	e.Delete("/application-resources/:applicationId/:resourceId", h.unlink)
+	e.Get("/applications/:applicationId/resources", h.listByApplication)
 }
 func (h *Handler) create(c *fiber.Ctx) error {
 	var input authorization.Resource
@@ -38,7 +41,7 @@ func (h *Handler) list(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(out)
+	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Handler) find(c *fiber.Ctx) error {
 	out, err := h.queries.Resource(c.Context(), c.Params("environment"), c.Params("id"))
@@ -70,4 +73,17 @@ func (h *Handler) link(c *fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(201)
+}
+func (h *Handler) unlink(c *fiber.Ctx) error {
+	if err := h.commands.UnlinkApplication(c.Context(), c.Params("environment"), c.Params("applicationId"), c.Params("resourceId")); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
+}
+func (h *Handler) listByApplication(c *fiber.Ctx) error {
+	out, err := h.queries.ResourcesByApplication(c.Context(), c.Params("environment"), c.Params("applicationId"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(httpx.NewPaginated(c, out))
 }

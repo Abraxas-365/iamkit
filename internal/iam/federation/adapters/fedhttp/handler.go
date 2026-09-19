@@ -2,6 +2,7 @@ package fedhttp
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/gofiber/fiber/v2"
@@ -9,18 +10,23 @@ import (
 
 type Handler struct {
 	commands federation.Commands
+	queries  federation.Queries
 	flows    federation.Flows
 	actor    func(*fiber.Ctx) string
 	issue    func(*fiber.Ctx, authentication.Issued) error
 }
 
-func New(commands federation.Commands, flows federation.Flows, actor func(*fiber.Ctx) string, issue func(*fiber.Ctx, authentication.Issued) error) *Handler {
-	return &Handler{commands, flows, actor, issue}
+func New(commands federation.Commands, queries federation.Queries, flows federation.Flows, actor func(*fiber.Ctx) string, issue func(*fiber.Ctx, authentication.Issued) error) *Handler {
+	return &Handler{commands, queries, flows, actor, issue}
 }
 func (h *Handler) Register(e fiber.Router) {
 	e.Post("/federation-connections", h.create)
+	e.Get("/federation-connections", h.list)
+	e.Get("/federation-connections/:id", h.find)
+	e.Get("/federation-connections/:id/identities", h.identities)
 	e.Delete("/federation-connections/:id", h.disable)
 	e.Post("/external-identities", h.link)
+	e.Delete("/external-identities/:connection/:user", h.unlink)
 }
 func (h *Handler) mutation(c *fiber.Ctx) federation.Mutation {
 	return federation.Mutation{Environment: c.Params("environment"), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
@@ -57,6 +63,33 @@ func (h *Handler) link(c *fiber.Ctx) error {
 }
 func (h *Handler) disable(c *fiber.Ctx) error {
 	if err := h.commands.Disable(c.Context(), h.mutation(c), c.Params("id")); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
+}
+func (h *Handler) list(c *fiber.Ctx) error {
+	out, err := h.queries.List(c.Context(), c.Params("environment"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(httpx.NewPaginated(c, out))
+}
+func (h *Handler) find(c *fiber.Ctx) error {
+	out, err := h.queries.Connection(c.Context(), c.Params("environment"), c.Params("id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+func (h *Handler) identities(c *fiber.Ctx) error {
+	out, err := h.queries.Identities(c.Context(), c.Params("environment"), c.Params("id"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(httpx.NewPaginated(c, out))
+}
+func (h *Handler) unlink(c *fiber.Ctx) error {
+	if err := h.commands.Unlink(c.Context(), h.mutation(c), c.Params("connection"), c.Params("user")); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

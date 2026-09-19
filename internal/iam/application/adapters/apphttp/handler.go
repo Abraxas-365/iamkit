@@ -2,6 +2,7 @@ package apphttp
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/application"
 	"github.com/gofiber/fiber/v2"
 )
@@ -37,7 +38,7 @@ func (h *Handler) list(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(out)
+	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Handler) find(c *fiber.Ctx) error {
 	out, err := h.queries.Find(c.Context(), c.Params("environment"), c.Params("id"))

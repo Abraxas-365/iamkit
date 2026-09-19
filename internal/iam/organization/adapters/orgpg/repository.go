@@ -86,12 +86,28 @@ func (r *Repository) Update(ctx context.Context, m organization.Mutation, id str
 	return failure(tx.Commit())
 }
 func (r *Repository) AddMember(ctx context.Context, environment string, input organization.Membership) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id,role) VALUES($1,$2,$3,$4)`, environment, input.Organization, input.User, input.Role)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, environment, input.Organization, input.User)
 	return conflict(err)
 }
 func (r *Repository) RemoveMember(ctx context.Context, environment, org, user string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE memberships SET active=false WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user)
 	return failure(err)
+}
+func (r *Repository) Members(ctx context.Context, environment, org string) ([]organization.MemberView, error) {
+	var rows []struct {
+		User      string `db:"user_id"`
+		UserName  string `db:"user_name"`
+		UserEmail string `db:"user_email"`
+		Active    bool   `db:"active"`
+	}
+	if err := r.db.SelectContext(ctx, &rows, `SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.environment_id=$1 AND m.organization_id=$2 ORDER BY u.name LIMIT 500`, environment, org); err != nil {
+		return nil, failure(err)
+	}
+	out := make([]organization.MemberView, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, organization.MemberView{User: row.User, UserName: row.UserName, UserEmail: row.UserEmail, Active: row.Active})
+	}
+	return out, nil
 }
 
 var _ organization.Repository = (*Repository)(nil)

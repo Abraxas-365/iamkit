@@ -117,6 +117,17 @@ func (r *Repository) named(ctx context.Context, query string, args ...any) ([]ma
 func (r *Repository) Projects(ctx context.Context, workspace string) ([]management.Named, error) {
 	return r.named(ctx, `SELECT id,name FROM projects WHERE workspace_id=$1 ORDER BY id`, workspace)
 }
+var iamResourcePermissions = pq.StringArray{
+	"iam:users:read", "iam:users:write",
+	"iam:orgs:read", "iam:orgs:write",
+	"iam:members:read", "iam:members:write",
+	"iam:apps:read", "iam:apps:write",
+	"iam:resources:read", "iam:resources:write",
+	"iam:roles:read", "iam:roles:write",
+	"iam:grants:read", "iam:grants:write",
+	"iam:service-accounts:read", "iam:service-accounts:write",
+}
+
 func (r *Repository) CreateEnvironment(ctx context.Context, workspace, project, id, name string) error {
 	res, err := r.db.ExecContext(ctx, `INSERT INTO environments(id,project_id,name) SELECT $1,id,$2 FROM projects WHERE id=$3 AND workspace_id=$4`, id, name, project, workspace)
 	if err != nil {
@@ -129,10 +140,32 @@ func (r *Repository) CreateEnvironment(ctx context.Context, workspace, project, 
 	if n == 0 {
 		return errx.NotFound("resource not found")
 	}
+	_, err = r.db.ExecContext(ctx, `INSERT INTO resources(id,environment_id,name,prefix,audience,permissions) VALUES($1,$2,'IAM','iam',$3,$4)`,
+		uuid.NewString(), id, "urn:iamkit:environment:"+id, iamResourcePermissions)
+	if err != nil {
+		return failure(err)
+	}
 	return nil
 }
 func (r *Repository) Environments(ctx context.Context, workspace, project string) ([]management.Named, error) {
 	return r.named(ctx, `SELECT e.id,e.name FROM environments e JOIN projects p ON p.id=e.project_id WHERE p.id=$1 AND p.workspace_id=$2 ORDER BY e.id`, project, workspace)
+}
+func (r *Repository) Operators(ctx context.Context, workspace string) ([]management.Operator, error) {
+	var rows []struct {
+		ID     string `db:"id"`
+		Email  string `db:"email"`
+		Role   string `db:"role"`
+		Active bool   `db:"active"`
+	}
+	err := r.db.SelectContext(ctx, &rows, `SELECT o.id, o.email, m.role, m.active FROM workspace_members m JOIN operators o ON o.id=m.operator_id WHERE m.workspace_id=$1 ORDER BY o.email`, workspace)
+	if err != nil {
+		return nil, failure(err)
+	}
+	out := make([]management.Operator, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, management.Operator{ID: row.ID, Email: row.Email, Role: row.Role, Active: row.Active})
+	}
+	return out, nil
 }
 
 var _ management.ControlRepository = (*Repository)(nil)

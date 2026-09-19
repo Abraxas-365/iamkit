@@ -8,14 +8,16 @@ import (
 
 type Control struct {
 	commands provisioning.ControlCommands
+	queries  provisioning.ControlQueries
 	actor    func(*fiber.Ctx) string
 }
 
-func NewControl(commands provisioning.ControlCommands, actor func(*fiber.Ctx) string) *Control {
-	return &Control{commands, actor}
+func NewControl(commands provisioning.ControlCommands, queries provisioning.ControlQueries, actor func(*fiber.Ctx) string) *Control {
+	return &Control{commands, queries, actor}
 }
 func (h *Control) Register(r fiber.Router) {
 	r.Post("/provisioning-credentials", h.issue)
+	r.Get("/provisioning-credentials", h.credentials)
 	r.Delete("/provisioning-credentials/:id", h.revoke)
 	r.Post("/provisioned-identities", h.link)
 }
@@ -48,4 +50,11 @@ func (h *Control) link(c *fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(204)
+}
+func (h *Control) credentials(c *fiber.Ctx) error {
+	out, err := h.queries.Credentials(c.Context(), c.Params("environment"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
 }

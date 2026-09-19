@@ -18,16 +18,17 @@ type Repository struct{ db *sqlx.DB }
 func New(db *sqlx.DB) *Repository { return &Repository{db: db} }
 
 type row struct {
-	ID       string          `db:"id"`
-	Email    string          `db:"email"`
-	Name     string          `db:"name"`
-	Active   bool            `db:"active"`
-	Verified bool            `db:"email_verified"`
-	Metadata json.RawMessage `db:"metadata"`
+	ID         string          `db:"id"`
+	Email      string          `db:"email"`
+	Name       string          `db:"name"`
+	Active     bool            `db:"active"`
+	Verified   bool            `db:"email_verified"`
+	OTPEnabled bool            `db:"otp_enabled"`
+	Metadata   json.RawMessage `db:"metadata"`
 }
 
 func (r row) domain() user.User {
-	return user.User{ID: r.ID, Email: r.Email, Name: r.Name, Active: r.Active, EmailVerified: r.Verified, Metadata: r.Metadata}
+	return user.User{ID: r.ID, Email: r.Email, Name: r.Name, Active: r.Active, EmailVerified: r.Verified, OTPEnabled: r.OTPEnabled, Metadata: r.Metadata}
 }
 func failure(err error, message string) error {
 	if err == nil {
@@ -61,7 +62,7 @@ func (r *Repository) List(ctx context.Context, environment string) ([]user.User,
 }
 func (r *Repository) Find(ctx context.Context, environment, id string) (user.User, error) {
 	var row row
-	err := r.db.GetContext(ctx, &row, `SELECT id,email,name,active,email_verified,metadata FROM users WHERE environment_id=$1 AND id=$2`, environment, id)
+	err := r.db.GetContext(ctx, &row, `SELECT id,email,name,active,email_verified,otp_enabled,metadata FROM users WHERE environment_id=$1 AND id=$2`, environment, id)
 	return row.domain(), failure(err, "find user")
 }
 func (r *Repository) Update(ctx context.Context, m user.Mutation, id string, input user.Update) error {

@@ -39,5 +39,5 @@ func New(deps Deps) Module {
 		p, err := oauthfosite.NewProvider(store, deps.Issuer, []byte(deps.HMACSecret()), deps.Key)
 		return p, store, err
 	}
-	return Module{Commands: service, Flows: service, HTTP: oauthhttp.New(service, service, provider, deps.Tokens, deps.Issuer, deps.ActorID)}
+	return Module{Commands: service, Flows: service, HTTP: oauthhttp.New(service, service, service, provider, deps.Tokens, deps.Issuer, deps.ActorID)}
 }

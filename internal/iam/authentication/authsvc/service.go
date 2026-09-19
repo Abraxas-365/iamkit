@@ -23,7 +23,6 @@ type Service struct {
 func New(repository authentication.Repository, passwords authentication.Passwords, secrets authentication.Secrets, delivery authentication.Delivery) *Service {
 	return &Service{repository, passwords, secrets, delivery}
 }
-func validID(id string) bool { _, err := uuid.Parse(id); return err == nil }
 func canonical(c authentication.Context) authentication.Context {
 	for _, id := range []*string{&c.EnvironmentID, &c.OrganizationID, &c.ApplicationID, &c.ResourceID} {
 		if parsed, err := uuid.Parse(*id); err == nil {
@@ -32,13 +31,10 @@ func canonical(c authentication.Context) authentication.Context {
 	}
 	return c
 }
-func valid(c authentication.Context) bool {
-	return validID(c.EnvironmentID) && validID(c.OrganizationID) && validID(c.ApplicationID) && validID(c.ResourceID)
-}
 func (s *Service) Login(ctx context.Context, boundary authentication.Context, email, password string) (authentication.Issued, error) {
 	var out authentication.Issued
 	email, err := identity.Email(email)
-	if err != nil || !valid(boundary) || len(password) > 72 {
+	if err != nil || boundary.Validate() != nil || len(password) > 72 {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	tx, err := s.repository.Begin(ctx)
@@ -87,7 +83,7 @@ func (s *Service) saveRefresh(ctx context.Context, tx authentication.Transaction
 }
 func (s *Service) Refresh(ctx context.Context, boundary authentication.Context, token string) (authentication.Issued, error) {
 	out := authentication.Issued{Context: canonical(boundary)}
-	if !valid(boundary) || !strings.HasPrefix(token, "ik_refresh_") {
+	if boundary.Validate() != nil || !strings.HasPrefix(token, "ik_refresh_") {
 		return out, errx.Unauthorized("invalid refresh token")
 	}
 	tx, err := s.repository.Begin(ctx)
@@ -127,7 +123,7 @@ func (s *Service) Refresh(ctx context.Context, boundary authentication.Context, 
 }
 func (s *Service) InitiateChallenge(ctx context.Context, environment, email, purpose string) (string, error) {
 	email, err := identity.Email(email)
-	if err != nil || !validID(environment) || (purpose != "login" && purpose != "password_reset" && purpose != "email_verification") {
+	if err != nil || !identity.ValidID(environment) || (purpose != "login" && purpose != "password_reset" && purpose != "email_verification") {
 		return "", errx.Validation("invalid challenge request")
 	}
 	if s.delivery == nil {
@@ -169,10 +165,10 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment, email, pur
 }
 func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.Context, id, code, purpose, password string) (authentication.Issued, error) {
 	var out authentication.Issued
-	if !validID(boundary.EnvironmentID) || !validID(id) || len(code) != 8 {
+	if !identity.ValidID(boundary.EnvironmentID) || !identity.ValidID(id) || len(code) != 8 {
 		return out, errx.Unauthorized("invalid challenge")
 	}
-	if purpose == "login" && !valid(boundary) {
+	if purpose == "login" && boundary.Validate() != nil {
 		return out, errx.Validation("login context required")
 	}
 	var hash string

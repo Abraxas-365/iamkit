@@ -2,6 +2,7 @@ package authzhttp
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/gofiber/fiber/v2"
 )
@@ -22,6 +23,7 @@ func (h *Grants) Register(e fiber.Router) {
 	e.Put("/roles/:id", h.saveRole)
 	e.Delete("/roles/:id", h.deleteRole)
 	e.Post("/role-assignments", h.assign)
+	e.Get("/role-assignments", h.roleAssignments)
 	e.Delete("/role-assignments/:role/:organization/:user", h.unassign)
 	e.Get("/grants", h.grants)
 	e.Get("/grants/:id", h.grants)
@@ -39,7 +41,7 @@ func (h *Grants) roles(c *fiber.Ctx) error {
 	if c.Params("id") != "" {
 		return c.JSON(out[0])
 	}
-	return c.JSON(out)
+	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Grants) grants(c *fiber.Ctx) error {
 	out, err := h.queries.Grants(c.Context(), c.Params("environment"), c.Params("id"))
@@ -49,7 +51,7 @@ func (h *Grants) grants(c *fiber.Ctx) error {
 	if c.Params("id") != "" {
 		return c.JSON(out[0])
 	}
-	return c.JSON(out)
+	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Grants) saveRole(c *fiber.Ctx) error {
 	var input authorization.Role
@@ -104,4 +106,19 @@ func (h *Grants) deleteGrant(c *fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(204)
+}
+func (h *Grants) roleAssignments(c *fiber.Ctx) error {
+	filter := authorization.RoleAssignmentFilter{
+		RoleID:         c.Query("role_id"),
+		OrganizationID: c.Query("organization_id"),
+		UserID:         c.Query("user_id"),
+		ResourceID:     c.Query("resource_id"),
+		Search:         c.Query("search"),
+	}
+	page := httpx.PaginationFromCtx(c)
+	items, total, err := h.queries.RoleAssignments(c.Context(), c.Params("environment"), filter, page)
+	if err != nil {
+		return err
+	}
+	return c.JSON(httpx.NewPaginatedDB(items, total, page))
 }

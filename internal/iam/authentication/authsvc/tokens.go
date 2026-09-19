@@ -33,17 +33,17 @@ func (s *Tokens) Issue(input authentication.Token, audience string) (string, err
 }
 func (s *Tokens) Validate(ctx context.Context, raw, environment, audience string) (authentication.Token, error) {
 	var out authentication.Token
-	if !validID(environment) || audience == "" {
+	if !identity.ValidID(environment) || audience == "" {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	out, err := s.codec.Verify(raw, audience)
 	if err != nil {
 		return out, err
 	}
-	if out.EnvironmentID != environment || !validID(out.Subject) || !validID(out.ApplicationID) || !validID(out.ResourceID) {
+	if out.EnvironmentID != environment || !identity.ValidID(out.Subject) || !identity.ValidID(out.ApplicationID) || !identity.ValidID(out.ResourceID) {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	if !(out.Purpose == "application" && validID(out.SessionID) && validID(out.OrganizationID)) && !(out.Purpose == "machine" && out.SessionID == "" && out.OrganizationID == "") {
+	if !(out.Purpose == "application" && identity.ValidID(out.SessionID) && identity.ValidID(out.OrganizationID)) && !(out.Purpose == "machine" && out.SessionID == "" && out.OrganizationID == "") {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	current, err := s.repository.Current(ctx, out, audience)
@@ -58,7 +58,7 @@ func (s *Tokens) Validate(ctx context.Context, raw, environment, audience string
 	}
 	if out.OAuthClientID != "" {
 		parts := strings.Split(raw, ".")
-		if len(parts) != 3 || !validID(out.OAuthClientID) {
+		if len(parts) != 3 || !identity.ValidID(out.OAuthClientID) {
 			return out, errx.Unauthorized("invalid OAuth token")
 		}
 		active, err := s.repository.OAuthActive(ctx, out, parts[2])
@@ -106,7 +106,7 @@ func (s *Tokens) UpdateProfile(ctx context.Context, token authentication.Token, 
 	return s.repository.UpdateProfile(ctx, token, name)
 }
 func (s *Tokens) AddMember(ctx context.Context, token authentication.Token, user string) error {
-	if token.Purpose != "application" || !validID(user) {
+	if token.Purpose != "application" || !identity.ValidID(user) {
 		return errx.Forbidden("insufficient permissions")
 	}
 	return s.repository.AddMember(ctx, token, user)

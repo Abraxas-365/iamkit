@@ -19,10 +19,9 @@ type Service struct {
 }
 
 func New(r oauth.Repository, s oauth.Secrets, p oauth.Passwords) *Service { return &Service{r, s, p} }
-func validID(id string) bool                                              { _, err := uuid.Parse(id); return err == nil }
 func (s *Service) Create(ctx context.Context, environment string, input oauth.Registration) (string, string, error) {
-	if !validID(input.Application) || !validID(input.Resource) || len(input.Redirects) == 0 {
-		return "", "", errx.Validation("application, resource and redirects required")
+	if err := input.Validate(); err != nil {
+		return "", "", err
 	}
 	if err := identity.ValidateRedirects(input.Redirects); err != nil {
 		return "", "", err
@@ -46,13 +45,16 @@ func (s *Service) Create(ctx context.Context, environment string, input oauth.Re
 	return id, raw, s.repository.Create(ctx, environment, id, input, hash)
 }
 func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id string) error {
-	if !validID(id) {
+	if !identity.ValidID(id) {
 		return errx.Validation("invalid client")
 	}
 	return s.repository.Disable(ctx, m, id)
 }
+func (s *Service) List(ctx context.Context, environment string) ([]oauth.ClientView, error) {
+	return s.repository.List(ctx, environment)
+}
 func (s *Service) Client(ctx context.Context, id string) (*oauth.Client, error) {
-	if !validID(id) {
+	if !identity.ValidID(id) {
 		return nil, errx.Validation("invalid client")
 	}
 	environment, err := s.repository.Environment(ctx, id)
@@ -100,7 +102,7 @@ func (s *Service) Complete(ctx context.Context, ticket, binding string, approve 
 	return tx.Commit()
 }
 func (s *Service) Access(ctx context.Context, client *oauth.Client, subject, session, organization string) (authentication.Access, error) {
-	if !validID(session) || !validID(organization) {
+	if !identity.ValidID(session) || !identity.ValidID(organization) {
 		return authentication.Access{}, errx.Unauthorized("invalid session context")
 	}
 	return s.repository.Access(ctx, client, subject, session, organization)

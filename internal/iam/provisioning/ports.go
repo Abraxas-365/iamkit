@@ -2,35 +2,40 @@ package provisioning
 
 import "context"
 
-type Principal struct{ ID, Environment, Organization, Connection string }
-type User struct {
-	ID, Email, Name, External, Manager string
-	Active                             bool
-}
-type Update struct {
-	Name    *string
-	Active  *bool
-	Manager *string
-}
-type Filter struct {
-	Field, Value string
-	Start, Count int
-}
 type Commands interface {
-	Create(context.Context, Principal, User) (User, error)
-	Update(context.Context, Principal, string, Update) (User, error)
-	Authenticate(context.Context, string) (Principal, error)
+	Create(ctx context.Context, p Principal, input User) (User, error)
+	Update(ctx context.Context, p Principal, userID string, input Update) (User, error)
+	Authenticate(ctx context.Context, raw string) (Principal, error)
 }
 type Queries interface {
-	Find(context.Context, Principal, string) (User, error)
-	List(context.Context, Principal, Filter) ([]User, int, error)
+	Find(ctx context.Context, p Principal, userID string) (User, error)
+	List(ctx context.Context, p Principal, f Filter) ([]User, int, error)
 }
 
 type Repository interface {
-	Authenticate(context.Context, []byte) (Principal, error)
-	Find(context.Context, Principal, string) (User, error)
-	List(context.Context, Principal, Filter) ([]User, int, error)
-	Create(context.Context, Principal, User) error
-	Update(context.Context, Principal, string, Update) (User, error)
+	Authenticate(ctx context.Context, hash []byte) (Principal, error)
+	Find(ctx context.Context, p Principal, userID string) (User, error)
+	List(ctx context.Context, p Principal, f Filter) ([]User, int, error)
+	Create(ctx context.Context, p Principal, input User) error
+	Update(ctx context.Context, p Principal, userID string, input Update) (User, error)
 }
-type Secrets interface{ Hash(string) []byte }
+type Secrets interface{ Hash(raw string) []byte }
+
+type ControlCommands interface {
+	Issue(ctx context.Context, environment string, input CredentialInput) (Credential, error)
+	Revoke(ctx context.Context, m Mutation, credentialID string) error
+	Link(ctx context.Context, m Mutation, input Link) error
+}
+type ControlQueries interface {
+	Credentials(ctx context.Context, environment string) ([]CredentialView, error)
+}
+
+type ControlRepository interface {
+	IssueCredential(ctx context.Context, environment string, input CredentialInput, cred Credential, hash []byte, create bool) error
+	RevokeCredential(ctx context.Context, m Mutation, credentialID string) error
+	Link(ctx context.Context, m Mutation, input Link) error
+	Credentials(ctx context.Context, environment string) ([]CredentialView, error)
+}
+type Generator interface {
+	Generate(prefix string) (string, []byte, error)
+}

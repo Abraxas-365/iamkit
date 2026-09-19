@@ -2,7 +2,6 @@ package sacctsvc
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -17,28 +16,31 @@ type Service struct {
 }
 
 func New(r serviceaccount.Repository, s serviceaccount.Secrets) *Service { return &Service{r, s} }
-func validID(id string) bool                                             { _, err := uuid.Parse(id); return err == nil }
 func (s *Service) Create(ctx context.Context, environment string, input serviceaccount.Input) (serviceaccount.Credential, error) {
 	var out serviceaccount.Credential
-	if strings.TrimSpace(input.Name) == "" || !validID(input.Application) || !validID(input.Resource) || identity.ValidatePermissions(input.Permissions) != nil {
-		return out, errx.Validation("invalid request")
+	if err := input.Validate(); err != nil {
+		return out, err
+	}
+	ttl, err := identity.ParseTTL(input.ExpiresIn)
+	if err != nil {
+		return out, err
 	}
 	catalog, err := s.repository.Catalog(ctx, environment, input.Resource)
 	if err != nil {
 		return out, err
 	}
 	if !identity.Subset(input.Permissions, catalog) {
-		return out, errx.Validation("invalid request")
+		return out, errx.Validation("permissions outside resource catalog")
 	}
 	raw, hash, err := s.secrets.Generate("ik_svc_")
 	if err != nil {
 		return out, err
 	}
-	out = serviceaccount.Credential{ID: uuid.NewString(), Secret: raw, Expires: time.Now().Add(24 * time.Hour)}
+	out = serviceaccount.Credential{ID: uuid.NewString(), Secret: raw, Expires: time.Now().Add(ttl)}
 	return out, s.repository.Create(ctx, environment, input, out, hash)
 }
 func (s *Service) Revoke(ctx context.Context, environment, id string) error {
-	if !validID(id) {
+	if !identity.ValidID(id) {
 		return errx.NotFound("resource not found")
 	}
 	return s.repository.Revoke(ctx, environment, id)

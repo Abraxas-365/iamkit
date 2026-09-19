@@ -28,5 +28,5 @@ type Module struct {
 
 func New(deps Deps) Module {
 	service := fedsvc.New(fedpg.New(deps.DB), fedoidc.Provider{Issuer: deps.Issuer}, mgmtsecret.Generator{}, deps.Sessions, deps.Issuer)
-	return Module{Commands: service, Flows: service, HTTP: fedhttp.New(service, service, deps.ActorID, deps.IssueSession)}
+	return Module{Commands: service, Flows: service, HTTP: fedhttp.New(service, service, service, deps.ActorID, deps.IssueSession)}
 }

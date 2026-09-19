@@ -20,13 +20,11 @@ func (s *Service) Create(ctx context.Context, actor management.Principal, enviro
 	if actor.Role != "owner" {
 		return token, "", errx.Forbidden("only workspace owners may impersonate")
 	}
-	for _, id := range []string{environment, input.Organization, input.Application, input.Resource, input.User} {
-		if _, err := uuid.Parse(id); err != nil {
-			return token, "", errx.Validation("valid target context and 10-1000 character reason required")
-		}
-	}
-	if len(strings.TrimSpace(input.Reason)) < 10 || len(input.Reason) > 1000 {
+	if !identity.ValidID(environment) {
 		return token, "", errx.Validation("valid target context and 10-1000 character reason required")
+	}
+	if err := input.Validate(); err != nil {
+		return token, "", err
 	}
 	target := impersonation.Target{Context: authentication.Context{EnvironmentID: environment, OrganizationID: input.Organization, ApplicationID: input.Application, ResourceID: input.Resource}, User: input.User, Reason: strings.TrimSpace(input.Reason), Actor: actor.OperatorID, Session: uuid.NewString(), Expires: time.Now().Add(15 * time.Minute)}
 	access, err := s.repository.Create(ctx, target)

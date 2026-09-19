@@ -1,9 +1,6 @@
 package management
 
-import (
-	"context"
-	"time"
-)
+import "time"
 
 type Session struct {
 	ID           string     `json:"id" db:"id"`
@@ -20,17 +17,4 @@ type AuditEvent struct {
 	Action  string    `json:"action" db:"action"`
 	Target  string    `json:"target_id" db:"target_id"`
 	Created time.Time `json:"created_at" db:"created_at"`
-}
-type ActivityCommands interface {
-	RevokeSession(context.Context, string, string, string, string, string) error
-}
-type ActivityQueries interface {
-	Sessions(context.Context, string) ([]Session, error)
-	Audit(context.Context, string) ([]AuditEvent, error)
-}
-
-type ActivityRepository interface {
-	Sessions(context.Context, string) ([]Session, error)
-	Audit(context.Context, string) ([]AuditEvent, error)
-	RevokeSession(context.Context, string, string, string, string, string) error
 }

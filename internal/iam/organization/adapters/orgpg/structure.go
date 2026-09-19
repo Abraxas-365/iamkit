@@ -17,7 +17,7 @@ func (r *Repository) Exists(ctx context.Context, b organization.Boundary) (bool,
 }
 
 var structureQueries = map[organization.StructureView]string{
-	organization.Members:      `SELECT coalesce(json_agg(t),'[]') FROM (SELECT user_id,role,active,org_unit_id,manager_id FROM memberships WHERE environment_id=$1 AND organization_id=$2 ORDER BY user_id) t`,
+	organization.Members:      `SELECT coalesce(json_agg(t),'[]') FROM (SELECT user_id,active,org_unit_id,manager_id FROM memberships WHERE environment_id=$1 AND organization_id=$2 ORDER BY user_id) t`,
 	organization.Units:        `SELECT coalesce(json_agg(t),'[]') FROM (SELECT id,parent_id,name,kind FROM org_units WHERE environment_id=$1 AND organization_id=$2 ORDER BY id) t`,
 	organization.Positions:    `SELECT coalesce(json_agg(t),'[]') FROM (SELECT id,name,code FROM positions WHERE environment_id=$1 AND organization_id=$2 ORDER BY id) t`,
 	organization.Assignments:  `SELECT coalesce(json_agg(t),'[]') FROM (SELECT id,position_id,user_id,org_unit_id FROM position_assignments WHERE environment_id=$1 AND organization_id=$2 ORDER BY id) t`,

@@ -18,7 +18,6 @@ type Service struct {
 func New(repository provisioning.Repository, secrets provisioning.Secrets) *Service {
 	return &Service{repository, secrets}
 }
-func validID(id string) bool { _, err := uuid.Parse(id); return err == nil }
 func (s *Service) Authenticate(ctx context.Context, raw string) (provisioning.Principal, error) {
 	if !strings.HasPrefix(raw, "ik_scim_") {
 		return provisioning.Principal{}, errx.Unauthorized("invalid credential")
@@ -26,7 +25,7 @@ func (s *Service) Authenticate(ctx context.Context, raw string) (provisioning.Pr
 	return s.repository.Authenticate(ctx, s.secrets.Hash(raw))
 }
 func (s *Service) Find(ctx context.Context, p provisioning.Principal, id string) (provisioning.User, error) {
-	if !validID(id) {
+	if !identity.ValidID(id) {
 		return provisioning.User{}, errx.NotFound("user not found")
 	}
 	return s.repository.Find(ctx, p, id)
@@ -52,17 +51,17 @@ func (s *Service) Create(ctx context.Context, p provisioning.Principal, input pr
 	if input.External == "" {
 		input.External = email
 	}
-	if input.Manager != "" && !validID(input.Manager) {
+	if input.Manager != "" && !identity.ValidID(input.Manager) {
 		return input, errx.Validation("invalid manager")
 	}
 	input.ID = uuid.NewString()
 	return input, s.repository.Create(ctx, p, input)
 }
 func (s *Service) Update(ctx context.Context, p provisioning.Principal, id string, input provisioning.Update) (provisioning.User, error) {
-	if !validID(id) {
+	if !identity.ValidID(id) {
 		return provisioning.User{}, errx.NotFound("user not found")
 	}
-	if input.Manager != nil && *input.Manager != "" && !validID(*input.Manager) {
+	if input.Manager != nil && *input.Manager != "" && !identity.ValidID(*input.Manager) {
 		return provisioning.User{}, errx.Validation("invalid manager")
 	}
 	return s.repository.Update(ctx, p, id, input)

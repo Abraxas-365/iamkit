@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
+
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount"
 	"github.com/jmoiron/sqlx"
@@ -43,9 +45,26 @@ func (r *Repository) Revoke(ctx context.Context, environment, id string) error {
 	return failure(err)
 }
 func (r *Repository) List(ctx context.Context, environment string) ([]serviceaccount.Account, error) {
-	out := []serviceaccount.Account{}
-	err := r.db.SelectContext(ctx, &out, `SELECT id,name,application_id,resource_id,permissions,expires_at,revoked_at FROM service_accounts WHERE environment_id=$1 ORDER BY id`, environment)
-	return out, failure(err)
+	var rows []struct {
+		ID              string         `db:"id"`
+		Name            string         `db:"name"`
+		Application     string         `db:"application_id"`
+		ApplicationName string         `db:"application_name"`
+		Resource        string         `db:"resource_id"`
+		ResourceName    string         `db:"resource_name"`
+		Permissions     pq.StringArray `db:"permissions"`
+		Expires         time.Time      `db:"expires_at"`
+		Revoked         *time.Time     `db:"revoked_at"`
+	}
+	err := r.db.SelectContext(ctx, &rows, `SELECT sa.id, sa.name, sa.application_id, a.name AS application_name, sa.resource_id, res.name AS resource_name, sa.permissions, sa.expires_at, sa.revoked_at FROM service_accounts sa JOIN applications a ON a.id=sa.application_id JOIN resources res ON res.id=sa.resource_id WHERE sa.environment_id=$1 ORDER BY sa.name`, environment)
+	if err != nil {
+		return nil, failure(err)
+	}
+	out := make([]serviceaccount.Account, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, serviceaccount.Account{ID: row.ID, Name: row.Name, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Permissions: []string(row.Permissions), Expires: row.Expires, Revoked: row.Revoked})
+	}
+	return out, nil
 }
 
 var _ serviceaccount.Repository = (*Repository)(nil)

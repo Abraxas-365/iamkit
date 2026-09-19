@@ -2,6 +2,7 @@ package orghttp
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/gofiber/fiber/v2"
 )
@@ -21,6 +22,7 @@ func (h *Handler) Register(e fiber.Router) {
 	e.Get("/organizations/:id", h.find)
 	e.Patch("/organizations/:id", h.update)
 	e.Post("/memberships", h.addMember)
+	e.Get("/organizations/:organization/members", h.members)
 	e.Delete("/organizations/:organization/members/:user", h.removeMember)
 }
 func (h *Handler) create(c *fiber.Ctx) error {
@@ -41,7 +43,7 @@ func (h *Handler) list(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.JSON(out)
+	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Handler) find(c *fiber.Ctx) error {
 	out, err := h.queries.Find(c.Context(), c.Params("environment"), c.Params("id"))
@@ -70,6 +72,13 @@ func (h *Handler) addMember(c *fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(201)
+}
+func (h *Handler) members(c *fiber.Ctx) error {
+	out, err := h.queries.Members(c.Context(), c.Params("environment"), c.Params("organization"))
+	if err != nil {
+		return err
+	}
+	return c.JSON(httpx.NewPaginated(c, out))
 }
 func (h *Handler) removeMember(c *fiber.Ctx) error {
 	if err := h.commands.RemoveMember(c.Context(), c.Params("environment"), c.Params("organization"), c.Params("user")); err != nil {
