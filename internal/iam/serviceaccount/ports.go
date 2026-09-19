@@ -8,16 +8,16 @@ import (
 
 type Commands interface {
 	Create(ctx context.Context, environment identity.EnvironmentID, input Input) (Credential, error)
-	Revoke(ctx context.Context, environment identity.EnvironmentID, accountID identity.AccountID) error
+	Revoke(ctx context.Context, environment identity.EnvironmentID, account identity.AccountID) error
 }
 type Queries interface {
 	List(ctx context.Context, environment identity.EnvironmentID) ([]Account, error)
 }
 
 type Repository interface {
-	Catalog(ctx context.Context, environment identity.EnvironmentID, resourceID identity.ResourceID) ([]string, error)
+	Catalog(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID) ([]string, error)
 	Create(ctx context.Context, environment identity.EnvironmentID, input Input, cred Credential, hash []byte) error
-	Revoke(ctx context.Context, environment identity.EnvironmentID, accountID identity.AccountID) error
+	Revoke(ctx context.Context, environment identity.EnvironmentID, account identity.AccountID) error
 	List(ctx context.Context, environment identity.EnvironmentID) ([]Account, error)
 }
 type Secrets interface {
