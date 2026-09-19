@@ -17,15 +17,15 @@ func New(commands organization.Commands, queries organization.Queries, actor fun
 	return &Handler{commands, queries, actor}
 }
 func (h *Handler) Register(e fiber.Router) {
-	e.Post("/organizations", h.create)
-	e.Get("/organizations", h.list)
-	e.Get("/organizations/:id", h.find)
-	e.Patch("/organizations/:id", h.update)
-	e.Post("/memberships", h.addMember)
-	e.Get("/organizations/:organization/members", h.members)
-	e.Delete("/organizations/:organization/members/:user", h.removeMember)
+	e.Post("/organizations", h.Create)
+	e.Get("/organizations", h.List)
+	e.Get("/organizations/:id", h.Find)
+	e.Patch("/organizations/:id", h.Update)
+	e.Post("/memberships", h.AddMember)
+	e.Get("/organizations/:organization/members", h.Members)
+	e.Delete("/organizations/:organization/members/:user", h.RemoveMember)
 }
-func (h *Handler) create(c *fiber.Ctx) error {
+func (h *Handler) Create(c *fiber.Ctx) error {
 	var input struct {
 		Name string `json:"name"`
 	}
@@ -38,21 +38,21 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
-func (h *Handler) list(c *fiber.Ctx) error {
+func (h *Handler) List(c *fiber.Ctx) error {
 	out, err := h.queries.List(c.Context(), c.Params("environment"))
 	if err != nil {
 		return err
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
-func (h *Handler) find(c *fiber.Ctx) error {
+func (h *Handler) Find(c *fiber.Ctx) error {
 	out, err := h.queries.Find(c.Context(), c.Params("environment"), c.Params("id"))
 	if err != nil {
 		return err
 	}
 	return c.JSON(out)
 }
-func (h *Handler) update(c *fiber.Ctx) error {
+func (h *Handler) Update(c *fiber.Ctx) error {
 	var input organization.Update
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -63,7 +63,7 @@ func (h *Handler) update(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(204)
 }
-func (h *Handler) addMember(c *fiber.Ctx) error {
+func (h *Handler) AddMember(c *fiber.Ctx) error {
 	var input organization.Membership
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -73,14 +73,14 @@ func (h *Handler) addMember(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(201)
 }
-func (h *Handler) members(c *fiber.Ctx) error {
+func (h *Handler) Members(c *fiber.Ctx) error {
 	out, err := h.queries.Members(c.Context(), c.Params("environment"), c.Params("organization"))
 	if err != nil {
 		return err
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
-func (h *Handler) removeMember(c *fiber.Ctx) error {
+func (h *Handler) RemoveMember(c *fiber.Ctx) error {
 	if err := h.commands.RemoveMember(c.Context(), c.Params("environment"), c.Params("organization"), c.Params("user")); err != nil {
 		return err
 	}

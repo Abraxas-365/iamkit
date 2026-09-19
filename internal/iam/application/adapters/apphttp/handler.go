@@ -17,12 +17,12 @@ func New(commands application.Commands, queries application.Queries, actor func(
 	return &Handler{commands: commands, queries: queries, actor: actor}
 }
 func (h *Handler) Register(r fiber.Router) {
-	r.Post("/applications", h.create)
-	r.Get("/applications", h.list)
-	r.Get("/applications/:id", h.find)
-	r.Patch("/applications/:id", h.update)
+	r.Post("/applications", h.Create)
+	r.Get("/applications", h.List)
+	r.Get("/applications/:id", h.Find)
+	r.Patch("/applications/:id", h.Update)
 }
-func (h *Handler) create(c *fiber.Ctx) error {
+func (h *Handler) Create(c *fiber.Ctx) error {
 	var input application.Create
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -33,21 +33,21 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
-func (h *Handler) list(c *fiber.Ctx) error {
+func (h *Handler) List(c *fiber.Ctx) error {
 	out, err := h.queries.List(c.Context(), c.Params("environment"))
 	if err != nil {
 		return err
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
-func (h *Handler) find(c *fiber.Ctx) error {
+func (h *Handler) Find(c *fiber.Ctx) error {
 	out, err := h.queries.Find(c.Context(), c.Params("environment"), c.Params("id"))
 	if err != nil {
 		return err
 	}
 	return c.JSON(out)
 }
-func (h *Handler) update(c *fiber.Ctx) error {
+func (h *Handler) Update(c *fiber.Ctx) error {
 	var input application.Update
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")

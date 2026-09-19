@@ -85,7 +85,7 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.secret)
+	req.Header.Set("X-API-Key", c.secret)
 	req.Header.Set("Content-Type", "application/scim+json")
 	transport := c.http
 	if transport == nil {

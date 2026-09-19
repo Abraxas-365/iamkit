@@ -17,15 +17,15 @@ func New(commands authorization.ResourceCommands, queries authorization.Resource
 	return &Handler{commands, queries, actor}
 }
 func (h *Handler) Register(e fiber.Router) {
-	e.Post("/resources", h.create)
-	e.Get("/resources", h.list)
-	e.Get("/resources/:id", h.find)
-	e.Put("/resources/:id", h.update)
-	e.Post("/application-resources", h.link)
-	e.Delete("/application-resources/:applicationId/:resourceId", h.unlink)
-	e.Get("/applications/:applicationId/resources", h.listByApplication)
+	e.Post("/resources", h.Create)
+	e.Get("/resources", h.List)
+	e.Get("/resources/:id", h.Find)
+	e.Put("/resources/:id", h.Update)
+	e.Post("/application-resources", h.Link)
+	e.Delete("/application-resources/:application/:resource", h.Unlink)
+	e.Get("/applications/:application/resources", h.ListByApplication)
 }
-func (h *Handler) create(c *fiber.Ctx) error {
+func (h *Handler) Create(c *fiber.Ctx) error {
 	var input authorization.Resource
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -36,21 +36,21 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
-func (h *Handler) list(c *fiber.Ctx) error {
+func (h *Handler) List(c *fiber.Ctx) error {
 	out, err := h.queries.Resources(c.Context(), c.Params("environment"))
 	if err != nil {
 		return err
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
-func (h *Handler) find(c *fiber.Ctx) error {
+func (h *Handler) Find(c *fiber.Ctx) error {
 	out, err := h.queries.Resource(c.Context(), c.Params("environment"), c.Params("id"))
 	if err != nil {
 		return err
 	}
 	return c.JSON(out)
 }
-func (h *Handler) update(c *fiber.Ctx) error {
+func (h *Handler) Update(c *fiber.Ctx) error {
 	var input authorization.Catalog
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -61,7 +61,7 @@ func (h *Handler) update(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(204)
 }
-func (h *Handler) link(c *fiber.Ctx) error {
+func (h *Handler) Link(c *fiber.Ctx) error {
 	var input struct {
 		Application string `json:"application_id"`
 		Resource    string `json:"resource_id"`
@@ -74,14 +74,14 @@ func (h *Handler) link(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(201)
 }
-func (h *Handler) unlink(c *fiber.Ctx) error {
-	if err := h.commands.UnlinkApplication(c.Context(), c.Params("environment"), c.Params("applicationId"), c.Params("resourceId")); err != nil {
+func (h *Handler) Unlink(c *fiber.Ctx) error {
+	if err := h.commands.UnlinkApplication(c.Context(), c.Params("environment"), c.Params("application"), c.Params("resource")); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
-func (h *Handler) listByApplication(c *fiber.Ctx) error {
-	out, err := h.queries.ResourcesByApplication(c.Context(), c.Params("environment"), c.Params("applicationId"))
+func (h *Handler) ListByApplication(c *fiber.Ctx) error {
+	out, err := h.queries.ResourcesByApplication(c.Context(), c.Params("environment"), c.Params("application"))
 	if err != nil {
 		return err
 	}

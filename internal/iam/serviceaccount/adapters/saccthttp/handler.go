@@ -16,11 +16,11 @@ func New(commands serviceaccount.Commands, queries serviceaccount.Queries) *Hand
 	return &Handler{commands, queries}
 }
 func (h *Handler) Register(r fiber.Router) {
-	r.Post("/service-accounts", h.create)
-	r.Get("/service-accounts", h.list)
-	r.Delete("/service-accounts/:id", h.revoke)
+	r.Post("/service-accounts", h.Create)
+	r.Get("/service-accounts", h.List)
+	r.Delete("/service-accounts/:id", h.Revoke)
 }
-func (h *Handler) create(c *fiber.Ctx) error {
+func (h *Handler) Create(c *fiber.Ctx) error {
 	var input serviceaccount.Input
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -31,14 +31,14 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	}
 	return c.Status(201).JSON(out)
 }
-func (h *Handler) list(c *fiber.Ctx) error {
+func (h *Handler) List(c *fiber.Ctx) error {
 	out, err := h.queries.List(c.Context(), c.Params("environment"))
 	if err != nil {
 		return err
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
-func (h *Handler) revoke(c *fiber.Ctx) error {
+func (h *Handler) Revoke(c *fiber.Ctx) error {
 	if err := h.commands.Revoke(c.Context(), c.Params("environment"), c.Params("id")); err != nil {
 		return err
 	}

@@ -8,15 +8,12 @@
 package authclient
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/sdk/apierror"
+	"github.com/Abraxas-365/iamkit/sdk/internal/transport"
 )
 
 // Client calls IAMKit's identity API (/identity/v1).
@@ -25,17 +22,17 @@ type Client struct {
 	http    *http.Client
 }
 
-// ClientOption configures the identity client.
-type ClientOption func(*Client)
+// Option configures the identity client.
+type Option func(*Client)
 
 // WithHTTPClient overrides the default http.Client.
-func WithHTTPClient(c *http.Client) ClientOption {
+func WithHTTPClient(c *http.Client) Option {
 	return func(cl *Client) { cl.http = c }
 }
 
 // New creates an identity client. baseURL is the IAMKit server root
 // (e.g. "http://localhost:8080").
-func New(baseURL string, opts ...ClientOption) *Client {
+func New(baseURL string, opts ...Option) *Client {
 	c := &Client{baseURL: strings.TrimRight(baseURL, "/")}
 	for _, o := range opts {
 		o(c)
@@ -101,43 +98,11 @@ func (c *Client) request(ctx context.Context, path, token string, input, output 
 }
 
 func (c *Client) requestMethod(ctx context.Context, method, path, token string, input, output any) error {
-	body, err := json.Marshal(input)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+"/identity/v1"+path, bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
+	var headers []transport.Header
 	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
+		headers = append(headers, transport.Header{Key: "Authorization", Value: "Bearer " + token})
 	}
-	transport := c.http
-	if transport == nil {
-		transport = http.DefaultClient
-	}
-	client := *transport
-	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	res, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		var envelope struct {
-			Error apierror.Error `json:"error"`
-		}
-		if json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&envelope) == nil && envelope.Error.Code != "" {
-			envelope.Error.HTTPStatus = res.StatusCode
-			return &envelope.Error
-		}
-		return &apierror.Error{Code: "HTTP_ERROR", Message: "identity request failed", HTTPStatus: res.StatusCode}
-	}
-	if output == nil || res.StatusCode == 204 {
-		return nil
-	}
-	return json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(output)
+	return transport.Do(c.http, ctx, method, c.baseURL+"/identity/v1"+path, headers, input, output)
 }
 
 // ── Authentication ──
@@ -163,7 +128,7 @@ func (c *Client) Refresh(ctx context.Context, boundary LoginContext, refresh str
 // MachineToken exchanges a service account credential (ik_svc_) for access tokens.
 func (c *Client) MachineToken(ctx context.Context, secret string) (TokenPair, error) {
 	if !strings.HasPrefix(secret, "ik_svc_") {
-		return TokenPair{}, fmt.Errorf("service credential required")
+		return TokenPair{}, &apierror.Error{Code: "VALIDATION", Message: "service credential required", HTTPStatus: 400}
 	}
 	var out TokenPair
 	err := c.request(ctx, "/machine-token", secret, nil, &out)
@@ -239,7 +204,7 @@ func (c *Client) AddMember(ctx context.Context, token string, input AddMemberReq
 // and enforcing the given trust boundaries.
 func (c *Client) Introspect(ctx context.Context, token, issuer, audience, environment, application, resource string) (*Claims, error) {
 	if issuer == "" || audience == "" || environment == "" || application == "" || resource == "" {
-		return nil, fmt.Errorf("expected boundaries required")
+		return nil, &apierror.Error{Code: "VALIDATION", Message: "expected boundaries required", HTTPStatus: 400}
 	}
 	var out struct {
 		Active bool   `json:"active"`
@@ -256,10 +221,10 @@ func (c *Client) Introspect(ctx context.Context, token, issuer, audience, enviro
 		}
 	}
 	if !out.Active || p.Issuer != issuer || !hasAudience || p.EnvironmentID != environment || p.ApplicationID != application || p.ResourceID != resource || p.Subject == "" {
-		return nil, fmt.Errorf("inactive token or boundary mismatch")
+		return nil, &apierror.Error{Code: "UNAUTHORIZED", Message: "inactive token or boundary mismatch", HTTPStatus: 401}
 	}
 	if p.Purpose != "application" && p.Purpose != "machine" {
-		return nil, fmt.Errorf("invalid purpose")
+		return nil, &apierror.Error{Code: "UNAUTHORIZED", Message: "invalid token purpose", HTTPStatus: 401}
 	}
 	return &p, nil
 }

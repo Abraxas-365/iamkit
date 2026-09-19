@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,7 +73,11 @@ func TestIdentityIsolationJourney(t *testing.T) {
 		r := httptest.NewRequest(method, path, bytes.NewReader(raw))
 		r.Header.Set("Content-Type", "application/json")
 		if token != "" {
-			r.Header.Set("Authorization", "Bearer "+token)
+			if strings.HasPrefix(token, "ik_") {
+				r.Header.Set("X-API-Key", token)
+			} else {
+				r.Header.Set("Authorization", "Bearer "+token)
+			}
 		}
 		resp, err := app.Test(r, 10000)
 		if err != nil {

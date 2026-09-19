@@ -9,13 +9,16 @@ import (
 	"encoding/pem"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/application/adapters/apphttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/appmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authmail"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/authzmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/fedmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/impmodule"
@@ -25,11 +28,15 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtsvc"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/oauthmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/organization/adapters/orghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/orgmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning/provmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/adapters/saccthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/sacctmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/user/adapters/userhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/usermodule"
 	"github.com/Abraxas-365/iamkit/internal/server"
+	"github.com/Abraxas-365/iamkit/internal/server/apiauth"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
@@ -62,6 +69,19 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Activity = managementModule.Activity
 	impersonationModule := impmodule.New(impmodule.Deps{DB: db, Tokens: s.Tokens})
 	s.Impersonation = impersonationModule.HTTP
+
+	// /api/v1/* route group — JWT auth with scoped permissions.
+	s.API = apiauth.New(authenticationModule.Validator)
+	actor := apiauth.ActorID
+	s.APIHandlers = server.APIHandlerSet{
+		Users:           userhttp.New(userModule.Commands, userModule.Queries, actor),
+		Organizations:   orghttp.New(organizationModule.Commands, organizationModule.Queries, actor),
+		Structure:       orghttp.NewStructure(organizationModule.StructureCommands, organizationModule.StructureQueries, actor),
+		Applications:    apphttp.New(applicationModule.Commands, applicationModule.Queries, actor),
+		Authorization:   authzhttp.New(authorizationModule.ResourceCommands, authorizationModule.ResourceQueries, actor),
+		Grants:          authzhttp.NewGrants(authorizationModule.GrantCommands, authorizationModule.GrantQueries, actor),
+		ServiceAccounts: saccthttp.New(serviceAccountModule.Commands, serviceAccountModule.Queries),
+	}
 	return s
 }
 func Management(db *sqlx.DB) *mgmtsvc.Service {
@@ -124,6 +144,13 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		}
 		delivery = mail
 	}
-	return New(db, key, strings.TrimSuffix(issuer, "/"), delivery), nil
+	s := New(db, key, strings.TrimSuffix(issuer, "/"), delivery)
+	s.AllowedOrigins = os.Getenv("CORS_ALLOWED_ORIGINS")
+	if v := os.Getenv("RATE_LIMIT_PER_MINUTE"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			s.RateLimitPerMinute = n
+		}
+	}
+	return s, nil
 }
 func GenerateKey() (*rsa.PrivateKey, error) { return rsa.GenerateKey(rand.Reader, 2048) }

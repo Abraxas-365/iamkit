@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -34,7 +35,7 @@ func canonical(c authentication.Context) authentication.Context {
 func (s *Service) Login(ctx context.Context, boundary authentication.Context, email, password string) (authentication.Issued, error) {
 	var out authentication.Issued
 	email, err := identity.Email(email)
-	if err != nil || boundary.Validate() != nil || len(password) > 72 {
+	if err != nil || boundary.Validate() != nil || len(password) > config.PasswordMaxLength {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	tx, err := s.repository.Begin(ctx)
@@ -61,7 +62,7 @@ func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction,
 		return out, err
 	}
 	out.Access = access
-	expires := time.Now().Add(24 * time.Hour)
+	expires := time.Now().Add(config.SessionTTL)
 	if err = tx.CreateSession(ctx, boundary, user, out.Session, expires); err != nil {
 		return out, err
 	}
@@ -174,7 +175,7 @@ func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.C
 	var hash string
 	var err error
 	if purpose == "password_reset" {
-		if len(password) < 12 || len(password) > 72 {
+		if len(password) < config.PasswordMinLength || len(password) > config.PasswordMaxLength {
 			return out, errx.Validation("12-72 byte password required")
 		}
 		hash, err = s.passwords.Hash(password)

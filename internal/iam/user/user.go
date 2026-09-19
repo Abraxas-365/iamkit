@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 )
 
@@ -29,7 +30,7 @@ func (c Create) Validate() error {
 	if strings.TrimSpace(c.Name) == "" {
 		return errx.Validation("user name is required")
 	}
-	if c.Password != "" && (len(c.Password) < 12 || len(c.Password) > 72) {
+	if c.Password != "" && (len(c.Password) < config.PasswordMinLength || len(c.Password) > config.PasswordMaxLength) {
 		return errx.Validation("password must be 12-72 bytes")
 	}
 	return nil

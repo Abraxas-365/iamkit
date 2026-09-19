@@ -47,10 +47,16 @@ type TokenIssuer interface {
 }
 type TokenValidator interface {
 	Validate(ctx context.Context, raw, audience, environment string) (Token, error)
+	// ValidateSelf verifies a JWT that IAMKit itself issued, without requiring
+	// the caller to specify audience/environment upfront. Used by /api/v1/*
+	// where the token's own claims determine the environment scope.
+	ValidateSelf(ctx context.Context, raw string) (Token, error)
 }
 type TokenCodec interface {
 	Sign(token Token) (string, error)
 	Verify(raw, audience string) (Token, error)
+	// VerifySelf checks signature, issuer, and expiry without audience enforcement.
+	VerifySelf(raw string) (Token, error)
 	KeyID() string
 	JWKS() any
 }

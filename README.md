@@ -228,7 +228,7 @@ PUT /grants
 {"organization_id":"ORG_UUID","user_id":"USER_UUID","resource_id":"RESOURCE_UUID","permissions":["invoices:read"]}
 ```
 
-Each request carries `Authorization: Bearer ik_mgmt_…` **from your backend only**.
+Each request carries `X-API-Key: ik_mgmt_…` **from your backend only**.
 Membership and an appropriate resource grant are prerequisites for this login,
 not optional onboarding decorations. These are separate requests, not one atomic
 signup transaction: handle partial failures/retries in your onboarding workflow.

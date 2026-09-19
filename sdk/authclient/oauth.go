@@ -6,11 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/Abraxas-365/iamkit/sdk/apierror"
 )
 
 // OAuthClient wraps the OAuth2 authorization code / PKCE flow endpoints.
@@ -73,7 +74,7 @@ func NewPKCE() (verifier, challenge string, err error) {
 
 func (c *OAuthClient) request(ctx context.Context, path string, form url.Values, out any) error {
 	if c.clientID == "" {
-		return fmt.Errorf("OAuth client ID required")
+		return &apierror.Error{Code: "VALIDATION", Message: "OAuth client ID required", HTTPStatus: 400}
 	}
 	form.Set("client_id", c.clientID)
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/oauth/"+path, strings.NewReader(form.Encode()))

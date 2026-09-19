@@ -1,6 +1,7 @@
 package authbcrypt
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -9,7 +10,7 @@ import (
 type Hasher struct{}
 
 var dummy = func() string {
-	hash, err := bcrypt.GenerateFromPassword([]byte(uuid.NewString()), 12)
+	hash, err := bcrypt.GenerateFromPassword([]byte(uuid.NewString()), config.BcryptCost)
 	if err != nil {
 		panic(err)
 	}
@@ -26,7 +27,7 @@ func (Hasher) Compare(hash, password string) bool {
 }
 
 func (Hasher) Hash(password string) (string, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), 12)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), config.BcryptCost)
 	if err != nil {
 		return "", errx.Wrap(err, "hash password", errx.TypeInternal)
 	}

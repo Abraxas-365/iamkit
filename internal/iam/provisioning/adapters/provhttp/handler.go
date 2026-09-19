@@ -82,11 +82,11 @@ func scimFailure(c *fiber.Ctx, status int, message string) error {
 	return c.Status(status).JSON(fiber.Map{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:Error"}, "status": strconv.Itoa(status), "detail": message})
 }
 func (h *Handler) authenticate(c *fiber.Ctx) error {
-	parts := strings.Fields(c.Get("Authorization"))
-	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+	key := c.Get("X-API-Key")
+	if key == "" {
 		return scimFailure(c, 401, "invalid credential")
 	}
-	p, err := h.commands.Authenticate(c.Context(), parts[1])
+	p, err := h.commands.Authenticate(c.Context(), key)
 	if err != nil {
 		return scimFailure(c, 401, "invalid credential")
 	}
@@ -104,7 +104,7 @@ func (h *Handler) authenticate(c *fiber.Ctx) error {
 func (h *Handler) Register(app *fiber.App) {
 	r := app.Group("/scim/v2", h.authenticate)
 	r.Get("/ServiceProviderConfig", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"}, "patch": fiber.Map{"supported": true}, "bulk": fiber.Map{"supported": false}, "filter": fiber.Map{"supported": true, "maxResults": 100}, "sort": fiber.Map{"supported": false}, "changePassword": fiber.Map{"supported": false}, "etag": fiber.Map{"supported": false}, "authenticationSchemes": []fiber.Map{{"type": "oauthbearertoken", "name": "Scoped provisioning token", "description": "Environment and organization bound credential"}}})
+		return c.JSON(fiber.Map{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"}, "patch": fiber.Map{"supported": true}, "bulk": fiber.Map{"supported": false}, "filter": fiber.Map{"supported": true, "maxResults": 100}, "sort": fiber.Map{"supported": false}, "changePassword": fiber.Map{"supported": false}, "etag": fiber.Map{"supported": false}, "authenticationSchemes": []fiber.Map{{"type": "httpApiKey", "name": "API Key", "description": "Scoped provisioning credential via X-API-Key header"}}})
 	})
 	r.Get("/ResourceTypes", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:ListResponse"}, "totalResults": 1, "Resources": []fiber.Map{{"id": "User", "name": "User", "endpoint": "/Users", "schema": scimUserSchema, "schemaExtensions": []fiber.Map{{"schema": scimEnterpriseSchema, "required": false}}}}})

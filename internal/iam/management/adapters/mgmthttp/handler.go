@@ -3,6 +3,7 @@ package mgmthttp
 import (
 	"strings"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/gofiber/fiber/v2"
@@ -24,14 +25,13 @@ func New(auth management.ManagementAuthenticator, sessions management.SessionCom
 func Principal(c *fiber.Ctx) management.Principal { return c.Locals("operator").(management.Principal) }
 func OperatorID(c *fiber.Ctx) string              { return Principal(c).OperatorID }
 
-// Authenticate resolves a Principal from either a Bearer ik_mgmt_ key or a session cookie.
+// Authenticate resolves a Principal from either an X-API-Key header or a session cookie.
 func (h *Handler) Authenticate(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-store")
 
-	// Try Bearer token first (existing API clients / SDK).
-	parts := strings.Fields(c.Get("Authorization"))
-	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") && strings.HasPrefix(parts[1], "ik_mgmt_") {
-		p, err := h.auth.Authenticate(c.Context(), parts[1])
+	// Try X-API-Key header first (SDK / programmatic access).
+	if key := c.Get("X-API-Key"); strings.HasPrefix(key, "ik_mgmt_") {
+		p, err := h.auth.Authenticate(c.Context(), key)
 		if err != nil {
 			return errx.Unauthorized("management credential required")
 		}
@@ -125,7 +125,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		Secure:   true,
 		HTTPOnly: true,
 		SameSite: "Strict",
-		MaxAge:   3600, // 1 hour, matches session expiry
+		MaxAge:   config.SessionCookieMaxAge,
 	})
 	c.Set("Cache-Control", "no-store")
 	return c.JSON(fiber.Map{

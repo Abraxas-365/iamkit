@@ -68,22 +68,24 @@ func TestConsoleCookieAndCSRF(t *testing.T) {
 		t.Fatalf("invalid Host cookie: %+v", cookie)
 	}
 	for _, tc := range []struct {
-		name, path, header, site, bearer string
-		allowed                          bool
+		name, path, header, site, apiKey string
+		allowed                         bool
 	}{
 		{"login no header", "/login", "", "", "", false},
 		{"login cross site", "/login", "1", "cross-site", "", false},
 		{"cookie no header", "/mutate", "", "", "", false},
 		{"cookie cross site", "/mutate", "1", "cross-site", "", false},
 		{"cookie same origin", "/mutate", "1", "same-origin", "", true},
-		{"bearer automation", "/mutate", "", "", "Bearer ik_mgmt_test", true},
+		{"api key automation", "/mutate", "", "", "ik_mgmt_test", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := httptest.NewRequest("POST", tc.path, nil)
 			r.AddCookie(cookie)
 			r.Header.Set("X-IAMKit-Console", tc.header)
 			r.Header.Set("Sec-Fetch-Site", tc.site)
-			r.Header.Set("Authorization", tc.bearer)
+			if tc.apiKey != "" {
+				r.Header.Set("X-API-Key", tc.apiKey)
+			}
 			out, err := app.Test(r)
 			if err != nil {
 				t.Fatal(err)

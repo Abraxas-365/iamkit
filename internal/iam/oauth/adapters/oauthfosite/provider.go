@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/mohae/deepcopy"
 	"github.com/ory/fosite"
@@ -40,7 +41,7 @@ func NewProvider(store *Store, issuer string, secret []byte, key *rsa.PrivateKey
 	if len(secret) < 32 || key == nil || key.N.BitLen() < 2048 {
 		return nil, errx.Internal("OIDC signing configuration is invalid")
 	}
-	cfg := &fosite.Config{GlobalSecret: secret, AuthorizeCodeLifespan: 5 * time.Minute, AccessTokenLifespan: 15 * time.Minute, RefreshTokenLifespan: 24 * time.Hour, RefreshTokenScopes: []string{"offline_access"}, IDTokenLifespan: 15 * time.Minute, IDTokenIssuer: issuer, AccessTokenIssuer: issuer, EnforcePKCE: true, EnablePKCEPlainChallengeMethod: false, SendDebugMessagesToClients: false}
+	cfg := &fosite.Config{GlobalSecret: secret, AuthorizeCodeLifespan: config.OAuthAuthorizeCodeLifespan, AccessTokenLifespan: config.OAuthAccessTokenLifespan, RefreshTokenLifespan: config.OAuthRefreshTokenLifespan, RefreshTokenScopes: []string{"offline_access"}, IDTokenLifespan: config.OAuthIDTokenLifespan, IDTokenIssuer: issuer, AccessTokenIssuer: issuer, EnforcePKCE: true, EnablePKCEPlainChallengeMethod: false, SendDebugMessagesToClients: false}
 	getter := func(context.Context) (any, error) { return key, nil }
 	hmac := compose.NewOAuth2HMACStrategy(cfg)
 	strategy := &compose.CommonStrategy{CoreStrategy: compose.NewOAuth2JWTStrategy(getter, hmac, cfg), OpenIDConnectTokenStrategy: compose.NewOpenIDConnectStrategy(getter, cfg), Signer: &jwt.DefaultSigner{GetPrivateKey: getter}}

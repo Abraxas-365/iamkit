@@ -49,8 +49,18 @@ func (c *Codec) Sign(input authentication.Token) (string, error) {
 	return raw, nil
 }
 func (c *Codec) Verify(raw, audience string) (authentication.Token, error) {
+	return c.parse(raw, jwt.WithAudience(audience))
+}
+
+// VerifySelf validates signature, issuer, and expiry without enforcing a
+// specific audience. Used by /api/v1/* where IAMKit trusts its own tokens.
+func (c *Codec) VerifySelf(raw string) (authentication.Token, error) {
+	return c.parse(raw)
+}
+func (c *Codec) parse(raw string, extra ...jwt.ParserOption) (authentication.Token, error) {
 	payload := &claims{}
-	token, err := jwt.ParseWithClaims(raw, payload, func(*jwt.Token) (any, error) { return &c.key.PublicKey, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer(c.issuer), jwt.WithAudience(audience), jwt.WithExpirationRequired())
+	opts := append([]jwt.ParserOption{jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer(c.issuer), jwt.WithExpirationRequired()}, extra...)
+	token, err := jwt.ParseWithClaims(raw, payload, func(*jwt.Token) (any, error) { return &c.key.PublicKey, nil }, opts...)
 	if err != nil || !token.Valid {
 		return authentication.Token{}, errx.Unauthorized("invalid credentials or access token")
 	}

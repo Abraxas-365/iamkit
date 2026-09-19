@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -28,7 +29,7 @@ func (s *Tokens) Issue(input authentication.Token, audience string) (string, err
 	input.Audience = []string{audience}
 	input.IssuedAt = now.Unix()
 	input.NotBefore = now.Unix()
-	input.ExpiresAt = now.Add(15 * time.Minute).Unix()
+	input.ExpiresAt = now.Add(config.TokenTTL).Unix()
 	return s.codec.Sign(input)
 }
 func (s *Tokens) Validate(ctx context.Context, raw, environment, audience string) (authentication.Token, error) {
@@ -44,6 +45,50 @@ func (s *Tokens) Validate(ctx context.Context, raw, environment, audience string
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	if !(out.Purpose == "application" && identity.ValidID(out.SessionID) && identity.ValidID(out.OrganizationID)) && !(out.Purpose == "machine" && out.SessionID == "" && out.OrganizationID == "") {
+		return out, errx.Unauthorized("invalid credentials or access token")
+	}
+	current, err := s.repository.Current(ctx, out, audience)
+	if err != nil || !identity.Subset(out.Permissions, current) {
+		return out, errx.Unauthorized("invalid credentials or access token")
+	}
+	if out.ActorID != "" {
+		active, err := s.repository.ActorActive(ctx, out)
+		if err != nil || !active {
+			return out, errx.Unauthorized("impersonation actor disabled")
+		}
+	}
+	if out.OAuthClientID != "" {
+		parts := strings.Split(raw, ".")
+		if len(parts) != 3 || !identity.ValidID(out.OAuthClientID) {
+			return out, errx.Unauthorized("invalid OAuth token")
+		}
+		active, err := s.repository.OAuthActive(ctx, out, parts[2])
+		if err != nil || !active {
+			return out, errx.Unauthorized("OAuth token revoked")
+		}
+	}
+	return out, nil
+}
+
+// ValidateSelf verifies a JWT that IAMKit issued, extracting the audience from
+// the token's own claims. It performs the same revocation and permission checks
+// as Validate. Used by /api/v1/* where the caller doesn't know the audience.
+func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.Token, error) {
+	out, err := s.codec.VerifySelf(raw)
+	if err != nil {
+		return out, err
+	}
+	if !identity.ValidID(out.EnvironmentID) || !identity.ValidID(out.Subject) || !identity.ValidID(out.ApplicationID) || !identity.ValidID(out.ResourceID) {
+		return out, errx.Unauthorized("invalid credentials or access token")
+	}
+	if !(out.Purpose == "application" && identity.ValidID(out.SessionID) && identity.ValidID(out.OrganizationID)) && !(out.Purpose == "machine" && out.SessionID == "" && out.OrganizationID == "") {
+		return out, errx.Unauthorized("invalid credentials or access token")
+	}
+	audience := ""
+	if len(out.Audience) > 0 {
+		audience = out.Audience[0]
+	}
+	if audience == "" {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	current, err := s.repository.Current(ctx, out, audience)

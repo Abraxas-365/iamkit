@@ -15,15 +15,17 @@ type Deps struct {
 	ActorID func(*fiber.Ctx) string
 }
 type Module struct {
-	Commands  organization.Commands
-	Queries   organization.Queries
-	HTTP      *orghttp.Handler
-	Structure *orghttp.Structure
+	Commands          organization.Commands
+	Queries           organization.Queries
+	StructureCommands organization.StructureCommands
+	StructureQueries  organization.StructureQueries
+	HTTP              *orghttp.Handler
+	Structure         *orghttp.Structure
 }
 
 func New(deps Deps) Module {
 	repository := orgpg.New(deps.DB)
 	service := orgsvc.New(repository)
 	structure := orgsvc.NewStructure(repository)
-	return Module{Commands: service, Queries: service, HTTP: orghttp.New(service, service, deps.ActorID), Structure: orghttp.NewStructure(structure, structure, deps.ActorID)}
+	return Module{Commands: service, Queries: service, StructureCommands: structure, StructureQueries: structure, HTTP: orghttp.New(service, service, deps.ActorID), Structure: orghttp.NewStructure(structure, structure, deps.ActorID)}
 }

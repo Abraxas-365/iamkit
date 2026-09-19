@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -55,7 +55,7 @@ func (p Provider) config(ctx context.Context, c federation.Connection) (*oidc.Pr
 	return provider, &oauth2.Config{ClientID: c.Client, ClientSecret: secret, Endpoint: endpoint, RedirectURL: p.Issuer + "/identity/v1/federation/callback", Scopes: []string{oidc.ScopeOpenID, "profile", "email"}}, nil
 }
 func httpContext(ctx context.Context) context.Context {
-	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := &http.Client{Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return oidc.ClientContext(ctx, client)
 }
 func (Provider) Verifier() string { return oauth2.GenerateVerifier() }

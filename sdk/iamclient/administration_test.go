@@ -12,7 +12,7 @@ func TestTypedAdministration(t *testing.T) {
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, r.Method+" "+r.URL.Path)
-		if r.Header.Get("Authorization") != "Bearer ik_mgmt_test" {
+		if r.Header.Get("X-API-Key") != "ik_mgmt_test" {
 			t.Error("missing key")
 		}
 		w.Header().Set("Content-Type", "application/json")

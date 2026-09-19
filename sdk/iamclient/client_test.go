@@ -29,7 +29,7 @@ func TestManagementClient(t *testing.T) {
 	var calls int
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		if r.URL.Path != "/management/v1/projects" || r.Header.Get("Authorization") != "Bearer ik_mgmt_test" {
+		if r.URL.Path != "/management/v1/projects" || r.Header.Get("X-API-Key") != "ik_mgmt_test" {
 			t.Error("unexpected request")
 		}
 		w.Header().Set("Content-Type", "application/json")

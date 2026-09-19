@@ -3,8 +3,8 @@ package authclient
 
 import (
 	"crypto/rsa"
-	"fmt"
 
+	"github.com/Abraxas-365/iamkit/sdk/apierror"
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -35,27 +35,27 @@ func (c Claims) HasPermission(required string) bool {
 // when immediate logout, suspension, or permission removal must take effect.
 func Validate(raw string, key *rsa.PublicKey, issuer, audience, environment, application, resource string) (*Claims, error) {
 	if key == nil || issuer == "" || audience == "" || environment == "" || application == "" || resource == "" {
-		return nil, fmt.Errorf("key and expected token boundaries required")
+		return nil, &apierror.Error{Code: "VALIDATION", Message: "key and expected token boundaries required", HTTPStatus: 400}
 	}
 	c := &Claims{}
 	t, err := jwt.ParseWithClaims(raw, c, func(*jwt.Token) (any, error) { return key, nil }, jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer(issuer), jwt.WithAudience(audience), jwt.WithExpirationRequired())
 	if err != nil {
-		return nil, err
+		return nil, &apierror.Error{Code: "UNAUTHORIZED", Message: "invalid or expired token", HTTPStatus: 401}
 	}
 	if !t.Valid || c.Subject == "" || c.EnvironmentID != environment || c.ApplicationID != application || c.ResourceID != resource {
-		return nil, fmt.Errorf("token boundary mismatch")
+		return nil, &apierror.Error{Code: "UNAUTHORIZED", Message: "token boundary mismatch", HTTPStatus: 401}
 	}
 	switch c.Purpose {
 	case "application":
 		if c.OrganizationID == "" || c.SessionID == "" {
-			return nil, fmt.Errorf("missing user session context")
+			return nil, &apierror.Error{Code: "UNAUTHORIZED", Message: "missing user session context", HTTPStatus: 401}
 		}
 	case "machine":
 		if c.OrganizationID != "" || c.SessionID != "" {
-			return nil, fmt.Errorf("invalid machine context")
+			return nil, &apierror.Error{Code: "UNAUTHORIZED", Message: "invalid machine context", HTTPStatus: 401}
 		}
 	default:
-		return nil, fmt.Errorf("unsupported token purpose")
+		return nil, &apierror.Error{Code: "UNAUTHORIZED", Message: "unsupported token purpose", HTTPStatus: 401}
 	}
 	return c, nil
 }

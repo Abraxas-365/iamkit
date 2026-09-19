@@ -17,23 +17,23 @@ func NewGrants(commands authorization.GrantCommands, queries authorization.Grant
 	return &Grants{commands, queries, actor}
 }
 func (h *Grants) Register(e fiber.Router) {
-	e.Get("/roles", h.roles)
-	e.Get("/roles/:id", h.roles)
-	e.Post("/roles", h.saveRole)
-	e.Put("/roles/:id", h.saveRole)
-	e.Delete("/roles/:id", h.deleteRole)
-	e.Post("/role-assignments", h.assign)
-	e.Get("/role-assignments", h.roleAssignments)
-	e.Delete("/role-assignments/:role/:organization/:user", h.unassign)
-	e.Get("/grants", h.grants)
-	e.Get("/grants/:id", h.grants)
-	e.Put("/grants", h.putGrant)
-	e.Delete("/grants/:id", h.deleteGrant)
+	e.Get("/roles", h.ListRoles)
+	e.Get("/roles/:id", h.ListRoles)
+	e.Post("/roles", h.SaveRole)
+	e.Put("/roles/:id", h.SaveRole)
+	e.Delete("/roles/:id", h.DeleteRole)
+	e.Post("/role-assignments", h.Assign)
+	e.Get("/role-assignments", h.RoleAssignments)
+	e.Delete("/role-assignments/:role/:organization/:user", h.Unassign)
+	e.Get("/grants", h.ListGrants)
+	e.Get("/grants/:id", h.ListGrants)
+	e.Put("/grants", h.PutGrant)
+	e.Delete("/grants/:id", h.DeleteGrant)
 }
 func (h *Grants) mutation(c *fiber.Ctx) authorization.Mutation {
 	return authorization.Mutation{Environment: c.Params("environment"), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
 }
-func (h *Grants) roles(c *fiber.Ctx) error {
+func (h *Grants) ListRoles(c *fiber.Ctx) error {
 	out, err := h.queries.Roles(c.Context(), c.Params("environment"), c.Params("id"))
 	if err != nil {
 		return err
@@ -43,7 +43,7 @@ func (h *Grants) roles(c *fiber.Ctx) error {
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
-func (h *Grants) grants(c *fiber.Ctx) error {
+func (h *Grants) ListGrants(c *fiber.Ctx) error {
 	out, err := h.queries.Grants(c.Context(), c.Params("environment"), c.Params("id"))
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func (h *Grants) grants(c *fiber.Ctx) error {
 	}
 	return c.JSON(httpx.NewPaginated(c, out))
 }
-func (h *Grants) saveRole(c *fiber.Ctx) error {
+func (h *Grants) SaveRole(c *fiber.Ctx) error {
 	var input authorization.Role
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -67,13 +67,13 @@ func (h *Grants) saveRole(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(204)
 }
-func (h *Grants) deleteRole(c *fiber.Ctx) error {
+func (h *Grants) DeleteRole(c *fiber.Ctx) error {
 	if err := h.commands.DeleteRole(c.Context(), h.mutation(c), c.Params("id")); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
-func (h *Grants) assign(c *fiber.Ctx) error {
+func (h *Grants) Assign(c *fiber.Ctx) error {
 	var input authorization.RoleAssignment
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -83,14 +83,14 @@ func (h *Grants) assign(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(204)
 }
-func (h *Grants) unassign(c *fiber.Ctx) error {
+func (h *Grants) Unassign(c *fiber.Ctx) error {
 	input := authorization.RoleAssignment{Role: c.Params("role"), Organization: c.Params("organization"), User: c.Params("user")}
 	if err := h.commands.AssignRole(c.Context(), h.mutation(c), input, true); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
-func (h *Grants) putGrant(c *fiber.Ctx) error {
+func (h *Grants) PutGrant(c *fiber.Ctx) error {
 	var input authorization.Grant
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -101,13 +101,13 @@ func (h *Grants) putGrant(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"id": id})
 }
-func (h *Grants) deleteGrant(c *fiber.Ctx) error {
+func (h *Grants) DeleteGrant(c *fiber.Ctx) error {
 	if err := h.commands.DeleteGrant(c.Context(), c.Params("environment"), c.Params("id")); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
-func (h *Grants) roleAssignments(c *fiber.Ctx) error {
+func (h *Grants) RoleAssignments(c *fiber.Ctx) error {
 	filter := authorization.RoleAssignmentFilter{
 		RoleID:         c.Query("role_id"),
 		OrganizationID: c.Query("organization_id"),

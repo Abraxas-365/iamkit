@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -33,7 +34,7 @@ func (s *Service) Bootstrap(ctx context.Context, email, name string) (string, er
 	if err != nil {
 		return "", errx.Wrap(err, "bootstrap failed", errx.TypeInternal)
 	}
-	if err = s.repository.Bootstrap(ctx, email, name, hash, time.Now().Add(24*time.Hour)); err != nil {
+	if err = s.repository.Bootstrap(ctx, email, name, hash, time.Now().Add(config.APIKeyTTL)); err != nil {
 		return "", err
 	}
 	return raw, nil
@@ -50,7 +51,7 @@ func (s *Service) RecoverOwner(ctx context.Context, workspace, email string) (st
 	if err != nil {
 		return "", errx.Wrap(err, "owner recovery failed", errx.TypeInternal)
 	}
-	if err = s.repository.RecoverOwner(ctx, workspace, email, hash, time.Now().Add(24*time.Hour)); err != nil {
+	if err = s.repository.RecoverOwner(ctx, workspace, email, hash, time.Now().Add(config.APIKeyTTL)); err != nil {
 		return "", err
 	}
 	return raw, nil
@@ -73,7 +74,7 @@ func (s *Service) EnvironmentAllowed(ctx context.Context, p management.Principal
 }
 func (s *Service) Login(ctx context.Context, email, password string) (string, management.Principal, error) {
 	email, err := identity.Email(email)
-	if err != nil || len(password) > 72 {
+	if err != nil || len(password) > config.PasswordMaxLength {
 		return "", management.Principal{}, errx.Unauthorized("invalid credentials")
 	}
 	p, hash, err := s.sessions.PasswordByEmail(ctx, email)
@@ -90,7 +91,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (string, ma
 		return "", management.Principal{}, errx.Wrap(err, "session creation failed", errx.TypeInternal)
 	}
 	id := uuid.NewString()
-	expires := time.Now().Add(1 * time.Hour)
+	expires := time.Now().Add(config.OperatorSessionTTL)
 	if err = s.sessions.CreateSession(ctx, id, p, secretHash, expires); err != nil {
 		return "", management.Principal{}, err
 	}
@@ -103,7 +104,7 @@ func (s *Service) Logout(ctx context.Context, raw string) error {
 	return s.sessions.RevokeSessionByHash(ctx, s.secrets.Hash(raw))
 }
 func (s *Service) SetPassword(ctx context.Context, p management.Principal, password string) error {
-	if len(password) < 12 || len(password) > 72 {
+	if len(password) < config.PasswordMinLength || len(password) > config.PasswordMaxLength {
 		return errx.Validation("password must be 12-72 bytes")
 	}
 	hash, err := s.passwords.Hash(password)

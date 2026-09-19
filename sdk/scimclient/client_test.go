@@ -25,7 +25,7 @@ func TestNew(t *testing.T) {
 
 func TestProvisioningClient(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer ik_scim_test" {
+		if r.Header.Get("X-API-Key") != "ik_scim_test" {
 			t.Error("missing scoped credential")
 		}
 		if r.URL.Path == "/scim/v2/Users/missing" {

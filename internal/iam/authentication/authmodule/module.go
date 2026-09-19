@@ -25,10 +25,11 @@ type Deps struct {
 	IssueSession func(*fiber.Ctx, authentication.Issued) error
 }
 type Module struct {
-	Commands authentication.Commands
-	Tokens   *authhttp.Tokens
-	HTTP     *authhttp.Handler
-	Sessions federation.Sessions
+	Commands  authentication.Commands
+	Validator authentication.TokenValidator
+	Tokens    *authhttp.Tokens
+	HTTP      *authhttp.Handler
+	Sessions  federation.Sessions
 }
 type federationSessions struct{ service *authsvc.Service }
 
@@ -38,5 +39,5 @@ func (s federationSessions) NewSession(ctx context.Context, tx authentication.Tr
 func New(deps Deps) Module {
 	service := authsvc.New(authpg.New(deps.DB), authbcrypt.Hasher{}, authsecret.Generator{}, deps.Delivery)
 	tokens := authsvc.NewTokens(authpg.New(deps.DB), authjwt.New(deps.Key, deps.Issuer), authsecret.Generator{})
-	return Module{Commands: service, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens), HTTP: authhttp.New(service, deps.IssueSession), Sessions: federationSessions{service}}
+	return Module{Commands: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens), HTTP: authhttp.New(service, deps.IssueSession), Sessions: federationSessions{service}}
 }
