@@ -57,23 +57,26 @@ proxies. Use HTTPS for non-local deployments.
 
 ## IAMKit vs Ory and Keycloak
 
-This is a comparison of approach, not a performance benchmark or a claim of
-feature parity.
+A comparison of approach, not a performance benchmark or feature-parity claim.
 
-| | IAMKit | Ory | Keycloak |
+| | **IAMKit** | **Ory** | **Keycloak** |
 | :--- | :--- | :--- | :--- |
-| Approach | One Go backend with a prescribed workspace → environment → organization/application/resource model | Composable identity infrastructure: Kratos for identities, Hydra for OAuth/OIDC, Keto for authorization | Integrated identity server with SSO, administration and account-management experiences |
-| App integration | Your backend provisions access; your app supplies signup/login UX | Assemble the components and integration flows you need; hosted offerings also exist | Register clients and use server-hosted login and account flows |
-| Access model | Explicit API audiences, resource permission catalogs, roles and direct grants | Authorization can be composed with Keto | Roles and authorization services/policies |
-| Good fit | Teams wanting explicit B2B/internal-product boundaries and custom UX | Teams wanting modular identity/auth components | Teams wanting a mature integrated SSO platform, including SAML and LDAP/AD integration |
-| Main trade-off | More onboarding/UX and operational work remains yours; no public self-registration endpoint | You choose and integrate the components appropriate to your architecture | Adopt and configure the platform's client, realm and authentication-flow model |
+| **What is it?** | Single Go binary with built-in operator console. Users, orgs, permissions, OIDC federation, OAuth 2.0 and SCIM — all included. | Toolkit — pick Kratos (users), Hydra (OAuth), Keto (permissions) and wire them together. | Full platform — SSO server with built-in admin console, login pages, and account management. |
+| **SSO and federation** | OIDC federation (Google, Microsoft, any OIDC provider). OAuth 2.0/OIDC server with PKCE. No SAML or LDAP. | Hydra provides OAuth/OIDC. Federation and SAML require additional integration. | OIDC, SAML 2.0, LDAP/AD, Kerberos — broadest protocol support out of the box. |
+| **Who builds the UI?** | You do. Your app handles signup forms, login pages and onboarding. IAMKit provides the APIs and an operator management console. | You do, but each component has its own integration surface. | Keycloak provides hosted login/registration pages you configure and theme. |
+| **How does access control work?** | Resources have permission catalogs. You assign permissions to users via roles or direct grants, scoped to an organization. | Add Keto for relationship-based authorization, or roll your own. | Roles and policy-based authorization built into the platform. |
+| **Best for** | B2B / multi-tenant products where you want full UX control, explicit tenant boundaries, and OIDC-based SSO. Also fits complex architectures — service accounts, a scoped API, SCIM and a Go SDK let you integrate IAMKit as an identity layer across multiple services. | Teams that want to pick and compose identity building blocks for a custom architecture. | Teams that want a battle-tested platform with broad enterprise protocol support (SAML, LDAP/AD) and minimal custom UI work. |
+| **Main trade-off** | You own the signup flow and login UI. No SAML/LDAP or built-in MFA yet. | You pick the pieces and own the glue — more architectural decisions upfront. | You work within Keycloak's realm/client/flow model — flexibility comes through configuration, not code. |
 
-Choose based on requirements, not just container count. If you need ready-made
-self-registration, MFA, broad enterprise federation or a mature operational track
-record today, evaluate those needs against established platforms first.
+All three support SSO via OIDC. Choose based on your requirements: if you need
+SAML, LDAP/AD or built-in MFA today, evaluate Keycloak. If you want fully
+modular, independent components, evaluate Ory. If you want one binary that
+covers identity, access control and multi-tenant boundaries — whether for a
+single product or as a shared identity layer across services — IAMKit is built
+for that.
 
-Official references: [Ory projects](https://www.ory.com/docs/oss/getting-started),
-[Keycloak capabilities](https://www.keycloak.org/).
+Official references: [Ory](https://www.ory.com/docs/oss/getting-started),
+[Keycloak](https://www.keycloak.org/).
 
 ## Get started
 
