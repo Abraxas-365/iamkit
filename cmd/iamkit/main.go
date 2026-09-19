@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -67,8 +69,51 @@ func run() error {
 		return nil
 	}
 	if len(os.Args) > 1 {
-		return errx.Validation("usage: iamkit [bootstrap|recover-owner --email EMAIL --workspace NAME_OR_ID --output FILE]")
+		return errx.Validation("usage: iamkit [migrate | bootstrap | recover-owner] (see --help)")
 	}
+
+	// ── Auto-migrate ──────────────────────────────────────────────────
+	log.Println("iamkit: running migrations…")
+	if err = migrations.Apply(context.Background(), db); err != nil {
+		return err
+	}
+	log.Println("iamkit: migrations up to date")
+
+	// ── Auto-bootstrap (first boot only) ──────────────────────────────
+	if email := os.Getenv("IAMKIT_BOOTSTRAP_EMAIL"); email != "" {
+		workspace := os.Getenv("IAMKIT_BOOTSTRAP_WORKSPACE")
+		if workspace == "" {
+			workspace = "Default"
+		}
+		mgmt := bootstrap.ManagementWithPasswords(db)
+		raw, err := mgmt.Bootstrap(context.Background(), email, workspace)
+		if err != nil {
+			var ex *errx.Error
+			if errors.As(err, &ex) && ex.Type == errx.TypeConflict {
+				// Already bootstrapped — skip silently.
+				log.Println("iamkit: workspace already exists, skipping bootstrap")
+			} else {
+				return err
+			}
+		} else {
+			log.Printf("iamkit: bootstrapped workspace %q with operator %s", workspace, email)
+			log.Printf("iamkit: management API key (expires in 24h): %s", raw)
+
+			// If a password was provided, set it immediately so Login works.
+			if password := os.Getenv("IAMKIT_BOOTSTRAP_PASSWORD"); password != "" {
+				p, err := mgmt.Authenticate(context.Background(), raw)
+				if err != nil {
+					return fmt.Errorf("auto-bootstrap: authenticate to set password: %w", err)
+				}
+				if err = mgmt.SetPassword(context.Background(), p, password); err != nil {
+					return fmt.Errorf("auto-bootstrap: set password: %w", err)
+				}
+				log.Println("iamkit: operator password set from IAMKIT_BOOTSTRAP_PASSWORD")
+			}
+		}
+	}
+
+	// ── Serve ─────────────────────────────────────────────────────────
 	s, err := bootstrap.FromEnvironment(db)
 	if err != nil {
 		return err

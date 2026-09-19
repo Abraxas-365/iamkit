@@ -19,6 +19,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/authzmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/fedmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/impmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtmodule"
@@ -64,7 +65,16 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	return s
 }
 func Management(db *sqlx.DB) *mgmtsvc.Service {
-	return mgmtsvc.New(mgmtpg.New(db), mgmtsecret.Generator{})
+	repo := mgmtpg.New(db)
+	return mgmtsvc.New(repo, repo, mgmtsecret.Generator{}, nil)
+}
+
+// ManagementWithPasswords returns a management service that can also set
+// passwords. Used by the auto-bootstrap flow where IAMKIT_BOOTSTRAP_PASSWORD
+// is set.
+func ManagementWithPasswords(db *sqlx.DB) *mgmtsvc.Service {
+	repo := mgmtpg.New(db)
+	return mgmtsvc.New(repo, repo, mgmtsecret.Generator{}, mgmtbcrypt.Hasher{})
 }
 func OpenDatabase() (*sqlx.DB, error) {
 	dsn := os.Getenv("DATABASE_URL")

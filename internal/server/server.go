@@ -51,7 +51,10 @@ func (s *Server) App() *fiber.App {
 		return c.JSON(fiber.Map{"status": "healthy", "service": "iamkit"})
 	})
 	app.Get("/.well-known/jwks.json", s.Tokens.JWKS)
-	control := app.Group("/management/v1", s.Control.Authenticate)
+	// Operator login is unauthenticated — registered outside the auth middleware.
+	mgmt := app.Group("/management/v1")
+	mgmt.Post("/login", limiter.New(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Control.Login)
+	control := mgmt.Group("", s.Control.Authenticate)
 	s.managementRoutes(control)
 	auth := app.Group("/identity/v1")
 	auth.Post("/login", limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Auth.Login)

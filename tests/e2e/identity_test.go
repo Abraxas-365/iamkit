@@ -105,13 +105,13 @@ func TestIdentityIsolationJourney(t *testing.T) {
 	orgA := makeID(base+"/organizations", fiber.Map{"name": "Acme"})
 	orgB := makeID(base+"/organizations", fiber.Map{"name": "Globex"})
 	client := makeID(base+"/applications", fiber.Map{"name": "iam", "redirect_uris": []string{"https://app.example/callback"}})
-	resource := makeID(base+"/resources", fiber.Map{"name": "Billing", "audience": "https://billing.example", "permissions": []string{"invoices:read", "invoices:write"}})
-	devresource := makeID(devbase+"/resources", fiber.Map{"name": "Billing", "audience": "https://billing.example", "permissions": []string{"invoices:read"}})
+	resource := makeID(base+"/resources", fiber.Map{"name": "Billing", "prefix": "invoices", "audience": "https://billing.example", "permissions": []string{"invoices:read", "invoices:write"}})
+	devresource := makeID(devbase+"/resources", fiber.Map{"name": "Billing", "prefix": "invoices", "audience": "https://billing.example", "permissions": []string{"invoices:read"}})
 	call("POST", base+"/application-resources", owner, fiber.Map{"application_id": client, "resource_id": devresource}, 409)
 	call("POST", base+"/application-resources", owner, fiber.Map{"application_id": client, "resource_id": resource}, 201)
-	call("POST", base+"/memberships", owner, fiber.Map{"organization_id": orgA, "user_id": devuser, "role": "owner"}, 409)
+	call("POST", base+"/memberships", owner, fiber.Map{"organization_id": orgA, "user_id": devuser}, 409)
 	for _, org := range []string{orgA, orgB} {
-		call("POST", base+"/memberships", owner, fiber.Map{"organization_id": org, "user_id": user, "role": "owner"}, 201)
+		call("POST", base+"/memberships", owner, fiber.Map{"organization_id": org, "user_id": user}, 201)
 	}
 	grant := fiber.Map{"organization_id": orgA, "user_id": user, "resource_id": resource, "permissions": []string{"iam:*"}}
 	call("PUT", base+"/grants", owner, grant, 400)
@@ -141,6 +141,14 @@ func TestIdentityIsolationJourney(t *testing.T) {
 	if claimsB["organization_id"] != orgB || claimsB["sub"] != user {
 		t.Fatal("membership duplicated identity")
 	}
+	// Every environment gets a system "iam" resource; iam:members:write lets a
+	// user add org members through the user-facing API without a hardcoded role.
+	var iamResource string
+	if err = db.Get(&iamResource, `SELECT id FROM resources WHERE environment_id=$1 AND prefix='iam'`, env); err != nil {
+		t.Fatal(err)
+	}
+	call("POST", "/identity/v1/memberships", token, fiber.Map{"environment_id": env, "audience": "https://billing.example", "user_id": member}, 403)
+	call("PUT", base+"/grants", owner, fiber.Map{"organization_id": orgA, "user_id": user, "resource_id": iamResource, "permissions": []string{"iam:members:write"}}, 200)
 	call("POST", "/identity/v1/memberships", token, fiber.Map{"environment_id": env, "audience": "https://billing.example", "user_id": member}, 201)
 	call("POST", "/identity/v1/memberships", token, fiber.Map{"environment_id": env, "audience": "https://billing.example", "user_id": devuser}, 409)
 	// Even a correctly signed legacy-shaped token carrying iam:* has no management authority.
