@@ -11,6 +11,18 @@ import (
 	"github.com/Abraxas-365/iamkit/sdk/apierror"
 )
 
+func TestNew(t *testing.T) {
+	c := New("http://localhost:8080/", "ik_scim_test")
+	if c.baseURL != "http://localhost:8080" {
+		t.Fatalf("trailing slash not trimmed: %s", c.baseURL)
+	}
+	custom := &http.Client{}
+	c2 := New("http://localhost", "ik_scim_x", WithHTTPClient(custom))
+	if c2.http != custom {
+		t.Fatal("WithHTTPClient not applied")
+	}
+}
+
 func TestProvisioningClient(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer ik_scim_test" {
@@ -24,7 +36,7 @@ func TestProvisioningClient(t *testing.T) {
 		json.NewEncoder(w).Encode(User{ID: "user-1", UserName: "a@example.com"})
 	}))
 	defer srv.Close()
-	c := Client{BaseURL: srv.URL, Secret: "ik_scim_test"}
+	c := New(srv.URL, "ik_scim_test")
 	ctx := context.Background()
 	u, err := c.Create(ctx, User{UserName: "a@example.com"})
 	if err != nil || u.ID != "user-1" {
@@ -38,8 +50,8 @@ func TestProvisioningClient(t *testing.T) {
 	if _, err = c.Get(ctx, "../x"); err == nil {
 		t.Fatal("unsafe path")
 	}
-	c.Secret = "ik_mgmt_wrong"
-	if _, err = c.Get(ctx, "user-1"); err == nil {
+	bad := New(srv.URL, "ik_mgmt_wrong")
+	if _, err = bad.Get(ctx, "user-1"); err == nil {
 		t.Fatal("management credential accepted")
 	}
 }

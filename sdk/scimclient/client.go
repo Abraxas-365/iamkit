@@ -1,4 +1,7 @@
 // Package scimclient provisions organization memberships using scoped credentials.
+//
+//	client := scimclient.New("http://localhost:8080", "ik_scim_...")
+//	user, err := client.Create(ctx, scimclient.User{...})
 package scimclient
 
 import (
@@ -15,16 +18,36 @@ import (
 	"github.com/Abraxas-365/iamkit/sdk/apierror"
 )
 
+// Client calls IAMKit's SCIM 2.0 provisioning API.
 type Client struct {
-	BaseURL string
-	Secret  string
-	HTTP    *http.Client
+	baseURL string
+	secret  string
+	http    *http.Client
 }
+
+// Option configures the SCIM client.
+type Option func(*Client)
+
+// WithHTTPClient overrides the default http.Client.
+func WithHTTPClient(c *http.Client) Option {
+	return func(cl *Client) { cl.http = c }
+}
+
+// New creates a SCIM client. secret must be an ik_scim_ credential.
+func New(baseURL, secret string, opts ...Option) *Client {
+	c := &Client{baseURL: strings.TrimRight(baseURL, "/"), secret: secret}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
+}
+
 type Enterprise struct {
 	Manager struct {
 		Value string `json:"value"`
 	} `json:"manager"`
 }
+
 type User struct {
 	Schemas     []string    `json:"schemas,omitempty"`
 	ID          string      `json:"id,omitempty"`
@@ -34,20 +57,22 @@ type User struct {
 	Active      *bool       `json:"active,omitempty"`
 	Enterprise  *Enterprise `json:"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User,omitempty"`
 }
+
 type List struct {
 	TotalResults int    `json:"totalResults"`
 	StartIndex   int    `json:"startIndex"`
 	ItemsPerPage int    `json:"itemsPerPage"`
 	Resources    []User `json:"Resources"`
 }
+
 type Operation struct {
 	Op    string `json:"op"`
 	Path  string `json:"path,omitempty"`
 	Value any    `json:"value"`
 }
 
-func (c Client) request(ctx context.Context, method, path string, input, output any) error {
-	if !strings.HasPrefix(c.Secret, "ik_scim_") {
+func (c *Client) request(ctx context.Context, method, path string, input, output any) error {
+	if !strings.HasPrefix(c.secret, "ik_scim_") {
 		return fmt.Errorf("provisioning credential required")
 	}
 	var body bytes.Buffer
@@ -56,13 +81,13 @@ func (c Client) request(ctx context.Context, method, path string, input, output 
 			return err
 		}
 	}
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.BaseURL, "/")+"/scim/v2"+path, &body)
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+"/scim/v2"+path, &body)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.Secret)
+	req.Header.Set("Authorization", "Bearer "+c.secret)
 	req.Header.Set("Content-Type", "application/scim+json")
-	transport := c.HTTP
+	transport := c.http
 	if transport == nil {
 		transport = http.DefaultClient
 	}
@@ -85,18 +110,23 @@ func (c Client) request(ctx context.Context, method, path string, input, output 
 	}
 	return json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(output)
 }
+
 func userPath(id string) (string, error) {
 	if id == "" || strings.ContainsAny(id, "/\\?#.%") {
 		return "", fmt.Errorf("invalid user ID")
 	}
 	return "/Users/" + id, nil
 }
-func (c Client) Create(ctx context.Context, input User) (User, error) {
+
+// Create provisions a new user.
+func (c *Client) Create(ctx context.Context, input User) (User, error) {
 	var out User
 	err := c.request(ctx, "POST", "/Users", input, &out)
 	return out, err
 }
-func (c Client) Get(ctx context.Context, id string) (User, error) {
+
+// Get retrieves a user by ID.
+func (c *Client) Get(ctx context.Context, id string) (User, error) {
 	var out User
 	path, err := userPath(id)
 	if err != nil {
@@ -105,13 +135,17 @@ func (c Client) Get(ctx context.Context, id string) (User, error) {
 	err = c.request(ctx, "GET", path, nil, &out)
 	return out, err
 }
-func (c Client) List(ctx context.Context, filter string, start, count int) (List, error) {
+
+// List queries users with a SCIM filter.
+func (c *Client) List(ctx context.Context, filter string, start, count int) (List, error) {
 	var out List
 	q := url.Values{"filter": {filter}, "startIndex": {strconv.Itoa(start)}, "count": {strconv.Itoa(count)}}
 	err := c.request(ctx, "GET", "/Users?"+q.Encode(), nil, &out)
 	return out, err
 }
-func (c Client) Replace(ctx context.Context, id string, input User) (User, error) {
+
+// Replace fully replaces a user.
+func (c *Client) Replace(ctx context.Context, id string, input User) (User, error) {
 	var out User
 	path, err := userPath(id)
 	if err != nil {
@@ -120,7 +154,9 @@ func (c Client) Replace(ctx context.Context, id string, input User) (User, error
 	err = c.request(ctx, "PUT", path, input, &out)
 	return out, err
 }
-func (c Client) Patch(ctx context.Context, id string, operations []Operation) (User, error) {
+
+// Patch applies partial updates to a user.
+func (c *Client) Patch(ctx context.Context, id string, operations []Operation) (User, error) {
 	var out User
 	path, err := userPath(id)
 	if err != nil {
@@ -129,7 +165,9 @@ func (c Client) Patch(ctx context.Context, id string, operations []Operation) (U
 	err = c.request(ctx, "PATCH", path, map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:PatchOp"}, "Operations": operations}, &out)
 	return out, err
 }
-func (c Client) Delete(ctx context.Context, id string) error {
+
+// Delete removes a user.
+func (c *Client) Delete(ctx context.Context, id string) error {
 	path, err := userPath(id)
 	if err != nil {
 		return err
