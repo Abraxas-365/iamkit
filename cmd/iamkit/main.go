@@ -6,15 +6,15 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/bootstrap"
-	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/migrations"
 )
 
@@ -78,11 +78,11 @@ func run() error {
 	}
 
 	// ── Auto-migrate ──────────────────────────────────────────────────
-	log.Println("iamkit: running migrations…")
+	slog.Info("running migrations")
 	if err = migrations.Apply(context.Background(), db); err != nil {
 		return err
 	}
-	log.Println("iamkit: migrations up to date")
+	slog.Info("migrations up to date")
 
 	// ── Auto-bootstrap (first boot only) ──────────────────────────────
 	if email := os.Getenv("IAMKIT_BOOTSTRAP_EMAIL"); email != "" {
@@ -96,13 +96,13 @@ func run() error {
 			var ex *errx.Error
 			if errors.As(err, &ex) && ex.Type == errx.TypeConflict {
 				// Already bootstrapped — skip silently.
-				log.Println("iamkit: workspace already exists, skipping bootstrap")
+				slog.Info("workspace already exists, skipping bootstrap")
 			} else {
 				return err
 			}
 		} else {
-			log.Printf("iamkit: bootstrapped workspace %q with operator %s", workspace, email)
-			log.Printf("iamkit: management API key (expires in 24h): %s", raw)
+			slog.Info("bootstrapped workspace", "workspace", workspace, "operator", email)
+			fmt.Printf("iamkit: management API key (expires in 24h): %s\n", raw)
 
 			// If a password was provided, set it immediately so Login works.
 			if password := os.Getenv("IAMKIT_BOOTSTRAP_PASSWORD"); password != "" {
@@ -113,7 +113,7 @@ func run() error {
 				if err = mgmt.SetPassword(context.Background(), p, password); err != nil {
 					return fmt.Errorf("auto-bootstrap: set password: %w", err)
 				}
-				log.Println("iamkit: operator password set from IAMKIT_BOOTSTRAP_PASSWORD")
+				slog.Info("operator password set from IAMKIT_BOOTSTRAP_PASSWORD")
 			}
 		}
 	}
@@ -132,10 +132,12 @@ func run() error {
 	defer stop()
 	done := make(chan error, 1)
 	go func() { done <- app.Listen(":" + port) }()
+	slog.Info("server listening", "port", port)
 	select {
 	case err = <-done:
 		return err
 	case <-ctx.Done():
+		slog.Info("shutting down")
 		return app.ShutdownWithTimeout(10 * time.Second)
 	}
 }

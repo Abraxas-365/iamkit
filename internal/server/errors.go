@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -41,6 +42,16 @@ func errorHandler(c *fiber.Ctx, err error) error {
 		} else {
 			custom = errx.Internal("internal server error")
 		}
+	}
+	// 5xx causes never reach the client, so they must be logged here or lost.
+	if custom.HTTPStatus >= 500 {
+		slog.ErrorContext(c.Context(), "request failed",
+			"method", c.Method(),
+			"path", c.Path(),
+			"status", custom.HTTPStatus,
+			"code", custom.Code,
+			"err", custom.Error(),
+		)
 	}
 	// Never serialize causes or internal details, including wrapped database errors.
 	public := *custom

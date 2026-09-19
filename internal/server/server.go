@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"io/fs"
+	"log/slog"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -17,13 +19,11 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning/adapters/provhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/adapters/saccthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/adapters/userhttp"
-	"github.com/Abraxas-365/iamkit/internal/logx"
 	"github.com/Abraxas-365/iamkit/internal/server/apiauth"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"time"
 )
 
 // APIHandlerSet groups the handler instances used by the /api/v1/* route group.
@@ -81,13 +81,13 @@ type Server struct {
 func requestLogger(c *fiber.Ctx) error {
 	start := time.Now()
 	err := c.Next()
-	logx.WithFields(logx.Fields{
-		"method":  c.Method(),
-		"path":    c.Path(),
-		"status":  c.Response().StatusCode(),
-		"latency": time.Since(start).String(),
-		"ip":      c.IP(),
-	}).Info("request")
+	slog.Info("request",
+		"method", c.Method(),
+		"path", c.Path(),
+		"status", c.Response().StatusCode(),
+		"latency", time.Since(start).String(),
+		"ip", c.IP(),
+	)
 	return err
 }
 

@@ -161,7 +161,12 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 		sendErr = s.delivery.Send(ctx, email, purpose, code)
 	}
 	if sendErr != nil {
-		slog.ErrorContext(ctx, "challenge delivery failed")
+		slog.ErrorContext(ctx, "challenge delivery failed",
+			"challenge", id,
+			"environment", environment,
+			"purpose", purpose,
+			"err", sendErr,
+		)
 		return id, nil
 	}
 	return id, tx.Commit()

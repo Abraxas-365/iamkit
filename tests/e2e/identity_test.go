@@ -46,7 +46,7 @@ func TestIdentityIsolationJourney(t *testing.T) {
 	if err = migrations.Apply(ctx, db); err != nil {
 		t.Fatal("migration replay:", err)
 	}
-	if _, err = db.Exec(`UPDATE iamkit_migrations SET checksum='tampered' WHERE name='001_identity.up.sql'`); err != nil {
+	if _, err = db.Exec(`UPDATE iamkit_migrations SET checksum='tampered' WHERE name='001_initial.up.sql'`); err != nil {
 		t.Fatal(err)
 	}
 	if err = migrations.Apply(ctx, db); err == nil {
