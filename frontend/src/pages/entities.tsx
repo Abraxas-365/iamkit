@@ -10,6 +10,7 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
+import { CollapsibleScopes } from '@/components/ui/collapsible-scopes'
 import { PermissionPicker } from '@/components/ui/permission-picker'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ConfirmDialog, DataTable, FormDialog, ID, PageHeader, Status, splitList } from '@/components/library/patterns'
@@ -17,23 +18,6 @@ import type { Field } from '@/components/library/patterns'
 
 type Kind = 'users' | 'organizations' | 'applications' | 'resources' | 'roles' | 'grants'
 
-const SCOPE_PREVIEW = 3
-
-function CollapsibleScopes({ scopes }: { scopes: string[] }) {
-  const [open, setOpen] = useState(false)
-  if (scopes.length <= SCOPE_PREVIEW) {
-    return <div className="flex flex-wrap gap-1">{scopes.map(p => <span key={p} className="inline-block rounded-md bg-secondary px-1.5 py-0.5 font-mono text-xs">{p}</span>)}</div>
-  }
-  const visible = open ? scopes : scopes.slice(0, SCOPE_PREVIEW)
-  return <div className="space-y-1">
-    <div className="flex flex-wrap gap-1">
-      {visible.map(p => <span key={p} className="inline-block rounded-md bg-secondary px-1.5 py-0.5 font-mono text-xs">{p}</span>)}
-    </div>
-    <button type="button" className="text-xs text-primary hover:underline" onClick={() => setOpen(!open)}>
-      {open ? 'Show less' : `+${scopes.length - SCOPE_PREVIEW} more`}
-    </button>
-  </div>
-}
 interface Entity {
   id: string; name?: string; email?: string; active?: boolean; prefix?: string; audience?: string;
   permissions?: string[]; redirect_uris?: string[]; resource_id?: string; resource_name?: string;
@@ -226,7 +210,7 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
     <PaginationBar state={list} noun={kind} placeholder={`Search ${titles[kind].toLowerCase()}…`} />
     <DataTable columns={[...columns, ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(row => {
       const identity = <div className="space-y-1"><p className="font-medium">{row.name}{kind === 'resources' && row.prefix === 'iam' && <span className="ml-2 inline-block rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">System</span>}</p><ID value={row.id} /></div>
-      const permissions = row.permissions?.length ? <CollapsibleScopes scopes={row.permissions} /> : <span className="text-xs text-muted-foreground">No permissions</span>
+      const permissions = row.permissions?.length ? <CollapsibleScopes key={row.id} scopes={row.permissions} /> : <span className="text-xs text-muted-foreground">No permissions</span>
       const cells = kind === 'users' ? [identity, row.email, <Status active={!!row.active} />] :
         kind === 'applications' ? [identity, <span className="text-xs">{row.redirect_uris?.join(', ') || '—'}</span>, <Status active={!!row.active} />] :
           kind === 'resources' ? [identity, <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">{row.prefix}</code>, row.audience, permissions] :

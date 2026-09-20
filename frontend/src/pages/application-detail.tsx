@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/auth'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { CollapsibleScopes } from '@/components/ui/collapsible-scopes'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
 import { ConfirmDialog, DataTable, ID, PageHeader, Status } from '@/components/library/patterns'
@@ -89,7 +90,7 @@ export default function ApplicationDetailPage() {
         retry={linkedResources.reload}
         rows={linkedResources.data.map(r => {
           const scopes = r.permissions?.length
-            ? <div className="flex flex-wrap gap-1">{r.permissions.map(p => <span key={p} className="inline-block rounded-md bg-secondary px-1.5 py-0.5 font-mono text-xs">{p}</span>)}</div>
+            ? <CollapsibleScopes key={r.id} scopes={r.permissions} />
             : <span className="text-xs text-muted-foreground">No scopes</span>
           const cells: React.ReactNode[] = [
             <div className="space-y-1"><p className="font-medium">{r.name}</p><ID value={r.id} /></div>,

@@ -9,6 +9,7 @@ import { message } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { SearchSelect } from '@/components/ui/search-select'
+import { CollapsibleScopes } from '@/components/ui/collapsible-scopes'
 import { PermissionPicker } from '@/components/ui/permission-picker'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -105,7 +106,7 @@ export function ServiceAccountsPage() {
         <div className="space-y-1"><p className="font-medium">{sa.name}</p><ID value={sa.id} /></div>,
         <span className="text-sm">{sa.application_name || <ID value={sa.application_id} />}</span>,
         <span className="text-sm">{sa.resource_name || <ID value={sa.resource_id} />}</span>,
-        sa.permissions?.length ? <div className="flex flex-wrap gap-1">{sa.permissions.map(p => <span key={p} className="inline-block rounded-md bg-secondary px-1.5 py-0.5 font-mono text-xs">{p}</span>)}</div> : <span className="text-xs text-muted-foreground">—</span>,
+        sa.permissions?.length ? <CollapsibleScopes key={sa.id} scopes={sa.permissions} /> : <span className="text-xs text-muted-foreground">—</span>,
         new Date(sa.expires_at).toLocaleString(),
         <Status active={active} />,
       ]
