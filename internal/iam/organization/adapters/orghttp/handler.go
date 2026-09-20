@@ -89,7 +89,13 @@ func (h *Handler) Members(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	out, err := h.queries.Members(c.Context(), env(c), org, httpx.PaginationFromCtx(c))
+	managerID, _ := identity.ParseUserID(c.Query("manager_id"))
+	filter := organization.MemberFilter{ManagerID: managerID}
+	if v := c.Query("active"); v == "true" || v == "false" {
+		b := v == "true"
+		filter.Active = &b
+	}
+	out, err := h.queries.Members(c.Context(), env(c), org, filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

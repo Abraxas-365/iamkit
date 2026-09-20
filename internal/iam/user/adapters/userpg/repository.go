@@ -91,4 +91,49 @@ func (r *Repository) Suspend(ctx context.Context, environment identity.Environme
 	return failure(err, "suspend user")
 }
 
+// Delete permanently erases a user and every row that references it —
+// sessions, refresh tokens, grants, role assignments, position assignments,
+// memberships, external identities, identity challenges, and provisioned
+// identities. This is irreversible; callers that only want to disable sign-in
+// should use Suspend instead.
+func (r *Repository) Delete(ctx context.Context, m user.Mutation, id identity.UserID) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err, "delete user")
+	}
+	defer tx.Rollback()
+	statements := []string{
+		`DELETE FROM refresh_tokens WHERE environment_id=$1 AND session_id IN (SELECT id FROM sessions WHERE environment_id=$1 AND user_id=$2)`,
+		`DELETE FROM sessions WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM grants WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM role_assignments WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM position_assignments WHERE environment_id=$1 AND user_id=$2`,
+		`UPDATE memberships SET manager_id=NULL WHERE environment_id=$1 AND manager_id=$2`,
+		`DELETE FROM memberships WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM external_identities WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM identity_challenges WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM provisioned_identities WHERE environment_id=$1 AND user_id=$2`,
+	}
+	for _, stmt := range statements {
+		if _, err = tx.ExecContext(ctx, stmt, m.Environment, id); err != nil {
+			return failure(err, "delete user")
+		}
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM users WHERE environment_id=$1 AND id=$2`, m.Environment, id)
+	if err != nil {
+		return failure(err, "delete user")
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return failure(err, "delete user")
+	}
+	if n == 0 {
+		return errx.NotFound("resource not found")
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+		return failure(err, "audit user deletion")
+	}
+	return failure(tx.Commit(), "commit user deletion")
+}
+
 var _ user.Repository = (*Repository)(nil)

@@ -22,7 +22,7 @@ interface ExternalIdentity {
   user_id: string; user_name: string; user_email: string
 }
 
-const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id) })
+const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id), inactive: item.active === false })
 
 export default function FederationDetailPage() {
   const { project, environment, connectionId } = useParams()

@@ -50,11 +50,11 @@ func (s *Service) RemoveMember(ctx context.Context, environment identity.Environ
 	}
 	return s.repository.RemoveMember(ctx, environment, org, user)
 }
-func (s *Service) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, page query.Pagination) (query.Paginated[organization.MemberView], error) {
+func (s *Service) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, filter organization.MemberFilter, page query.Pagination) (query.Paginated[organization.MemberView], error) {
 	if org.IsZero() {
 		return query.Paginated[organization.MemberView]{}, errx.NotFound("resource not found")
 	}
-	return s.repository.Members(ctx, environment, org, page)
+	return s.repository.Members(ctx, environment, org, filter, page)
 }
 
 var _ organization.Commands = (*Service)(nil)

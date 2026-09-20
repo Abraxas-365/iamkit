@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { api, type ListResult } from '@/lib/api'
 
-interface Option { id: string; label: string }
+interface Option { id: string; label: string; inactive?: boolean }
 
 interface SearchSelectProps {
   path: string
@@ -30,6 +31,9 @@ export function SearchSelect({ path, mapItem, name, id, defaultValue = '', requi
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState(defaultValue)
   const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
 
   // Debounce search input
   useEffect(() => {
@@ -57,19 +61,54 @@ export function SearchSelect({ path, mapItem, name, id, defaultValue = '', requi
     return () => controller.abort()
   }, [path, debouncedQuery])
 
+  // Close on click outside (check both the input container and the portalled dropdown)
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (ref.current?.contains(target)) return
+      if (dropdownRef.current?.contains(target)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  const selectedLabel = options.find(o => o.id === selected)?.label
+  // Position the dropdown using fixed coordinates so it escapes overflow containers
+  useEffect(() => {
+    if (!open || !inputRef.current) return
+    const rect = inputRef.current.getBoundingClientRect()
+    setDropdownStyle({
+      position: 'fixed',
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+    })
+  }, [open])
+
+  const selectedOption = options.find(o => o.id === selected)
+  const selectedLabel = selectedOption?.label
+
+  const dropdownContent = open && (
+    <div ref={dropdownRef}>
+      {options.length > 0
+        ? <ul style={dropdownStyle} className="z-[100] max-h-48 overflow-auto rounded-lg border bg-popover py-1 text-sm shadow-lg">
+            {options.map(o => <li key={o.id} className={cn('cursor-pointer px-3 py-1.5 hover:bg-accent', o.id === selected && 'bg-accent font-medium')} onMouseDown={e => { e.preventDefault(); setSelected(o.id); setOpen(false); onChange?.(o.id) }}>
+              <span>{o.label}</span>
+              {o.inactive && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Inactive</span>}
+              <span className="ml-2 font-mono text-xs text-muted-foreground">{o.id.slice(0, 8)}…</span>
+            </li>)}
+          </ul>
+        : !loading
+          ? <div style={dropdownStyle} className="z-[100] rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-lg">No matches found</div>
+          : <div style={dropdownStyle} className="z-[100] rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-lg">Searching…</div>
+      }
+    </div>
+  )
 
   return <div ref={ref} className="relative">
     <input type="hidden" name={name} value={selected} />
     <input
+      ref={inputRef}
       id={id}
       type="text"
       role="combobox"
@@ -79,17 +118,10 @@ export function SearchSelect({ path, mapItem, name, id, defaultValue = '', requi
       disabled={disabled || (loading && !open)}
       placeholder={loading && !open ? 'Loading…' : placeholder ?? 'Search…'}
       className={cn('h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30', className)}
-      value={open ? query : (selectedLabel ? `${selectedLabel} (${selected.slice(0, 8)}…)` : selected)}
+      value={open ? query : (selectedLabel ? `${selectedLabel}${selectedOption?.inactive ? ' (inactive)' : ''} (${selected.slice(0, 8)}…)` : selected)}
       onFocus={() => { setOpen(true); setQuery('') }}
       onChange={e => { setQuery(e.target.value); setOpen(true) }}
     />
-    {open && options.length > 0 && <ul className="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border bg-popover py-1 text-sm shadow-lg">
-      {options.map(o => <li key={o.id} className={cn('cursor-pointer px-3 py-1.5 hover:bg-accent', o.id === selected && 'bg-accent font-medium')} onMouseDown={e => { e.preventDefault(); setSelected(o.id); setOpen(false); onChange?.(o.id) }}>
-        <span>{o.label}</span>
-        <span className="ml-2 font-mono text-xs text-muted-foreground">{o.id.slice(0, 8)}…</span>
-      </li>)}
-    </ul>}
-    {open && options.length === 0 && !loading && <div className="absolute z-50 mt-1 w-full rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-lg">No matches found</div>}
-    {open && loading && <div className="absolute z-50 mt-1 w-full rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-lg">Searching…</div>}
+    {dropdownContent && createPortal(dropdownContent, document.body)}
   </div>
 }

@@ -11,6 +11,7 @@ type Commands interface {
 	Create(ctx context.Context, environment identity.EnvironmentID, input Create) (identity.UserID, error)
 	Update(ctx context.Context, m Mutation, user identity.UserID, input Update) error
 	Suspend(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) error
+	Delete(ctx context.Context, m Mutation, user identity.UserID) error
 }
 type Queries interface {
 	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[User], error)
@@ -23,5 +24,6 @@ type Repository interface {
 	Find(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (User, error)
 	Update(ctx context.Context, m Mutation, user identity.UserID, input Update) error
 	Suspend(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) error
+	Delete(ctx context.Context, m Mutation, user identity.UserID) error
 }
 type PasswordHasher interface{ Hash(password string) (string, error) }

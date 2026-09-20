@@ -57,14 +57,21 @@ export function FormDialog({ title, description, fields, submit, onClose }: { ti
     </form>
   </DialogContent></Dialog>
 }
-export function ConfirmDialog({ title, description, confirm, onClose }: { title: string; description: string; confirm: () => Promise<void>; onClose: () => void }) {
+export function ConfirmDialog({ title, description, confirm, onClose, confirmLabel = 'Confirm', confirmationText }: { title: string; description: string; confirm: () => Promise<void>; onClose: () => void; confirmLabel?: string; confirmationText?: string }) {
+  const id = useId()
+  const [confirmation, setConfirmation] = useState('')
+  const confirmed = confirmationText === undefined || confirmation === confirmationText
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const pending = useRef(false)
   return <Dialog open onOpenChange={open => { if (!open && !pending.current) onClose() }}><DialogContent>
     <DialogTitle className="text-base font-semibold">{title}</DialogTitle><DialogDescription className="text-muted-foreground">{description}</DialogDescription>
+    {confirmationText !== undefined && <div className="space-y-2">
+      <label htmlFor={id} className="text-sm">Type <strong className="break-all">{confirmationText}</strong> to confirm</label>
+      <Input id={id} value={confirmation} onChange={e => setConfirmation(e.target.value)} disabled={busy} autoComplete="off" spellCheck={false} />
+    </div>}
     {error && <ErrorState error={error} />}
-    <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={async () => { if (pending.current) return; pending.current = true; setBusy(true); try { await confirm(); onClose() } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) } }}>{busy ? 'Working…' : 'Confirm'}</Button></div>
+    <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button><Button variant="destructive" disabled={busy || !confirmed} onClick={async () => { if (pending.current || !confirmed) return; pending.current = true; setBusy(true); setError(''); try { await confirm(); onClose() } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) } }}>{busy ? 'Working…' : confirmLabel}</Button></div>
   </DialogContent></Dialog>
 }
 export function DataTable({ columns, rows, loading, error, retry }: { columns: string[]; rows: ReactNode[][]; loading: boolean; error: string; retry: () => void }) {

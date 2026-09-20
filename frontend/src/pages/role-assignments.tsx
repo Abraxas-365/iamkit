@@ -14,7 +14,7 @@ interface RoleAssignment {
   resource_id: string; resource_name: string
   role_id: string; role_name: string
 }
-interface Named { id: string; name: string }
+interface Named { id: string; name: string; active?: boolean }
 
 interface Filters { role: string; organization: string; user: string; resource: string }
 const emptyFilters: Filters = { role: '', organization: '', user: '', resource: '' }
@@ -68,7 +68,7 @@ export default function RoleAssignmentsPage() {
       <div className="flex flex-wrap items-center gap-2">
         <FilterSelect label="Role" value={filters.role} options={roles.data.map(r => [r.id, r.name] as [string, string])} onChange={v => updateFilter({ role: v })} />
         <FilterSelect label="Organization" value={filters.organization} options={orgs.data.map(o => [o.id, o.name] as [string, string])} onChange={v => updateFilter({ organization: v })} />
-        <FilterSelect label="User" value={filters.user} options={users.data.map(u => [u.id, u.name] as [string, string])} onChange={v => updateFilter({ user: v })} />
+        <FilterSelect label="User" value={filters.user} options={users.data.map(u => [u.id, u.name + (u.active === false ? ' (inactive)' : '')] as [string, string])} onChange={v => updateFilter({ user: v })} />
         <FilterSelect label="Resource" value={filters.resource} options={resources.data.map(r => [r.id, r.name] as [string, string])} onChange={v => updateFilter({ resource: v })} />
         {hasFilters && <Button variant="ghost" size="sm" onClick={() => { setFilters(emptyFilters); list.setSearch('') }}><X className="size-3.5" /> Clear</Button>}
       </div>

@@ -101,10 +101,20 @@ func (r *Repository) RemoveMember(ctx context.Context, environment identity.Envi
 	_, err := r.db.ExecContext(ctx, `UPDATE memberships SET active=false WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user)
 	return failure(err)
 }
-func (r *Repository) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, page query.Pagination) (query.Paginated[organization.MemberView], error) {
-	base := `FROM memberships m JOIN users u ON u.id=m.user_id WHERE m.environment_id=$1 AND m.organization_id=$2`
+func (r *Repository) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, filter organization.MemberFilter, page query.Pagination) (query.Paginated[organization.MemberView], error) {
+	base := `FROM memberships m JOIN users u ON u.id=m.user_id LEFT JOIN users mgr ON mgr.id=m.manager_id WHERE m.environment_id=$1 AND m.organization_id=$2`
 	args := []any{environment, org}
 	n := 2
+	if !filter.ManagerID.IsZero() {
+		n++
+		base += fmt.Sprintf(" AND m.manager_id=$%d", n)
+		args = append(args, filter.ManagerID)
+	}
+	if filter.Active != nil {
+		n++
+		base += fmt.Sprintf(" AND m.active=$%d", n)
+		args = append(args, *filter.Active)
+	}
 	if like := query.EscapeLike(page.Search); like != "" {
 		n++
 		base += fmt.Sprintf(" AND (u.name ILIKE $%d OR u.email ILIKE $%d)", n, n)
@@ -115,7 +125,7 @@ func (r *Repository) Members(ctx context.Context, environment identity.Environme
 		return query.Paginated[organization.MemberView]{}, failure(err)
 	}
 	out := []organization.MemberView{}
-	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active, m.manager_id, mgr.name AS manager_name %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
 		return query.Paginated[organization.MemberView]{}, failure(err)
 	}
 	return query.NewPaginated(out, total, page), nil

@@ -17,7 +17,7 @@ type Commands interface {
 type Queries interface {
 	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Summary], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Organization, error)
-	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[MemberView], error)
+	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, filter MemberFilter, page query.Pagination) (query.Paginated[MemberView], error)
 }
 
 type Repository interface {
@@ -27,7 +27,7 @@ type Repository interface {
 	Update(ctx context.Context, m Mutation, organization identity.OrganizationID, input Update) error
 	AddMember(ctx context.Context, environment identity.EnvironmentID, input Membership) error
 	RemoveMember(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) error
-	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[MemberView], error)
+	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, filter MemberFilter, page query.Pagination) (query.Paginated[MemberView], error)
 }
 
 type StructureCommands interface {

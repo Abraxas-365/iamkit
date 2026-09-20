@@ -15,6 +15,7 @@ Lists of users, organizations and members use the
 | `GET /users/:id` | User ID | 200 user |
 | `PATCH /users/:id` | Optional `name`, `active`, `otp_enabled`, `metadata` | 204 |
 | `DELETE /users/:id` | User ID | 204; suspend, not erase |
+| `DELETE /users/:id/permanent` | User ID | 204; permanently erases the user and every session, membership, grant, role assignment, position assignment, external identity, provisioned identity, and identity challenge referencing them. Irreversible. |
 
 List items contain only `id,email,name,active`. Use `GET /users/:id` for
 `email_verified,otp_enabled,metadata` as well; missing list fields are not evidence
@@ -25,7 +26,10 @@ string. Password is not a user PATCH field; use the challenge reset workflow.
 
 A user without a password can use linked federation, or OTP if enabled. Creation
 does not establish membership or access. Email verification does not automatically
-follow creation. Suspend rather than assuming deletion removes historical data.
+follow creation. Suspend rather than assuming deletion removes historical data;
+use the `/permanent` endpoint only when the user's data must actually be erased
+(e.g. a GDPR erasure request) — it deletes audit-relevant relationships, not
+just the account.
 
 ## Organizations and memberships
 

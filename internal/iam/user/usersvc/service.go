@@ -60,6 +60,12 @@ func (s *Service) Suspend(ctx context.Context, environment identity.EnvironmentI
 	}
 	return s.repository.Suspend(ctx, environment, id)
 }
+func (s *Service) Delete(ctx context.Context, m user.Mutation, id identity.UserID) error {
+	if id.IsZero() {
+		return errx.NotFound("resource not found")
+	}
+	return s.repository.Delete(ctx, m, id)
+}
 
 var _ user.Commands = (*Service)(nil)
 var _ user.Queries = (*Service)(nil)

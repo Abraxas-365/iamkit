@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Link as LinkIcon, Eye } from 'lucide-react'
+import { Plus, Pencil, Trash2, Link as LinkIcon, Eye, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -33,12 +33,12 @@ const descriptions: Record<Kind, string> = {
   grants: 'Direct resource permissions granted to users within an organization.',
 }
 const titles: Record<Kind, string> = { users: 'Users', organizations: 'Organizations', applications: 'Applications', resources: 'Resources & scopes', roles: 'Roles', grants: 'Grants' }
-const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id) })
+const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id), inactive: item.active === false })
 function fieldsFor(kind: Kind, _base: string, row?: Entity): Field[] {
   const name: Field = { name: 'name', label: 'Name', value: row?.name }
   const permissionTags: Field = { name: 'permissions', label: 'Permissions', type: 'tags', optional: true, tags: row?.permissions ?? [], prefix: row?.prefix, hint: row?.prefix ? `Type an action and press Enter. Auto-prefixed as ${row.prefix}:action.` : 'Define the prefix first — permissions will use it as a namespace.' }
   switch (kind) {
-    case 'users': return row ? [name, { name: 'active', label: 'Active', type: 'checkbox', value: row.active }, { name: 'otp_enabled', label: 'Enable one-time password login', type: 'checkbox', value: row.otp_enabled }, { name: 'metadata', label: 'Metadata (JSON)', optional: true, value: row.metadata ? JSON.stringify(row.metadata) : '', hint: 'Arbitrary JSON object, e.g. {"team":"billing"}' }] : [name, { name: 'email', label: 'Email', type: 'email' }, { name: 'password', label: 'Initial password', type: 'password', optional: true, hint: 'Optional; 12–72 bytes when supplied.' }, { name: 'otp_enabled', label: 'Enable one-time password login', type: 'checkbox' }]
+    case 'users': return row ? [name, { name: 'active', label: 'Active', type: 'checkbox', value: row.active }, { name: 'otp_enabled', label: 'Enable one-time password login', type: 'checkbox', value: row.otp_enabled }, { name: 'metadata', label: 'Metadata (JSON)', optional: true, value: row.metadata ? JSON.stringify(row.metadata) : '', hint: 'Arbitrary JSON object, e.g. {"team":"billing"}' }] : [name, { name: 'email', label: 'Email', type: 'email' }, { name: 'password', label: 'Initial password', type: 'password', optional: true, hint: 'Leave blank for OTP-only or OAuth login. If set, must be 12–72 bytes.' }, { name: 'otp_enabled', label: 'Enable one-time password login', type: 'checkbox' }]
     case 'organizations': return row ? [name, { name: 'active', label: 'Active', type: 'checkbox', value: row.active }, { name: 'metadata', label: 'Metadata (JSON)', optional: true, value: row.metadata ? JSON.stringify(row.metadata) : '', hint: 'Arbitrary JSON object.' }] : [name]
     case 'applications': return [name, { name: 'redirect_uris', label: 'Redirect URIs', type: 'tags', optional: true, tags: row?.redirect_uris ?? [], hint: 'Type a redirect URI and press Enter.' }, ...(row ? [{ name: 'active', label: 'Active', type: 'checkbox' as const, value: row.active }] : [])]
     case 'resources': {
@@ -185,6 +185,7 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
     } else { setEdit(row) }
   }
   const [remove, setRemove] = useState<Entity | null>(null)
+  const [purge, setPurge] = useState<Entity | null>(null)
   const [extra, setExtra] = useState(false)
   const extraConfig = kind === 'applications' ? { title: 'Link resource', path: '/application-resources', fields: [
     { name: 'application_id', label: 'Application', type: 'select' as const, selectPath: `${base}/applications`, selectMap: named },
@@ -220,7 +221,10 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
         {kind === 'organizations' && <Link to={`${envBase}/organizations/${row.id}/members`} className={buttonVariants({ variant: 'ghost', size: 'icon' })} aria-label={`Members of ${row.name}`}><Eye className="size-4" /></Link>}
         {kind === 'applications' && <Link to={`${envBase}/applications/${row.id}`} className={buttonVariants({ variant: 'ghost', size: 'icon' })} aria-label={`Details of ${row.name}`}><Eye className="size-4" /></Link>}
         <Button variant="ghost" size="icon" aria-label={`Edit ${row.name || row.id}`} onClick={() => openEdit(row)}><Pencil /></Button>
-        {canDelete && <Button variant="ghost" size="icon" aria-label={`${kind === 'users' ? 'Suspend' : 'Delete'} ${row.name || row.id}`} onClick={() => setRemove(row)}><Trash2 /></Button>}
+        {kind === 'users' ? <>
+          {row.active && <Button variant="ghost" size="sm" aria-label={`Suspend ${row.name || row.id}`} onClick={() => setRemove(row)}><UserX />Suspend</Button>}
+          <Button variant="ghost" size="sm" className="text-destructive" aria-label={`Permanently delete ${row.name || row.id}`} onClick={() => setPurge(row)}><Trash2 />Delete permanently</Button>
+        </> : canDelete && <Button variant="ghost" size="icon" aria-label={`Delete ${row.name || row.id}`} onClick={() => setRemove(row)}><Trash2 /></Button>}
       </div>)
       return cells
     })} />
@@ -236,6 +240,7 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
       list.reload()
     }} />}
     {remove && <ConfirmDialog title={kind === 'users' ? 'Suspend user?' : 'Delete access configuration?'} description={`This affects ${remove.name || remove.id} in the current environment. ${kind === 'users' ? 'You can reactivate the user by editing their status.' : 'This action cannot be undone.'}`} onClose={() => setRemove(null)} confirm={async () => { await api.delete(`${path}/${remove.id}`); list.reload() }} />}
+    {purge && <ConfirmDialog title="Permanently delete user?" description={`This erases ${purge.name || purge.id} and every session, membership, grant, role assignment, and linked identity for them in this environment. This cannot be undone.`} confirmLabel="Delete permanently" confirmationText={purge.name || purge.id} onClose={() => setPurge(null)} confirm={async () => { await api.delete(`${path}/${purge.id}/permanent`); list.reload() }} />}
     {extra && extraConfig && <FormDialog title={extraConfig.title} description="Enter the IDs from this environment's list screens." fields={extraConfig.fields} onClose={() => setExtra(false)} submit={async values => { await api.post(`${base}${extraConfig.path}`, values) }} />}
   </div>
 }
