@@ -60,7 +60,7 @@ export default function SetupPage() {
       const confirm = String(data.get('confirm') ?? '')
       if (password !== confirm) { setError('Passwords do not match.'); return }
       const bytes = new TextEncoder().encode(password).length
-      if (bytes < 12 || bytes > 72) { setError('Password must be 12–72 bytes.'); return }
+      if (bytes < 12 || bytes > 72) { setError('Password must be 12–72 characters long.'); return }
       pending.current = true; setBusy(true); setError('')
       try {
         await request('/password', {
@@ -80,7 +80,7 @@ export default function SetupPage() {
         <label htmlFor="confirm-password">Confirm password</label>
         <Input id="confirm-password" name="confirm" type="password" required autoComplete="new-password" disabled={busy} />
       </div>
-      <p className="text-xs text-muted-foreground">Use a unique password of 12–72 bytes.</p>
+      <p className="text-xs text-muted-foreground">Use a unique password between 12 and 72 characters long.</p>
       {error && <ErrorState error={error} />}
       <Button className="w-full" type="submit" disabled={busy}>{busy ? 'Setting password…' : 'Set password'}</Button>
     </form>}

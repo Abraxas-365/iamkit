@@ -103,7 +103,7 @@ func (s *Service) Logout(ctx context.Context, raw string) error {
 }
 func (s *Service) SetPassword(ctx context.Context, p management.Principal, password string) error {
 	if len(password) < config.PasswordMinLength || len(password) > config.PasswordMaxLength {
-		return errx.Validation("password must be 12-72 bytes")
+		return errx.Validation("password must be 12-72 characters long")
 	}
 	hash, err := s.passwords.Hash(password)
 	if err != nil {

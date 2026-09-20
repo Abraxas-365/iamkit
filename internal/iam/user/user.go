@@ -30,7 +30,7 @@ func (c Create) Validate() error {
 		return errx.Validation("user name is required")
 	}
 	if c.Password != "" && (len(c.Password) < config.PasswordMinLength || len(c.Password) > config.PasswordMaxLength) {
-		return errx.Validation("password must be 12-72 bytes")
+		return errx.Validation("password must be 12-72 characters long")
 	}
 	return nil
 }

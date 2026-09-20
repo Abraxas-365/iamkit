@@ -58,8 +58,8 @@ export function SettingsPage() {
     const password = String(data.get('password'))
     if (password !== data.get('confirm')) { setError('Passwords do not match.'); return }
     const bytes = new TextEncoder().encode(password).length
-    if (bytes < 12 || bytes > 72) { setError('Password must be 12–72 bytes.'); return }
+    if (bytes < 12 || bytes > 72) { setError('Password must be 12–72 characters long.'); return }
     pending.current = true; setBusy(true); setError('')
     try { await api.post('/password', { password }); form.reset(); toast.success('Password updated') } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
-  }}><h2 className="font-mono font-medium">Change password</h2><p className="text-sm text-muted-foreground">Use a unique password of 12–72 bytes.</p><div className="space-y-1.5"><label htmlFor="new-password">New password</label><Input id="new-password" name="password" type="password" autoComplete="new-password" required disabled={busy} /></div><div className="space-y-1.5"><label htmlFor="confirm-password">Confirm password</label><Input id="confirm-password" name="confirm" type="password" autoComplete="new-password" required disabled={busy} /></div>{error && <ErrorState error={error} />}<Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Update password'}</Button></form></Card></div>
+  }}><h2 className="font-mono font-medium">Change password</h2><p className="text-sm text-muted-foreground">Use a unique password between 12 and 72 characters long.</p><div className="space-y-1.5"><label htmlFor="new-password">New password</label><Input id="new-password" name="password" type="password" autoComplete="new-password" required disabled={busy} /></div><div className="space-y-1.5"><label htmlFor="confirm-password">Confirm password</label><Input id="confirm-password" name="confirm" type="password" autoComplete="new-password" required disabled={busy} /></div>{error && <ErrorState error={error} />}<Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Update password'}</Button></form></Card></div>
 }
