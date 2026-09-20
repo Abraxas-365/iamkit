@@ -137,9 +137,7 @@ func (e Environment) CreateServiceAccount(ctx context.Context, input ServiceAcco
 }
 
 func (e Environment) ServiceAccounts(ctx context.Context) ([]ServiceAccount, error) {
-	var out []ServiceAccount
-	err := e.operation(ctx, "GET", []string{"service-accounts"}, nil, &out)
-	return out, err
+	return listOp[ServiceAccount](e, ctx, []string{"service-accounts"})
 }
 
 func (e Environment) RevokeServiceAccount(ctx context.Context, id string) error {
@@ -155,9 +153,7 @@ func (e Environment) CreateProvisioningCredential(ctx context.Context, input Cre
 }
 
 func (e Environment) ProvisioningCredentials(ctx context.Context) ([]Credential, error) {
-	var out []Credential
-	err := e.operation(ctx, "GET", []string{"provisioning-credentials"}, nil, &out)
-	return out, err
+	return listOp[Credential](e, ctx, []string{"provisioning-credentials"})
 }
 
 func (e Environment) RevokeProvisioningCredential(ctx context.Context, id string) error {
@@ -173,9 +169,7 @@ func (e Environment) CreateOAuthClient(ctx context.Context, input OAuthClient) (
 }
 
 func (e Environment) OAuthClients(ctx context.Context) ([]OAuthCredential, error) {
-	var out []OAuthCredential
-	err := e.operation(ctx, "GET", []string{"oauth-clients"}, nil, &out)
-	return out, err
+	return listOp[OAuthCredential](e, ctx, []string{"oauth-clients"})
 }
 
 func (e Environment) DisableOAuthClient(ctx context.Context, id string) error {
@@ -191,9 +185,7 @@ func (e Environment) CreateFederation(ctx context.Context, input Federation) (Cr
 }
 
 func (e Environment) FederationConnections(ctx context.Context) ([]Federation, error) {
-	var out []Federation
-	err := e.operation(ctx, "GET", []string{"federation-connections"}, nil, &out)
-	return out, err
+	return listOp[Federation](e, ctx, []string{"federation-connections"})
 }
 
 func (e Environment) FederationConnection(ctx context.Context, id string) (Federation, error) {
@@ -203,9 +195,7 @@ func (e Environment) FederationConnection(ctx context.Context, id string) (Feder
 }
 
 func (e Environment) FederationIdentities(ctx context.Context, id string) ([]ExternalIdentity, error) {
-	var out []ExternalIdentity
-	err := e.operation(ctx, "GET", []string{"federation-connections", id, "identities"}, nil, &out)
-	return out, err
+	return listOp[ExternalIdentity](e, ctx, []string{"federation-connections", id, "identities"})
 }
 
 func (e Environment) DisableFederation(ctx context.Context, id string) error {
@@ -229,9 +219,7 @@ func (e Environment) LinkProvisionedIdentity(ctx context.Context, connection, us
 // ── Sessions & Audit ──
 
 func (e Environment) Sessions(ctx context.Context) ([]Session, error) {
-	var out []Session
-	err := e.operation(ctx, "GET", []string{"sessions"}, nil, &out)
-	return out, err
+	return listOp[Session](e, ctx, []string{"sessions"})
 }
 
 func (e Environment) RevokeSession(ctx context.Context, id string) error {
@@ -239,9 +227,7 @@ func (e Environment) RevokeSession(ctx context.Context, id string) error {
 }
 
 func (e Environment) AuditEvents(ctx context.Context) ([]AuditEvent, error) {
-	var out []AuditEvent
-	err := e.operation(ctx, "GET", []string{"audit-events"}, nil, &out)
-	return out, err
+	return listOp[AuditEvent](e, ctx, []string{"audit-events"})
 }
 
 // ── Impersonation ──

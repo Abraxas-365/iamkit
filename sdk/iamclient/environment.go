@@ -23,6 +23,42 @@ func (e Environment) path(collection string) string {
 	return "/environments/" + e.id + "/" + collection
 }
 
+// paginated wraps the list response envelope: {"items":[...],"page":{...}}.
+type paginated[T any] struct {
+	Items []T `json:"items"`
+}
+
+// list fetches a paginated collection and unwraps the items.
+func list[T any](e Environment, ctx context.Context, collection string) ([]T, error) {
+	var out paginated[T]
+	err := e.client.Do(ctx, "GET", e.path(collection), nil, &out)
+	if err != nil {
+		return nil, err
+	}
+	if out.Items == nil {
+		return []T{}, nil
+	}
+	return out.Items, nil
+}
+
+// listOp is like list but uses operation (path segments with validation).
+func listOp[T any](e Environment, ctx context.Context, parts []string) ([]T, error) {
+	for _, part := range parts {
+		if err := safeSegment(part); err != nil {
+			return nil, err
+		}
+	}
+	var out paginated[T]
+	err := e.client.Do(ctx, "GET", e.path(strings.Join(parts, "/")), nil, &out)
+	if err != nil {
+		return nil, err
+	}
+	if out.Items == nil {
+		return []T{}, nil
+	}
+	return out.Items, nil
+}
+
 // ── Shared types ──
 
 type Created struct {
@@ -111,9 +147,7 @@ func (e Environment) CreateUser(ctx context.Context, input CreateUser) (Created,
 }
 
 func (e Environment) Users(ctx context.Context) ([]User, error) {
-	var out []User
-	err := e.client.Do(ctx, "GET", e.path("users"), nil, &out)
-	return out, err
+	return list[User](e, ctx, "users")
 }
 
 func (e Environment) User(ctx context.Context, id string) (User, error) {
@@ -139,9 +173,7 @@ func (e Environment) CreateOrganization(ctx context.Context, name string) (Creat
 }
 
 func (e Environment) Organizations(ctx context.Context) ([]Organization, error) {
-	var out []Organization
-	err := e.client.Do(ctx, "GET", e.path("organizations"), nil, &out)
-	return out, err
+	return list[Organization](e, ctx, "organizations")
 }
 
 func (e Environment) Organization(ctx context.Context, id string) (Organization, error) {
@@ -159,9 +191,7 @@ func (e Environment) AddMember(ctx context.Context, input Membership) error {
 }
 
 func (e Environment) Members(ctx context.Context, org string) ([]Membership, error) {
-	var out []Membership
-	err := e.operation(ctx, "GET", []string{"organizations", org, "members"}, nil, &out)
-	return out, err
+	return listOp[Membership](e, ctx, []string{"organizations", org, "members"})
 }
 
 func (e Environment) RemoveMember(ctx context.Context, org, user string) error {
@@ -181,9 +211,7 @@ func (e Environment) CreateApplication(ctx context.Context, input Application) (
 }
 
 func (e Environment) Applications(ctx context.Context) ([]Application, error) {
-	var out []Application
-	err := e.client.Do(ctx, "GET", e.path("applications"), nil, &out)
-	return out, err
+	return list[Application](e, ctx, "applications")
 }
 
 func (e Environment) Application(ctx context.Context, id string) (Application, error) {
@@ -205,9 +233,7 @@ func (e Environment) CreateResource(ctx context.Context, input Resource) (Create
 }
 
 func (e Environment) Resources(ctx context.Context) ([]Resource, error) {
-	var out []Resource
-	err := e.client.Do(ctx, "GET", e.path("resources"), nil, &out)
-	return out, err
+	return list[Resource](e, ctx, "resources")
 }
 
 func (e Environment) Resource(ctx context.Context, id string) (Resource, error) {
@@ -229,9 +255,7 @@ func (e Environment) UnbindResource(ctx context.Context, application, resource s
 }
 
 func (e Environment) ApplicationResources(ctx context.Context, application string) ([]Resource, error) {
-	var out []Resource
-	err := e.operation(ctx, "GET", []string{"applications", application, "resources"}, nil, &out)
-	return out, err
+	return listOp[Resource](e, ctx, []string{"applications", application, "resources"})
 }
 
 // ── Grants ──
@@ -243,9 +267,7 @@ func (e Environment) PutGrant(ctx context.Context, input Grant) (Created, error)
 }
 
 func (e Environment) Grants(ctx context.Context) ([]Grant, error) {
-	var out []Grant
-	err := e.client.Do(ctx, "GET", e.path("grants"), nil, &out)
-	return out, err
+	return list[Grant](e, ctx, "grants")
 }
 
 func (e Environment) Grant(ctx context.Context, id string) (Grant, error) {
@@ -267,9 +289,7 @@ func (e Environment) CreateRole(ctx context.Context, input Role) (Created, error
 }
 
 func (e Environment) Roles(ctx context.Context) ([]Role, error) {
-	var out []Role
-	err := e.client.Do(ctx, "GET", e.path("roles"), nil, &out)
-	return out, err
+	return list[Role](e, ctx, "roles")
 }
 
 func (e Environment) Role(ctx context.Context, id string) (Role, error) {
@@ -293,9 +313,7 @@ func (e Environment) AssignRole(ctx context.Context, input RoleAssignment) error
 }
 
 func (e Environment) RoleAssignments(ctx context.Context) ([]RoleAssignment, error) {
-	var out []RoleAssignment
-	err := e.client.Do(ctx, "GET", e.path("role-assignments"), nil, &out)
-	return out, err
+	return list[RoleAssignment](e, ctx, "role-assignments")
 }
 
 func (e Environment) UnassignRole(ctx context.Context, input RoleAssignment) error {
@@ -324,9 +342,7 @@ func (e Environment) OrgUnits(ctx context.Context, organization string) ([]OrgUn
 	if err := safeSegment(organization); err != nil {
 		return nil, err
 	}
-	var out []OrgUnit
-	err := e.client.Do(ctx, "GET", e.path("organizations/"+organization+"/org-units"), nil, &out)
-	return out, err
+	return list[OrgUnit](e, ctx, "organizations/"+organization+"/org-units")
 }
 
 func (e Environment) OrgUnit(ctx context.Context, org, id string) (OrgUnit, error) {
@@ -344,15 +360,11 @@ func (e Environment) DeleteOrgUnit(ctx context.Context, org, id string) error {
 }
 
 func (e Environment) OrgUnitAncestors(ctx context.Context, org, id string) ([]OrgUnit, error) {
-	var out []OrgUnit
-	err := e.operation(ctx, "GET", []string{"organizations", org, "org-units", id, "ancestors"}, nil, &out)
-	return out, err
+	return listOp[OrgUnit](e, ctx, []string{"organizations", org, "org-units", id, "ancestors"})
 }
 
 func (e Environment) OrgUnitDescendants(ctx context.Context, org, id string) ([]OrgUnit, error) {
-	var out []OrgUnit
-	err := e.operation(ctx, "GET", []string{"organizations", org, "org-units", id, "descendants"}, nil, &out)
-	return out, err
+	return listOp[OrgUnit](e, ctx, []string{"organizations", org, "org-units", id, "descendants"})
 }
 
 func (e Environment) OrgUnitDeleteImpact(ctx context.Context, org, id string) (UnitImpact, error) {
@@ -362,15 +374,11 @@ func (e Environment) OrgUnitDeleteImpact(ctx context.Context, org, id string) (U
 }
 
 func (e Environment) OrgUnitTree(ctx context.Context, org string) ([]OrgUnit, error) {
-	var out []OrgUnit
-	err := e.operation(ctx, "GET", []string{"organizations", org, "tree"}, nil, &out)
-	return out, err
+	return listOp[OrgUnit](e, ctx, []string{"organizations", org, "tree"})
 }
 
 func (e Environment) OrgChart(ctx context.Context, org string) ([]ReportingMember, error) {
-	var out []ReportingMember
-	err := e.operation(ctx, "GET", []string{"organizations", org, "org-chart"}, nil, &out)
-	return out, err
+	return listOp[ReportingMember](e, ctx, []string{"organizations", org, "org-chart"})
 }
 
 // ── Positions ──
@@ -385,9 +393,7 @@ func (e Environment) CreatePosition(ctx context.Context, organization string, in
 }
 
 func (e Environment) Positions(ctx context.Context, org string) ([]Position, error) {
-	var out []Position
-	err := e.operation(ctx, "GET", []string{"organizations", org, "positions"}, nil, &out)
-	return out, err
+	return listOp[Position](e, ctx, []string{"organizations", org, "positions"})
 }
 
 func (e Environment) UpdatePosition(ctx context.Context, org, id string, input Position) error {
@@ -405,9 +411,7 @@ func (e Environment) AssignPosition(ctx context.Context, org string, input Posit
 }
 
 func (e Environment) PositionAssignments(ctx context.Context, org string) ([]PositionAssignment, error) {
-	var out []PositionAssignment
-	err := e.operation(ctx, "GET", []string{"organizations", org, "position-assignments"}, nil, &out)
-	return out, err
+	return listOp[PositionAssignment](e, ctx, []string{"organizations", org, "position-assignments"})
 }
 
 func (e Environment) UnassignPosition(ctx context.Context, org, id string) error {
