@@ -1,7 +1,10 @@
-.PHONY: build test test-unit test-sdk vet fmt test-e2e test-integration test-all
+.PHONY: build build-cli test test-unit test-sdk vet fmt test-e2e test-integration test-all
 
 build:
 	go build -o bin/iamkit ./cmd/iamkit
+
+build-cli:
+	go build -o bin/iam ./cmd/iam
 
 test: test-unit test-sdk
 
