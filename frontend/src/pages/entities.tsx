@@ -222,8 +222,8 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
         {kind === 'applications' && <Link to={`${envBase}/applications/${row.id}`} className={buttonVariants({ variant: 'ghost', size: 'icon' })} aria-label={`Details of ${row.name}`}><Eye className="size-4" /></Link>}
         <Button variant="ghost" size="icon" aria-label={`Edit ${row.name || row.id}`} onClick={() => openEdit(row)}><Pencil /></Button>
         {kind === 'users' ? <>
-          {row.active && <Button variant="ghost" size="sm" aria-label={`Suspend ${row.name || row.id}`} onClick={() => setRemove(row)}><UserX />Suspend</Button>}
-          <Button variant="ghost" size="sm" className="text-destructive" aria-label={`Permanently delete ${row.name || row.id}`} onClick={() => setPurge(row)}><Trash2 />Delete permanently</Button>
+          {row.active && <Button variant="ghost" size="icon" aria-label={`Suspend ${row.name || row.id}`} onClick={() => setRemove(row)}><UserX /></Button>}
+          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" aria-label={`Permanently delete ${row.name || row.id}`} onClick={() => setPurge(row)}><Trash2 /></Button>
         </> : canDelete && <Button variant="ghost" size="icon" aria-label={`Delete ${row.name || row.id}`} onClick={() => setRemove(row)}><Trash2 /></Button>}
       </div>)
       return cells

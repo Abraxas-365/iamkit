@@ -1,0 +1,28 @@
+project_name: iam
+
+builds:
+  - id: iam
+    main: ./cmd/iam
+    binary: iam
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+
+archives:
+  - id: iam
+    builds: [iam]
+    format: tar.gz
+    name_template: "iam_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
