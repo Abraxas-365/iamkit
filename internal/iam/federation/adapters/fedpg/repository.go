@@ -39,7 +39,7 @@ func (r *Repository) Create(ctx context.Context, c federation.Connection) error 
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
 	var row federation.Connection
-	err := r.db.GetContext(ctx, &row, `SELECT id,environment_id AS environment,issuer,client_id AS client,secret_env FROM federation_connections WHERE id=$1 AND environment_id=$2 AND active`, id, environment)
+	err := r.db.GetContext(ctx, &row, `SELECT id,environment_id,name,issuer,client_id,secret_env FROM federation_connections WHERE id=$1 AND environment_id=$2 AND active`, id, environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		return federation.Connection{}, errx.NotFound("resource not found")
 	}

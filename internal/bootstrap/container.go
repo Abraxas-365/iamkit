@@ -29,6 +29,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtsvc"
+	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/oauthmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/adapters/orghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/orgmodule"
@@ -48,7 +49,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s := &server.Server{Control: managementModule.HTTP, Health: db.PingContext}
 	userModule := usermodule.New(usermodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Users = userModule.HTTP
-	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, IssueSession: s.IssueSession})
+	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession})
 	s.Tokens = authenticationModule.Tokens
 	s.Auth = authenticationModule.HTTP
 	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService)

@@ -18,6 +18,7 @@ func (r testRepository) Begin(context.Context) (authentication.Transaction, erro
 type testTransaction struct {
 	authentication.Transaction
 	lookup                error
+	resolve               error
 	user                  identity.UserID
 	committed, rolledBack bool
 }
@@ -41,7 +42,7 @@ func (t *testTransaction) CreateChallenge(context.Context, identity.ChallengeID,
 	return nil
 }
 func (t *testTransaction) Resolve(context.Context, authentication.Context, identity.UserID) (authentication.Access, error) {
-	return authentication.Access{Audience: "api"}, nil
+	return authentication.Access{Audience: "api"}, t.resolve
 }
 func (t *testTransaction) CreateSession(context.Context, authentication.Context, identity.UserID, identity.SessionID, time.Time) error {
 	return nil
@@ -49,19 +50,19 @@ func (t *testTransaction) CreateSession(context.Context, authentication.Context,
 func (t *testTransaction) SaveRefresh(context.Context, []byte, identity.UserID, identity.SessionID, time.Time) error {
 	return nil
 }
-func (t *testTransaction) UseRefresh(context.Context, []byte) error { return nil }
-func (t *testTransaction) Commit() error                            { t.committed = true; return nil }
-func (t *testTransaction) Rollback() error                          { t.rolledBack = true; return nil }
-func (t *testTransaction) RevokeSession(context.Context, identity.SessionID) error { return nil }
+func (t *testTransaction) UseRefresh(context.Context, []byte) error                  { return nil }
+func (t *testTransaction) Commit() error                                             { t.committed = true; return nil }
+func (t *testTransaction) Rollback() error                                           { t.rolledBack = true; return nil }
+func (t *testTransaction) RevokeSession(context.Context, identity.SessionID) error   { return nil }
 func (t *testTransaction) FailChallenge(context.Context, identity.ChallengeID) error { return nil }
 func (t *testTransaction) CompleteChallenge(context.Context, identity.ChallengeID, identity.UserID, string, identity.EnvironmentID, string) error {
 	return nil
 }
 
-type testPasswords struct{}
+type testPasswords struct{ mismatch bool }
 
-func (testPasswords) Hash(string) (string, error) { return "hash", nil }
-func (testPasswords) Compare(string, string) bool { return true }
+func (testPasswords) Hash(string) (string, error)   { return "hash", nil }
+func (p testPasswords) Compare(string, string) bool { return !p.mismatch }
 
 type testSecrets struct{}
 

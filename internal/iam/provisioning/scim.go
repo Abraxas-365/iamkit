@@ -9,12 +9,12 @@ type Principal struct {
 	Connection   identity.ConnectionID
 }
 type User struct {
-	ID       identity.UserID
-	Email    string
-	Name     string
-	External string
-	Manager  string
-	Active   bool
+	ID       identity.UserID `db:"id"`
+	Email    string          `db:"email"`
+	Name     string          `db:"name"`
+	External string          `db:"external_id"`
+	Manager  string          `db:"manager_id"`
+	Active   bool            `db:"active"`
 }
 type Update struct {
 	Name    *string

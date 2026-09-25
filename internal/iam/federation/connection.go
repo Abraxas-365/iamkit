@@ -6,12 +6,12 @@ import (
 )
 
 type Connection struct {
-	ID          identity.ConnectionID
-	Environment identity.EnvironmentID
-	Name        string
-	Issuer      string
-	Client      string
-	SecretEnv   string
+	ID          identity.ConnectionID  `db:"id"`
+	Environment identity.EnvironmentID `db:"environment_id"`
+	Name        string                 `db:"name"`
+	Issuer      string                 `db:"issuer"`
+	Client      string                 `db:"client_id"`
+	SecretEnv   string                 `db:"secret_env"`
 }
 type State struct {
 	Connection      identity.ConnectionID

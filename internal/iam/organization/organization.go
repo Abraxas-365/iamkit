@@ -15,8 +15,8 @@ type Organization struct {
 	Metadata json.RawMessage         `json:"metadata"`
 }
 type Summary struct {
-	ID   identity.OrganizationID `json:"id"`
-	Name string                  `json:"name"`
+	ID   identity.OrganizationID `json:"id" db:"id"`
+	Name string                  `json:"name" db:"name"`
 }
 type Update struct {
 	Name     *string         `json:"name"`

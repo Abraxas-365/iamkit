@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
-	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authjwt"
@@ -15,6 +14,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authsvc"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
 )
@@ -24,6 +24,7 @@ type Deps struct {
 	Key          *rsa.PrivateKey
 	Issuer       string
 	Delivery     authentication.Delivery
+	OAuthTokens  authentication.OAuthTokens // nil rejects every OAuth-issued access token
 	IssueSession func(*fiber.Ctx, authentication.Issued) error
 }
 type Module struct {
@@ -48,6 +49,6 @@ func New(deps Deps) Module {
 	}
 	deliverySvc := authsvc.NewDeliveryService(deliveryRepo, deps.Delivery, factory)
 	service.SetDeliveryService(deliverySvc)
-	tokens := authsvc.NewTokens(repo, authjwt.New(deps.Key, deps.Issuer), authsecret.Generator{})
+	tokens := authsvc.NewTokens(repo, authjwt.New(deps.Key, deps.Issuer), authsecret.Generator{}, deps.OAuthTokens)
 	return Module{Commands: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens), HTTP: authhttp.New(service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc}
 }

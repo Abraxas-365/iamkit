@@ -30,7 +30,7 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 	var out authentication.Issued
 	email, err := identity.Email(email)
 	if err != nil || boundary.Validate() != nil || len(password) > config.PasswordMaxLength {
-		return out, errx.Unauthorized("invalid credentials or access token")
+		return out, invalidCredentials()
 	}
 	tx, err := s.repository.Begin(ctx)
 	if err != nil {
@@ -38,14 +38,31 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 	}
 	defer tx.Rollback()
 	user, hash, lookup := tx.PasswordUser(ctx, boundary, email)
+	// Compare always runs (dummy hash when unknown) so timing is uniform.
 	matches := s.passwords.Compare(hash, password)
 	if lookup != nil {
-		return out, lookup
+		return out, credentialFailure(lookup)
 	}
 	if !matches {
-		return out, errx.Unauthorized("invalid credentials or access token")
+		return out, invalidCredentials()
 	}
-	return s.NewSession(ctx, tx, boundary, user)
+	out, err = s.NewSession(ctx, tx, boundary, user)
+	return out, credentialFailure(err)
+}
+
+// invalidCredentials is the single response for every login credential
+// failure — unknown email, wrong password, or no access to the boundary — so
+// callers cannot enumerate accounts or memberships.
+func invalidCredentials() error { return errx.Unauthorized("invalid credentials or access token") }
+
+// credentialFailure collapses 401 authorization errors into invalidCredentials
+// and passes every other error (403, internal, …) through unchanged.
+func credentialFailure(err error) error {
+	var e *errx.Error
+	if errx.As(err, &e) && e.Type == errx.TypeAuthorization && e.HTTPStatus == 401 {
+		return invalidCredentials()
+	}
+	return err
 }
 
 func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Issued, error) {

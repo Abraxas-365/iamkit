@@ -34,10 +34,11 @@ func (s *Structure) SaveUnit(ctx context.Context, b organization.Boundary, m org
 	if err := input.Validate(); err != nil {
 		return identity.UnitID{}, err
 	}
-	if id.IsZero() {
+	creating := id.IsZero()
+	if creating {
 		id = identity.NewUnitID()
 	}
-	return id, s.repository.SaveUnit(ctx, b, m, id, input, id.IsZero())
+	return id, s.repository.SaveUnit(ctx, b, m, id, input, creating)
 }
 func (s *Structure) DeleteUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.UnitID) error {
 	if id.IsZero() {

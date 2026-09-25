@@ -20,8 +20,8 @@ type SessionCreator interface {
 
 type SessionCommands interface {
 	Logout(ctx context.Context, token Token) error
-	UpdateProfile(ctx context.Context, token Token, organization identity.OrganizationID) error
-	AddMember(ctx context.Context, token Token, organization identity.OrganizationID) error
+	UpdateProfile(ctx context.Context, token Token, name string) error
+	AddMember(ctx context.Context, token Token, user identity.UserID) error
 }
 type SessionQueries interface {
 	Profile(ctx context.Context, token Token) (Profile, error)
@@ -81,6 +81,14 @@ type TokenCodec interface {
 	JWKS() any
 }
 
+// OAuthTokens reports whether an OAuth-issued access token is still live.
+// The OAuth adapter owns token storage (and its signature hashing), so the
+// authentication service asks it rather than reading OAuth tables itself.
+// signature is the JWT's third segment.
+type OAuthTokens interface {
+	Active(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID, signature string) (bool, error)
+}
+
 // Transactions retain the original user/session/challenge lock ordering.
 type Repository interface {
 	Begin(ctx context.Context) (Transaction, error)
@@ -106,11 +114,10 @@ type Transaction interface {
 type TokenRepository interface {
 	Current(ctx context.Context, token Token, environment identity.EnvironmentID) ([]string, error)
 	ActorActive(ctx context.Context, token Token) (bool, error)
-	OAuthActive(ctx context.Context, token Token, client identity.ClientID) (bool, error)
 	Machine(ctx context.Context, hash []byte) (Token, string, error)
 	Revoke(ctx context.Context, environment identity.EnvironmentID, session identity.SessionID) error
 	Profile(ctx context.Context, token Token) (Profile, error)
 	Organizations(ctx context.Context, token Token) ([]Organization, error)
-	UpdateProfile(ctx context.Context, token Token, organization identity.OrganizationID) error
-	AddMember(ctx context.Context, token Token, organization identity.OrganizationID) error
+	UpdateProfile(ctx context.Context, token Token, name string) error
+	AddMember(ctx context.Context, token Token, user identity.UserID) error
 }

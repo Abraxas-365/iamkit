@@ -73,7 +73,9 @@ func TestIdentityIsolationJourney(t *testing.T) {
 		r := httptest.NewRequest(method, path, bytes.NewReader(raw))
 		r.Header.Set("Content-Type", "application/json")
 		if token != "" {
-			if strings.HasPrefix(token, "ik_") {
+			// ik_svc_ secrets are Bearer on /machine-token (docs/reference/api/identity.md);
+			// every other ik_ secret is an X-API-Key.
+			if strings.HasPrefix(token, "ik_") && !strings.HasPrefix(token, "ik_svc_") {
 				r.Header.Set("X-API-Key", token)
 			} else {
 				r.Header.Set("Authorization", "Bearer "+token)

@@ -32,9 +32,12 @@ func failure(err error) error {
 	}
 	return errx.Wrap(err, "authentication persistence failed", errx.TypeInternal)
 }
+
+// credentialError maps "no row" to the same message every credential failure
+// uses, so responses never reveal whether an account or grant exists.
 func credentialError(err error) error {
 	if err == sql.ErrNoRows {
-		return errx.Unauthorized("invalid credentials or access")
+		return errx.Unauthorized("invalid credentials or access token")
 	}
 	return failure(err)
 }

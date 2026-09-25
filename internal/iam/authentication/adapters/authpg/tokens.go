@@ -25,11 +25,6 @@ func (r *Repository) ActorActive(ctx context.Context, t authentication.Token) (b
 	err := r.db.GetContext(ctx, &active, `SELECT EXISTS(SELECT 1 FROM sessions s JOIN environments e ON e.id=s.environment_id JOIN projects p ON p.id=e.project_id JOIN workspace_members m ON m.workspace_id=p.workspace_id AND m.operator_id=s.actor_id WHERE s.id=$1 AND s.actor_id=$2 AND m.active AND m.role='owner')`, t.SessionID, t.ActorID)
 	return active, failure(err)
 }
-func (r *Repository) OAuthActive(ctx context.Context, t authentication.Token, clientID identity.ClientID) (bool, error) {
-	var live bool
-	err := r.db.GetContext(ctx, &live, `SELECT EXISTS(SELECT 1 FROM oauth_clients c WHERE c.id=$1 AND c.environment_id=$2 AND c.active)`, clientID, t.EnvironmentID)
-	return live, failure(err)
-}
 func (r *Repository) Machine(ctx context.Context, hash []byte) (authentication.Token, string, error) {
 	var row struct {
 		ID          identity.UserID        `db:"id"`
@@ -59,18 +54,23 @@ func (r *Repository) Organizations(ctx context.Context, t authentication.Token) 
 	err := r.db.SelectContext(ctx, &out, `SELECT o.id,o.name,m.org_unit_id,m.manager_id FROM organizations o JOIN memberships m ON m.organization_id=o.id AND m.environment_id=o.environment_id WHERE m.user_id=$1 AND m.environment_id=$2 AND m.active AND o.active ORDER BY o.id`, t.Subject, t.EnvironmentID)
 	return out, failure(err)
 }
-func (r *Repository) UpdateProfile(ctx context.Context, t authentication.Token, organizationID identity.OrganizationID) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE sessions SET organization_id=$3 WHERE user_id=$1 AND environment_id=$2 AND revoked_at IS NULL AND expires_at>now()`, t.Subject, t.EnvironmentID, organizationID)
+
+// UpdateProfile sets the token subject's display name.
+func (r *Repository) UpdateProfile(ctx context.Context, t authentication.Token, name string) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE users SET name=$3 WHERE id=$1 AND environment_id=$2`, t.Subject, t.EnvironmentID, name)
 	return failure(err)
 }
-func (r *Repository) AddMember(ctx context.Context, t authentication.Token, organizationID identity.OrganizationID) error {
+
+// AddMember adds user to the token's organization when the caller (t.Subject)
+// holds iam:members:write there.
+func (r *Repository) AddMember(ctx context.Context, t authentication.Token, user identity.UserID) error {
 	res, err := r.db.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id)
 SELECT $1,$2,$3 WHERE EXISTS(
   SELECT 1 FROM effective_grants eg
   JOIN resources res ON res.id=eg.resource_id AND res.environment_id=eg.environment_id AND res.prefix='iam'
   WHERE eg.environment_id=$1 AND eg.organization_id=$2 AND eg.user_id=$4
   AND 'iam:members:write' = ANY(eg.permissions)
-)`, t.EnvironmentID, organizationID, t.Subject, t.Subject)
+)`, t.EnvironmentID, t.OrganizationID, user, t.Subject)
 	if err != nil {
 		var pg *pq.Error
 		if errors.As(err, &pg) && pg.Code.Class() == "23" {

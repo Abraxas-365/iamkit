@@ -111,9 +111,9 @@ func (h *Tokens) Organizations(c *fiber.Ctx) error {
 }
 func (h *Tokens) UpdateProfile(c *fiber.Ctx) error {
 	var input struct {
-		Environment identity.EnvironmentID  `json:"environment_id"`
-		Audience    string                  `json:"audience"`
-		Organization identity.OrganizationID `json:"organization_id"`
+		Environment identity.EnvironmentID `json:"environment_id"`
+		Audience    string                 `json:"audience"`
+		Name        string                 `json:"name"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -122,16 +122,16 @@ func (h *Tokens) UpdateProfile(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.UpdateProfile(c.Context(), token, input.Organization); err != nil {
+	if err = h.commands.UpdateProfile(c.Context(), token, input.Name); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 func (h *Tokens) AddMember(c *fiber.Ctx) error {
 	var input struct {
-		Environment  identity.EnvironmentID  `json:"environment_id"`
-		Audience     string                  `json:"audience"`
-		Organization identity.OrganizationID `json:"organization_id"`
+		Environment identity.EnvironmentID `json:"environment_id"`
+		Audience    string                 `json:"audience"`
+		User        string                 `json:"user_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -140,7 +140,13 @@ func (h *Tokens) AddMember(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.AddMember(c.Context(), token, input.Organization); err != nil {
+	var user identity.UserID
+	if input.User != "" {
+		if user, err = identity.ParseUserID(input.User); err != nil {
+			return errx.Validation("user_id must be a valid user ID")
+		}
+	}
+	if err = h.commands.AddMember(c.Context(), token, user); err != nil {
 		return err
 	}
 	return c.SendStatus(201)

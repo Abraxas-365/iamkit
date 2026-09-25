@@ -10,13 +10,13 @@ import (
 )
 
 type User struct {
-	ID            identity.UserID `json:"id"`
-	Email         string          `json:"email"`
-	Name          string          `json:"name"`
-	Active        bool            `json:"active"`
-	EmailVerified bool            `json:"email_verified"`
-	OTPEnabled    bool            `json:"otp_enabled"`
-	Metadata      json.RawMessage `json:"metadata"`
+	ID            identity.UserID `json:"id" db:"id"`
+	Email         string          `json:"email" db:"email"`
+	Name          string          `json:"name" db:"name"`
+	Active        bool            `json:"active" db:"active"`
+	EmailVerified bool            `json:"email_verified" db:"email_verified"`
+	OTPEnabled    bool            `json:"otp_enabled" db:"otp_enabled"`
+	Metadata      json.RawMessage `json:"metadata" db:"metadata"`
 }
 type Create struct {
 	Email      string `json:"email"`

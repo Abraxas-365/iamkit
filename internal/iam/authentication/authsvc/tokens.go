@@ -16,13 +16,14 @@ type Tokens struct {
 	repository authentication.TokenRepository
 	codec      authentication.TokenCodec
 	secrets    authentication.Secrets
+	oauth      authentication.OAuthTokens
 }
 
-func NewTokens(r authentication.TokenRepository, c authentication.TokenCodec, s authentication.Secrets) *Tokens {
-	return &Tokens{r, c, s}
+func NewTokens(r authentication.TokenRepository, c authentication.TokenCodec, s authentication.Secrets, o authentication.OAuthTokens) *Tokens {
+	return &Tokens{r, c, s, o}
 }
 func (s *Tokens) KeyID() string { return s.codec.KeyID() }
-func (s *Tokens) JWKS() any    { return s.codec.JWKS() }
+func (s *Tokens) JWKS() any     { return s.codec.JWKS() }
 func (s *Tokens) Issue(input authentication.Token, audience string) (string, error) {
 	now := time.Now()
 	input.ID = uuid.NewString()
@@ -57,17 +58,7 @@ func (s *Tokens) Validate(ctx context.Context, raw string, audience string, envi
 			return out, errx.Unauthorized("impersonation actor disabled")
 		}
 	}
-	if !out.OAuthClientID.IsZero() {
-		parts := strings.Split(raw, ".")
-		if len(parts) != 3 {
-			return out, errx.Unauthorized("invalid OAuth token")
-		}
-		active, err := s.repository.OAuthActive(ctx, out, out.OAuthClientID)
-		if err != nil || !active {
-			return out, errx.Unauthorized("OAuth token revoked")
-		}
-	}
-	return out, nil
+	return out, s.checkOAuth(ctx, raw, out)
 }
 
 func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.Token, error) {
@@ -98,17 +89,28 @@ func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.T
 			return out, errx.Unauthorized("impersonation actor disabled")
 		}
 	}
-	if !out.OAuthClientID.IsZero() {
-		parts := strings.Split(raw, ".")
-		if len(parts) != 3 {
-			return out, errx.Unauthorized("invalid OAuth token")
-		}
-		active, err := s.repository.OAuthActive(ctx, out, out.OAuthClientID)
-		if err != nil || !active {
-			return out, errx.Unauthorized("OAuth token revoked")
-		}
+	return out, s.checkOAuth(ctx, raw, out)
+}
+
+// checkOAuth rejects OAuth-issued access tokens whose grant was revoked
+// (refresh/code replay, logout) or expired, or whose client was disabled.
+// Tokens not issued through OAuth pass through.
+func (s *Tokens) checkOAuth(ctx context.Context, raw string, token authentication.Token) error {
+	if token.OAuthClientID.IsZero() {
+		return nil
 	}
-	return out, nil
+	parts := strings.Split(raw, ".")
+	if len(parts) != 3 || parts[2] == "" {
+		return errx.Unauthorized("invalid OAuth token")
+	}
+	if s.oauth == nil {
+		return errx.Unauthorized("OAuth token revoked")
+	}
+	active, err := s.oauth.Active(ctx, token.EnvironmentID, token.OAuthClientID, parts[2])
+	if err != nil || !active {
+		return errx.Unauthorized("OAuth token revoked")
+	}
+	return nil
 }
 
 func (s *Tokens) Machine(ctx context.Context, raw string) (string, error) {
@@ -139,15 +141,22 @@ func (s *Tokens) Organizations(ctx context.Context, token authentication.Token) 
 	}
 	return s.repository.Organizations(ctx, token)
 }
-func (s *Tokens) UpdateProfile(ctx context.Context, token authentication.Token, organizationID identity.OrganizationID) error {
+func (s *Tokens) UpdateProfile(ctx context.Context, token authentication.Token, name string) error {
 	if token.Purpose != "application" || !token.ActorID.IsZero() {
 		return errx.Forbidden("non-impersonated user session required")
 	}
-	return s.repository.UpdateProfile(ctx, token, organizationID)
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errx.Validation("name is required")
+	}
+	return s.repository.UpdateProfile(ctx, token, name)
 }
-func (s *Tokens) AddMember(ctx context.Context, token authentication.Token, organizationID identity.OrganizationID) error {
-	if token.Purpose != "application" || organizationID.IsZero() {
+func (s *Tokens) AddMember(ctx context.Context, token authentication.Token, user identity.UserID) error {
+	if token.Purpose != "application" || token.OrganizationID.IsZero() {
 		return errx.Forbidden("insufficient permissions")
 	}
-	return s.repository.AddMember(ctx, token, organizationID)
+	if user.IsZero() {
+		return errx.Validation("user_id is required")
+	}
+	return s.repository.AddMember(ctx, token, user)
 }
