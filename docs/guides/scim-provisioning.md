@@ -36,8 +36,10 @@ For existing users, an operator explicitly links
 the connection with `"adopt_existing_members": true` so that directory users are
 matched to existing members of the organization by email. Adoption never reaches
 users outside the organization, and the directory cannot rename the login email
-of users it adopted or that were linked (only of users it created). Disable it
-by issuing a credential on the same connection with
+of users it adopted or that were linked (only of users it created). Add
+`"adopt_scope": "verified_domains"` to adopt only members whose email is on one
+of the organization's verified domains (Organization → Members → Domains).
+Disable adoption by issuing a credential on the same connection with
 `"adopt_existing_members": false`; every change is audited.
 
 ## Groups

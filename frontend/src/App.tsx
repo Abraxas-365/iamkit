@@ -10,6 +10,7 @@ import OperatorsPage from '@/pages/operators'
 import { ServiceAccountsPage, FederationPage, OAuthClientsPage, ProvisioningPage } from '@/pages/integrations'
 import MembersPage from '@/pages/members'
 import { GroupDetailPage, GroupsPage } from '@/pages/groups'
+import { DomainsPage } from '@/pages/domains'
 import RoleAssignmentsPage from '@/pages/role-assignments'
 import ApplicationDetailPage from '@/pages/application-detail'
 import FederationDetailPage from '@/pages/federation-detail'
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="organizations/:orgId/members" element={<MembersPage />} />
         <Route path="organizations/:orgId/groups" element={<GroupsPage />} />
         <Route path="organizations/:orgId/groups/:groupId" element={<GroupDetailPage />} />
+        <Route path="organizations/:orgId/domains" element={<DomainsPage />} />
         <Route path="applications/:appId" element={<ApplicationDetailPage />} />
         <Route path="role-assignments" element={<RoleAssignmentsPage />} />
         <Route path="service-accounts" element={<ServiceAccountsPage />} />

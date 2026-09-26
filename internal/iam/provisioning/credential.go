@@ -17,7 +17,17 @@ type CredentialInput struct {
 	// organization with the same email instead of failing with 409. Applies
 	// to the connection; nil keeps the current setting (default false).
 	AdoptExistingMembers *bool `json:"adopt_existing_members,omitempty"`
+	// AdoptScope restricts adoption: AdoptAny (default) or AdoptVerifiedDomains,
+	// which only adopts members whose email is on one of the organization's
+	// verified domains. nil keeps the current setting.
+	AdoptScope *string `json:"adopt_scope,omitempty"`
 }
+
+// Adoption scopes for AdoptExistingMembers.
+const (
+	AdoptAny             = "any"
+	AdoptVerifiedDomains = "verified_domains"
+)
 
 func (c CredentialInput) Validate() error {
 	if strings.TrimSpace(c.Name) == "" {
@@ -26,8 +36,8 @@ func (c CredentialInput) Validate() error {
 	if c.Organization.IsZero() {
 		return errx.Validation("organization_id must be a valid UUID")
 	}
-	if !c.Connection.IsZero() {
-		// connection is optional; only validate format if provided
+	if c.AdoptScope != nil && *c.AdoptScope != AdoptAny && *c.AdoptScope != AdoptVerifiedDomains {
+		return errx.Validation("adopt_scope must be \"any\" or \"verified_domains\"")
 	}
 	return nil
 }
@@ -71,4 +81,5 @@ type CredentialView struct {
 	Expires      time.Time               `json:"expires_at"`
 	Revoked      *time.Time              `json:"revoked_at"`
 	Adopt        bool                    `json:"adopt_existing_members"`
+	AdoptScope   string                  `json:"adopt_scope"`
 }

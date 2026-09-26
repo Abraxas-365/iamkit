@@ -19,8 +19,8 @@ requires owner. Credential responses are secrets and must be captured once.
 | `POST /service-accounts` | `name,application_id,resource_id,permissions`, optional `expires_in` | 201 `{id,secret,expires_at}` |
 | `GET /service-accounts` | — | 200 page |
 | `DELETE /service-accounts/:id` | — | 204 |
-| `POST /provisioning-credentials` | `name,organization_id`, optional `connection_id,expires_in,adopt_existing_members` | 201 `{id,secret,expires_at,connection_id}` |
-| `GET /provisioning-credentials` | — | 200 array |
+| `POST /provisioning-credentials` | `name,organization_id`, optional `connection_id,expires_in,adopt_existing_members,adopt_scope` (`any`\|`verified_domains`) | 201 `{id,secret,expires_at,connection_id}` |
+| `GET /provisioning-credentials` | — | 200 array (includes `adopt_existing_members,adopt_scope`) |
 | `DELETE /provisioning-credentials/:id` | — | 204 |
 | `POST /provisioned-identities` | `connection_id,user_id,external_id`; also re-anchors deprovisioned or internally anchored identities | 204 |
 | `POST /impersonations` | `organization_id,application_id,resource_id,user_id,reason` | 200 access token without refresh |

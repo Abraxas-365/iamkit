@@ -76,7 +76,10 @@ By default, `POST` of an email that already belongs to a user returns 409
 `uniqueness`; link them explicitly with `POST /provisioned-identities`. A
 connection issued with `"adopt_existing_members": true` instead links an existing
 member of its organization with that primary email (password and grants are
-kept). Users outside the organization are never adopted.
+kept). Users outside the organization are never adopted. With
+`"adopt_scope": "verified_domains"` only members whose email is on one of the
+organization's [verified domains](users-and-organizations.md#domains) are
+adopted; others get 409 as if adoption were off.
 
 ```json
 {"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"alice@example.com","displayName":"Alice","externalId":"directory-alice","active":true}

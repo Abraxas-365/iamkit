@@ -82,3 +82,32 @@ type GroupRepository interface {
 	FindGroup(ctx context.Context, b Boundary, group identity.GroupID) (Group, error)
 	ListGroupMembers(ctx context.Context, b Boundary, group identity.GroupID, page query.Pagination) (query.Paginated[GroupMemberView], error)
 }
+
+// DomainCommands claims, verifies and releases organization domains.
+type DomainCommands interface {
+	AddDomain(ctx context.Context, b Boundary, m Mutation, input DomainInput) (Domain, error)
+	// VerifyDomain checks the DNS TXT record now; it is never re-checked later.
+	VerifyDomain(ctx context.Context, b Boundary, m Mutation, domain identity.DomainID) (Domain, error)
+	// ForceVerifyDomain marks the domain verified without DNS proof (audited).
+	ForceVerifyDomain(ctx context.Context, b Boundary, m Mutation, domain identity.DomainID) (Domain, error)
+	DeleteDomain(ctx context.Context, b Boundary, m Mutation, domain identity.DomainID) error
+}
+type DomainQueries interface {
+	ListDomains(ctx context.Context, b Boundary, page query.Pagination) (query.Paginated[Domain], error)
+	FindDomain(ctx context.Context, b Boundary, domain identity.DomainID) (Domain, error)
+}
+
+type DomainRepository interface {
+	CreateDomain(ctx context.Context, b Boundary, m Mutation, domain identity.DomainID, name, token string) error
+	ListDomains(ctx context.Context, b Boundary, page query.Pagination) (query.Paginated[Domain], error)
+	FindDomain(ctx context.Context, b Boundary, domain identity.DomainID) (Domain, error)
+	// VerifyDomain records the verification unless the domain is already verified.
+	VerifyDomain(ctx context.Context, b Boundary, m Mutation, domain identity.DomainID, method string) error
+	DeleteDomain(ctx context.Context, b Boundary, m Mutation, domain identity.DomainID) error
+}
+
+// Resolver looks up DNS TXT records. A name without records returns an empty
+// list and no error; lookup failures return an external error.
+type Resolver interface {
+	TXT(ctx context.Context, name string) ([]string, error)
+}

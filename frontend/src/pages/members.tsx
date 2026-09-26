@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, ShieldCheck, UserMinus, Users, UsersRound, X } from 'lucide-react'
+import { ArrowLeft, Globe, ShieldCheck, UserMinus, Users, UsersRound, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -67,7 +67,10 @@ export default function MembersPage() {
       <PageHeader
         title={orgName ? `Members of ${orgName}` : 'Members'}
         description={orgId}
-        actions={<Link to={`${orgsPath}/${orgId}/groups`} className={buttonVariants({ variant: 'outline' })}><UsersRound className="size-4" /> Groups</Link>}
+        actions={<div className="flex gap-2">
+          <Link to={`${orgsPath}/${orgId}/groups`} className={buttonVariants({ variant: 'outline' })}><UsersRound className="size-4" /> Groups</Link>
+          <Link to={`${orgsPath}/${orgId}/domains`} className={buttonVariants({ variant: 'outline' })}><Globe className="size-4" /> Domains</Link>
+        </div>}
       />
     </div>
 

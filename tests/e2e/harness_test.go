@@ -19,10 +19,12 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/internal/bootstrap"
+	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/migrations"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
@@ -131,6 +133,7 @@ type Harness struct {
 	App   *fiber.App
 	Key   *rsa.PrivateKey
 	Mail  *capturedMail
+	DNS   *fakeDNS
 	Owner string // operator X-API-Key
 }
 
@@ -146,9 +149,42 @@ func newHarness(t *testing.T) *Harness {
 		t.Fatal(err)
 	}
 	mail := &capturedMail{}
-	app := bootstrap.New(db, key, "https://iam.example", mail).App()
+	dns := &fakeDNS{records: map[string][]string{}}
+	app := bootstrap.New(db, key, "https://iam.example", mail, bootstrap.WithResolver(dns)).App()
 	t.Cleanup(func() { app.Shutdown() })
-	return &Harness{t: t, DB: db, App: app, Key: key, Mail: mail, Owner: owner}
+	return &Harness{t: t, DB: db, App: app, Key: key, Mail: mail, DNS: dns, Owner: owner}
+}
+
+// fakeDNS serves TXT records for domain verification; names in fail return
+// a lookup error.
+type fakeDNS struct {
+	mu      sync.Mutex
+	records map[string][]string
+	fail    map[string]bool
+}
+
+func (d *fakeDNS) Publish(name string, values ...string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.records[name] = values
+}
+
+func (d *fakeDNS) Fail(name string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.fail == nil {
+		d.fail = map[string]bool{}
+	}
+	d.fail[name] = true
+}
+
+func (d *fakeDNS) TXT(_ context.Context, name string) ([]string, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.fail[name] {
+		return nil, errx.External("DNS lookup failed, retry later")
+	}
+	return d.records[name], nil
 }
 
 // Response is a decoded HTTP response.

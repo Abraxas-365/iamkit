@@ -31,6 +31,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtsvc"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/oauthmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/adapters/orghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/orgmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning/provmodule"
@@ -44,7 +45,19 @@ import (
 	_ "github.com/lib/pq"
 )
 
-func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authentication.Delivery) *server.Server {
+// Option customizes New; production callers pass none.
+type Option func(*options)
+
+type options struct{ resolver organization.Resolver }
+
+// WithResolver replaces the system DNS resolver used for domain verification.
+func WithResolver(r organization.Resolver) Option { return func(o *options) { o.resolver = r } }
+
+func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authentication.Delivery, opts ...Option) *server.Server {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
 	managementModule := mgmtmodule.New(mgmtmodule.Deps{DB: db})
 	s := &server.Server{Control: managementModule.HTTP, Health: db.PingContext}
 	userModule := usermodule.New(usermodule.Deps{DB: db, ActorID: server.OperatorID})
@@ -53,9 +66,10 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Tokens = authenticationModule.Tokens
 	s.Auth = authenticationModule.HTTP
 	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService)
-	organizationModule := orgmodule.New(orgmodule.Deps{DB: db, ActorID: server.OperatorID})
+	organizationModule := orgmodule.New(orgmodule.Deps{DB: db, ActorID: server.OperatorID, Resolver: o.resolver})
 	s.Structure = organizationModule.Structure
 	s.Groups = organizationModule.Groups
+	s.Domains = organizationModule.Domains
 	s.Organizations = organizationModule.HTTP
 	authorizationModule := authzmodule.New(authzmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Grants = authorizationModule.Grants
@@ -83,6 +97,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Organizations:   orghttp.New(organizationModule.Commands, organizationModule.Queries, actor),
 		Structure:       orghttp.NewStructure(organizationModule.StructureCommands, organizationModule.StructureQueries, actor),
 		Groups:          orghttp.NewGroups(organizationModule.GroupCommands, organizationModule.GroupQueries, actor),
+		Domains:         orghttp.NewDomains(organizationModule.DomainCommands, organizationModule.DomainQueries, actor),
 		Applications:    apphttp.New(applicationModule.Commands, applicationModule.Queries, actor),
 		Authorization:   authzhttp.New(authorizationModule.ResourceCommands, authorizationModule.ResourceQueries, actor),
 		Grants:          authzhttp.NewGrants(authorizationModule.GrantCommands, authorizationModule.GrantQueries, actor),

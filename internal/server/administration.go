@@ -12,4 +12,8 @@ func (s *Server) administrationRoutes(e fiber.Router) {
 		s.Groups.RegisterViews(org)
 		s.Groups.RegisterMutations(org)
 	}
+	if s.Domains != nil {
+		s.Domains.RegisterViews(org)
+		s.Domains.RegisterMutations(org)
+	}
 }

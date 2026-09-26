@@ -100,10 +100,46 @@ Groups with a non-null `connection_id` are owned by a SCIM directory (see
 Bind roles with `POST /group-role-assignments` (see
 [authorization](applications-and-authorization.md#group-roles)).
 
+## Domains
+
+An organization claims the DNS domains it owns and proves control with a TXT
+record. Prefix these paths with `/organizations/:organization`:
+
+| Method/path | Input | Success |
+| --- | --- | --- |
+| `POST /domains` | `domain` | 201 domain (unverified, with the record to publish) |
+| `GET /domains` | List parameters (`search` matches the domain) | 200 page |
+| `GET /domains/:domain` | — | 200 domain |
+| `POST /domains/:domain/verify` | — | 200 domain; 422 when the record is missing, 502 when DNS fails |
+| `POST /domains/:domain/force-verify` | — | 200 domain, verified without DNS (method `manual`) |
+| `DELETE /domains/:domain` | — | 204; releases the claim |
+
+A domain is `{id,organization_id,domain,verified,verified_at,verified_by,verification_method,verification:{type,name,value},created_at}`.
+Input is normalized: lowercased, trailing dot removed, internationalized names
+converted to punycode (`bücher.example` → `xn--bcher-kva.example`). Wildcards,
+bare public suffixes (`com`, `co.uk`), single labels and names over 253
+characters are rejected (400). Subdomains are separate claims.
+
+A domain belongs to at most one organization per environment, verified or not
+(409). To verify, publish a TXT record named `verification.name`
+(`_iamkit-challenge.<domain>`) with value `verification.value`
+(`iamkit-verification=<token>`), then call `verify`; the check runs only when
+requested and is never repeated, so removing the record later does not
+unverify. Verifying an already verified domain returns it unchanged.
+Force-verify is for ownership confirmed out of band; both paths are audited
+with their method. Viewers can read domains but not change them.
+
+Verified domains restrict SCIM adoption when a connection uses
+`adopt_scope: "verified_domains"` (see [SCIM](scim.md#existing-users)).
+
+**Verify (domains):** add a domain, call `verify` before publishing the record (422), publish
+it, verify again (200, `verification_method: "dns"`), then try to claim it from
+another organization (409).
+
 **Verify:** create a user and membership, read both back, then attempt login before
 creating a resource grant: it must fail. Complete the
 [first application](../../start/first-application.md) workflow for permitted access.
 
 Source: `user/adapters/userhttp/handler.go`, `user/user.go`,
-`organization/adapters/orghttp/{handler,structure,groups}.go` and domain types under
+`organization/adapters/orghttp/{handler,structure,groups,domains}.go`, `organization/adapters/orgdns` and domain types under
 `internal/iam/`.

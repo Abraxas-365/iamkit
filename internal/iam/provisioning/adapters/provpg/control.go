@@ -20,12 +20,12 @@ func (r *Repository) IssueCredential(ctx context.Context, m provisioning.Mutatio
 	}
 	defer tx.Rollback()
 	if create {
-		_, err = tx.ExecContext(ctx, `INSERT INTO provisioning_connections(id,environment_id,organization_id,name,adopt_existing_members) VALUES($1,$2,$3,$4,coalesce($5,false))`, out.Connection, environment, input.Organization, input.Name, input.AdoptExistingMembers)
+		_, err = tx.ExecContext(ctx, `INSERT INTO provisioning_connections(id,environment_id,organization_id,name,adopt_existing_members,adopt_scope) VALUES($1,$2,$3,$4,coalesce($5,false),coalesce($6,'any'))`, out.Connection, environment, input.Organization, input.Name, input.AdoptExistingMembers, input.AdoptScope)
 		if err != nil {
 			return conflict(err)
 		}
-	} else if input.AdoptExistingMembers != nil {
-		_, err = tx.ExecContext(ctx, `UPDATE provisioning_connections SET adopt_existing_members=$4 WHERE id=$1 AND environment_id=$2 AND organization_id=$3`, out.Connection, environment, input.Organization, *input.AdoptExistingMembers)
+	} else if input.AdoptExistingMembers != nil || input.AdoptScope != nil {
+		_, err = tx.ExecContext(ctx, `UPDATE provisioning_connections SET adopt_existing_members=coalesce($4,adopt_existing_members),adopt_scope=coalesce($5,adopt_scope) WHERE id=$1 AND environment_id=$2 AND organization_id=$3`, out.Connection, environment, input.Organization, input.AdoptExistingMembers, input.AdoptScope)
 		if err != nil {
 			return failure(err)
 		}
@@ -35,8 +35,14 @@ func (r *Repository) IssueCredential(ctx context.Context, m provisioning.Mutatio
 		return conflict(err)
 	}
 	target := m.Target + "/" + out.ID.String()
+	if input.AdoptExistingMembers != nil || input.AdoptScope != nil {
+		target += "?connection=" + out.Connection.String()
+	}
 	if input.AdoptExistingMembers != nil {
-		target += fmt.Sprintf("?connection=%s&adopt_existing_members=%t", out.Connection, *input.AdoptExistingMembers)
+		target += fmt.Sprintf("&adopt_existing_members=%t", *input.AdoptExistingMembers)
+	}
+	if input.AdoptScope != nil {
+		target += "&adopt_scope=" + *input.AdoptScope
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, environment, m.Actor, m.Action, target); err != nil {
 		return failure(err)
@@ -110,13 +116,14 @@ func (r *Repository) Credentials(ctx context.Context, environment identity.Envir
 		Expires      time.Time               `db:"expires_at"`
 		Revoked      *time.Time              `db:"revoked_at"`
 		Adopt        bool                    `db:"adopt_existing_members"`
+		AdoptScope   string                  `db:"adopt_scope"`
 	}
-	if err := r.db.SelectContext(ctx, &rows, `SELECT k.id,k.name,k.organization_id,k.connection_id,k.expires_at,k.revoked_at,c.adopt_existing_members FROM provisioning_credentials k JOIN provisioning_connections c ON c.id=k.connection_id AND c.environment_id=k.environment_id WHERE k.environment_id=$1 ORDER BY k.id`, environment); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, `SELECT k.id,k.name,k.organization_id,k.connection_id,k.expires_at,k.revoked_at,c.adopt_existing_members,c.adopt_scope FROM provisioning_credentials k JOIN provisioning_connections c ON c.id=k.connection_id AND c.environment_id=k.environment_id WHERE k.environment_id=$1 ORDER BY k.id`, environment); err != nil {
 		return nil, failure(err)
 	}
 	out := make([]provisioning.CredentialView, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, provisioning.CredentialView{ID: row.ID, Name: row.Name, Organization: row.Organization, Connection: row.Connection, Expires: row.Expires, Revoked: row.Revoked, Adopt: row.Adopt})
+		out = append(out, provisioning.CredentialView{ID: row.ID, Name: row.Name, Organization: row.Organization, Connection: row.Connection, Expires: row.Expires, Revoked: row.Revoked, Adopt: row.Adopt, AdoptScope: row.AdoptScope})
 	}
 	return out, nil
 }

@@ -43,7 +43,7 @@ internal/
 | impersonation | `internal/iam/impersonation` | Audited admin impersonation |
 | management | `internal/iam/management` | Workspaces, projects, environments, operators, keys |
 | oauth | `internal/iam/oauth` | OAuth2/OIDC server (authorization code + PKCE) |
-| organization | `internal/iam/organization` | Organizations, memberships, org units, positions, groups |
+| organization | `internal/iam/organization` | Organizations, memberships, org units, positions, groups, verified domains |
 | provisioning | `internal/iam/provisioning` | SCIM user and group provisioning |
 | serviceaccount | `internal/iam/serviceaccount` | Machine-to-machine credentials |
 | user | `internal/iam/user` | End-user CRUD |
@@ -118,9 +118,11 @@ var _ application.Queries = (*Service)(nil)
 **Modules with sub-domains** split further. Authorization has separate
 `ResourceCommands`/`ResourceQueries`/`ResourceRepository` and
 `GrantCommands`/`GrantQueries`/`GrantRepository`.
-Organization has `StructureCommands`/`StructureQueries` and
-`GroupCommands`/`GroupQueries`/`GroupRepository`; provisioning has the same
-trio for SCIM groups. Management has
+Organization has `StructureCommands`/`StructureQueries`,
+`GroupCommands`/`GroupQueries`/`GroupRepository` and
+`DomainCommands`/`DomainQueries`/`DomainRepository` (plus the `Resolver` DNS
+port, adapter `orgdns`, replaceable in tests via `bootstrap.WithResolver`);
+provisioning has the same trio for SCIM groups. Management has
 `ControlCommands`/`ControlQueries` and `ActivityCommands`/`ActivityQueries`.
 Method names still use standard verbs (`Create`, `List`, `Find`). When a
 single Queries/Repository interface manages multiple entity types, prefix the

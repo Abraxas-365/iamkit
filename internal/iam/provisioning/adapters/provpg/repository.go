@@ -114,16 +114,19 @@ func (r *Repository) Create(ctx context.Context, p provisioning.Principal, u pro
 	}
 	defer tx.Rollback()
 	// Serialize creates per connection so reactivation/adoption decisions are stable.
-	var adopt bool
-	if err = tx.GetContext(ctx, &adopt, `SELECT adopt_existing_members FROM provisioning_connections WHERE id=$1 AND environment_id=$2 FOR UPDATE`, p.Connection, p.Environment); err != nil {
+	var policy struct {
+		Adopt bool   `db:"adopt_existing_members"`
+		Scope string `db:"adopt_scope"`
+	}
+	if err = tx.GetContext(ctx, &policy, `SELECT adopt_existing_members,adopt_scope FROM provisioning_connections WHERE id=$1 AND environment_id=$2 FOR UPDATE`, p.Connection, p.Environment); err != nil {
 		return u.ID, failure(err)
 	}
 	id, err := r.claim(ctx, tx, p, u)
 	if err == nil && id.IsZero() {
 		id, err = r.reactivate(ctx, tx, p, u)
 	}
-	if err == nil && id.IsZero() && adopt {
-		id, err = r.adopt(ctx, tx, p, u)
+	if err == nil && id.IsZero() && policy.Adopt {
+		id, err = r.adopt(ctx, tx, p, u, policy.Scope)
 	}
 	if err == nil && id.IsZero() {
 		id, err = u.ID, r.insert(ctx, tx, p, u)
@@ -219,9 +222,18 @@ func (r *Repository) reactivate(ctx context.Context, tx *sqlx.Tx, p provisioning
 }
 
 // adopt links an existing member of the connection's organization whose
-// primary email equals userName (opt-in per connection).
-func (r *Repository) adopt(ctx context.Context, tx *sqlx.Tx, p provisioning.Principal, u provisioning.User) (identity.UserID, error) {
+// primary email equals userName (opt-in per connection). With scope
+// verified_domains the email must also be on one of the organization's
+// verified domains; otherwise the create proceeds and conflicts as usual.
+func (r *Repository) adopt(ctx context.Context, tx *sqlx.Tx, p provisioning.Principal, u provisioning.User, scope string) (identity.UserID, error) {
 	var id identity.UserID
+	if scope == provisioning.AdoptVerifiedDomains {
+		var verified bool
+		if err := tx.GetContext(ctx, &verified, `SELECT EXISTS(SELECT 1 FROM organization_domains WHERE environment_id=$1 AND organization_id=$2 AND domain=$3 AND verified_at IS NOT NULL)`,
+			p.Environment, p.Organization, identity.EmailDomain(u.Email)); err != nil || !verified {
+			return id, failure(err)
+		}
+	}
 	err := tx.GetContext(ctx, &id, `SELECT u.id FROM users u JOIN memberships m ON m.user_id=u.id AND m.environment_id=u.environment_id AND m.organization_id=$2
 		WHERE u.environment_id=$1 AND u.email=$3 AND NOT EXISTS(SELECT 1 FROM provisioned_identities i WHERE i.connection_id=$4 AND i.user_id=u.id)
 		FOR UPDATE OF u`, p.Environment, p.Organization, u.Email, p.Connection)

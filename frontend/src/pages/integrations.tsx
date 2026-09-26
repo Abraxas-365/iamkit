@@ -228,7 +228,7 @@ export function OAuthClientsPage() {
 }
 
 // --- Provisioning (SCIM) Credentials ---
-interface ProvCredential { id: string; name: string; organization_id: string; connection_id: string; expires_at: string; revoked_at: string | null; adopt_existing_members?: boolean }
+interface ProvCredential { id: string; name: string; organization_id: string; connection_id: string; expires_at: string; revoked_at: string | null; adopt_existing_members?: boolean; adopt_scope?: 'any' | 'verified_domains' }
 
 export function ProvisioningPage() {
   const { environment } = useParams()
@@ -260,6 +260,11 @@ export function ProvisioningPage() {
       { label: 'Enabled', value: 'true' },
       { label: 'Disabled', value: 'false' },
     ], hint: 'Link SCIM users to existing organization members with the same email instead of rejecting them.' },
+    { name: 'adopt_scope', label: 'Adoption scope', type: 'dropdown', value: '', options: [
+      { label: 'Unchanged (any email for new connections)', value: '' },
+      { label: 'Any email', value: 'any' },
+      { label: 'Verified domains only', value: 'verified_domains' },
+    ], hint: "Verified domains only: adopt a member only when their email is on one of the organization's verified domains." },
   ]
   const linkFields: Field[] = [
     { name: 'connection_id', label: 'Connection ID' },
@@ -276,7 +281,7 @@ export function ProvisioningPage() {
         <div className="space-y-1"><p className="font-medium">{c.name}</p><ID value={c.id} /></div>,
         <ID value={c.organization_id} />,
         <ID value={c.connection_id} />,
-        c.adopt_existing_members ? 'Yes' : 'No',
+        c.adopt_existing_members ? (c.adopt_scope === 'verified_domains' ? 'Verified domains' : 'Yes') : 'No',
         new Date(c.expires_at).toLocaleString(),
         <Status active={active} />,
       ]
@@ -288,6 +293,7 @@ export function ProvisioningPage() {
       const body: Record<string, string | boolean> = { ...values }
       if (body.adopt_existing_members === '') delete body.adopt_existing_members
       else body.adopt_existing_members = body.adopt_existing_members === 'true'
+      if (body.adopt_scope === '') delete body.adopt_scope
       const result = await api.post<{ id: string; secret: string; expires_at: string; connection_id: string }>(path, body)
       setSecret(result)
       list.reload()

@@ -12,6 +12,8 @@ backups, credential rotation and incident response before rollout.
 - Generate/store an RSA signing key (2048+ bits) and stable OAuth HMAC secret.
 - Mount the key read-only for the non-root container user; back it up separately.
 - Configure only trusted CORS origins, provider bindings and delivery endpoints.
+- Allow outbound DNS from the backend if organizations verify domains; it uses
+  the system resolver (10 s timeout) and looks up TXT records only on request.
 - Choose explicit bootstrap to avoid printing credentials in logs.
 
 ## Procedure

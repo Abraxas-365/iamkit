@@ -17,6 +17,10 @@ Within an environment:
 - **Group:** named set of members of one organization. Roles bound to a group
   apply to all its members. Groups are created by operators or pushed by a SCIM
   directory (directory groups are read-only to operators except for their roles).
+- **Domain:** DNS domain claimed by one organization per environment and
+  verified through a TXT record (or force-verified by an operator). Verified
+  domains prove the organization owns an email domain; SCIM adoption can be
+  restricted to them.
 - **Federation connection:** approved external OIDC issuer/client credentials.
   External subject links resolve to local users; matching email is not a link.
 - **Service account:** machine identity bound to an app/resource and permissions.

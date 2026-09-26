@@ -52,6 +52,9 @@ type Credential struct {
 	// AdoptExistingMembers links SCIM-created users to existing organization
 	// members with the same email instead of failing with 409.
 	AdoptExistingMembers *bool `json:"adopt_existing_members,omitempty"`
+	// AdoptScope is "any" or "verified_domains" (adopt only emails on the
+	// organization's verified domains). nil keeps the current setting.
+	AdoptScope *string `json:"adopt_scope,omitempty"`
 }
 
 type OAuthClient struct {
