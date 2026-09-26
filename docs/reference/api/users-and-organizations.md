@@ -15,7 +15,7 @@ Lists of users, organizations and members use the
 | `GET /users/:id` | User ID | 200 user |
 | `PATCH /users/:id` | Optional `name`, `active`, `otp_enabled`, `metadata` | 204 |
 | `DELETE /users/:id` | User ID | 204; suspend, not erase |
-| `DELETE /users/:id/permanent` | User ID | 204; permanently erases the user and every session, membership, grant, role assignment, position assignment, external identity, provisioned identity, and identity challenge referencing them. Irreversible. |
+| `DELETE /users/:id/permanent` | User ID | 204; permanently erases the user and every session, membership, group membership, grant, role assignment, position assignment, external identity, provisioned identity, and identity challenge referencing them. Irreversible. |
 
 List items contain only `id,email,name,active`. Use `GET /users/:id` for
 `email_verified,otp_enabled,metadata` as well; missing list fields are not evidence
@@ -71,10 +71,39 @@ and units must belong to the organization. Parent/manager relationships cannot
 introduce cycles. Structure collections are not the generic page contract. Job
 titles and reporting relationships are descriptive, not authorization grants.
 
+## Groups
+
+Groups collect organization members so roles can be assigned once to many
+people. Prefix these paths with `/organizations/:organization`:
+
+| Method/path | Input | Success |
+| --- | --- | --- |
+| `POST /groups` | `name`, optional `description` | 201 `{id}` |
+| `GET /groups` | List parameters; optional `user_id`, `connection_id` filters | 200 page |
+| `GET /groups/:group` | — | 200 group |
+| `PATCH /groups/:group` | Optional `name`, `description` | 204 |
+| `DELETE /groups/:group` | — | 204; also removes its members and role bindings |
+| `GET /groups/:group/members` | List parameters | 200 page `{user_id,user_name,user_email,active,added_at}` |
+| `POST /groups/:group/members` | `add` and/or `remove` user ID arrays (≤ 1000 total) | 204 |
+| `GET /members/:user/groups` | List parameters | 200 page of the member's groups |
+
+A group is `{id,name,description,connection_id,external_id?,member_count,created_at,updated_at}`.
+Names are unique per organization, case-insensitive (409). Every added user must
+be an active member of the organization (400); adding an existing member or
+removing a non-member is a no-op. Removing a member from the organization, SCIM
+deprovisioning and permanent user deletion also remove the user from its groups.
+Groups do not nest.
+
+Groups with a non-null `connection_id` are owned by a SCIM directory (see
+[SCIM Groups](scim.md#group-resource)): PATCH, DELETE and member changes return
+422; the directory manages them. Operators still decide which roles they carry.
+Bind roles with `POST /group-role-assignments` (see
+[authorization](applications-and-authorization.md#group-roles)).
+
 **Verify:** create a user and membership, read both back, then attempt login before
 creating a resource grant: it must fail. Complete the
 [first application](../../start/first-application.md) workflow for permitted access.
 
 Source: `user/adapters/userhttp/handler.go`, `user/user.go`,
-`organization/adapters/orghttp/{handler,structure}.go` and domain types under
+`organization/adapters/orghttp/{handler,structure,groups}.go` and domain types under
 `internal/iam/`.

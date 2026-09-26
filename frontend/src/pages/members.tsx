@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, UserMinus, Users, X } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, UserMinus, Users, UsersRound, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
-import { ConfirmDialog, DataTable, ID, PageHeader, Status } from '@/components/library/patterns'
+import { ConfirmDialog, DataTable, ErrorState, ID, PageHeader, Status } from '@/components/library/patterns'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 
 interface Member {
@@ -31,6 +32,7 @@ export default function MembersPage() {
   const canWrite = principal?.role !== 'viewer'
 
   const [removing, setRemoving] = useState<Member | null>(null)
+  const [inspecting, setInspecting] = useState<Member | null>(null)
   const [settingManager, setSettingManager] = useState<Member | null>(null)
   const [orgName, setOrgName] = useState('')
   const [managerFilter, setManagerFilter] = useState('')
@@ -65,6 +67,7 @@ export default function MembersPage() {
       <PageHeader
         title={orgName ? `Members of ${orgName}` : 'Members'}
         description={orgId}
+        actions={<Link to={`${orgsPath}/${orgId}/groups`} className={buttonVariants({ variant: 'outline' })}><UsersRound className="size-4" /> Groups</Link>}
       />
     </div>
 
@@ -96,35 +99,41 @@ export default function MembersPage() {
     </div>
 
     <DataTable
-      columns={['User', 'Email', 'Manager', 'Status', ...(canWrite ? ['Actions'] : [])]}
+      columns={['User', 'Email', 'Manager', 'Status', 'Actions']}
       loading={list.loading}
       error={list.error}
       retry={list.reload}
-      rows={list.data.map(m => {
-        const cells: React.ReactNode[] = [
-          <div className="space-y-1">
-            <p className="font-medium">{m.user_name}</p>
-            <ID value={m.user_id} />
-          </div>,
-          <span className="text-sm">{m.user_email}</span>,
-          m.manager_name
-            ? <button type="button" className="text-left text-sm text-primary hover:underline" onClick={() => setManagerFilter(m.manager_id!)}>{m.manager_name}</button>
-            : <span className="text-xs text-muted-foreground">—</span>,
-          <Status active={m.active} />,
-        ]
-        if (canWrite) cells.push(
-          <div className="flex items-center gap-1">
-            {m.active && <Button variant="ghost" size="icon" aria-label={`Set manager for ${m.user_name}`} onClick={() => setSettingManager(m)}>
-              <Users className="size-4" />
-            </Button>}
-            {m.active && <Button variant="ghost" size="icon" aria-label={`Remove ${m.user_name}`} onClick={() => setRemoving(m)}>
-              <UserMinus className="size-4" />
-            </Button>}
-          </div>,
-        )
-        return cells
-      })}
+      rows={list.data.map(m => [
+        <div className="space-y-1">
+          <p className="font-medium">{m.user_name}</p>
+          <ID value={m.user_id} />
+        </div>,
+        <span className="text-sm">{m.user_email}</span>,
+        m.manager_name
+          ? <button type="button" className="text-left text-sm text-primary hover:underline" onClick={() => setManagerFilter(m.manager_id!)}>{m.manager_name}</button>
+          : <span className="text-xs text-muted-foreground">—</span>,
+        <Status active={m.active} />,
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" aria-label={`Access of ${m.user_name}`} onClick={() => setInspecting(m)}>
+            <ShieldCheck className="size-4" />
+          </Button>
+          {canWrite && m.active && <Button variant="ghost" size="icon" aria-label={`Set manager for ${m.user_name}`} onClick={() => setSettingManager(m)}>
+            <Users className="size-4" />
+          </Button>}
+          {canWrite && m.active && <Button variant="ghost" size="icon" aria-label={`Remove ${m.user_name}`} onClick={() => setRemoving(m)}>
+            <UserMinus className="size-4" />
+          </Button>}
+        </div>,
+      ])}
     />
+
+    {inspecting && <MemberAccessDialog
+      member={inspecting}
+      base={base}
+      orgId={orgId!}
+      groupsPath={`${orgsPath}/${orgId}/groups`}
+      onClose={() => setInspecting(null)}
+    />}
 
     {removing && (
       <ConfirmDialog
@@ -198,6 +207,63 @@ function SetManagerDialog({ member, membersPath, profilePath, onClose, onSaved }
           }}>{busy ? 'Saving…' : 'Save'}</Button>
         </div>
       </div>
+    </DialogContent>
+  </Dialog>
+}
+
+interface EffectiveRole {
+  role_id: string; role_name: string; resource_id: string; resource_name: string
+  source: 'direct' | 'group'; group_id?: string; group_name?: string
+}
+interface MemberGroup { id: string; name: string; connection_id: string | null }
+
+/** Shows why a member holds each role: directly or through a group. */
+function MemberAccessDialog({ member, base, orgId, groupsPath, onClose }: {
+  member: Member; base: string; orgId: string; groupsPath: string; onClose: () => void
+}) {
+  const [roles, setRoles] = useState<EffectiveRole[] | null>(null)
+  const [groups, setGroups] = useState<MemberGroup[]>([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const q = new URLSearchParams({ organization_id: orgId, user_id: member.user_id })
+    Promise.all([
+      api.list<EffectiveRole>(`${base}/effective-roles?${q}`, controller.signal),
+      api.list<MemberGroup>(`${base}/organizations/${orgId}/members/${member.user_id}/groups?limit=100`, controller.signal),
+    ]).then(([r, g]) => { setRoles(r.data); setGroups(g.data) })
+      .catch(e => { if (!controller.signal.aborted) setError(message(e)) })
+    return () => controller.abort()
+  }, [base, orgId, member.user_id])
+
+  return <Dialog open onOpenChange={open => { if (!open) onClose() }}>
+    <DialogContent className="sm:max-w-lg">
+      <DialogTitle className="text-base font-semibold">Access of {member.user_name}</DialogTitle>
+      <DialogDescription className="text-muted-foreground">
+        Effective roles in this organization: direct assignments plus roles inherited from groups. Grants are not shown.
+      </DialogDescription>
+      {error ? <ErrorState error={error} /> : roles === null ? <p role="status" className="text-sm text-muted-foreground">Loading…</p> : <div className="space-y-4">
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Roles</h3>
+          {roles.length === 0 ? <p className="text-sm text-muted-foreground">No roles.</p> : <ul className="divide-y rounded-lg border">
+            {roles.map(r => <li key={`${r.role_id}:${r.source}:${r.group_id ?? ''}`} className="flex items-center justify-between gap-3 px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate font-medium">{r.role_name}</p>
+                <p className="truncate text-xs text-muted-foreground">{r.resource_name}</p>
+              </div>
+              {r.source === 'group'
+                ? <Link to={`${groupsPath}/${r.group_id}`} className="shrink-0"><Badge variant="secondary" className="bg-primary/10 text-primary">via {r.group_name}</Badge></Link>
+                : <Badge variant="secondary" className="shrink-0">Direct</Badge>}
+            </li>)}
+          </ul>}
+        </div>
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Groups</h3>
+          {groups.length === 0 ? <p className="text-sm text-muted-foreground">Not in any group.</p> : <div className="flex flex-wrap gap-2">
+            {groups.map(g => <Link key={g.id} to={`${groupsPath}/${g.id}`}><Badge variant="outline">{g.name}{g.connection_id ? ' · Directory' : ''}</Badge></Link>)}
+          </div>}
+        </div>
+      </div>}
     </DialogContent>
   </Dialog>
 }

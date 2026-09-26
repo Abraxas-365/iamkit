@@ -73,6 +73,27 @@ func (s *Grants) AssignRole(ctx context.Context, m authorization.Mutation, input
 	}
 	return s.repository.AssignRole(ctx, m, input)
 }
+func (s *Grants) AssignGroupRole(ctx context.Context, m authorization.Mutation, input authorization.GroupRoleAssignment, remove bool) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+	if remove {
+		return s.repository.UnassignGroupRole(ctx, m, input)
+	}
+	return s.repository.AssignGroupRole(ctx, m, input)
+}
+func (s *Grants) GroupRoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter authorization.GroupRoleAssignmentFilter, page query.Pagination) (query.Paginated[authorization.GroupRoleAssignmentView], error) {
+	return s.repository.GroupRoleAssignments(ctx, environment, filter, page)
+}
+func (s *Grants) EffectiveRoles(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) ([]authorization.EffectiveRoleView, error) {
+	if organization.IsZero() {
+		return nil, errx.Validation("organization_id must be a valid UUID")
+	}
+	if user.IsZero() {
+		return nil, errx.Validation("user_id must be a valid UUID")
+	}
+	return s.repository.EffectiveRoles(ctx, environment, organization, user)
+}
 func (s *Grants) PutGrant(ctx context.Context, environment identity.EnvironmentID, input authorization.Grant) (identity.GrantID, error) {
 	if err := input.Validate(); err != nil {
 		return identity.GrantID{}, err

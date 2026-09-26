@@ -42,6 +42,10 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	structure := e.Group("/organizations/:organization", apiauth.ReadWrite(authorization.PermMembersRead, authorization.PermMembersWrite), s.APIHandlers.Structure.Check)
 	s.APIHandlers.Structure.RegisterViews(structure)
 	s.APIHandlers.Structure.RegisterMutations(structure)
+	if s.APIHandlers.Groups != nil {
+		s.APIHandlers.Groups.RegisterViews(structure)
+		s.APIHandlers.Groups.RegisterMutations(structure)
+	}
 
 	// Applications
 	apps := e.Group("/applications", apiauth.ReadWrite(authorization.PermAppsRead, authorization.PermAppsWrite))
@@ -70,6 +74,10 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	roles.Post("/role-assignments", s.APIHandlers.Grants.Assign)
 	roles.Get("/role-assignments", s.APIHandlers.Grants.RoleAssignments)
 	roles.Delete("/role-assignments/:role/:organization/:user", s.APIHandlers.Grants.Unassign)
+	roles.Post("/group-role-assignments", s.APIHandlers.Grants.AssignGroup)
+	roles.Get("/group-role-assignments", s.APIHandlers.Grants.GroupRoleAssignments)
+	roles.Delete("/group-role-assignments/:role/:organization/:group", s.APIHandlers.Grants.UnassignGroup)
+	roles.Get("/effective-roles", s.APIHandlers.Grants.EffectiveRoles)
 
 	// Grants
 	grants := e.Group("", apiauth.ReadWrite(authorization.PermGrantsRead, authorization.PermGrantsWrite))

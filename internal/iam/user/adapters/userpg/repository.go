@@ -108,6 +108,7 @@ func (r *Repository) Delete(ctx context.Context, m user.Mutation, id identity.Us
 		`DELETE FROM grants WHERE environment_id=$1 AND user_id=$2`,
 		`DELETE FROM role_assignments WHERE environment_id=$1 AND user_id=$2`,
 		`DELETE FROM position_assignments WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM group_members WHERE environment_id=$1 AND user_id=$2`,
 		`UPDATE memberships SET manager_id=NULL WHERE environment_id=$1 AND manager_id=$2`,
 		`DELETE FROM memberships WHERE environment_id=$1 AND user_id=$2`,
 		`DELETE FROM external_identities WHERE environment_id=$1 AND user_id=$2`,

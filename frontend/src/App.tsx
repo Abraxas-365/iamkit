@@ -9,6 +9,7 @@ import { KeysPage, SettingsPage } from '@/pages/settings'
 import OperatorsPage from '@/pages/operators'
 import { ServiceAccountsPage, FederationPage, OAuthClientsPage, ProvisioningPage } from '@/pages/integrations'
 import MembersPage from '@/pages/members'
+import { GroupDetailPage, GroupsPage } from '@/pages/groups'
 import RoleAssignmentsPage from '@/pages/role-assignments'
 import ApplicationDetailPage from '@/pages/application-detail'
 import FederationDetailPage from '@/pages/federation-detail'
@@ -24,6 +25,8 @@ export default function App() {
       <Route path="projects/:project/environments/:environment">
         {(['users', 'organizations', 'applications', 'resources', 'roles', 'grants'] as const).map(kind => <Route key={kind} path={kind} element={<EntitiesPage key={kind} kind={kind} />} />)}
         <Route path="organizations/:orgId/members" element={<MembersPage />} />
+        <Route path="organizations/:orgId/groups" element={<GroupsPage />} />
+        <Route path="organizations/:orgId/groups/:groupId" element={<GroupDetailPage />} />
         <Route path="applications/:appId" element={<ApplicationDetailPage />} />
         <Route path="role-assignments" element={<RoleAssignmentsPage />} />
         <Route path="service-accounts" element={<ServiceAccountsPage />} />

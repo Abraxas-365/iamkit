@@ -2,8 +2,10 @@ package provhttp
 
 import (
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
@@ -13,11 +15,48 @@ import (
 
 const scimUserSchema = "urn:ietf:params:scim:schemas:core:2.0:User"
 const scimEnterpriseSchema = "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+const scimListSchema = "urn:ietf:params:scim:api:messages:2.0:ListResponse"
+const scimContentType = "application/scim+json; charset=utf-8"
 
 type scimEnterprise struct {
-	Manager struct {
+	Manager *scimManager `json:"manager,omitempty"`
+}
+type scimManager struct {
+	Value string `json:"value"`
+}
+
+// UnmarshalJSON accepts the manager as `{"value":"id"}` or a bare `"id"`.
+func (m *scimManager) UnmarshalJSON(raw []byte) error {
+	var id string
+	if err := json.Unmarshal(raw, &id); err == nil {
+		m.Value = id
+		return nil
+	}
+	var ref struct {
 		Value string `json:"value"`
-	} `json:"manager"`
+	}
+	if err := json.Unmarshal(raw, &ref); err != nil {
+		return err
+	}
+	m.Value = ref.Value
+	return nil
+}
+
+type scimEmail struct {
+	Value   string `json:"value"`
+	Type    string `json:"type,omitempty"`
+	Primary bool   `json:"primary"`
+}
+type scimMeta struct {
+	ResourceType string `json:"resourceType"`
+	Created      string `json:"created,omitempty"`
+	LastModified string `json:"lastModified,omitempty"`
+	Location     string `json:"location,omitempty"`
+}
+type scimName struct {
+	Formatted string `json:"formatted,omitempty"`
+	Given     string `json:"givenName,omitempty"`
+	Family    string `json:"familyName,omitempty"`
 }
 type scimUser struct {
 	Enterprise  *scimEnterprise `json:"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User,omitempty"`
@@ -25,28 +64,48 @@ type scimUser struct {
 	ID          string          `json:"id,omitempty"`
 	ExternalID  string          `json:"externalId,omitempty"`
 	UserName    string          `json:"userName"`
-	DisplayName string          `json:"displayName"`
+	DisplayName string          `json:"displayName,omitempty"`
+	Name        *scimName       `json:"name,omitempty"`
 	Active      *bool           `json:"active,omitempty"`
-	Emails      []struct {
-		Value   string `json:"value"`
-		Primary bool   `json:"primary"`
-	} `json:"emails,omitempty"`
-	Name struct {
-		Given  string `json:"givenName"`
-		Family string `json:"familyName"`
-	} `json:"name,omitempty"`
+	Emails      []scimEmail     `json:"emails,omitempty"`
+	Meta        *scimMeta       `json:"meta,omitempty"`
 }
 
-func dto(u provisioning.User) scimUser {
-	out := scimUser{Schemas: []string{scimUserSchema}, ID: u.ID.String(), ExternalID: u.External, UserName: u.Email, DisplayName: u.Name, Active: &u.Active}
+// scimInput is the inbound resource; active uses parseBool so Entra's
+// "True"/"False" strings are accepted.
+type scimInput struct {
+	scimUser
+	Active json.RawMessage `json:"active,omitempty"`
+}
+
+func dto(c *fiber.Ctx, u provisioning.User) scimUser {
+	active := u.Active
+	out := scimUser{
+		Schemas: []string{scimUserSchema}, ID: u.ID.String(),
+		UserName: u.Email, DisplayName: u.Name, Name: &scimName{Formatted: u.Name}, Active: &active,
+		Emails: []scimEmail{{Value: u.Email, Type: "work", Primary: true}},
+		Meta:   &scimMeta{ResourceType: "User", Location: c.BaseURL() + "/scim/v2/Users/" + u.ID.String()},
+	}
+	// A derived anchor is IAMKit's own key, not the directory's externalId.
+	if u.ExternalSource != provisioning.AnchorDerived {
+		out.ExternalID = u.External
+	}
+	if !u.Created.IsZero() {
+		out.Meta.Created = u.Created.UTC().Format(time.RFC3339)
+		out.Meta.LastModified = u.Modified.UTC().Format(time.RFC3339)
+	}
+	for _, alias := range u.Aliases {
+		out.Emails = append(out.Emails, scimEmail{Value: alias.Value, Type: alias.Type})
+	}
 	if u.Manager != "" {
-		out.Enterprise = &scimEnterprise{}
-		out.Enterprise.Manager.Value = u.Manager
+		out.Enterprise = &scimEnterprise{Manager: &scimManager{Value: u.Manager}}
 		out.Schemas = append(out.Schemas, scimEnterpriseSchema)
 	}
 	return out
 }
-func normalize(input *scimUser) {
+
+// normalize fills userName/displayName from emails/name when absent.
+func normalize(input *scimInput) {
 	if input.UserName == "" {
 		for _, email := range input.Emails {
 			if input.UserName == "" || email.Primary {
@@ -54,61 +113,145 @@ func normalize(input *scimUser) {
 			}
 		}
 	}
-	if input.DisplayName == "" {
-		input.DisplayName = strings.TrimSpace(input.Name.Given + " " + input.Name.Family)
+	if input.DisplayName == "" && input.Name != nil {
+		input.DisplayName = strings.TrimSpace(input.Name.Formatted)
+		if input.DisplayName == "" {
+			input.DisplayName = strings.TrimSpace(input.Name.Given + " " + input.Name.Family)
+		}
 	}
+}
+
+// aliases returns emails[] as domain aliases; the primary is filtered out by
+// the service.
+func (input scimInput) aliases() []provisioning.Email {
+	out := make([]provisioning.Email, 0, len(input.Emails))
+	for _, e := range input.Emails {
+		if v := strings.TrimSpace(e.Value); v != "" {
+			out = append(out, provisioning.Email{Value: v, Type: e.Type})
+		}
+	}
+	return out
+}
+
+func (input scimInput) manager() *string {
+	if input.Enterprise == nil || input.Enterprise.Manager == nil {
+		return nil
+	}
+	v := strings.TrimSpace(input.Enterprise.Manager.Value)
+	return &v
+}
+
+// active returns nil when absent, else the parsed boolean.
+func (input scimInput) active() (*bool, error) {
+	if len(input.Active) == 0 || string(input.Active) == "null" {
+		return nil, nil
+	}
+	v, err := parseBool(input.Active)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
 }
 
 type Handler struct {
 	commands provisioning.Commands
 	queries  provisioning.Queries
+	groups   *Groups
 }
 
-func New(commands provisioning.Commands, queries provisioning.Queries) *Handler {
-	return &Handler{commands, queries}
+func New(commands provisioning.Commands, queries provisioning.Queries, groups *Groups) *Handler {
+	return &Handler{commands, queries, groups}
 }
 func principal(c *fiber.Ctx) provisioning.Principal {
 	return c.Locals("provisioner").(provisioning.Principal)
 }
+func send(c *fiber.Ctx, status int, v any) error {
+	return c.Status(status).JSON(v, scimContentType)
+}
 func parse(c *fiber.Ctx, v any) error {
-	if err := c.BodyParser(v); err != nil {
-		return errx.Validation("invalid request")
+	if err := json.Unmarshal(c.Body(), v); err != nil {
+		return scimError("invalid request body", scimInvalidSyntax)
 	}
 	return nil
 }
-func scimFailure(c *fiber.Ctx, status int, message string) error {
+func scimFailure(c *fiber.Ctx, status int, message, scimType string) error {
 	if status >= 500 {
-		message = "internal server error"
+		message, scimType = "internal server error", ""
 	}
-	return c.Status(status).JSON(fiber.Map{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:Error"}, "status": strconv.Itoa(status), "detail": message})
+	body := fiber.Map{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:Error"}, "status": strconv.Itoa(status), "detail": message}
+	if scimType != "" {
+		body["scimType"] = scimType
+	}
+	return send(c, status, body)
+}
+
+// credential extracts the provisioning secret. Directories send it as
+// `Authorization: Bearer` (RFC 7644 §2); X-API-Key is kept for compatibility.
+// When both are present they must agree.
+func credential(c *fiber.Ctx) string {
+	bearer := ""
+	if scheme, token, ok := strings.Cut(strings.TrimSpace(c.Get("Authorization")), " "); ok && strings.EqualFold(scheme, "Bearer") {
+		bearer = strings.TrimSpace(token)
+	}
+	key := strings.TrimSpace(c.Get("X-API-Key"))
+	switch {
+	case bearer != "" && key != "" && bearer != key:
+		return ""
+	case bearer != "":
+		return bearer
+	default:
+		return key
+	}
 }
 func (h *Handler) authenticate(c *fiber.Ctx) error {
-	key := c.Get("X-API-Key")
+	key := credential(c)
 	if key == "" {
-		return scimFailure(c, 401, "invalid credential")
+		return scimFailure(c, 401, "invalid credential", "")
 	}
 	p, err := h.commands.Authenticate(c.Context(), key)
 	if err != nil {
-		return scimFailure(c, 401, "invalid credential")
+		return scimFailure(c, 401, "invalid credential", "")
 	}
 	c.Locals("provisioner", p)
 	c.Set("Cache-Control", "no-store")
 	if err = c.Next(); err != nil {
 		var custom *errx.Error
 		if errx.As(err, &custom) && custom != nil {
-			return scimFailure(c, custom.HTTPStatus, custom.Message)
+			scimType, _ := custom.Details["scimType"].(string)
+			if scimType == "" && custom.Type == errx.TypeConflict {
+				scimType = scimUniqueness
+			}
+			return scimFailure(c, custom.HTTPStatus, custom.Message, scimType)
 		}
-		return scimFailure(c, 500, "internal server error")
+		var routing *fiber.Error
+		if errx.As(err, &routing) && routing != nil && routing.Code < 500 {
+			return scimFailure(c, routing.Code, "resource not supported", "")
+		}
+		return scimFailure(c, 500, "internal server error", "")
 	}
 	return nil
 }
 func (h *Handler) Register(app *fiber.App) {
 	r := app.Group("/scim/v2", h.authenticate)
 	r.Get("/ServiceProviderConfig", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"schemas": []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"}, "patch": fiber.Map{"supported": true}, "bulk": fiber.Map{"supported": false}, "filter": fiber.Map{"supported": true, "maxResults": 100}, "sort": fiber.Map{"supported": false}, "changePassword": fiber.Map{"supported": false}, "etag": fiber.Map{"supported": false}, "authenticationSchemes": []fiber.Map{{"type": "httpApiKey", "name": "API Key", "description": "Scoped provisioning credential via X-API-Key header"}}})
+		return send(c, 200, fiber.Map{
+			"schemas":        []string{"urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"},
+			"patch":          fiber.Map{"supported": true},
+			"bulk":           fiber.Map{"supported": false, "maxOperations": 0, "maxPayloadSize": 0},
+			"filter":         fiber.Map{"supported": true, "maxResults": 100},
+			"sort":           fiber.Map{"supported": false},
+			"changePassword": fiber.Map{"supported": false},
+			"etag":           fiber.Map{"supported": false},
+			"authenticationSchemes": []fiber.Map{{
+				"type": "oauthbearertoken", "name": "Bearer token", "primary": true,
+				"description": "Provisioning credential sent as Authorization: Bearer (X-API-Key is also accepted)",
+			}},
+			"meta": fiber.Map{"resourceType": "ServiceProviderConfig", "location": c.BaseURL() + "/scim/v2/ServiceProviderConfig"},
+		})
 	})
 	r.Get("/ResourceTypes", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:ListResponse"}, "totalResults": 1, "Resources": []fiber.Map{{"id": "User", "name": "User", "endpoint": "/Users", "schema": scimUserSchema, "schemaExtensions": []fiber.Map{{"schema": scimEnterpriseSchema, "required": false}}}}})
+		types := []fiber.Map{userResourceType(), groupResourceType()}
+		return send(c, 200, fiber.Map{"schemas": []string{scimListSchema}, "totalResults": len(types), "itemsPerPage": len(types), "startIndex": 1, "Resources": types})
 	})
 	r.Get("/Schemas", scimSchemas)
 	r.Get("/Schemas/:id", scimSchema)
@@ -119,29 +262,36 @@ func (h *Handler) Register(app *fiber.App) {
 	r.Put("/Users/:id", h.replace)
 	r.Patch("/Users/:id", h.patch)
 	r.Delete("/Users/:id", h.remove)
+	if h.groups != nil {
+		h.groups.register(r)
+	}
 }
-func (h *Handler) get(c *fiber.Ctx) error {
+func userID(c *fiber.Ctx) (identity.UserID, error) {
 	id, err := identity.ParseUserID(c.Params("id"))
 	if err != nil {
-		return errx.NotFound("user not found")
+		return id, errx.NotFound("user not found")
+	}
+	return id, nil
+}
+func (h *Handler) get(c *fiber.Ctx) error {
+	id, err := userID(c)
+	if err != nil {
+		return err
 	}
 	u, err := h.queries.Find(c.Context(), principal(c), id)
 	if err != nil {
 		return err
 	}
-	return c.JSON(dto(u))
+	return send(c, 200, dto(c, u))
 }
 func (h *Handler) list(c *fiber.Ctx) error {
-	f := provisioning.Filter{Start: c.QueryInt("startIndex", 1), Count: c.QueryInt("count", 100)}
+	f := provisioning.Filter{Start: c.QueryInt("startIndex", 1), Count: c.QueryInt("count", provisioning.MaxResults)}.Clamped()
 	if filter := c.Query("filter"); filter != "" {
-		parts := strings.SplitN(filter, " eq ", 2)
-		if len(parts) != 2 {
-			return errx.Validation("unsupported filter")
+		field, value, err := parseFilter(filter)
+		if err != nil {
+			return err
 		}
-		f.Field = parts[0]
-		if err := json.Unmarshal([]byte(parts[1]), &f.Value); err != nil {
-			return errx.Validation("invalid filter")
-		}
+		f.Field, f.Value = field, value
 	}
 	rows, total, err := h.queries.List(c.Context(), principal(c), f)
 	if err != nil {
@@ -149,152 +299,133 @@ func (h *Handler) list(c *fiber.Ctx) error {
 	}
 	resources := make([]scimUser, 0, len(rows))
 	for _, u := range rows {
-		resources = append(resources, dto(u))
+		resources = append(resources, dto(c, u))
 	}
-	return c.JSON(fiber.Map{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:ListResponse"}, "totalResults": total, "startIndex": f.Start, "itemsPerPage": len(resources), "Resources": resources})
+	return send(c, 200, fiber.Map{"schemas": []string{scimListSchema}, "totalResults": total, "startIndex": f.Start, "itemsPerPage": len(resources), "Resources": resources})
 }
 func (h *Handler) create(c *fiber.Ctx) error {
-	var input scimUser
+	var input scimInput
 	if err := parse(c, &input); err != nil {
 		return err
 	}
 	normalize(&input)
-	u := provisioning.User{Email: input.UserName, Name: input.DisplayName, External: input.ExternalID, Active: true}
-	if input.Active != nil {
-		u.Active = *input.Active
+	active, err := input.active()
+	if err != nil {
+		return err
 	}
-	if input.Enterprise != nil {
-		u.Manager = input.Enterprise.Manager.Value
+	u := provisioning.User{Email: input.UserName, Name: input.DisplayName, External: strings.TrimSpace(input.ExternalID), Aliases: input.aliases(), Active: true}
+	if active != nil {
+		u.Active = *active
+	}
+	if m := input.manager(); m != nil {
+		u.Manager = *m
 	}
 	out, err := h.commands.Create(c.Context(), principal(c), u)
 	if err != nil {
 		return err
 	}
-	input.ID = out.ID.String()
-	input.UserName = out.Email
-	input.DisplayName = out.Name
-	input.ExternalID = out.External
-	input.Active = &out.Active
-	input.Schemas = []string{scimUserSchema}
-	if input.Enterprise != nil {
-		input.Schemas = append(input.Schemas, scimEnterpriseSchema)
-	}
-	c.Set("Location", "/scim/v2/Users/"+out.ID.String())
-	return c.Status(201).JSON(input)
+	resp := dto(c, out)
+	c.Set("Location", resp.Meta.Location)
+	return send(c, 201, resp)
 }
 func (h *Handler) replace(c *fiber.Ctx) error {
-	var input scimUser
+	id, err := userID(c)
+	if err != nil {
+		return err
+	}
+	var input scimInput
 	if err := parse(c, &input); err != nil {
 		return err
 	}
 	normalize(&input)
-	id, err := identity.ParseUserID(c.Params("id"))
-	if err != nil {
-		return errx.NotFound("user not found")
-	}
 	old, err := h.queries.Find(c.Context(), principal(c), id)
 	if err != nil {
 		return err
 	}
-	if !strings.EqualFold(strings.TrimSpace(input.UserName), old.Email) || (input.ExternalID != "" && input.ExternalID != old.External) {
-		return errx.Validation("identity identifiers are immutable")
+	// PUT is a full replace keyed by the resource id: userName may change
+	// (rename), externalId may upgrade a derived anchor, emails[] becomes the
+	// directory-managed alias set.
+	update := provisioning.Update{}
+	if userName := strings.TrimSpace(input.UserName); userName == "" {
+		return scimError("userName is required", scimInvalidValue)
+	} else if !strings.EqualFold(userName, old.Email) {
+		update.Email = &userName
 	}
-	if input.DisplayName == "" {
-		input.DisplayName = old.Email
+	if external := strings.TrimSpace(input.ExternalID); external != "" && external != old.External {
+		update.External = &external
 	}
-	active := true
-	if input.Active != nil {
-		active = *input.Active
+	aliases := input.aliases()
+	update.Aliases = &aliases
+	name := strings.TrimSpace(input.DisplayName)
+	if name == "" {
+		name = old.Email
 	}
-	update := provisioning.Update{Name: &input.DisplayName, Active: &active}
-	if input.Enterprise != nil {
-		update.Manager = &input.Enterprise.Manager.Value
+	active, err := input.active()
+	if err != nil {
+		return err
 	}
+	if active == nil {
+		t := true
+		active = &t
+	}
+	update.Name, update.Active, update.Manager = &name, active, input.manager()
 	return h.update(c, id, update)
 }
 func (h *Handler) patch(c *fiber.Ctx) error {
-	id, err := identity.ParseUserID(c.Params("id"))
+	id, err := userID(c)
 	if err != nil {
-		return errx.NotFound("user not found")
-	}
-	if _, err := h.queries.Find(c.Context(), principal(c), id); err != nil {
 		return err
 	}
 	var input struct {
-		Operations []struct {
-			Op    string          `json:"op"`
-			Path  string          `json:"path"`
-			Value json.RawMessage `json:"value"`
-		} `json:"Operations"`
+		Operations []patchOp `json:"Operations"`
 	}
 	if err := parse(c, &input); err != nil {
 		return err
 	}
-	var update provisioning.Update
-	for _, op := range input.Operations {
-		if !strings.EqualFold(op.Op, "replace") && !strings.EqualFold(op.Op, "add") {
-			return errx.Validation("unsupported patch operation")
+	// PATCH is read-modify-write (emails[] edits apply to the current alias
+	// set): the update is conditional on the version read, retried when a
+	// concurrent request got there first.
+	for attempt := 0; ; attempt++ {
+		old, err := h.queries.Find(c.Context(), principal(c), id)
+		if err != nil {
+			return err
 		}
-		switch strings.ToLower(op.Path) {
-		case strings.ToLower(scimEnterpriseSchema + ":manager.value"):
-			var manager string
-			if err := json.Unmarshal(op.Value, &manager); err != nil {
-				return errx.Validation("manager value must be user ID")
-			}
-			update.Manager = &manager
-		case strings.ToLower(scimEnterpriseSchema + ":manager"):
-			var manager struct{ Value string `json:"value"` }
-			if err := json.Unmarshal(op.Value, &manager); err != nil {
-				return errx.Validation("invalid manager")
-			}
-			update.Manager = &manager.Value
-		case "active":
-			if err := json.Unmarshal(op.Value, &update.Active); err != nil {
-				return errx.Validation("active must be boolean")
-			}
-		case "displayname":
-			if err := json.Unmarshal(op.Value, &update.Name); err != nil {
-				return errx.Validation("displayName must be string")
-			}
-		case "":
-			var values struct {
-				Active     *bool           `json:"active"`
-				Name       *string         `json:"displayName"`
-				Enterprise *scimEnterprise `json:"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"`
-			}
-			if err := json.Unmarshal(op.Value, &values); err != nil {
-				return errx.Validation("invalid patch value")
-			}
-			if values.Active != nil {
-				update.Active = values.Active
-			}
-			if values.Name != nil {
-				update.Name = values.Name
-			}
-			if values.Enterprise != nil {
-				update.Manager = &values.Enterprise.Manager.Value
-			}
-		default:
-			return errx.Validation("unsupported patch path")
+		update, err := applyPatch(old, input.Operations)
+		if err != nil {
+			return err
 		}
+		update.IfVersion = &old.Version
+		out, err := h.commands.Update(c.Context(), principal(c), id, update)
+		if errors.Is(err, provisioning.ErrStale) && attempt < 3 {
+			continue
+		}
+		if errors.Is(err, provisioning.ErrStale) {
+			return errx.Conflict("resource was modified concurrently; retry")
+		}
+		if err != nil {
+			return err
+		}
+		return send(c, 200, dto(c, out))
 	}
-	return h.update(c, id, update)
 }
 func (h *Handler) update(c *fiber.Ctx, id identity.UserID, input provisioning.Update) error {
 	out, err := h.commands.Update(c.Context(), principal(c), id, input)
 	if err != nil {
 		return err
 	}
-	if c.Method() == "DELETE" {
-		return c.SendStatus(204)
-	}
-	return c.JSON(dto(out))
+	return send(c, 200, dto(c, out))
 }
+
+// remove deprovisions the identity from this connection: the membership is
+// deactivated and the resource answers 404 afterwards. The underlying user is
+// kept (it may exist in other organizations); creating it again reactivates it.
 func (h *Handler) remove(c *fiber.Ctx) error {
-	id, err := identity.ParseUserID(c.Params("id"))
+	id, err := userID(c)
 	if err != nil {
-		return errx.NotFound("user not found")
+		return err
 	}
-	active := false
-	return h.update(c, id, provisioning.Update{Active: &active})
+	if err := h.commands.Delete(c.Context(), principal(c), id); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
 }

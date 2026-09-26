@@ -48,6 +48,14 @@ type Enterprise struct {
 	} `json:"manager"`
 }
 
+// Email is a SCIM emails[] element. The primary address is userName; other
+// entries are stored as aliases.
+type Email struct {
+	Value   string `json:"value"`
+	Type    string `json:"type,omitempty"`
+	Primary bool   `json:"primary,omitempty"`
+}
+
 type User struct {
 	Schemas     []string    `json:"schemas,omitempty"`
 	ID          string      `json:"id,omitempty"`
@@ -55,6 +63,7 @@ type User struct {
 	UserName    string      `json:"userName"`
 	DisplayName string      `json:"displayName"`
 	Active      *bool       `json:"active,omitempty"`
+	Emails      []Email     `json:"emails,omitempty"`
 	Enterprise  *Enterprise `json:"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User,omitempty"`
 }
 

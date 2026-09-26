@@ -97,9 +97,22 @@ func (r *Repository) AddMember(ctx context.Context, environment identity.Environ
 	_, err := r.db.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, environment, input.Organization, input.User)
 	return conflict(err)
 }
+
+// RemoveMember deactivates the membership and drops the user from the
+// organization's groups; re-adding the member does not restore them.
 func (r *Repository) RemoveMember(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, user identity.UserID) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE memberships SET active=false WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user)
-	return failure(err)
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err)
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE memberships SET active=false WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user); err != nil {
+		return failure(err)
+	}
+	if _, err = tx.ExecContext(ctx, `DELETE FROM group_members WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user); err != nil {
+		return failure(err)
+	}
+	return failure(tx.Commit())
 }
 func (r *Repository) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, filter organization.MemberFilter, page query.Pagination) (query.Paginated[organization.MemberView], error) {
 	base := `FROM memberships m JOIN users u ON u.id=m.user_id LEFT JOIN users mgr ON mgr.id=m.manager_id WHERE m.environment_id=$1 AND m.organization_id=$2`

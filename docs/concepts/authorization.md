@@ -19,6 +19,13 @@ may not remove permission supplied by a role. Inspect both paths when revoking
 access. Offline tokens contain issued permissions until expiry; use introspection
 when immediate current-state evaluation is required.
 
+A member's effective permissions for a resource are the union of three sources:
+direct grants, directly assigned roles, and roles bound to groups the member
+belongs to in that organization. Group roles are resolved when a token is
+issued, never copied onto the user, so removing someone from a group revokes
+only what the group supplied. `GET /effective-roles` shows which path supplies
+each role.
+
 Permissions are exact strings, not wildcard patterns. Use the resource's catalog;
 `iam:users:write` belongs to the built-in IAM resource, not the invoice catalog.
 IAM administrative permissions deserve separate service credentials and review.

@@ -17,7 +17,7 @@ type Control struct {
 func NewControl(r provisioning.ControlRepository, s provisioning.Generator) *Control {
 	return &Control{r, s}
 }
-func (s *Control) Issue(ctx context.Context, environment identity.EnvironmentID, input provisioning.CredentialInput) (provisioning.Credential, error) {
+func (s *Control) Issue(ctx context.Context, m provisioning.Mutation, input provisioning.CredentialInput) (provisioning.Credential, error) {
 	var out provisioning.Credential
 	if err := input.Validate(); err != nil {
 		return out, err
@@ -35,7 +35,7 @@ func (s *Control) Issue(ctx context.Context, environment identity.EnvironmentID,
 		return out, err
 	}
 	out = provisioning.Credential{ID: identity.NewCredentialID(), Secret: raw, Expires: time.Now().Add(ttl), Connection: input.Connection}
-	return out, s.repository.IssueCredential(ctx, environment, input, out, hash, create)
+	return out, s.repository.IssueCredential(ctx, m, input, out, hash, create)
 }
 func (s *Control) Revoke(ctx context.Context, m provisioning.Mutation, id identity.CredentialID) error {
 	if id.IsZero() {

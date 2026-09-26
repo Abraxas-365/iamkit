@@ -23,6 +23,7 @@ type GrantCommands interface {
 	SaveRole(ctx context.Context, m Mutation, role identity.RoleID, input Role) (identity.RoleID, error)
 	DeleteRole(ctx context.Context, m Mutation, role identity.RoleID) error
 	AssignRole(ctx context.Context, m Mutation, input RoleAssignment, assign bool) error
+	AssignGroupRole(ctx context.Context, m Mutation, input GroupRoleAssignment, remove bool) error
 	PutGrant(ctx context.Context, environment identity.EnvironmentID, input Grant) (identity.GrantID, error)
 	DeleteGrant(ctx context.Context, environment identity.EnvironmentID, grant identity.GrantID) error
 }
@@ -30,6 +31,9 @@ type GrantQueries interface {
 	ListRoles(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, page query.Pagination) (query.Paginated[RoleView], error)
 	ListGrants(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, page query.Pagination) (query.Paginated[GrantView], error)
 	RoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter RoleAssignmentFilter, page query.Pagination) (query.Paginated[RoleAssignmentView], error)
+	GroupRoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter GroupRoleAssignmentFilter, page query.Pagination) (query.Paginated[GroupRoleAssignmentView], error)
+	// EffectiveRoles lists every role user holds in organization with its source.
+	EffectiveRoles(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) ([]EffectiveRoleView, error)
 }
 
 type ResourceRepository interface {
@@ -51,6 +55,10 @@ type GrantRepository interface {
 	DeleteRole(ctx context.Context, m Mutation, role identity.RoleID) error
 	AssignRole(ctx context.Context, m Mutation, input RoleAssignment) error
 	UnassignRole(ctx context.Context, m Mutation, input RoleAssignment) error
+	AssignGroupRole(ctx context.Context, m Mutation, input GroupRoleAssignment) error
+	UnassignGroupRole(ctx context.Context, m Mutation, input GroupRoleAssignment) error
+	GroupRoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter GroupRoleAssignmentFilter, page query.Pagination) (query.Paginated[GroupRoleAssignmentView], error)
+	EffectiveRoles(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) ([]EffectiveRoleView, error)
 	PutGrant(ctx context.Context, environment identity.EnvironmentID, grant identity.GrantID, input Grant) (identity.GrantID, error)
 	DeleteGrant(ctx context.Context, environment identity.EnvironmentID, grant identity.GrantID) error
 }

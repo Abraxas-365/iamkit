@@ -49,6 +49,9 @@ type Credential struct {
 	Secret       string    `json:"secret"`
 	ConnectionID string    `json:"connection_id,omitempty"`
 	ExpiresAt    time.Time `json:"expires_at"`
+	// AdoptExistingMembers links SCIM-created users to existing organization
+	// members with the same email instead of failing with 409.
+	AdoptExistingMembers *bool `json:"adopt_existing_members,omitempty"`
 }
 
 type OAuthClient struct {

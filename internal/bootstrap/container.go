@@ -55,6 +55,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService)
 	organizationModule := orgmodule.New(orgmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Structure = organizationModule.Structure
+	s.Groups = organizationModule.Groups
 	s.Organizations = organizationModule.HTTP
 	authorizationModule := authzmodule.New(authzmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Grants = authorizationModule.Grants
@@ -81,6 +82,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Users:           userhttp.New(userModule.Commands, userModule.Queries, actor),
 		Organizations:   orghttp.New(organizationModule.Commands, organizationModule.Queries, actor),
 		Structure:       orghttp.NewStructure(organizationModule.StructureCommands, organizationModule.StructureQueries, actor),
+		Groups:          orghttp.NewGroups(organizationModule.GroupCommands, organizationModule.GroupQueries, actor),
 		Applications:    apphttp.New(applicationModule.Commands, applicationModule.Queries, actor),
 		Authorization:   authzhttp.New(authorizationModule.ResourceCommands, authorizationModule.ResourceQueries, actor),
 		Grants:          authzhttp.NewGrants(authorizationModule.GrantCommands, authorizationModule.GrantQueries, actor),

@@ -13,6 +13,10 @@ type CredentialInput struct {
 	Organization identity.OrganizationID `json:"organization_id"`
 	Connection   identity.ConnectionID   `json:"connection_id"`
 	ExpiresIn    *string                 `json:"expires_in,omitempty"`
+	// AdoptExistingMembers lets SCIM create link an existing member of the
+	// organization with the same email instead of failing with 409. Applies
+	// to the connection; nil keeps the current setting (default false).
+	AdoptExistingMembers *bool `json:"adopt_existing_members,omitempty"`
 }
 
 func (c CredentialInput) Validate() error {
@@ -66,4 +70,5 @@ type CredentialView struct {
 	Connection   identity.ConnectionID   `json:"connection_id"`
 	Expires      time.Time               `json:"expires_at"`
 	Revoked      *time.Time              `json:"revoked_at"`
+	Adopt        bool                    `json:"adopt_existing_members"`
 }

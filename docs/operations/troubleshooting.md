@@ -13,7 +13,7 @@
 | Provider binding not approved | Exact env/issuer/client/secret reference | Correct deployment approval and recheck connection |
 | Federation callback denied | HTTPS cookie, state/nonce, verified subject link | Repeat browser flow; do not bypass validation |
 | OAuth exchange rejected | Redirect, verifier, client authentication, reused code | Start a new authorization; never replay consumed code |
-| SCIM 401 | `X-API-Key`, expiry, connection credential | Rotate on same connection; validate discovery and a test user |
+| SCIM 401 | `Authorization: Bearer` or `X-API-Key` (must match if both), expiry, connection credential | Rotate on same connection; validate discovery and a test user |
 | SDK cannot decode list | Array vs page envelope/version mismatch | Verify endpoint contract and SDK version; do not discard errors |
 | JWT valid but wrong tenant access | API only checks permission string | Compare organization and scope DB query; add a denied tenant test |
 | Excess 429 | Process/edge limit and retry storms | Back off, serialize refresh/resend, assess legitimate capacity |

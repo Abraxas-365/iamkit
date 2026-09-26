@@ -18,6 +18,8 @@ type Deps struct {
 type Module struct {
 	Commands        provisioning.Commands
 	Queries         provisioning.Queries
+	GroupCommands   provisioning.GroupCommands
+	GroupQueries    provisioning.GroupQueries
 	ControlCommands provisioning.ControlCommands
 	HTTP            *provhttp.Handler
 	Control         *provhttp.Control
@@ -26,6 +28,13 @@ type Module struct {
 func New(deps Deps) Module {
 	repository := provpg.New(deps.DB)
 	service := provsvc.New(repository, mgmtsecret.Generator{})
+	groups := provsvc.NewGroups(repository)
 	control := provsvc.NewControl(repository, mgmtsecret.Generator{})
-	return Module{Commands: service, Queries: service, ControlCommands: control, HTTP: provhttp.New(service, service), Control: provhttp.NewControl(control, control, deps.ActorID)}
+	return Module{
+		Commands: service, Queries: service,
+		GroupCommands: groups, GroupQueries: groups,
+		ControlCommands: control,
+		HTTP:            provhttp.New(service, service, provhttp.NewGroups(groups, groups)),
+		Control:         provhttp.NewControl(control, control, deps.ActorID),
+	}
 }

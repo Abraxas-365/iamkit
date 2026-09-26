@@ -56,3 +56,29 @@ type StructureRepository interface {
 	AssignPosition(ctx context.Context, b Boundary, assignment identity.AssignmentID, input Assignment) error
 	DeleteAssignment(ctx context.Context, b Boundary, m Mutation, assignment identity.AssignmentID) error
 }
+
+// GroupCommands manages operator groups and their members. Directory-owned
+// groups reject name and member changes with a business error.
+type GroupCommands interface {
+	CreateGroup(ctx context.Context, b Boundary, m Mutation, input GroupInput) (identity.GroupID, error)
+	UpdateGroup(ctx context.Context, b Boundary, m Mutation, group identity.GroupID, input GroupUpdate) error
+	DeleteGroup(ctx context.Context, b Boundary, m Mutation, group identity.GroupID) error
+	ChangeGroupMembers(ctx context.Context, b Boundary, m Mutation, group identity.GroupID, input GroupMembers) error
+}
+type GroupQueries interface {
+	ListGroups(ctx context.Context, b Boundary, filter GroupFilter, page query.Pagination) (query.Paginated[Group], error)
+	FindGroup(ctx context.Context, b Boundary, group identity.GroupID) (Group, error)
+	ListGroupMembers(ctx context.Context, b Boundary, group identity.GroupID, page query.Pagination) (query.Paginated[GroupMemberView], error)
+}
+
+// GroupRepository persists groups. Mutations only touch operator groups
+// (connection_id IS NULL); the service checks ownership first for a clear error.
+type GroupRepository interface {
+	CreateGroup(ctx context.Context, b Boundary, m Mutation, group identity.GroupID, input GroupInput) error
+	UpdateGroup(ctx context.Context, b Boundary, m Mutation, group identity.GroupID, input GroupUpdate) error
+	DeleteGroup(ctx context.Context, b Boundary, m Mutation, group identity.GroupID) error
+	ChangeGroupMembers(ctx context.Context, b Boundary, m Mutation, group identity.GroupID, input GroupMembers) error
+	ListGroups(ctx context.Context, b Boundary, filter GroupFilter, page query.Pagination) (query.Paginated[Group], error)
+	FindGroup(ctx context.Context, b Boundary, group identity.GroupID) (Group, error)
+	ListGroupMembers(ctx context.Context, b Boundary, group identity.GroupID, page query.Pagination) (query.Paginated[GroupMemberView], error)
+}

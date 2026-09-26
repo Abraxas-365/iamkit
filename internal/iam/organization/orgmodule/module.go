@@ -19,13 +19,24 @@ type Module struct {
 	Queries           organization.Queries
 	StructureCommands organization.StructureCommands
 	StructureQueries  organization.StructureQueries
+	GroupCommands     organization.GroupCommands
+	GroupQueries      organization.GroupQueries
 	HTTP              *orghttp.Handler
 	Structure         *orghttp.Structure
+	Groups            *orghttp.Groups
 }
 
 func New(deps Deps) Module {
 	repository := orgpg.New(deps.DB)
 	service := orgsvc.New(repository)
 	structure := orgsvc.NewStructure(repository)
-	return Module{Commands: service, Queries: service, StructureCommands: structure, StructureQueries: structure, HTTP: orghttp.New(service, service, deps.ActorID), Structure: orghttp.NewStructure(structure, structure, deps.ActorID)}
+	groups := orgsvc.NewGroups(repository)
+	return Module{
+		Commands: service, Queries: service,
+		StructureCommands: structure, StructureQueries: structure,
+		GroupCommands: groups, GroupQueries: groups,
+		HTTP:      orghttp.New(service, service, deps.ActorID),
+		Structure: orghttp.NewStructure(structure, structure, deps.ActorID),
+		Groups:    orghttp.NewGroups(groups, groups, deps.ActorID),
+	}
 }

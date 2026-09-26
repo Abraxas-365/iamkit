@@ -34,7 +34,7 @@ func (h *Control) issue(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Issue(c.Context(), envParam(c), input)
+	out, err := h.commands.Issue(c.Context(), h.mutation(c), input)
 	if err != nil {
 		return err
 	}

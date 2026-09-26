@@ -32,6 +32,7 @@ type APIHandlerSet struct {
 	Users           *userhttp.Handler
 	Organizations   *orghttp.Handler
 	Structure       *orghttp.Structure
+	Groups          *orghttp.Groups
 	Applications    *apphttp.Handler
 	Authorization   *authzhttp.Handler
 	Grants          *authzhttp.Grants
@@ -46,6 +47,7 @@ type Server struct {
 	Tokens              *authhttp.Tokens
 	Grants              *authzhttp.Grants
 	Structure           *orghttp.Structure
+	Groups              *orghttp.Groups
 	Provisioning        *provhttp.Handler
 	Federation          *fedhttp.Handler
 	Authorization       *authzhttp.Handler

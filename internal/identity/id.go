@@ -117,6 +117,7 @@ type (
 	accountTag      struct{} // service account
 	clientTag       struct{} // oauth client
 	keyTag          struct{} // management key
+	groupTag        struct{}
 )
 
 // tagName returns a human-readable name for error messages.
@@ -163,6 +164,8 @@ func tagName[T any]() string {
 		return "client_id"
 	case keyTag:
 		return "key_id"
+	case groupTag:
+		return "group_id"
 	default:
 		return "id"
 	}
@@ -191,6 +194,7 @@ type (
 	AccountID      = ID[accountTag]
 	ClientID       = ID[clientTag]
 	KeyID          = ID[keyTag]
+	GroupID        = ID[groupTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -215,6 +219,7 @@ func NewChallengeID() ChallengeID       { return NewID[challengeTag]() }
 func NewAccountID() AccountID           { return NewID[accountTag]() }
 func NewClientID() ClientID             { return NewID[clientTag]() }
 func NewKeyID() KeyID                   { return NewID[keyTag]() }
+func NewGroupID() GroupID               { return NewID[groupTag]() }
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -238,6 +243,7 @@ func ParseChallengeID(raw string) (ChallengeID, error)       { return ParseID[ch
 func ParseAccountID(raw string) (AccountID, error)           { return ParseID[accountTag](raw) }
 func ParseClientID(raw string) (ClientID, error)             { return ParseID[clientTag](raw) }
 func ParseKeyID(raw string) (KeyID, error)                   { return ParseID[keyTag](raw) }
+func ParseGroupID(raw string) (GroupID, error)               { return ParseID[groupTag](raw) }
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.
 func MustParseEnvironmentID(raw string) EnvironmentID   { return MustParseID[environmentTag](raw) }
@@ -260,3 +266,4 @@ func MustParseChallengeID(raw string) ChallengeID       { return MustParseID[cha
 func MustParseAccountID(raw string) AccountID           { return MustParseID[accountTag](raw) }
 func MustParseClientID(raw string) ClientID             { return MustParseID[clientTag](raw) }
 func MustParseKeyID(raw string) KeyID                   { return MustParseID[keyTag](raw) }
+func MustParseGroupID(raw string) GroupID               { return MustParseID[groupTag](raw) }

@@ -41,10 +41,10 @@ plus grant checks because of middleware registration order.
 | --- | --- |
 | `/users`, `/users/:id`, `/users/:id/permanent` (create/list/get/patch/suspend/delete) | `iam:users:read`, `iam:users:write` |
 | `/organizations`, `/organizations/:id` (create/list/get/patch) | `iam:orgs:read`, `iam:orgs:write` |
-| `/memberships`, `/organizations/:organization/members`, member removal and structure routes | `iam:members:read`, `iam:members:write` |
+| `/memberships`, `/organizations/:organization/members`, member removal, structure and group routes | `iam:members:read`, `iam:members:write` |
 | `/applications`, `/applications/:id` (create/list/get/patch) | `iam:apps:read`, `iam:apps:write` |
 | Resources, application-resource bindings, application resource lists | `iam:resources:read`, `iam:resources:write` |
-| Roles and role assignments | `iam:roles:read`, `iam:roles:write` |
+| Roles, role assignments, group role assignments, effective roles | `iam:roles:read`, `iam:roles:write` |
 | Grants | `iam:grants:read`, `iam:grants:write` |
 | Service accounts (create/list/revoke) | `iam:service-accounts:read`, `iam:service-accounts:write` |
 | Delivery configuration (`GET`, `PUT`, `DELETE /delivery`) | `iam:delivery:read`, `iam:delivery:write` |

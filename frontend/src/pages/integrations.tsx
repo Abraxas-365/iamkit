@@ -228,7 +228,7 @@ export function OAuthClientsPage() {
 }
 
 // --- Provisioning (SCIM) Credentials ---
-interface ProvCredential { id: string; name: string; organization_id: string; connection_id: string; expires_at: string; revoked_at: string | null }
+interface ProvCredential { id: string; name: string; organization_id: string; connection_id: string; expires_at: string; revoked_at: string | null; adopt_existing_members?: boolean }
 
 export function ProvisioningPage() {
   const { environment } = useParams()
@@ -255,6 +255,11 @@ export function ProvisioningPage() {
       { label: '1 year', value: '8760h' },
       { label: 'No expiry', value: 'never' },
     ] },
+    { name: 'adopt_existing_members', label: 'Adopt existing members', type: 'dropdown', value: '', options: [
+      { label: 'Unchanged (off for new connections)', value: '' },
+      { label: 'Enabled', value: 'true' },
+      { label: 'Disabled', value: 'false' },
+    ], hint: 'Link SCIM users to existing organization members with the same email instead of rejecting them.' },
   ]
   const linkFields: Field[] = [
     { name: 'connection_id', label: 'Connection ID' },
@@ -265,12 +270,13 @@ export function ProvisioningPage() {
   return <div className="space-y-6">
     <PageHeader title="SCIM provisioning" description="SCIM 2.0 credentials for automated user provisioning from your IdP." actions={canWrite && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setLinkId(true)}>Link identity</Button><Button onClick={() => setAdd(true)}><Plus className="size-4" /> Issue credential</Button></div>} />
     <PaginationBar state={list} noun="credentials" />
-    <DataTable columns={['Name / ID', 'Organization', 'Connection', 'Expires', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
+    <DataTable columns={['Name / ID', 'Organization', 'Connection', 'Adopt members', 'Expires', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
       const active = !c.revoked_at && Date.parse(c.expires_at) > Date.now()
       const cells: React.ReactNode[] = [
         <div className="space-y-1"><p className="font-medium">{c.name}</p><ID value={c.id} /></div>,
         <ID value={c.organization_id} />,
         <ID value={c.connection_id} />,
+        c.adopt_existing_members ? 'Yes' : 'No',
         new Date(c.expires_at).toLocaleString(),
         <Status active={active} />,
       ]
@@ -278,7 +284,11 @@ export function ProvisioningPage() {
       return cells
     })} />
     {add && <FormDialog title="Issue SCIM credential" description="Create a bearer token for your IdP's SCIM integration." fields={createFields} onClose={() => setAdd(false)} submit={async values => {
-      const result = await api.post<{ id: string; secret: string; expires_at: string; connection_id: string }>(path, values)
+      // Empty keeps the connection's current adoption setting (off for new connections).
+      const body: Record<string, string | boolean> = { ...values }
+      if (body.adopt_existing_members === '') delete body.adopt_existing_members
+      else body.adopt_existing_members = body.adopt_existing_members === 'true'
+      const result = await api.post<{ id: string; secret: string; expires_at: string; connection_id: string }>(path, body)
       setSecret(result)
       list.reload()
     }} />}

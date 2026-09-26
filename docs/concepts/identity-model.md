@@ -14,6 +14,9 @@ Within an environment:
 - **Binding:** allows an application to request a resource; does not grant user access.
 - **Grant:** permissions for a user + organization + resource. Roles group resource
   permissions and role assignments associate them with an organization member.
+- **Group:** named set of members of one organization. Roles bound to a group
+  apply to all its members. Groups are created by operators or pushed by a SCIM
+  directory (directory groups are read-only to operators except for their roles).
 - **Federation connection:** approved external OIDC issuer/client credentials.
   External subject links resolve to local users; matching email is not a link.
 - **Service account:** machine identity bound to an app/resource and permissions.

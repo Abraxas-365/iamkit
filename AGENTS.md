@@ -38,13 +38,13 @@ internal/
 |--------|---------------|---------|
 | application | `internal/iam/application` | OAuth/OIDC application registration |
 | authentication | `internal/iam/authentication` | Password login, sessions, refresh tokens, challenges |
-| authorization | `internal/iam/authorization` | Resources, roles, grants, role assignments |
+| authorization | `internal/iam/authorization` | Resources, roles, grants, role assignments, group role assignments |
 | federation | `internal/iam/federation` | External OIDC identity provider connections |
 | impersonation | `internal/iam/impersonation` | Audited admin impersonation |
 | management | `internal/iam/management` | Workspaces, projects, environments, operators, keys |
 | oauth | `internal/iam/oauth` | OAuth2/OIDC server (authorization code + PKCE) |
-| organization | `internal/iam/organization` | Organizations, memberships, org units, positions |
-| provisioning | `internal/iam/provisioning` | SCIM user provisioning |
+| organization | `internal/iam/organization` | Organizations, memberships, org units, positions, groups |
+| provisioning | `internal/iam/provisioning` | SCIM user and group provisioning |
 | serviceaccount | `internal/iam/serviceaccount` | Machine-to-machine credentials |
 | user | `internal/iam/user` | End-user CRUD |
 
@@ -118,7 +118,9 @@ var _ application.Queries = (*Service)(nil)
 **Modules with sub-domains** split further. Authorization has separate
 `ResourceCommands`/`ResourceQueries`/`ResourceRepository` and
 `GrantCommands`/`GrantQueries`/`GrantRepository`.
-Organization has `StructureCommands`/`StructureQueries`. Management has
+Organization has `StructureCommands`/`StructureQueries` and
+`GroupCommands`/`GroupQueries`/`GroupRepository`; provisioning has the same
+trio for SCIM groups. Management has
 `ControlCommands`/`ControlQueries` and `ActivityCommands`/`ActivityQueries`.
 Method names still use standard verbs (`Create`, `List`, `Find`). When a
 single Queries/Repository interface manages multiple entity types, prefix the
@@ -238,7 +240,7 @@ All entity identifiers use `identity.ID[T]`, a generic struct wrapping
 ```go
 type ID[T any] struct{ v uuid.UUID }
 
-// 20 entity types, each with an unexported tag:
+// 21 entity types, each with an unexported tag:
 type environmentTag struct{}
 type userTag        struct{}
 // ...
@@ -255,7 +257,7 @@ type UserID         = ID[userTag]
 - Unexported tags: external packages cannot construct arbitrary IDs — they must
   use `ParseXID()` or `NewXID()`.
 
-**API per entity type** (20 sets):
+**API per entity type** (21 sets):
 - `NewUserID() UserID` — generate new UUID
 - `ParseUserID(raw string) (UserID, error)` — validation boundary
 - `MustParseUserID(raw string) UserID` — panics, for tests/static init
