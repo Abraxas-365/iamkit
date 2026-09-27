@@ -24,6 +24,14 @@ check is not a substitute for a repository/history secret scanner. External URLs
 are not fetched, so provider documentation and registry availability need separate
 verification. See [validation record](validation.md).
 
+`make test-e2e` starts one disposable PostgreSQL container (testcontainers),
+applies every migration to a template database and gives each test its own
+copy. The HTTP journeys run against the real app on that database;
+`tests/e2e/schema_test.go` additionally checks each migration's constraints
+directly with SQL (unique, check and foreign-key violations by SQLSTATE,
+defaults, cascades on user deletion). Add a case there when a migration adds
+a constraint.
+
 When changing auth, test both success and denial: wrong tenant/environment,
 permission absence, replay, expiry and revoked state. Test SDK decoding against
 real response envelopes, not only mocks. Run browser flows through actual HTTPS
