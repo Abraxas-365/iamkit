@@ -51,6 +51,18 @@ func (t *Transaction) PasswordUser(ctx context.Context, b authentication.Context
 	err := t.tx.GetContext(ctx, &row, `SELECT id,password_hash FROM users WHERE environment_id=$1 AND email=$2 AND active FOR UPDATE`, b.EnvironmentID, email)
 	return row.ID, row.Hash, credentialError(err)
 }
+func (t *Transaction) SSORequired(ctx context.Context, b authentication.Context, email string) (bool, error) {
+	var required bool
+	err := t.tx.GetContext(ctx, &required, `SELECT EXISTS(
+		SELECT 1 FROM federation_connections c
+		JOIN organization_domains d ON d.organization_id=c.organization_id AND d.environment_id=c.environment_id
+		WHERE c.environment_id=$1 AND c.organization_id=$2 AND c.active AND c.enforcement='enforced'
+		  AND d.domain=$3 AND d.verified_at IS NOT NULL
+		  AND NOT EXISTS(SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id AND u.environment_id=m.environment_id
+		                 WHERE m.environment_id=$1 AND m.organization_id=$2 AND u.email=$4 AND m.sso_bypass))`,
+		b.EnvironmentID, b.OrganizationID, identity.EmailDomain(email), email)
+	return required, failure(err)
+}
 func Resolve(ctx context.Context, q sqlx.QueryerContext, b authentication.Context, user identity.UserID) (authentication.Access, error) {
 	var row struct {
 		Audience    string         `db:"audience"`
@@ -118,11 +130,14 @@ func (t *Transaction) Challenge(ctx context.Context, id identity.ChallengeID, _ 
 	if err := t.tx.GetContext(ctx, &user, `SELECT user_id FROM identity_challenges WHERE id=$1`, id); err != nil {
 		return out, credentialError(err)
 	}
-	var active bool
-	if err := t.tx.GetContext(ctx, &active, `SELECT (active AND ($2!='login' OR otp_enabled) AND ($2!='password_reset' OR password_hash!='')) FROM users WHERE id=$1 FOR UPDATE`, user, purpose); err != nil {
+	var account struct {
+		Active bool   `db:"eligible"`
+		Email  string `db:"email"`
+	}
+	if err := t.tx.GetContext(ctx, &account, `SELECT (active AND ($2!='login' OR otp_enabled) AND ($2!='password_reset' OR password_hash!='')) AS eligible, email FROM users WHERE id=$1 FOR UPDATE`, user, purpose); err != nil {
 		return out, credentialError(err)
 	}
-	if !active {
+	if !account.Active {
 		return out, errx.Unauthorized("invalid challenge")
 	}
 	var row struct {
@@ -131,7 +146,7 @@ func (t *Transaction) Challenge(ctx context.Context, id identity.ChallengeID, _ 
 		Attempts int             `db:"attempts"`
 	}
 	err := t.tx.GetContext(ctx, &row, `SELECT user_id,secret_hash,attempts FROM identity_challenges WHERE id=$1 AND purpose=$2 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, id, purpose)
-	return authentication.Challenge{User: row.User, Hash: row.Hash, Attempts: row.Attempts}, credentialError(err)
+	return authentication.Challenge{User: row.User, Email: account.Email, Hash: row.Hash, Attempts: row.Attempts}, credentialError(err)
 }
 func (t *Transaction) FailChallenge(ctx context.Context, id identity.ChallengeID) error {
 	_, err := t.tx.ExecContext(ctx, `UPDATE identity_challenges SET attempts=attempts+1 WHERE id=$1`, id)

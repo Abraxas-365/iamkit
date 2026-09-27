@@ -28,6 +28,7 @@ func (h *Handler) Register(e fiber.Router) {
 	e.Post("/federation-connections", h.create)
 	e.Get("/federation-connections", h.list)
 	e.Get("/federation-connections/:id", h.find)
+	e.Patch("/federation-connections/:id", h.update)
 	e.Get("/federation-connections/:id/identities", h.identities)
 	e.Delete("/federation-connections/:id", h.disable)
 	e.Post("/external-identities", h.link)
@@ -37,20 +38,29 @@ func (h *Handler) mutation(c *fiber.Ctx) federation.Mutation {
 	return federation.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
 }
 func (h *Handler) create(c *fiber.Ctx) error {
-	var input struct {
-		Name   string `json:"name"`
-		Issuer string `json:"issuer"`
-		Client string `json:"client_id"`
-		Secret string `json:"secret_env"`
-	}
+	var input federation.ConnectionInput
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.Create(c.Context(), federation.Connection{Environment: env(c), Name: input.Name, Issuer: input.Issuer, Client: input.Client, SecretEnv: input.Secret})
+	id, err := h.commands.Create(c.Context(), h.mutation(c), input)
 	if err != nil {
 		return err
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id})
+}
+func (h *Handler) update(c *fiber.Ctx) error {
+	id, err := identity.ParseConnectionID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("federation connection not found")
+	}
+	var input federation.ConnectionUpdate
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	if err := h.commands.Update(c.Context(), h.mutation(c), id, input); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
 }
 func (h *Handler) link(c *fiber.Ctx) error {
 	var input struct {
@@ -77,7 +87,15 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Handler) list(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
+	var filter federation.ConnectionFilter
+	if raw := c.Query("organization_id"); raw != "" {
+		org, err := identity.ParseOrganizationID(raw)
+		if err != nil {
+			return errx.Validation("organization_id must be a valid UUID")
+		}
+		filter.Organization = org
+	}
+	out, err := h.queries.List(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -142,4 +160,22 @@ func (h *Handler) Callback(c *fiber.Ctx) error {
 	}
 	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: "", Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: -1})
 	return h.issue(c, out)
+}
+
+// Discover serves POST /identity/v1/discover: which login method an email
+// should use. The answer depends only on the email's domain.
+func (h *Handler) Discover(c *fiber.Ctx) error {
+	var input struct {
+		Environment identity.EnvironmentID `json:"environment_id"`
+		Email       string                 `json:"email"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	out, err := h.flows.Discover(c.Context(), input.Environment, input.Email)
+	if err != nil {
+		return err
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(out)
 }

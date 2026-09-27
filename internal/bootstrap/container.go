@@ -7,12 +7,14 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/console"
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/adapters/apphttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/appmodule"
@@ -48,15 +50,33 @@ import (
 // Option customizes New; production callers pass none.
 type Option func(*options)
 
-type options struct{ resolver organization.Resolver }
+type options struct {
+	resolver  organization.Resolver
+	sealer    *cryptox.Sealer
+	transport http.RoundTripper
+}
 
 // WithResolver replaces the system DNS resolver used for domain verification.
 func WithResolver(r organization.Resolver) Option { return func(o *options) { o.resolver = r } }
+
+// WithSealer sets the encryption for secrets at rest; without it, storing
+// secrets is refused.
+func WithSealer(s *cryptox.Sealer) Option { return func(o *options) { o.sealer = s } }
+
+// WithFederationTransport replaces the guarded transport used to reach
+// identity providers of sealed-secret connections, so tests can reach a
+// provider on a loopback address.
+func WithFederationTransport(t http.RoundTripper) Option {
+	return func(o *options) { o.transport = t }
+}
 
 func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authentication.Delivery, opts ...Option) *server.Server {
 	var o options
 	for _, opt := range opts {
 		opt(&o)
+	}
+	if o.sealer == nil {
+		o.sealer = &cryptox.Sealer{}
 	}
 	managementModule := mgmtmodule.New(mgmtmodule.Deps{DB: db})
 	s := &server.Server{Control: managementModule.HTTP, Health: db.PingContext}
@@ -74,7 +94,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	authorizationModule := authzmodule.New(authzmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Grants = authorizationModule.Grants
 	s.Authorization = authorizationModule.HTTP
-	federationModule := fedmodule.New(fedmodule.Deps{DB: db, Issuer: issuer, Sessions: authenticationModule.Sessions, ActorID: server.OperatorID, IssueSession: s.IssueSession})
+	federationModule := fedmodule.New(fedmodule.Deps{DB: db, Issuer: issuer, Cipher: o.sealer, Transport: o.transport, Sessions: authenticationModule.Sessions, ActorID: server.OperatorID, IssueSession: s.IssueSession})
 	s.Federation = federationModule.HTTP
 	provisioningModule := provmodule.New(provmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.ProvisioningControl = provisioningModule.Control
@@ -165,7 +185,11 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		}
 		delivery = mail
 	}
-	s := New(db, key, strings.TrimSuffix(issuer, "/"), delivery)
+	sealer, err := cryptox.Parse(os.Getenv("IAMKIT_ENCRYPTION_KEY"), os.Getenv("IAMKIT_ENCRYPTION_KEYS_OLD"))
+	if err != nil {
+		return nil, err
+	}
+	s := New(db, key, strings.TrimSuffix(issuer, "/"), delivery, WithSealer(sealer))
 	s.AllowedOrigins = os.Getenv("CORS_ALLOWED_ORIGINS")
 	if v := os.Getenv("RATE_LIMIT_PER_MINUTE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {

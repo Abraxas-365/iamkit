@@ -39,6 +39,7 @@ type Session struct {
 }
 type Challenge struct {
 	User     identity.UserID
+	Email    string
 	Hash     []byte
 	Attempts int
 }

@@ -36,6 +36,7 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	members := e.Group("", apiauth.ReadWrite(authorization.PermMembersRead, authorization.PermMembersWrite))
 	members.Post("/memberships", s.APIHandlers.Organizations.AddMember)
 	members.Get("/organizations/:organization/members", s.APIHandlers.Organizations.Members)
+	members.Patch("/organizations/:organization/members/:user", s.APIHandlers.Organizations.UpdateMember)
 	members.Delete("/organizations/:organization/members/:user", s.APIHandlers.Organizations.RemoveMember)
 
 	// Org structure (follows org membership domain)

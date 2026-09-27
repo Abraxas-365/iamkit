@@ -95,6 +95,10 @@ type Repository interface {
 }
 type Transaction interface {
 	PasswordUser(ctx context.Context, boundary Context, email string) (identity.UserID, string, error)
+	// SSORequired reports whether the boundary organization requires SSO for
+	// the email: it has an active enforced connection, has verified the
+	// email's domain, and the email's user has no sso_bypass membership.
+	SSORequired(ctx context.Context, boundary Context, email string) (bool, error)
 	Resolve(ctx context.Context, boundary Context, user identity.UserID) (Access, error)
 	CreateSession(ctx context.Context, boundary Context, user identity.UserID, session identity.SessionID, expires time.Time) error
 	SaveRefresh(ctx context.Context, hash []byte, user identity.UserID, session identity.SessionID, expires time.Time) error

@@ -67,6 +67,28 @@ func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentI
 	}
 	return organization.Organization{ID: row.ID, Name: row.Name, Active: row.Active, Metadata: json.RawMessage(row.Metadata)}, failure(err)
 }
+func (r *Repository) UpdateMember(ctx context.Context, m organization.Mutation, org identity.OrganizationID, user identity.UserID, input organization.MemberUpdate) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err)
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE memberships SET sso_bypass=coalesce($4,sso_bypass) WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, m.Environment, org, user, input.SSOBypass)
+	if err != nil {
+		return failure(err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return failure(err)
+	}
+	if count == 0 {
+		return errx.NotFound("resource not found")
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+		return failure(err)
+	}
+	return failure(tx.Commit())
+}
 func (r *Repository) Update(ctx context.Context, m organization.Mutation, id identity.OrganizationID, input organization.Update) error {
 	var metadata any
 	if len(input.Metadata) > 0 {
@@ -138,7 +160,7 @@ func (r *Repository) Members(ctx context.Context, environment identity.Environme
 		return query.Paginated[organization.MemberView]{}, failure(err)
 	}
 	out := []organization.MemberView{}
-	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active, m.manager_id, mgr.name AS manager_name %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active, m.manager_id, mgr.name AS manager_name, m.sso_bypass %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
 		return query.Paginated[organization.MemberView]{}, failure(err)
 	}
 	return query.NewPaginated(out, total, page), nil

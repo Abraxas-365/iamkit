@@ -12,9 +12,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/rsa"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
@@ -24,7 +26,9 @@ import (
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/internal/bootstrap"
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedoidc"
 	"github.com/Abraxas-365/iamkit/migrations"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
@@ -135,7 +139,36 @@ type Harness struct {
 	Mail  *capturedMail
 	DNS   *fakeDNS
 	Owner string // operator X-API-Key
+	// IdP routes identity-provider traffic of sealed-secret connections;
+	// tests point it at their TLS provider (see fakeIdP).
+	IdP *switchTransport
 }
+
+// switchTransport delegates to a replaceable transport, by default the
+// production guarded one.
+type switchTransport struct {
+	mu   sync.Mutex
+	next http.RoundTripper
+}
+
+func (s *switchTransport) Set(next http.RoundTripper) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.next = next
+}
+
+func (s *switchTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	s.mu.Lock()
+	next := s.next
+	s.mu.Unlock()
+	if next == nil {
+		next = fedoidc.GuardedTransport()
+	}
+	return next.RoundTrip(r)
+}
+
+// testEncryptionKey is the harness IAMKIT_ENCRYPTION_KEY.
+var testEncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 
 func newHarness(t *testing.T) *Harness {
 	t.Helper()
@@ -150,9 +183,14 @@ func newHarness(t *testing.T) *Harness {
 	}
 	mail := &capturedMail{}
 	dns := &fakeDNS{records: map[string][]string{}}
-	app := bootstrap.New(db, key, "https://iam.example", mail, bootstrap.WithResolver(dns)).App()
+	sealer, err := cryptox.Parse(testEncryptionKey, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	idp := &switchTransport{}
+	app := bootstrap.New(db, key, "https://iam.example", mail, bootstrap.WithResolver(dns), bootstrap.WithSealer(sealer), bootstrap.WithFederationTransport(idp)).App()
 	t.Cleanup(func() { app.Shutdown() })
-	return &Harness{t: t, DB: db, App: app, Key: key, Mail: mail, DNS: dns, Owner: owner}
+	return &Harness{t: t, DB: db, App: app, Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp}
 }
 
 // fakeDNS serves TXT records for domain verification; names in fail return

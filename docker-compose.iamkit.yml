@@ -50,6 +50,11 @@ services:
       IAMKIT_BOOTSTRAP_EMAIL: ${IAMKIT_BOOTSTRAP_EMAIL:-}
       IAMKIT_BOOTSTRAP_WORKSPACE: ${IAMKIT_BOOTSTRAP_WORKSPACE:-Default}
       IAMKIT_BOOTSTRAP_PASSWORD: ${IAMKIT_BOOTSTRAP_PASSWORD:-}
+      # Encrypts stored secrets (organization SSO client secrets). Base64 of
+      # 32 random bytes: openssl rand -base64 32. Keep a backup; losing it
+      # makes stored secrets unreadable.
+      IAMKIT_ENCRYPTION_KEY: ${IAMKIT_ENCRYPTION_KEY:-}
+      IAMKIT_ENCRYPTION_KEYS_OLD: ${IAMKIT_ENCRYPTION_KEYS_OLD:-}
     volumes:
       - ./secrets/jwt.pem:/secrets/jwt.pem:ro
     depends_on:

@@ -25,7 +25,9 @@ To prove an organization owns an email domain, add it under Members → Domains
 (or `POST /organizations/:organization/domains`), publish the TXT record shown
 at your DNS provider and click **Check DNS now**. A domain belongs to one
 organization per environment. Verified domains let SCIM adopt only members on
-the organization's own domains.
+the organization's own domains, and power the organization's
+[single sign-on](federation.md#organization-sso): email discovery,
+just-in-time provisioning and enforcement.
 
 **Verify:** two memberships for one user can carry different permissions. Removing
 Acme access must not grant access to, or silently rewrite, the other tenant.

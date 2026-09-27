@@ -1,6 +1,7 @@
 package fedoidc
 
 import (
+	"net"
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
@@ -34,5 +35,29 @@ func TestFederationCredentialBinding(t *testing.T) {
 	t.Setenv("FEDERATION_CREDENTIAL_BINDINGS", "invalid")
 	if (Provider{}).Approved(approved) {
 		t.Fatal("malformed bindings accepted")
+	}
+}
+
+func TestPublicAddresses(t *testing.T) {
+	for addr, want := range map[string]bool{
+		"8.8.8.8": true, "2606:4700::1111": true,
+		"127.0.0.1": false, "10.1.2.3": false, "172.16.0.1": false, "192.168.1.1": false,
+		"169.254.169.254": false, "100.64.0.1": false, "0.0.0.0": false, "::1": false,
+		"fe80::1": false, "fd00::1": false, "224.0.0.1": false, "::ffff:127.0.0.1": false,
+	} {
+		if got := Public(net.ParseIP(addr)); got != want {
+			t.Errorf("Public(%s) = %v", addr, got)
+		}
+	}
+}
+
+func TestEmailVerifiedFlag(t *testing.T) {
+	if flag(nil) != nil {
+		t.Fatal("absent claim must stay absent")
+	}
+	for v, want := range map[any]bool{true: true, false: false, "true": true, "false": false, "garbage": false, 1.0: false} {
+		if got := flag(v); got == nil || *got != want {
+			t.Errorf("flag(%v) = %v", v, got)
+		}
 	}
 }

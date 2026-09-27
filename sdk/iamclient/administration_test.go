@@ -90,3 +90,46 @@ func TestEnvironmentMissingEndpoints(t *testing.T) {
 		}
 	}
 }
+
+func TestOrganizationSSOEndpoints(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.RequestURI())
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	secret, bypass, group := "s", true, ""
+	env.OrganizationFederations(ctx, "org-1")
+	env.UpdateFederation(ctx, "conn-1", FederationPatch{ClientSecret: &secret, JITGroupID: &group})
+	env.AddDomain(ctx, "org-1", "acme.example")
+	env.Domains(ctx, "org-1")
+	env.VerifyDomain(ctx, "org-1", "d-1")
+	env.ForceVerifyDomain(ctx, "org-1", "d-1")
+	env.DeleteDomain(ctx, "org-1", "d-1")
+	env.UpdateMember(ctx, "org-1", "user-1", MemberPatch{SSOBypass: &bypass})
+	if _, err := env.OrganizationFederations(ctx, "../x"); err == nil {
+		t.Fatal("unsafe segment accepted")
+	}
+	base := "/management/v1/environments/env-1"
+	expected := []string{
+		"GET " + base + "/federation-connections",
+		"PATCH " + base + "/federation-connections/conn-1",
+		"POST " + base + "/organizations/org-1/domains",
+		"GET " + base + "/organizations/org-1/domains",
+		"POST " + base + "/organizations/org-1/domains/d-1/verify",
+		"POST " + base + "/organizations/org-1/domains/d-1/force-verify",
+		"DELETE " + base + "/organizations/org-1/domains/d-1",
+		"PATCH " + base + "/organizations/org-1/members/user-1",
+	}
+	if len(calls) != len(expected) {
+		t.Fatalf("calls %v", calls)
+	}
+	for i, want := range expected {
+		if calls[i] != want {
+			t.Errorf("call[%d] = %q, want %q", i, calls[i], want)
+		}
+	}
+}

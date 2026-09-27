@@ -45,6 +45,20 @@ type MemberView struct {
 	Active      bool             `json:"active" db:"active"`
 	ManagerID   *identity.UserID `json:"manager_id" db:"manager_id"`
 	ManagerName *string          `json:"manager_name" db:"manager_name"`
+	SSOBypass   bool             `json:"sso_bypass" db:"sso_bypass"`
+}
+
+// MemberUpdate changes a membership. SSOBypass lets the member keep using
+// password login where the organization enforces SSO (break-glass admins).
+type MemberUpdate struct {
+	SSOBypass *bool `json:"sso_bypass"`
+}
+
+func (u MemberUpdate) Validate() error {
+	if u.SSOBypass == nil {
+		return errx.Validation("no changes requested")
+	}
+	return nil
 }
 
 type MemberFilter struct {

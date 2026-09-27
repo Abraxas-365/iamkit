@@ -128,7 +128,7 @@ export function ServiceAccountsPage() {
 }
 
 // --- Federation Connections ---
-interface FederationConnection { id: string; name: string; issuer: string; client_id: string; active: boolean; linked: number }
+interface FederationConnection { id: string; organization_id: string | null; name: string; issuer: string; client_id: string; active: boolean; linked: number; jit_provisioning: boolean; enforcement: string }
 
 export function FederationPage() {
   const { project, environment } = useParams()
@@ -145,9 +145,12 @@ export function FederationPage() {
   return <div className="space-y-6">
     <PageHeader title="Federation connections" description="External OIDC identity providers. Users authenticate through these connections and are linked to local identities." actions={canWrite && <Button onClick={() => setAdd(true)}><Plus className="size-4" /> Create</Button>} />
     <PaginationBar state={list} noun="connections" />
-    <DataTable columns={['Name / ID', 'Issuer', 'Client ID', 'Linked', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
+    <DataTable columns={['Name / ID', 'Scope', 'Issuer', 'Client ID', 'Linked', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
       const cells: React.ReactNode[] = [
         <div className="space-y-1"><Link to={detailPath(c.id)} className="block font-medium text-primary hover:underline">{c.name}</Link><ID value={c.id} /></div>,
+        c.organization_id
+          ? <div className="space-y-1"><span className="text-xs">Organization</span><ID value={c.organization_id} />{c.enforcement === 'enforced' && <span className="block text-xs font-medium text-primary">SSO enforced</span>}</div>
+          : <span className="text-xs text-muted-foreground">Environment</span>,
         <span className="text-xs break-all">{c.issuer}</span>,
         <span className="text-xs">{c.client_id}</span>,
         <span className="text-sm">{c.linked}</span>,
@@ -156,12 +159,17 @@ export function FederationPage() {
       if (canWrite) cells.push(c.active ? <Button variant="destructive" size="sm" onClick={e => { e.stopPropagation(); setDisable(c) }}>Disable</Button> : null)
       return cells
     })} />
-    {add && <FormDialog title="Create federation connection" description="Connect an external OIDC identity provider." fields={[
+    {add && <FormDialog title="Create federation connection" description="Connect an external OIDC identity provider. Organization connections support SSO discovery, just-in-time provisioning and enforcement." fields={[
       { name: 'name', label: 'Name' },
-      { name: 'issuer', label: 'Issuer URL', hint: 'Must be HTTPS, e.g. https://accounts.google.com' },
+      { name: 'organization_id', label: 'Organization', type: 'select', optional: true, selectPath: `${base}/organizations`, selectMap: named, hint: 'Leave empty for an environment-wide connection.' },
+      { name: 'issuer', label: 'Issuer URL', hint: 'Must be HTTPS, e.g. https://login.microsoftonline.com/<tenant>/v2.0' },
       { name: 'client_id', label: 'Client ID' },
-      { name: 'secret_env', label: 'Secret env variable', hint: 'e.g. IAMKIT_PROVIDER_GOOGLE_SECRET' },
-    ]} onClose={() => setAdd(false)} submit={async values => { await api.post(path, values); list.reload() }} />}
+      { name: 'client_secret', label: 'Client secret', type: 'password', optional: true, hint: 'Stored encrypted; never shown again. Requires IAMKIT_ENCRYPTION_KEY.' },
+      { name: 'secret_env', label: 'Or: secret env variable', optional: true, hint: 'Legacy: an approved deployment variable, e.g. IAMKIT_PROVIDER_GOOGLE_SECRET. Provide exactly one secret source.' },
+    ]} onClose={() => setAdd(false)} submit={async values => {
+      const body = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''))
+      await api.post(path, body); list.reload()
+    }} />}
     {disable && <ConfirmDialog title="Disable connection?" description={`${disable.name} will no longer accept new logins.`} onClose={() => setDisable(null)} confirm={async () => { await api.delete(`${path}/${disable.id}`); list.reload() }} />}
   </div>
 }

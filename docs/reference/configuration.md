@@ -16,6 +16,8 @@ containers after changes. Keep secrets outside source control and frontend build
 | `EMAIL_WEBHOOK_TOKEN` | Sent as Bearer token | Secret authenticating delivery requests |
 | `FEDERATION_CREDENTIAL_BINDINGS` | No approved bindings when unset | JSON array of exact environment/issuer/client/secret-reference approvals |
 | `IAMKIT_PROVIDER_*` | As referenced by a binding | External provider client secret; server-only |
+| `IAMKIT_ENCRYPTION_KEY` | Unset: features storing secrets fail with 500 | Base64 of 32 bytes; encrypts stored secrets (organization SSO client secrets). See [encryption key](#encryption-key) |
+| `IAMKIT_ENCRYPTION_KEYS_OLD` | Empty | Comma-separated previous keys, decrypt-only, for rotation |
 | `CORS_ALLOWED_ORIGINS` | Empty: no CORS middleware | Comma-separated allowed origins; enables credentials, so never use untrusted origins or wildcard |
 | `RATE_LIMIT_PER_MINUTE` | 120 | Per-IP, per-process limit on authenticated management and scoped API routes; invalid/non-positive values fall back to default |
 | `IAMKIT_BOOTSTRAP_EMAIL` | Unset: no automatic bootstrap | First-boot owner email; automatic bootstrap logs a one-time key |
@@ -36,6 +38,20 @@ IAMKIT_PROVIDER_GOOGLE=PRIVATE_CLIENT_SECRET
 
 The `secret_env` name must reference a deployment-approved provider variable.
 Do not allow app users to choose arbitrary outbound issuers or secret names.
+
+## Encryption key
+
+Organization SSO connections store their client secret encrypted with
+AES-256-GCM under `IAMKIT_ENCRYPTION_KEY`. Generate one with
+`openssl rand -base64 32` and keep it with your other deployment secrets.
+The server starts without it, but creating a connection with `client_secret`
+then fails. A malformed key stops startup.
+
+Back the key up with the database: a restored database is useless for these
+secrets without it. To rotate, set the new key, move the old one to
+`IAMKIT_ENCRYPTION_KEYS_OLD`, restart, then re-save each connection's secret
+(`PATCH {"client_secret":…}`) before dropping the old key. Stored values carry
+the ID of their key, so old and new values coexist during rotation.
 
 ## Compose-only variables
 

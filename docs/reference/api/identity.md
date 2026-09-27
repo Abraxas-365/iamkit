@@ -11,7 +11,8 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 | `POST /machine-token` | Bearer `ik_svc_…`; no body needed | 200 access token, no user refresh |
 | `POST /challenges` | `environment_id`, `email`, `purpose` | 202 challenge response |
 | `POST /challenges/verify` | `environment_id`, `challenge_id`, `code`, `purpose`; full boundary for login; `password` for reset | Login: 200 pair; reset/verification: 204 |
-| `POST /federation/start` | boundary + `connection_id` | 200 `{authorization_url}` + binding cookie |
+| `POST /discover` | `environment_id`, `email` | 200 `{method:"sso"\|"password",organization_id?,connection_id?,required}`; by email domain only; rate limited |
+| `POST /federation/start` | boundary + `connection_id`; organization connections need their own `organization_id` | 200 `{authorization_url}` + binding cookie |
 | `GET /federation/callback` | `code`, `state` query + binding cookie | 200 token pair |
 | `POST /introspect` | Bearer access token; `environment_id`, `audience` | 200 `{active:false}` or `{active:true,claims:{…}}` |
 | `POST /logout` | Bearer user token; `environment_id`, `audience` | 204 |

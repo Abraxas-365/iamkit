@@ -69,18 +69,79 @@ type OAuthCredential struct {
 	ClientSecret string `json:"client_secret,omitempty"`
 }
 
+// Federation is an OIDC identity provider connection. Set OrganizationID
+// for an organization connection (SSO, JIT provisioning, enforcement); leave
+// it empty for a legacy environment-wide one. On create, provide exactly one
+// of ClientSecret (stored encrypted; requires IAMKIT_ENCRYPTION_KEY) or
+// SecretEnv (an approved deployment variable). ClientSecret is never
+// returned.
 type Federation struct {
-	ID        string `json:"id,omitempty"`
-	Name      string `json:"name"`
-	Issuer    string `json:"issuer"`
-	ClientID  string `json:"client_id"`
-	SecretEnv string `json:"secret_env"`
+	ID             string `json:"id,omitempty"`
+	OrganizationID string `json:"organization_id,omitempty"`
+	Name           string `json:"name"`
+	Issuer         string `json:"issuer"`
+	ClientID       string `json:"client_id"`
+	SecretEnv      string `json:"secret_env,omitempty"`
+	ClientSecret   string `json:"client_secret,omitempty"`
+	// JITProvisioning defaults to true for organization connections.
+	JITProvisioning *bool  `json:"jit_provisioning,omitempty"`
+	JITGroupID      string `json:"jit_group_id,omitempty"`
+	// Enforcement is "optional" (default) or "enforced".
+	Enforcement string `json:"enforcement,omitempty"`
+	// Read-only.
+	SecretSource string     `json:"secret_source,omitempty"`
+	Active       bool       `json:"active,omitempty"`
+	Linked       int        `json:"linked,omitempty"`
+	CreatedAt    *time.Time `json:"created_at,omitempty"`
+}
+
+// FederationPatch changes a connection; nil fields are left unchanged.
+// JITGroupID set to "" clears the group. Setting ClientSecret on a
+// secret_env connection converts it to an encrypted secret.
+type FederationPatch struct {
+	Name            *string `json:"name,omitempty"`
+	ClientSecret    *string `json:"client_secret,omitempty"`
+	JITProvisioning *bool   `json:"jit_provisioning,omitempty"`
+	JITGroupID      *string `json:"jit_group_id,omitempty"`
+	Enforcement     *string `json:"enforcement,omitempty"`
 }
 
 type ExternalIdentity struct {
 	ConnectionID string `json:"connection_id"`
 	UserID       string `json:"user_id"`
 	Subject      string `json:"subject"`
+	// Read-only: "linked" by an operator or "jit" on first login.
+	Origin    string     `json:"origin,omitempty"`
+	UserName  string     `json:"user_name,omitempty"`
+	UserEmail string     `json:"user_email,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
+}
+
+// Domain is an organization's email domain. Verified domains route email
+// discovery to the organization's SSO and bound JIT provisioning.
+type Domain struct {
+	ID             string     `json:"id"`
+	OrganizationID string     `json:"organization_id"`
+	Domain         string     `json:"domain"`
+	Verified       bool       `json:"verified"`
+	VerifiedAt     *time.Time `json:"verified_at"`
+	Method         *string    `json:"verification_method"`
+	CreatedAt      time.Time  `json:"created_at"`
+	VerifiedBy     *string    `json:"verified_by"`
+	Record         DNSRecord  `json:"verification"`
+}
+
+// DNSRecord is the TXT record that proves domain ownership.
+type DNSRecord struct {
+	Type  string `json:"type"`
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// MemberPatch changes a membership. SSOBypass lets the member keep using
+// password login where the organization enforces SSO (break-glass).
+type MemberPatch struct {
+	SSOBypass *bool `json:"sso_bypass,omitempty"`
 }
 
 type Session struct {
@@ -121,6 +182,49 @@ type ReportingMember struct {
 	OrgUnitID *string `json:"org_unit_id"`
 	Name      string  `json:"name"`
 	Email     string  `json:"email"`
+}
+
+// ── Domains ──
+
+// AddDomain registers a domain; publish its Record in DNS, then call
+// VerifyDomain.
+func (e Environment) AddDomain(ctx context.Context, org, domain string) (Domain, error) {
+	var out Domain
+	err := e.operation(ctx, "POST", []string{"organizations", org, "domains"}, map[string]string{"domain": domain}, &out)
+	return out, err
+}
+
+func (e Environment) Domains(ctx context.Context, org string) ([]Domain, error) {
+	return listOp[Domain](e, ctx, []string{"organizations", org, "domains"})
+}
+
+func (e Environment) Domain(ctx context.Context, org, id string) (Domain, error) {
+	var out Domain
+	err := e.operation(ctx, "GET", []string{"organizations", org, "domains", id}, nil, &out)
+	return out, err
+}
+
+// VerifyDomain checks the DNS TXT record now.
+func (e Environment) VerifyDomain(ctx context.Context, org, id string) (Domain, error) {
+	var out Domain
+	err := e.operation(ctx, "POST", []string{"organizations", org, "domains", id, "verify"}, nil, &out)
+	return out, err
+}
+
+// ForceVerifyDomain marks the domain verified without DNS (audited).
+func (e Environment) ForceVerifyDomain(ctx context.Context, org, id string) (Domain, error) {
+	var out Domain
+	err := e.operation(ctx, "POST", []string{"organizations", org, "domains", id, "force-verify"}, nil, &out)
+	return out, err
+}
+
+func (e Environment) DeleteDomain(ctx context.Context, org, id string) error {
+	return e.operation(ctx, "DELETE", []string{"organizations", org, "domains", id}, nil, nil)
+}
+
+// UpdateMember changes a membership, e.g. the SSO break-glass bypass.
+func (e Environment) UpdateMember(ctx context.Context, org, user string, input MemberPatch) error {
+	return e.operation(ctx, "PATCH", []string{"organizations", org, "members", user}, input, nil)
 }
 
 // ── operation helper for safe path composition ──
@@ -192,6 +296,28 @@ func (e Environment) CreateFederation(ctx context.Context, input Federation) (Cr
 
 func (e Environment) FederationConnections(ctx context.Context) ([]Federation, error) {
 	return listOp[Federation](e, ctx, []string{"federation-connections"})
+}
+
+// OrganizationFederations lists the connections of one organization.
+func (e Environment) OrganizationFederations(ctx context.Context, org string) ([]Federation, error) {
+	if err := safeSegment(org); err != nil {
+		return nil, err
+	}
+	all, err := e.FederationConnections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []Federation{}
+	for _, f := range all {
+		if f.OrganizationID == org {
+			out = append(out, f)
+		}
+	}
+	return out, nil
+}
+
+func (e Environment) UpdateFederation(ctx context.Context, id string, input FederationPatch) error {
+	return e.operation(ctx, "PATCH", []string{"federation-connections", id}, input, nil)
 }
 
 func (e Environment) FederationConnection(ctx context.Context, id string) (Federation, error) {

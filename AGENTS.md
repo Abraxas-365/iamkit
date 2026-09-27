@@ -122,7 +122,10 @@ Organization has `StructureCommands`/`StructureQueries`,
 `GroupCommands`/`GroupQueries`/`GroupRepository` and
 `DomainCommands`/`DomainQueries`/`DomainRepository` (plus the `Resolver` DNS
 port, adapter `orgdns`, replaceable in tests via `bootstrap.WithResolver`);
-provisioning has the same trio for SCIM groups. Management has
+provisioning has the same trio for SCIM groups. Federation's `fedoidc` adapter
+dials providers through `GuardedTransport` (public addresses only) for
+sealed-secret connections; tests replace it via
+`bootstrap.WithFederationTransport`. Management has
 `ControlCommands`/`ControlQueries` and `ActivityCommands`/`ActivityQueries`.
 Method names still use standard verbs (`Create`, `List`, `Find`). When a
 single Queries/Repository interface manages multiple entity types, prefix the
@@ -161,6 +164,8 @@ infrastructure concerns that should be swappable:
 | `Secrets` | authentication, federation, oauth, provisioning, serviceaccount | Token/key generation and hashing |
 | `Delivery` | authentication | Send verification codes (email webhook) |
 | `Provider` | federation | OIDC provider discovery and credential approval |
+| `Flows` | federation | Browser login flows (`Discover`, `Start`, `Callback`), separate from Commands/Queries |
+| `Cipher` | federation | Seal/open stored client secrets; implemented by `internal/cryptox.Sealer` (`IAMKIT_ENCRYPTION_KEY`), injected via `bootstrap.WithSealer` |
 | `TokenCodec` | authentication | JWT sign/parse (combines `TokenIssuer` + `TokenValidator`) |
 | `Transaction` | authentication, oauth | Database transaction handle for multi-step mutations |
 

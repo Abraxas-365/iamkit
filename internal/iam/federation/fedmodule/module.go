@@ -2,6 +2,8 @@
 package fedmodule
 
 import (
+	"net/http"
+
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedhttp"
@@ -14,8 +16,12 @@ import (
 )
 
 type Deps struct {
-	DB           *sqlx.DB
-	Issuer       string
+	DB     *sqlx.DB
+	Issuer string
+	Cipher federation.Cipher
+	// Transport, when set, replaces the guarded transport for sealed-secret
+	// connections (tests with a loopback provider).
+	Transport    http.RoundTripper
 	Sessions     authentication.SessionCreator
 	ActorID      func(*fiber.Ctx) string
 	IssueSession func(*fiber.Ctx, authentication.Issued) error
@@ -27,6 +33,7 @@ type Module struct {
 }
 
 func New(deps Deps) Module {
-	service := fedsvc.New(fedpg.New(deps.DB), fedoidc.Provider{Issuer: deps.Issuer}, mgmtsecret.Generator{}, deps.Sessions, deps.Issuer)
+	provider := fedoidc.Provider{Issuer: deps.Issuer, Cipher: deps.Cipher, Guarded: deps.Transport}
+	service := fedsvc.New(fedpg.New(deps.DB), provider, deps.Cipher, mgmtsecret.Generator{}, deps.Sessions, deps.Issuer)
 	return Module{Commands: service, Flows: service, HTTP: fedhttp.New(service, service, service, deps.ActorID, deps.IssueSession)}
 }

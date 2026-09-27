@@ -6,10 +6,11 @@ requires owner. Credential responses are secrets and must be captured once.
 
 | Method/path | JSON body | Success |
 | --- | --- | --- |
-| `POST /federation-connections` | `name,issuer,client_id,secret_env` | 201 `{id}` |
-| `GET /federation-connections` | — | 200 page with linked counts |
-| `GET /federation-connections/:id` | — | 200 detail, including secret variable name (not secret value) |
-| `GET /federation-connections/:id/identities` | — | 200 page of subject/user links |
+| `POST /federation-connections` | `name,issuer,client_id` and exactly one of `client_secret` (stored encrypted) or `secret_env`; optional `organization_id,jit_provisioning,jit_group_id,enforcement` | 201 `{id}` |
+| `GET /federation-connections` | Optional `organization_id` filter | 200 page with `organization_id,jit_provisioning,enforcement` and linked counts |
+| `GET /federation-connections/:id` | — | 200 detail with `secret_source` (`sealed`\|`env`), secret variable name for `env`; never the secret |
+| `PATCH /federation-connections/:id` | Any of `name,client_secret,jit_provisioning,jit_group_id` (`""` clears),`enforcement` | 204 |
+| `GET /federation-connections/:id/identities` | — | 200 page of subject/user links with `origin` (`linked`\|`jit`) and `created_at` |
 | `DELETE /federation-connections/:id` | — | 204; disable |
 | `POST /external-identities` | `connection_id,user_id,subject` | 204 |
 | `DELETE /external-identities/:connection/:user` | — | 204 |
@@ -25,7 +26,12 @@ requires owner. Credential responses are secrets and must be captured once.
 | `POST /provisioned-identities` | `connection_id,user_id,external_id`; also re-anchors deprovisioned or internally anchored identities | 204 |
 | `POST /impersonations` | `organization_id,application_id,resource_id,user_id,reason` | 200 access token without refresh |
 
-Federation issuer/client/secret reference must match deployment approval exactly.
+`jit_provisioning` (default `true`), `jit_group_id` and `enforcement`
+(`optional`\|`enforced`) require `organization_id`. The default group must be
+an operator-managed group of that organization with JIT on; enforcement needs
+a verified domain (422) and at most one enforced connection per organization
+(409). `client_secret` requires `IAMKIT_ENCRYPTION_KEY`. A `secret_env`
+issuer/client/secret reference must match deployment approval exactly.
 SCIM rotation should reuse the stable connection ID to retain identity mappings.
 Impersonation reasons must be 10–1000 trimmed characters. Do not confuse a
 provisioned external ID with an OIDC subject link: they serve different protocols.

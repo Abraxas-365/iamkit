@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Globe, ShieldCheck, UserMinus, Users, UsersRound, X } from 'lucide-react'
+import { ArrowLeft, Globe, KeyRound, ShieldCheck, UserMinus, Users, UsersRound, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 interface Member {
   user_id: string; user_name: string; user_email: string; active: boolean
   manager_id: string | null; manager_name: string | null
+  sso_bypass?: boolean
 }
 
 const memberOption = (item: Record<string, unknown>) => ({
@@ -34,6 +35,7 @@ export default function MembersPage() {
   const [removing, setRemoving] = useState<Member | null>(null)
   const [inspecting, setInspecting] = useState<Member | null>(null)
   const [settingManager, setSettingManager] = useState<Member | null>(null)
+  const [bypassing, setBypassing] = useState<Member | null>(null)
   const [orgName, setOrgName] = useState('')
   const [managerFilter, setManagerFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
@@ -115,13 +117,19 @@ export default function MembersPage() {
         m.manager_name
           ? <button type="button" className="text-left text-sm text-primary hover:underline" onClick={() => setManagerFilter(m.manager_id!)}>{m.manager_name}</button>
           : <span className="text-xs text-muted-foreground">—</span>,
-        <Status active={m.active} />,
+        <div className="flex flex-wrap items-center gap-1">
+          <Status active={m.active} />
+          {m.sso_bypass && <Badge variant="outline" title="May sign in with a password even when SSO is enforced">SSO bypass</Badge>}
+        </div>,
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label={`Access of ${m.user_name}`} onClick={() => setInspecting(m)}>
             <ShieldCheck className="size-4" />
           </Button>
           {canWrite && m.active && <Button variant="ghost" size="icon" aria-label={`Set manager for ${m.user_name}`} onClick={() => setSettingManager(m)}>
             <Users className="size-4" />
+          </Button>}
+          {canWrite && m.active && <Button variant="ghost" size="icon" aria-label={`${m.sso_bypass ? 'Revoke' : 'Grant'} SSO bypass for ${m.user_name}`} onClick={() => setBypassing(m)}>
+            <KeyRound className="size-4" />
           </Button>}
           {canWrite && m.active && <Button variant="ghost" size="icon" aria-label={`Remove ${m.user_name}`} onClick={() => setRemoving(m)}>
             <UserMinus className="size-4" />
@@ -145,6 +153,20 @@ export default function MembersPage() {
         onClose={() => setRemoving(null)}
         confirm={async () => {
           await api.delete(`${base}/organizations/${orgId}/members/${removing.user_id}`)
+          list.reload()
+        }}
+      />
+    )}
+
+    {bypassing && (
+      <ConfirmDialog
+        title={bypassing.sso_bypass ? 'Revoke SSO bypass?' : 'Grant SSO bypass?'}
+        description={bypassing.sso_bypass
+          ? `${bypassing.user_name || bypassing.user_id} will have to sign in through SSO when it is enforced.`
+          : `${bypassing.user_name || bypassing.user_id} will be able to sign in with a password even when SSO is enforced. Use for break-glass administrators only.`}
+        onClose={() => setBypassing(null)}
+        confirm={async () => {
+          await api.patch(`${base}/organizations/${orgId}/members/${bypassing.user_id}`, { sso_bypass: !bypassing.sso_bypass })
           list.reload()
         }}
       />

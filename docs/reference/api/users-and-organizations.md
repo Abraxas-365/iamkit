@@ -41,7 +41,12 @@ just the account.
 | `PATCH /organizations/:id` | Update fields: `name`, `metadata` | 204 |
 | `POST /memberships` | `organization_id`, `user_id` | 201 |
 | `GET /organizations/:organization/members` | Organization ID | 200 page |
+| `PATCH /organizations/:organization/members/:user` | `sso_bypass` | 204; 400 for an empty patch |
 | `DELETE /organizations/:organization/members/:user` | Organization/user IDs | 204 |
+
+Members include `sso_bypass`: when true, the member may keep using password or
+email-code login where the organization enforces SSO (break-glass; see
+[federation](../../guides/federation.md#enforcement)).
 
 Membership does not grant operator authority or API permissions. Removing one
 organization's membership must not be used as a substitute for suspending a user
@@ -112,7 +117,7 @@ record. Prefix these paths with `/organizations/:organization`:
 | `GET /domains/:domain` | — | 200 domain |
 | `POST /domains/:domain/verify` | — | 200 domain; 422 when the record is missing, 502 when DNS fails |
 | `POST /domains/:domain/force-verify` | — | 200 domain, verified without DNS (method `manual`) |
-| `DELETE /domains/:domain` | — | 204; releases the claim |
+| `DELETE /domains/:domain` | — | 204; releases the claim; 422 if it is the last verified domain while SSO is enforced |
 
 A domain is `{id,organization_id,domain,verified,verified_at,verified_by,verification_method,verification:{type,name,value},created_at}`.
 Input is normalized: lowercased, trailing dot removed, internationalized names
@@ -130,7 +135,9 @@ Force-verify is for ownership confirmed out of band; both paths are audited
 with their method. Viewers can read domains but not change them.
 
 Verified domains restrict SCIM adoption when a connection uses
-`adopt_scope: "verified_domains"` (see [SCIM](scim.md#existing-users)).
+`adopt_scope: "verified_domains"` (see [SCIM](scim.md#existing-users)), and
+route email discovery, just-in-time provisioning and SSO enforcement for the
+organization's federation connections (see [federation](../../guides/federation.md#organization-sso)).
 
 **Verify (domains):** add a domain, call `verify` before publishing the record (422), publish
 it, verify again (200, `verification_method: "dns"`), then try to claim it from

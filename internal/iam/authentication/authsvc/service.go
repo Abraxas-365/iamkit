@@ -37,6 +37,11 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 		return out, err
 	}
 	defer tx.Rollback()
+	// Checked before the password so a blocked login reveals neither whether
+	// the account exists nor whether the password was right.
+	if err = requireNoSSO(ctx, tx, boundary, email); err != nil {
+		return out, err
+	}
 	user, hash, lookup := tx.PasswordUser(ctx, boundary, email)
 	// Compare always runs (dummy hash when unknown) so timing is uniform.
 	matches := s.passwords.Compare(hash, password)
@@ -63,6 +68,21 @@ func credentialFailure(err error) error {
 		return invalidCredentials()
 	}
 	return err
+}
+
+// requireNoSSO rejects password and email-code login where the boundary
+// organization enforces SSO. Clients find the connection with /discover.
+func requireNoSSO(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, email string) error {
+	required, err := tx.SSORequired(ctx, boundary, email)
+	if err != nil {
+		return err
+	}
+	if required {
+		e := errx.Forbidden("this organization requires single sign-on")
+		e.Code = "SSO_REQUIRED"
+		return e
+	}
+	return nil
 }
 
 func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Issued, error) {
@@ -219,6 +239,11 @@ func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.C
 	}
 	if row.Attempts >= 5 {
 		return out, errx.Unauthorized("invalid challenge")
+	}
+	if purpose == "login" {
+		if err = requireNoSSO(ctx, tx, boundary, row.Email); err != nil {
+			return out, err
+		}
 	}
 	if subtle.ConstantTimeCompare(row.Hash, s.secrets.Hash(challengeID.String()+":"+code)) != 1 {
 		if err = tx.FailChallenge(ctx, challengeID); err != nil {

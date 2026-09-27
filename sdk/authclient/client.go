@@ -85,6 +85,17 @@ type FederationResult struct {
 	AuthorizationURL string `json:"authorization_url"`
 }
 
+// Discovery tells a login screen how an email signs in. Method is "sso"
+// (start federation with ConnectionID in OrganizationID) or "password".
+// Required means password and email-code login are refused for this email
+// in that organization. The answer depends only on the email's domain.
+type Discovery struct {
+	Method         string `json:"method"`
+	OrganizationID string `json:"organization_id,omitempty"`
+	ConnectionID   string `json:"connection_id,omitempty"`
+	Required       bool   `json:"required"`
+}
+
 type AddMemberRequest struct {
 	EnvironmentID string `json:"environment_id"`
 	Audience      string `json:"audience"`
@@ -152,6 +163,13 @@ func (c *Client) VerifyChallenge(ctx context.Context, input ChallengeVerificatio
 }
 
 // ── Federation (SSO) ──
+
+// Discover returns the login method for an email ("home realm discovery").
+func (c *Client) Discover(ctx context.Context, environment, email string) (Discovery, error) {
+	var out Discovery
+	err := c.request(ctx, "/discover", "", map[string]string{"environment_id": environment, "email": email}, &out)
+	return out, err
+}
 
 // StartFederation initiates an SSO login flow, returning the IdP authorization URL.
 // The user's browser should be redirected to the returned URL.

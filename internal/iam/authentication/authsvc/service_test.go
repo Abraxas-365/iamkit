@@ -20,7 +20,12 @@ type testTransaction struct {
 	lookup                error
 	resolve               error
 	user                  identity.UserID
+	sso                   bool
 	committed, rolledBack bool
+}
+
+func (t *testTransaction) SSORequired(context.Context, authentication.Context, string) (bool, error) {
+	return t.sso, nil
 }
 
 func (t *testTransaction) PasswordUser(context.Context, authentication.Context, string) (identity.UserID, string, error) {
@@ -143,6 +148,25 @@ func TestIssuedBoundaryIsCanonical(t *testing.T) {
 		}
 		if out.Context != testBoundary() {
 			t.Fatalf("noncanonical %s: %+v", op, out.Context)
+		}
+	}
+}
+
+// A login where the organization enforces SSO fails with 403 SSO_REQUIRED
+// whether or not the account exists or the password matches.
+func TestEnforcedSSOBlocksPasswordLogin(t *testing.T) {
+	for _, tx := range []*testTransaction{
+		{sso: true, user: identity.MustParseUserID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")},
+		{sso: true, lookup: errx.Unauthorized("no such user")},
+	} {
+		s := New(testRepository{tx}, testPasswords{mismatch: true}, testSecrets{}, nil)
+		_, err := s.Login(context.Background(), testBoundary(), "user@example.com", "password")
+		var e *errx.Error
+		if !errx.As(err, &e) || e.HTTPStatus != 403 || e.Code != "SSO_REQUIRED" {
+			t.Fatalf("want SSO_REQUIRED, got %v", err)
+		}
+		if tx.committed {
+			t.Fatal("blocked login committed")
 		}
 	}
 }

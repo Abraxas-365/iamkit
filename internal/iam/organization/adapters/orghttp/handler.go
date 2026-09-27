@@ -28,6 +28,7 @@ func (h *Handler) Register(e fiber.Router) {
 	e.Patch("/organizations/:id", h.Update)
 	e.Post("/memberships", h.AddMember)
 	e.Get("/organizations/:organization/members", h.Members)
+	e.Patch("/organizations/:organization/members/:user", h.UpdateMember)
 	e.Delete("/organizations/:organization/members/:user", h.RemoveMember)
 }
 func (h *Handler) Create(c *fiber.Ctx) error {
@@ -100,6 +101,25 @@ func (h *Handler) Members(c *fiber.Ctx) error {
 		return err
 	}
 	return c.JSON(out)
+}
+func (h *Handler) UpdateMember(c *fiber.Ctx) error {
+	org, err := identity.ParseOrganizationID(c.Params("organization"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	user, err := identity.ParseUserID(c.Params("user"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	var input organization.MemberUpdate
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	m := organization.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
+	if err := h.commands.UpdateMember(c.Context(), m, org, user, input); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
 }
 func (h *Handler) RemoveMember(c *fiber.Ctx) error {
 	org, err := identity.ParseOrganizationID(c.Params("organization"))

@@ -95,6 +95,18 @@ func (r *Repository) DeleteDomain(ctx context.Context, b organization.Boundary, 
 		return failure(err)
 	}
 	defer tx.Rollback()
+	// Removing an organization's last verified domain while it enforces SSO
+	// would silently turn enforcement off (R7).
+	var last bool
+	err = tx.GetContext(ctx, &last, `SELECT EXISTS(SELECT 1 FROM organization_domains d WHERE d.id=$1 AND d.environment_id=$2 AND d.organization_id=$3 AND d.verified_at IS NOT NULL)
+		AND NOT EXISTS(SELECT 1 FROM organization_domains d WHERE d.id<>$1 AND d.environment_id=$2 AND d.organization_id=$3 AND d.verified_at IS NOT NULL)
+		AND EXISTS(SELECT 1 FROM federation_connections c WHERE c.environment_id=$2 AND c.organization_id=$3 AND c.active AND c.enforcement='enforced')`, id, b.Environment, b.Organization)
+	if err != nil {
+		return failure(err)
+	}
+	if last {
+		return errx.Business("cannot delete the last verified domain while the organization enforces SSO")
+	}
 	var name string
 	err = tx.GetContext(ctx, &name, `DELETE FROM organization_domains WHERE id=$1 AND environment_id=$2 AND organization_id=$3 RETURNING domain`, id, b.Environment, b.Organization)
 	if errors.Is(err, sql.ErrNoRows) {

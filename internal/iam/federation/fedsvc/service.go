@@ -2,8 +2,6 @@ package fedsvc
 
 import (
 	"context"
-	"net/url"
-	"regexp"
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -16,28 +14,92 @@ import (
 type Service struct {
 	repository federation.Repository
 	provider   federation.Provider
+	cipher     federation.Cipher
 	secrets    federation.Secrets
 	sessions   federation.Sessions
 	issuer     string
 }
 
-func New(r federation.Repository, p federation.Provider, secrets federation.Secrets, sessions federation.Sessions, issuer string) *Service {
-	return &Service{r, p, secrets, sessions, issuer}
+func New(r federation.Repository, p federation.Provider, cipher federation.Cipher, secrets federation.Secrets, sessions federation.Sessions, issuer string) *Service {
+	return &Service{r, p, cipher, secrets, sessions, issuer}
 }
 
-var secretName = regexp.MustCompile(`^IAMKIT_PROVIDER_[A-Z0-9_]+$`)
-
-func (s *Service) Create(ctx context.Context, input federation.Connection) (identity.ConnectionID, error) {
-	u, err := url.Parse(input.Issuer)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || input.Name == "" || input.Client == "" || !secretName.MatchString(input.SecretEnv) {
-		return identity.ConnectionID{}, errx.Validation("HTTPS issuer, client ID and IAMKIT_PROVIDER_ secret variable required")
+func (s *Service) Create(ctx context.Context, m federation.Mutation, input federation.ConnectionInput) (identity.ConnectionID, error) {
+	if err := input.Validate(); err != nil {
+		return identity.ConnectionID{}, err
 	}
-	if !s.provider.Approved(input) {
+	c := input.Connection(m.Environment)
+	if err := s.check(ctx, c); err != nil {
+		return identity.ConnectionID{}, err
+	}
+	if c.SecretEnv != "" && !s.provider.Approved(c) {
 		return identity.ConnectionID{}, errx.Forbidden("provider credential is not approved for this environment, issuer and client")
 	}
-	input.ID = identity.NewConnectionID()
-	return input.ID, s.repository.Create(ctx, input)
+	if input.ClientSecret != "" {
+		sealed, err := s.cipher.Seal([]byte(input.ClientSecret))
+		if err != nil {
+			return identity.ConnectionID{}, err
+		}
+		c.Sealed = sealed
+	}
+	c.ID = identity.NewConnectionID()
+	return c.ID, s.repository.Create(ctx, m, c)
 }
+
+func (s *Service) Update(ctx context.Context, m federation.Mutation, id identity.ConnectionID, input federation.ConnectionUpdate) error {
+	if id.IsZero() {
+		return errx.NotFound("federation connection not found")
+	}
+	if err := input.Validate(); err != nil {
+		return err
+	}
+	current, err := s.repository.Find(ctx, m.Environment, id)
+	if err != nil {
+		return err
+	}
+	c := input.Apply(current)
+	if err = s.check(ctx, c); err != nil {
+		return err
+	}
+	if input.ClientSecret != nil {
+		if c.Sealed, err = s.cipher.Seal([]byte(*input.ClientSecret)); err != nil {
+			return err
+		}
+		c.SecretEnv = ""
+	}
+	return s.repository.Update(ctx, m, c)
+}
+
+// check enforces the rules shared by create and update: organization-only
+// settings, a JIT group the directory cannot overwrite, and enforcement only
+// once the organization has verified a domain (enforcement applies to
+// verified-domain emails, so without one it would silently do nothing).
+func (s *Service) check(ctx context.Context, c federation.Connection) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	if !c.JITGroup.IsZero() {
+		ok, err := s.repository.OperatorGroup(ctx, c.Environment, c.Organization, c.JITGroup)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errx.Validation("jit_group_id must be an operator-managed group of the organization")
+		}
+	}
+	if c.Enforcement != federation.EnforcementEnforced {
+		return nil
+	}
+	verified, err := s.repository.HasVerifiedDomain(ctx, c.Environment, c.Organization)
+	if err != nil {
+		return err
+	}
+	if !verified {
+		return errx.Business("enforcing SSO requires the organization to have a verified domain")
+	}
+	return nil
+}
+
 func (s *Service) Link(ctx context.Context, m federation.Mutation, connectionID identity.ConnectionID, userID identity.UserID, subject string) error {
 	if connectionID.IsZero() || userID.IsZero() || subject == "" || len(subject) > 512 {
 		return errx.Validation("invalid external identity")
@@ -56,8 +118,8 @@ func (s *Service) Unlink(ctx context.Context, m federation.Mutation, connectionI
 	}
 	return s.repository.Unlink(ctx, m, connectionID, userID)
 }
-func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[federation.ConnectionView], error) {
-	return s.repository.List(ctx, environment, page)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, filter federation.ConnectionFilter, page query.Pagination) (query.Paginated[federation.ConnectionView], error) {
+	return s.repository.List(ctx, environment, filter, page)
 }
 func (s *Service) Connection(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID) (federation.ConnectionDetail, error) {
 	if connectionID.IsZero() {
@@ -71,6 +133,24 @@ func (s *Service) Identities(ctx context.Context, environment identity.Environme
 	}
 	return s.repository.Identities(ctx, environment, connectionID, page)
 }
+
+// Discover routes an email by its domain alone, never by whether an account
+// exists, so it cannot be used to enumerate users.
+func (s *Service) Discover(ctx context.Context, environment identity.EnvironmentID, email string) (federation.Discovery, error) {
+	email, err := identity.Email(email)
+	if err != nil || environment.IsZero() {
+		return federation.Discovery{}, errx.Validation("environment_id and a valid email are required")
+	}
+	out, err := s.repository.Discover(ctx, environment, identity.EmailDomain(email))
+	if err != nil {
+		return federation.Discovery{}, err
+	}
+	if out.Method == "" {
+		out = federation.Discovery{Method: federation.MethodPassword}
+	}
+	return out, nil
+}
+
 func (s *Service) Start(ctx context.Context, b authentication.Context, id identity.ConnectionID) (federation.Start, error) {
 	var out federation.Start
 	if err := b.Validate(); err != nil {
@@ -85,6 +165,10 @@ func (s *Service) Start(ctx context.Context, b authentication.Context, id identi
 	connection, err := s.repository.Find(ctx, b.EnvironmentID, id)
 	if err != nil {
 		return out, err
+	}
+	// An organization connection only signs users in to its organization.
+	if connection.Scoped() && connection.Organization != b.OrganizationID {
+		return out, errx.Validation("connection belongs to another organization")
 	}
 	state, hash, err := s.secrets.Generate("ik_state_")
 	if err != nil {
@@ -108,6 +192,7 @@ func (s *Service) Start(ctx context.Context, b authentication.Context, id identi
 	}
 	return federation.Start{URL: address, Binding: binding}, nil
 }
+
 func (s *Service) Callback(ctx context.Context, code, state, binding string) (authentication.Issued, error) {
 	var out authentication.Issued
 	if code == "" || state == "" {
@@ -121,14 +206,56 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (au
 	if err != nil {
 		return out, err
 	}
-	subject, err := s.provider.Verify(ctx, connection, code, row.Nonce, row.Verifier)
+	claims, err := s.provider.Verify(ctx, connection, code, row.Nonce, row.Verifier)
 	if err != nil {
 		return out, err
 	}
-	tx, user, err := s.repository.LinkedUser(ctx, row.Boundary.EnvironmentID, row.Connection, subject)
+	tx, user, err := s.repository.LinkedUser(ctx, row.Boundary.EnvironmentID, row.Connection, claims.Subject)
 	if err != nil {
 		return out, err
+	}
+	if tx == nil {
+		if err = s.provision(ctx, connection, claims); err != nil {
+			return out, err
+		}
+		if tx, user, err = s.repository.LinkedUser(ctx, row.Boundary.EnvironmentID, row.Connection, claims.Subject); err != nil {
+			return out, err
+		}
+		if tx == nil {
+			return out, errx.Unauthorized("external identity is not linked")
+		}
 	}
 	defer tx.Rollback()
-	return s.sessions.NewSession(ctx, tx, row.Boundary, user)
+	out, err = s.sessions.NewSession(ctx, tx, row.Boundary, user)
+	if connection.Scoped() && unauthorized(err) {
+		// The provider proved the identity; what is missing is access
+		// (inactive membership, or no roles for a just-provisioned user).
+		return out, errx.Forbidden("signed in, but the user has no access to this application")
+	}
+	return out, err
 }
+
+// provision links an unlinked subject on first login when the connection
+// allows it: the provider email must be verified (or unreported) and its
+// domain verified by the connection's organization, which the repository
+// checks in its transaction. The account persists even when the user has no
+// access yet, so operators can find it and grant roles.
+func (s *Service) provision(ctx context.Context, c federation.Connection, claims federation.Claims) error {
+	email, err := c.Admit(claims)
+	if err != nil {
+		return err
+	}
+	return s.repository.Provision(ctx, federation.Provisioning{
+		Connection: c.ID, Environment: c.Environment, Organization: c.Organization, Group: c.JITGroup,
+		User: identity.NewUserID(), Subject: claims.Subject, Email: email, Domain: identity.EmailDomain(email), Name: claims.DisplayName(email),
+	})
+}
+
+func unauthorized(err error) bool {
+	var e *errx.Error
+	return errx.As(err, &e) && e.Type == errx.TypeAuthorization && e.HTTPStatus == 401
+}
+
+var _ federation.Commands = (*Service)(nil)
+var _ federation.Queries = (*Service)(nil)
+var _ federation.Flows = (*Service)(nil)
