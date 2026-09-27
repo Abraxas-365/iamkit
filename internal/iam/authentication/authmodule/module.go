@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rsa"
 
+	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
@@ -27,6 +28,7 @@ type Deps struct {
 	OAuthTokens  authentication.OAuthTokens // nil rejects every OAuth-issued access token
 	IssueSession func(*fiber.Ctx, authentication.Issued) error
 	SecondFactor authentication.SecondFactor // nil disables MFA
+	Cipher       authentication.Cipher       // seals delivery secrets; nil refuses to store them
 }
 type Module struct {
 	Commands        authentication.Commands
@@ -49,10 +51,14 @@ func New(deps Deps) Module {
 		service.SetSecondFactor(deps.SecondFactor)
 	}
 	deliveryRepo := authpg.NewDeliveryConfigRepository(deps.DB)
-	factory := func(url, token string) authentication.Delivery {
-		return authmail.WebhookDelivery{URL: url, Token: token}
+	factory := func(cfg authentication.DeliveryConfig, secret authentication.DeliverySecret) (authentication.Delivery, error) {
+		if cfg.Provider == authentication.ProviderWebhook {
+			return authmail.WebhookDelivery{URL: cfg.WebhookURL, Token: secret.WebhookToken}, nil
+		}
+		// TODO(email-providers phase 5): SMTP and Resend senders.
+		return nil, errx.Internal("email provider " + cfg.Provider + " is not available")
 	}
-	deliverySvc := authsvc.NewDeliveryService(deliveryRepo, deps.Delivery, factory, deps.Issuer)
+	deliverySvc := authsvc.NewDeliveryService(deliveryRepo, deps.Delivery, factory, deps.Cipher, deps.Issuer)
 	service.SetDeliveryService(deliverySvc)
 	tokens := authsvc.NewTokens(repo, authjwt.New(deps.Key, deps.Issuer), authsecret.Generator{}, deps.OAuthTokens)
 	return Module{Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens), HTTP: authhttp.New(service, service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc}

@@ -11,42 +11,92 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
-type DeliveryFactory func(url, token string) authentication.Delivery
+// DeliveryFactory builds the delivery of a stored configuration; it opens
+// the sealed secret, so it can fail (DELIVERY_CREDENTIAL).
+type DeliveryFactory func(cfg authentication.DeliveryConfig, secret authentication.DeliverySecret) (authentication.Delivery, error)
 
 type DeliveryService struct {
 	repo    authentication.DeliveryConfigRepository
 	global  authentication.Delivery
 	factory DeliveryFactory
+	cipher  authentication.Cipher
 	issuer  string
 	now     func() time.Time
+	// globalProvider names the global delivery's provider for status.
+	globalProvider string
 }
 
 var _ authentication.DeliveryConfigCommands = (*DeliveryService)(nil)
 var _ authentication.DeliveryConfigQueries = (*DeliveryService)(nil)
 
-// NewDeliveryService builds the delivery service; issuer is IAMKit's public
-// URL, used to offer the hosted invitation page.
-func NewDeliveryService(repo authentication.DeliveryConfigRepository, global authentication.Delivery, factory DeliveryFactory, issuer string) *DeliveryService {
-	return &DeliveryService{repo: repo, global: global, factory: factory, issuer: strings.TrimRight(issuer, "/"), now: time.Now}
+// NewDeliveryService builds the delivery service; cipher seals provider
+// secrets (nil refuses to store them); issuer is IAMKit's public URL, used
+// to offer the hosted invitation page.
+func NewDeliveryService(repo authentication.DeliveryConfigRepository, global authentication.Delivery, factory DeliveryFactory, cipher authentication.Cipher, issuer string) *DeliveryService {
+	return &DeliveryService{repo: repo, global: global, factory: factory, cipher: cipher, issuer: strings.TrimRight(issuer, "/"), now: time.Now, globalProvider: authentication.ProviderWebhook}
 }
 
+// SetGlobalProvider names the provider of the global delivery (webhook by
+// default) for DeliveryStatus.
+func (s *DeliveryService) SetGlobalProvider(provider string) { s.globalProvider = provider }
+
 // Audited delivery actions; the target is the environment's delivery path
-// (or, for tests, the source used), never the URL or token.
+// (or, for tests, the source used), never the URL or secret.
 const (
 	ActionDeliveryUpdate = "delivery.update"
 	ActionDeliveryDelete = "delivery.delete"
 	ActionDeliveryTest   = "delivery.test"
 )
 
+// SetDeliveryConfig validates and stores the configuration. A provider
+// secret (SMTP password, Resend API key) is sealed; left blank while keeping
+// the same provider, the stored one is kept.
 func (s *DeliveryService) SetDeliveryConfig(ctx context.Context, m authentication.Mutation, input authentication.DeliveryConfigInput) error {
 	if m.Environment.IsZero() {
 		return errx.Validation("environment_id must be a valid UUID")
 	}
+	input = input.Normalize()
 	if err := input.Validate(); err != nil {
 		return err
 	}
+	sealed := ""
+	if input.Provider != authentication.ProviderWebhook {
+		var err error
+		if sealed, err = s.secret(ctx, m.Environment, input); err != nil {
+			return err
+		}
+	}
 	m.Action, m.Target = ActionDeliveryUpdate, "/environments/"+m.Environment.String()+"/delivery"
-	return s.repo.SetDeliveryConfig(ctx, m, input)
+	return s.repo.SetDeliveryConfig(ctx, m, input, sealed)
+}
+
+// secret returns the sealed provider secret to store: the new one, the
+// stored one (same provider, blank input), or "" when the provider needs
+// none (SMTP without authentication).
+func (s *DeliveryService) secret(ctx context.Context, environment identity.EnvironmentID, input authentication.DeliveryConfigInput) (string, error) {
+	if plain := input.Secret(); plain != "" {
+		if s.cipher == nil {
+			return "", errx.Business("storing secrets requires IAMKIT_ENCRYPTION_KEY to be configured")
+		}
+		return s.cipher.Seal([]byte(plain))
+	}
+	stored, secret, err := s.repo.GetDeliveryConfig(ctx, environment)
+	if err != nil && !notFound(err) {
+		return "", err
+	}
+	kept := ""
+	if err == nil && stored.Provider == input.Provider {
+		kept = secret.Sealed
+	}
+	switch {
+	case input.Provider == authentication.ProviderResend && kept == "":
+		return "", errx.Validation("api_key is required")
+	case input.Provider == authentication.ProviderSMTP && input.SMTPUsername != "" && kept == "":
+		return "", errx.Validation("smtp_password is required")
+	case input.Provider == authentication.ProviderSMTP && input.SMTPUsername == "":
+		return "", nil // no authentication: nothing to keep
+	}
+	return kept, nil
 }
 
 func (s *DeliveryService) DeleteDeliveryConfig(ctx context.Context, m authentication.Mutation) error {
@@ -65,27 +115,29 @@ func (s *DeliveryService) DeliveryConfig(ctx context.Context, environmentID iden
 	return cfg, err
 }
 
-// DeliveryStatus reports which webhook serves the environment and its
-// recent delivery activity.
+// DeliveryStatus reports which configuration serves the environment, its
+// provider, and its recent delivery activity.
 func (s *DeliveryService) DeliveryStatus(ctx context.Context, environmentID identity.EnvironmentID) (authentication.DeliveryStatus, error) {
 	if environmentID.IsZero() {
 		return authentication.DeliveryStatus{}, errx.Validation("environment_id must be a valid UUID")
 	}
-	source := authentication.SourceEnvironment
-	if _, _, err := s.repo.GetDeliveryConfig(ctx, environmentID); err != nil {
+	source, provider := authentication.SourceEnvironment, ""
+	if cfg, _, err := s.repo.GetDeliveryConfig(ctx, environmentID); err == nil {
+		provider = cfg.Provider
+	} else {
 		if !notFound(err) {
 			return authentication.DeliveryStatus{}, err
 		}
 		source = authentication.SourceNone
 		if s.global != nil {
-			source = authentication.SourceGlobal
+			source, provider = authentication.SourceGlobal, s.globalProvider
 		}
 	}
 	activity, err := s.repo.Activity(ctx, environmentID)
 	if err != nil {
 		return authentication.DeliveryStatus{}, err
 	}
-	out := authentication.DeliveryStatus{Source: source, GlobalConfigured: s.global != nil, Activity: activity}
+	out := authentication.DeliveryStatus{Source: source, Provider: provider, GlobalConfigured: s.global != nil, Activity: activity}
 	if s.issuer != "" {
 		out.HostedInvitationURL = s.issuer + "/hosted/invite"
 	}
@@ -127,20 +179,28 @@ func (s *DeliveryService) TestDelivery(ctx context.Context, m authentication.Mut
 	return attempt, nil
 }
 
-// deliver picks the environment webhook, else the global one (also when the
-// configuration lookup fails), sends, and records the attempt.
+// deliver picks the environment's delivery, else the global one (also when
+// the configuration lookup fails), sends, and records the attempt. A stored
+// configuration that cannot be built (undecryptable secret) fails the
+// attempt rather than falling back.
 func (s *DeliveryService) deliver(ctx context.Context, environmentID identity.EnvironmentID, m authentication.Message) (authentication.Attempt, error) {
 	start := s.now()
+	m.Environment = environmentID
 	source, sender := authentication.SourceNone, authentication.Delivery(nil)
-	cfg, token, err := s.repo.GetDeliveryConfig(ctx, environmentID)
+	var buildErr error
+	cfg, secret, err := s.repo.GetDeliveryConfig(ctx, environmentID)
 	switch {
 	case err == nil && s.factory != nil:
-		source, sender = authentication.SourceEnvironment, s.factory(cfg.WebhookURL, token)
+		source = authentication.SourceEnvironment
+		sender, buildErr = s.factory(cfg, secret)
 	case s.global != nil:
 		source, sender = authentication.SourceGlobal, s.global
 	}
 	err = authentication.ErrDeliveryNotConfigured()
-	if sender != nil {
+	switch {
+	case buildErr != nil:
+		err = buildErr
+	case sender != nil:
 		err = sender.Send(ctx, m)
 	}
 	attempt := authentication.Attempt{Source: source, Purpose: m.Purpose, Delivered: err == nil, LatencyMS: int(s.now().Sub(start).Milliseconds()), At: start.UTC()}

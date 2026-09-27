@@ -18,44 +18,71 @@ func NewDeliveryConfigRepository(db *sqlx.DB) *DeliveryConfigRepository {
 	return &DeliveryConfigRepository{db}
 }
 
-func (r *DeliveryConfigRepository) GetDeliveryConfig(ctx context.Context, environmentID identity.EnvironmentID) (authentication.DeliveryConfig, string, error) {
+func (r *DeliveryConfigRepository) GetDeliveryConfig(ctx context.Context, environmentID identity.EnvironmentID) (authentication.DeliveryConfig, authentication.DeliverySecret, error) {
 	var row struct {
 		EnvironmentID identity.EnvironmentID `db:"environment_id"`
+		Provider      string                 `db:"provider"`
 		WebhookURL    string                 `db:"webhook_url"`
 		WebhookToken  string                 `db:"webhook_token"`
 		InvitationURL string                 `db:"invitation_url"`
+		FromEmail     string                 `db:"from_email"`
+		FromName      string                 `db:"from_name"`
+		ReplyTo       string                 `db:"reply_to"`
+		SMTPHost      string                 `db:"smtp_host"`
+		SMTPPort      sql.NullInt32          `db:"smtp_port"`
+		SMTPUsername  string                 `db:"smtp_username"`
+		SMTPTLS       string                 `db:"smtp_tls"`
+		SecretSealed  string                 `db:"secret_sealed"`
 		CreatedAt     time.Time              `db:"created_at"`
 		UpdatedAt     time.Time              `db:"updated_at"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT environment_id, webhook_url, webhook_token, invitation_url, created_at, updated_at FROM delivery_configs WHERE environment_id = $1`, environmentID)
+	err := r.db.GetContext(ctx, &row, `SELECT environment_id, provider, webhook_url, webhook_token, invitation_url, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_username, smtp_tls, secret_sealed, created_at, updated_at FROM delivery_configs WHERE environment_id = $1`, environmentID)
 	if err == sql.ErrNoRows {
-		return authentication.DeliveryConfig{}, "", errx.NotFound("delivery config not found")
+		return authentication.DeliveryConfig{}, authentication.DeliverySecret{}, errx.NotFound("delivery config not found")
 	}
 	if err != nil {
-		return authentication.DeliveryConfig{}, "", errx.Wrap(err, "read delivery config", errx.TypeInternal)
+		return authentication.DeliveryConfig{}, authentication.DeliverySecret{}, errx.Wrap(err, "read delivery config", errx.TypeInternal)
 	}
 	cfg := authentication.DeliveryConfig{
 		EnvironmentID: row.EnvironmentID,
+		Provider:      row.Provider,
 		WebhookURL:    row.WebhookURL,
 		HasToken:      row.WebhookToken != "",
 		InvitationURL: row.InvitationURL,
+		FromEmail:     row.FromEmail,
+		FromName:      row.FromName,
+		ReplyTo:       row.ReplyTo,
+		SMTPHost:      row.SMTPHost,
+		SMTPPort:      int(row.SMTPPort.Int32),
+		SMTPUsername:  row.SMTPUsername,
+		SMTPTLS:       row.SMTPTLS,
+		HasSecret:     row.SecretSealed != "",
 		CreatedAt:     row.CreatedAt,
 		UpdatedAt:     row.UpdatedAt,
 	}
-	return cfg, row.WebhookToken, nil
+	return cfg, authentication.DeliverySecret{WebhookToken: row.WebhookToken, Sealed: row.SecretSealed}, nil
 }
 
-func (r *DeliveryConfigRepository) SetDeliveryConfig(ctx context.Context, m authentication.Mutation, input authentication.DeliveryConfigInput) error {
+// SetDeliveryConfig writes the whole row, so switching provider clears the
+// previous provider's settings and secret.
+func (r *DeliveryConfigRepository) SetDeliveryConfig(ctx context.Context, m authentication.Mutation, input authentication.DeliveryConfigInput, sealed string) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return errx.Wrap(err, "save delivery config", errx.TypeInternal)
 	}
 	defer tx.Rollback()
+	var port sql.NullInt32
+	if input.SMTPPort != 0 {
+		port = sql.NullInt32{Int32: int32(input.SMTPPort), Valid: true}
+	}
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO delivery_configs (environment_id, webhook_url, webhook_token, invitation_url, updated_at)
-		VALUES ($1, $2, $3, $4, now())
-		ON CONFLICT (environment_id) DO UPDATE SET webhook_url = $2, webhook_token = $3, invitation_url = $4, updated_at = now()`,
-		m.Environment, input.WebhookURL, input.WebhookToken, input.InvitationURL)
+		INSERT INTO delivery_configs (environment_id, provider, webhook_url, webhook_token, invitation_url, from_email, from_name, reply_to, smtp_host, smtp_port, smtp_username, smtp_tls, secret_sealed, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now())
+		ON CONFLICT (environment_id) DO UPDATE SET provider = $2, webhook_url = $3, webhook_token = $4, invitation_url = $5,
+			from_email = $6, from_name = $7, reply_to = $8, smtp_host = $9, smtp_port = $10, smtp_username = $11, smtp_tls = $12,
+			secret_sealed = $13, updated_at = now()`,
+		m.Environment, input.Provider, input.WebhookURL, input.WebhookToken, input.InvitationURL,
+		input.FromEmail, input.FromName, input.ReplyTo, input.SMTPHost, port, input.SMTPUsername, input.SMTPTLS, sealed)
 	if err != nil {
 		return errx.Wrap(err, "save delivery config", errx.TypeInternal)
 	}

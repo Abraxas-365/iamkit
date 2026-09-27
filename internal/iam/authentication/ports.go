@@ -59,17 +59,40 @@ type Delivery interface {
 	Send(ctx context.Context, message Message) error
 }
 
-// DeliveryConfigCommands manages per-environment webhook delivery settings;
-// every change is audited (delivery.update, delivery.delete, delivery.test).
+// Mailer sends an email IAMKit rendered (SMTP, Resend).
+type Mailer interface {
+	Deliver(ctx context.Context, email Email) error
+}
+
+// Renderer writes the email for a message in the brand's look; the language
+// is message.Locale when set, else the brand's.
+type Renderer interface {
+	Render(ctx context.Context, message Message, brand Brand) (Email, error)
+}
+
+// Branding reads how an environment's emails look (hosted login branding).
+type Branding interface {
+	Brand(ctx context.Context, environment identity.EnvironmentID) (Brand, error)
+}
+
+// Cipher seals delivery secrets (SMTP password, Resend API key) at rest
+// (IAMKIT_ENCRYPTION_KEY).
+type Cipher interface {
+	Seal(plain []byte) (string, error)
+	Open(sealed string) ([]byte, error)
+}
+
+// DeliveryConfigCommands manages per-environment delivery settings; every
+// change is audited (delivery.update, delivery.delete, delivery.test).
 type DeliveryConfigCommands interface {
 	SetDeliveryConfig(ctx context.Context, m Mutation, input DeliveryConfigInput) error
 	DeleteDeliveryConfig(ctx context.Context, m Mutation) error
 	// TestDelivery sends a test message through the environment's effective
-	// webhook, records and audits the attempt, and returns its outcome.
+	// delivery, records and audits the attempt, and returns its outcome.
 	TestDelivery(ctx context.Context, m Mutation, input TestInput) (Attempt, error)
 }
 
-// DeliveryConfigQueries reads per-environment webhook delivery settings.
+// DeliveryConfigQueries reads per-environment delivery settings.
 type DeliveryConfigQueries interface {
 	DeliveryConfig(ctx context.Context, environment identity.EnvironmentID) (DeliveryConfig, error)
 	// DeliveryStatus reports the effective source and recent activity.
@@ -78,9 +101,11 @@ type DeliveryConfigQueries interface {
 
 // DeliveryConfigRepository is the storage interface for delivery configs.
 type DeliveryConfigRepository interface {
-	GetDeliveryConfig(ctx context.Context, environment identity.EnvironmentID) (DeliveryConfig, string, error) // config, webhook token, error
-	// SetDeliveryConfig and DeleteDeliveryConfig audit m in the same transaction.
-	SetDeliveryConfig(ctx context.Context, m Mutation, input DeliveryConfigInput) error
+	GetDeliveryConfig(ctx context.Context, environment identity.EnvironmentID) (DeliveryConfig, DeliverySecret, error)
+	// SetDeliveryConfig stores input without its plaintext secrets: the
+	// webhook token as given, sealed as the SMTP password / Resend API key.
+	// It and DeleteDeliveryConfig audit m in the same transaction.
+	SetDeliveryConfig(ctx context.Context, m Mutation, input DeliveryConfigInput, sealed string) error
 	DeleteDeliveryConfig(ctx context.Context, m Mutation) error
 	// RecordAttempt stores the environment's latest attempt (and failure).
 	RecordAttempt(ctx context.Context, environment identity.EnvironmentID, attempt Attempt) error

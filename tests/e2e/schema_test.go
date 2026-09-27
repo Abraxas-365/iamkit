@@ -299,3 +299,38 @@ func TestSchemaSocialLogin(t *testing.T) {
 	expectSQL(t, db, "state without organization or continuation", checkSQL, state, []byte("s1"), social, f.envA, f.app, f.res, nil, nil)
 	expectSQL(t, db, "consumed state", okSQL, state, []byte("s2"), social, f.envA, f.app, f.res, nil, "2026-01-01")
 }
+
+// TestSchemaDeliveryProviders covers 012: existing webhook rows stay valid,
+// each provider requires its own settings and carries no other provider's,
+// and the environment email language.
+func TestSchemaDeliveryProviders(t *testing.T) {
+	db := freshDB(t)
+	f := newSchemaFixture(t, db)
+	expectSQL(t, db, "legacy webhook row", okSQL, `INSERT INTO delivery_configs(environment_id,webhook_url,webhook_token) VALUES($1,'https://hook','t')`, f.envA)
+	if n := count(t, db, `SELECT count(*) FROM delivery_configs WHERE provider='webhook' AND secret_sealed='' AND smtp_port IS NULL`); n != 1 {
+		t.Fatalf("webhook defaults: %d", n)
+	}
+	upsert := `INSERT INTO delivery_configs(environment_id,provider,webhook_url,webhook_token,from_email,smtp_host,smtp_port,smtp_tls,secret_sealed) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		ON CONFLICT (environment_id) DO UPDATE SET provider=$2,webhook_url=$3,webhook_token=$4,from_email=$5,smtp_host=$6,smtp_port=$7,smtp_tls=$8,secret_sealed=$9`
+	expectSQL(t, db, "unknown provider", checkSQL, upsert, f.envB, "ses", "", "", "a@x.io", "", nil, "", "v1:x")
+	expectSQL(t, db, "webhook without token", checkSQL, upsert, f.envB, "webhook", "https://hook", "", "", "", nil, "", "")
+	expectSQL(t, db, "webhook with sender", checkSQL, upsert, f.envB, "webhook", "https://hook", "t", "a@x.io", "", nil, "", "")
+	expectSQL(t, db, "smtp without host", checkSQL, upsert, f.envB, "smtp", "", "", "a@x.io", "", 587, "starttls", "")
+	expectSQL(t, db, "smtp without sender", checkSQL, upsert, f.envB, "smtp", "", "", "", "smtp.x.io", 587, "starttls", "")
+	expectSQL(t, db, "smtp bad tls", checkSQL, upsert, f.envB, "smtp", "", "", "a@x.io", "smtp.x.io", 587, "ssl", "")
+	expectSQL(t, db, "smtp bad port", checkSQL, upsert, f.envB, "smtp", "", "", "a@x.io", "smtp.x.io", 70000, "starttls", "")
+	expectSQL(t, db, "smtp with webhook", checkSQL, upsert, f.envB, "smtp", "https://hook", "t", "a@x.io", "smtp.x.io", 587, "starttls", "")
+	expectSQL(t, db, "smtp without auth", okSQL, upsert, f.envB, "smtp", "", "", "a@x.io", "smtp.x.io", 587, "starttls", "")
+	expectSQL(t, db, "resend without key", checkSQL, upsert, f.envB, "resend", "", "", "a@x.io", "", nil, "", "")
+	expectSQL(t, db, "resend with smtp host", checkSQL, upsert, f.envB, "resend", "", "", "a@x.io", "smtp.x.io", nil, "", "v1:x")
+	expectSQL(t, db, "resend", okSQL, upsert, f.envB, "resend", "", "", "a@x.io", "", nil, "", "v1:x")
+	expectSQL(t, db, "switch back to webhook", okSQL, upsert, f.envB, "webhook", "https://hook", "t", "", "", nil, "", "")
+	expectSQL(t, db, "long sender name", checkSQL, `UPDATE delivery_configs SET from_name=repeat('x',101) WHERE environment_id=$1`, f.envA)
+
+	expectSQL(t, db, "locale default", okSQL, `INSERT INTO login_settings(environment_id) VALUES($1)`, f.envA)
+	if n := count(t, db, `SELECT count(*) FROM login_settings WHERE locale=''`); n != 1 {
+		t.Fatalf("locale default: %d", n)
+	}
+	expectSQL(t, db, "locale", okSQL, `UPDATE login_settings SET locale='es' WHERE environment_id=$1`, f.envA)
+	expectSQL(t, db, "long locale", checkSQL, `UPDATE login_settings SET locale=repeat('x',17) WHERE environment_id=$1`, f.envA)
+}

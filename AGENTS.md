@@ -168,7 +168,8 @@ infrastructure concerns that should be swappable:
 |-----------|--------|---------|
 | `Passwords` | authentication, management | `Hash(string) (string, error)`, `Compare(string, string) bool` |
 | `Secrets` | authentication, federation, oauth, provisioning, serviceaccount | Token/key generation and hashing |
-| `Delivery` | authentication | Send challenge codes and invitations (email webhook, `Message`) |
+| `Delivery` | authentication | Send challenge codes and invitations (`Message`); per environment a webhook, SMTP or Resend configuration (`DeliveryConfig.Provider`), else the global one |
+| `Mailer` / `Renderer` / `Branding` | authentication | Send a rendered `Email` (SMTP, Resend); render a `Message` in the environment's `Brand` and language (`internal/i18n`); read that brand |
 | `Mailer` | invitation | Send invitation mail and build links; `invmail` adapts authentication delivery |
 | `Provider` | federation | OIDC provider discovery and credential approval |
 | `Flows` | federation | Browser login flows (`Discover`, `Start`, `StartHosted`, `Callback`, `EnvironmentConnections`), separate from Commands/Queries. `Callback` returns an `Outcome`: a session, or for hosted starts (`Continuation` = OAuth ticket) only the `Verified` identity |
@@ -177,7 +178,7 @@ infrastructure concerns that should be swappable:
 | `SecondFactor` | authentication | Login-time MFA (`Requirement`, `Begin`, `Complete`, `Enroll`), implemented by `mfasvc` (`mfa.Logins`). `Login`/`VerifyChallenge` return `authentication.Result{Issued, MFA}`: `SignIn` commits the credential transaction, then either issues the session or parks a pending `ik_mfa_` login. `authhttp.Respond` renders either shape; federation receives it as the injected `Respond` closure |
 | `Logins` | mfa | Everything login flows need from mfa (headless pending logins + hosted `Verify`/`Enrolling` without a pending token) |
 | `TOTP` | mfa | RFC 6238 codes/URIs (`mfatotp`, stdlib only, RFC test vectors) |
-| `Cipher` | federation, mfa | Seal/open stored secrets (client secrets, TOTP secrets); implemented by `internal/cryptox.Sealer` (`IAMKIT_ENCRYPTION_KEY`), injected via `bootstrap.WithSealer` |
+| `Cipher` | authentication, federation, mfa | Seal/open stored secrets (SMTP password / Resend API key, client secrets, TOTP secrets); implemented by `internal/cryptox.Sealer` (`IAMKIT_ENCRYPTION_KEY`), injected via `bootstrap.WithSealer` |
 | `TokenCodec` | authentication | JWT sign/parse (combines `TokenIssuer` + `TokenValidator`) |
 | `Transaction` | authentication, invitation, mfa, oauth | Database transaction handle for multi-step mutations |
 
