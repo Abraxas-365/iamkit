@@ -106,10 +106,12 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	sa.Delete("/:id", s.APIHandlers.ServiceAccounts.Revoke)
 
 	// Delivery config
-	if s.Delivery != nil {
+	if d := s.APIHandlers.Delivery; d != nil {
 		delivery := e.Group("/delivery", apiauth.ReadWrite(authorization.PermDeliveryRead, authorization.PermDeliveryWrite))
-		delivery.Get("/", s.Delivery.Get)
-		delivery.Put("/", s.Delivery.Set)
-		delivery.Delete("/", s.Delivery.Delete)
+		delivery.Get("/", d.Get)
+		delivery.Put("/", d.Set)
+		delivery.Delete("/", d.Delete)
+		delivery.Get("/status", d.Status)
+		delivery.Post("/test", d.Limit, d.Test)
 	}
 }

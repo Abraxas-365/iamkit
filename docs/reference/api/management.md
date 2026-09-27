@@ -53,8 +53,12 @@ responses. See [users/organizations](users-and-organizations.md),
 
 Delivery configuration uses `GET /delivery` (200 configuration or 404),
 `PUT /delivery` (required `webhook_url`, `webhook_token`; 204) and `DELETE /delivery`
-(204, or 404 if absent). Reads redact the token. Deletion restores global fallback;
-see [email delivery](../../guides/email-delivery.md) for precedence and rotation.
+(204, or 404 if absent). Reads redact the token. `PUT`/`DELETE` are audited as
+`delivery.update`/`delivery.delete`. Deletion restores global fallback.
+`GET /delivery/status` reports the effective source (`environment`, `global`,
+`none`) and the latest attempt and failure; `POST /delivery/test` (`{"email"}`,
+owner/admin, audited `delivery.test`, 5/min) sends a `test` message and returns
+the attempt. See [email delivery](../../guides/email-delivery.md) for precedence, rotation and field details.
 
 Administrative inventories include `GET /sessions`, `DELETE /sessions/:id` and
 `GET /audit-events` under this prefix. Session revocation affects online checks

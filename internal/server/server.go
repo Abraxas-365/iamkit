@@ -43,6 +43,7 @@ type APIHandlerSet struct {
 	Grants          *authzhttp.Grants
 	ServiceAccounts *saccthttp.Handler
 	Factors         *mfahttp.Handler
+	Delivery        *authhttp.DeliveryHandler
 }
 
 type Server struct {

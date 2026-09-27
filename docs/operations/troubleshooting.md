@@ -8,7 +8,7 @@
 | Management 401 | Header family, expiry, active operator | Use `X-API-Key`; rotate/recover credential and verify `/me` |
 | Console loses login | HTTPS, cookie scope, CSRF header, proxy | Same-origin HTTPS, preserve cookies; login/read/logout test |
 | Password login denied | Boundary IDs, active user/app, membership, binding, grant | Inspect each prerequisite; verify known-good and cross-tenant denial |
-| OTP never arrives | Delivery config in container, eligibility, webhook failures | Verify trusted test mailbox and delivery logs without codes |
+| OTP never arrives | Delivery config in container, eligibility, webhook failures | Check the console **Notifications** page (effective source, last failure) or `GET …/delivery/status`; **Send test email** to a trusted mailbox |
 | Old OTP rejected | Resend invalidated predecessor or expiry/attempt limit | Start a new challenge; retain only latest ID |
 | Provider binding not approved | Exact env/issuer/client/secret reference | Correct deployment approval and recheck connection |
 | Federation callback denied | HTTPS cookie, state/nonce, verified subject link | Repeat browser flow; do not bypass validation |

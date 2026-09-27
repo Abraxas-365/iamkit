@@ -47,7 +47,7 @@ plus grant checks because of middleware registration order.
 | Roles, role assignments, group role assignments, effective roles | `iam:roles:read`, `iam:roles:write` |
 | Grants | `iam:grants:read`, `iam:grants:write` |
 | Service accounts (create/list/revoke) | `iam:service-accounts:read`, `iam:service-accounts:write` |
-| Delivery configuration (`GET`, `PUT`, `DELETE /delivery`) | `iam:delivery:read`, `iam:delivery:write` |
+| Delivery configuration (`GET`, `PUT`, `DELETE /delivery`; `GET /delivery/status`; `POST /delivery/test`) | `iam:delivery:read`, `iam:delivery:write` |
 
 There are no workspace/operator, federation, OAuth-client or SCIM-credential
 administration routes in this API family. Application DELETE is not registered

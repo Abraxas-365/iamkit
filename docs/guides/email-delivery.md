@@ -38,10 +38,35 @@ With management authority, use
   configuration or shell history. Endpoint changes control where challenge codes go.
 - `DELETE`: 204; removes the override and **restores global fallback**, not
   necessarily disables delivery. Deleting an absent override returns 404.
+- `GET /delivery/status`: which webhook serves the environment and what happened
+  last, without any URL or token:
+
+  ```json
+  {"source":"global","global_configured":true,"hosted_invitation_url":"https://IAMKIT_HOST/hosted/invite",
+   "last_attempt":{"source":"global","purpose":"login","delivered":true,"latency_ms":84,"at":"2026-09-27T10:00:00Z"},
+   "last_failure":{"source":"environment","purpose":"invitation","delivered":false,"status":503,"reason":"webhook rejected the request","latency_ms":0,"at":"2026-09-26T09:12:00Z"}}
+  ```
+
+  `source` is `environment` (this environment's webhook), `global`
+  (`EMAIL_WEBHOOK_URL`) or `none` (nothing delivers). `last_attempt` is the
+  latest delivery of any purpose; `last_failure` is the latest failed one and
+  survives later successes. `reason` is one of `webhook rejected the request`
+  (with `status`), `webhook did not respond in time`, `webhook could not be reached`,
+  `no webhook configured`, `webhook URL is not allowed` or `delivery failed`. Both are
+  `null` until the first delivery. Recording is best effort and never blocks delivery.
+- `POST /delivery/test` with `{"email":"ops@example.com"}`: sends
+  `{"email":"ops@example.com","purpose":"test"}` through the effective webhook and
+  returns the attempt (200 whether or not the webhook accepted it; `delivered` says
+  which). Owners/admins only, audited as `delivery.test`, and limited to five per
+  minute per environment and client (429 beyond). Handle or ignore purpose `test`
+  in your receiver. The console's **Notifications** page offers this as
+  **Send test email**.
 
 The URL requires HTTPS (HTTP permitted only on localhost/127.0.0.1), without
 userinfo or fragment. Restrict outbound network access and who may edit delivery
-configuration. Persisted tokens are sensitive database contents; protect backups.
+configuration. Changes are audited as `delivery.update` and `delivery.delete`
+(actor and environment; never the URL or token) — review them in **Audit events**.
+Persisted tokens are sensitive database contents; protect backups.
 Scoped `/api/v1` delivery routes also exist but share the
 [scoped API blockers](../reference/api/scoped-iam.md#deployment-blockers).
 

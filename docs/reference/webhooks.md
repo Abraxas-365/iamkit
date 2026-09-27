@@ -12,6 +12,10 @@ Authorization: Bearer DELIVERY_TOKEN
 Purposes: `login`, `password_reset`, `email_verification`. The code is secret,
 single-use and valid for five minutes.
 
+Test sends from the console (`POST …/delivery/test`) use purpose `test` with
+only `email` and `purpose`: `{"email":"ops@example.com","purpose":"test"}`.
+Accept or ignore them with a 2xx.
+
 Invitations use purpose `invitation` and carry no code:
 
 ```json

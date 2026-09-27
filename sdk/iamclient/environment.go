@@ -506,6 +506,44 @@ func (e Environment) DeleteDeliveryConfig(ctx context.Context) error {
 	return e.client.Do(ctx, "DELETE", e.path("delivery"), nil, nil)
 }
 
+// DeliveryAttempt is the outcome of one delivery. Reason is a fixed,
+// secret-free description; Status is the webhook's HTTP status when it
+// answered.
+type DeliveryAttempt struct {
+	Source    string `json:"source"` // environment, global or none
+	Purpose   string `json:"purpose"`
+	Delivered bool   `json:"delivered"`
+	Status    *int   `json:"status,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	LatencyMS int    `json:"latency_ms"`
+	At        string `json:"at"`
+}
+
+// DeliveryStatus says which webhook serves the environment (environment,
+// global or none) and its latest attempt and failure.
+type DeliveryStatus struct {
+	Source              string           `json:"source"`
+	GlobalConfigured    bool             `json:"global_configured"`
+	HostedInvitationURL string           `json:"hosted_invitation_url"`
+	LastAttempt         *DeliveryAttempt `json:"last_attempt"`
+	LastFailure         *DeliveryAttempt `json:"last_failure"`
+}
+
+// DeliveryStatus returns the effective delivery source and recent activity.
+func (e Environment) DeliveryStatus(ctx context.Context) (DeliveryStatus, error) {
+	var out DeliveryStatus
+	err := e.client.Do(ctx, "GET", e.path("delivery/status"), nil, &out)
+	return out, err
+}
+
+// TestDelivery sends {"email","purpose":"test"} through the effective
+// webhook. A failed delivery is returned as an attempt, not an error.
+func (e Environment) TestDelivery(ctx context.Context, email string) (DeliveryAttempt, error) {
+	var out DeliveryAttempt
+	err := e.client.Do(ctx, "POST", e.path("delivery/test"), map[string]string{"email": email}, &out)
+	return out, err
+}
+
 // ── Hosted login ──
 
 // LoginSettings brands the hosted sign-in and invitation pages. Empty

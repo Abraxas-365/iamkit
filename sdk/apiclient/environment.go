@@ -315,3 +315,35 @@ func (e Environment) SetDeliveryConfig(ctx context.Context, input SetDeliveryCon
 func (e Environment) DeleteDeliveryConfig(ctx context.Context) error {
 	return e.client.Do(ctx, "DELETE", e.path("delivery"), nil, nil)
 }
+
+// DeliveryAttempt is the outcome of one delivery.
+type DeliveryAttempt struct {
+	Source    string `json:"source"`
+	Purpose   string `json:"purpose"`
+	Delivered bool   `json:"delivered"`
+	Status    *int   `json:"status,omitempty"`
+	Reason    string `json:"reason,omitempty"`
+	LatencyMS int    `json:"latency_ms"`
+	At        string `json:"at"`
+}
+
+// DeliveryStatus is the effective delivery source and recent activity.
+type DeliveryStatus struct {
+	Source              string           `json:"source"`
+	GlobalConfigured    bool             `json:"global_configured"`
+	HostedInvitationURL string           `json:"hosted_invitation_url"`
+	LastAttempt         *DeliveryAttempt `json:"last_attempt"`
+	LastFailure         *DeliveryAttempt `json:"last_failure"`
+}
+
+// DeliveryStatus requires delivery:read.
+func (e Environment) DeliveryStatus(ctx context.Context) (DeliveryStatus, error) {
+	var out DeliveryStatus
+	return out, e.client.Do(ctx, "GET", e.path("delivery", "status"), nil, &out)
+}
+
+// TestDelivery sends a test message; requires delivery:write.
+func (e Environment) TestDelivery(ctx context.Context, email string) (DeliveryAttempt, error) {
+	var out DeliveryAttempt
+	return out, e.client.Do(ctx, "POST", e.path("delivery", "test"), map[string]string{"email": email}, &out)
+}

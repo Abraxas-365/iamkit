@@ -46,6 +46,117 @@ type DeliveryConfigInput struct {
 	InvitationURL string `json:"invitation_url"`
 }
 
+// Delivery sources: which webhook serves an environment.
+const (
+	SourceEnvironment = "environment" // the environment's own configuration
+	SourceGlobal      = "global"      // EMAIL_WEBHOOK_URL fallback
+	SourceNone        = "none"        // nothing can deliver
+)
+
+// PurposeTest marks a test message sent from the console; it carries no
+// code or token.
+const PurposeTest = "test"
+
+// Mutation attributes an audited delivery change.
+type Mutation struct {
+	Environment identity.EnvironmentID
+	Actor       string
+	Action      string
+	Target      string
+}
+
+// Attempt is the outcome of one delivery. Reason is a fixed, secret-free
+// description; Status is the webhook's HTTP status when it answered.
+type Attempt struct {
+	Source    string    `json:"source"`
+	Purpose   string    `json:"purpose"`
+	Delivered bool      `json:"delivered"`
+	Status    *int      `json:"status,omitempty"`
+	Reason    string    `json:"reason,omitempty"`
+	LatencyMS int       `json:"latency_ms"`
+	At        time.Time `json:"at"`
+}
+
+// Activity is the latest delivery attempt of an environment and the latest
+// failure, which survives later successes.
+type Activity struct {
+	Last        *Attempt `json:"last_attempt"`
+	LastFailure *Attempt `json:"last_failure"`
+}
+
+// DeliveryStatus says which webhook serves the environment, never exposing
+// the global URL or any token. HostedInvitationURL is IAMKit's own
+// invitation page, usable as invitation_url.
+type DeliveryStatus struct {
+	Source              string `json:"source"`
+	GlobalConfigured    bool   `json:"global_configured"`
+	HostedInvitationURL string `json:"hosted_invitation_url"`
+	Activity
+}
+
+// TestInput asks for a test message to Email.
+type TestInput struct {
+	Email string `json:"email"`
+}
+
+// Validate checks the recipient address.
+func (t TestInput) Validate() error {
+	if _, err := identity.Email(t.Email); err != nil {
+		return errx.Validation("email must be a valid address")
+	}
+	return nil
+}
+
+// Delivery failure codes set by delivery adapters on their errors; Describe
+// turns them into the stored reason.
+const (
+	CodeDeliveryRejected    = "DELIVERY_REJECTED"
+	CodeDeliveryTimeout     = "DELIVERY_TIMEOUT"
+	CodeDeliveryUnreachable = "DELIVERY_UNREACHABLE"
+	CodeDeliveryUnavailable = "DELIVERY_NOT_CONFIGURED"
+)
+
+// DeliveryRejected is a non-2xx webhook answer.
+func DeliveryRejected(status int) error {
+	e := errx.External("email delivery rejected").WithDetail("status", status)
+	e.Code = CodeDeliveryRejected
+	return e
+}
+
+// ErrDeliveryNotConfigured is returned when no webhook serves the environment.
+func ErrDeliveryNotConfigured() error {
+	e := errx.External("email delivery is not configured")
+	e.Code = CodeDeliveryUnavailable
+	return e
+}
+
+// Describe classifies a delivery error into a status (when the webhook
+// answered) and a fixed reason that never contains the cause, which may
+// include URLs or response details.
+func Describe(err error) (*int, string) {
+	var e *errx.Error
+	if !errx.As(err, &e) {
+		return nil, "delivery failed"
+	}
+	switch e.Code {
+	case CodeDeliveryRejected:
+		if status, ok := e.Details["status"].(int); ok {
+			return &status, "webhook rejected the request"
+		}
+		return nil, "webhook rejected the request"
+	case CodeDeliveryTimeout:
+		return nil, "webhook did not respond in time"
+	case CodeDeliveryUnreachable:
+		return nil, "webhook could not be reached"
+	case CodeDeliveryUnavailable:
+		return nil, "no webhook configured"
+	}
+	if e.Type == errx.TypeValidation {
+		return nil, "webhook URL is not allowed"
+	}
+	return nil, "delivery failed"
+}
+
 // Validate checks structural invariants for the delivery config input.
 func (d DeliveryConfigInput) Validate() error {
 	if !SecureURL(d.WebhookURL) {

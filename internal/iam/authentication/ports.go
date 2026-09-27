@@ -59,22 +59,35 @@ type Delivery interface {
 	Send(ctx context.Context, message Message) error
 }
 
-// DeliveryConfigCommands manages per-environment webhook delivery settings.
+// DeliveryConfigCommands manages per-environment webhook delivery settings;
+// every change is audited (delivery.update, delivery.delete, delivery.test).
 type DeliveryConfigCommands interface {
-	SetDeliveryConfig(ctx context.Context, environment identity.EnvironmentID, input DeliveryConfigInput) error
-	DeleteDeliveryConfig(ctx context.Context, environment identity.EnvironmentID) error
+	SetDeliveryConfig(ctx context.Context, m Mutation, input DeliveryConfigInput) error
+	DeleteDeliveryConfig(ctx context.Context, m Mutation) error
+	// TestDelivery sends a test message through the environment's effective
+	// webhook, records and audits the attempt, and returns its outcome.
+	TestDelivery(ctx context.Context, m Mutation, input TestInput) (Attempt, error)
 }
 
 // DeliveryConfigQueries reads per-environment webhook delivery settings.
 type DeliveryConfigQueries interface {
 	DeliveryConfig(ctx context.Context, environment identity.EnvironmentID) (DeliveryConfig, error)
+	// DeliveryStatus reports the effective source and recent activity.
+	DeliveryStatus(ctx context.Context, environment identity.EnvironmentID) (DeliveryStatus, error)
 }
 
 // DeliveryConfigRepository is the storage interface for delivery configs.
 type DeliveryConfigRepository interface {
 	GetDeliveryConfig(ctx context.Context, environment identity.EnvironmentID) (DeliveryConfig, string, error) // config, webhook token, error
-	SetDeliveryConfig(ctx context.Context, environment identity.EnvironmentID, input DeliveryConfigInput) error
-	DeleteDeliveryConfig(ctx context.Context, environment identity.EnvironmentID) error
+	// SetDeliveryConfig and DeleteDeliveryConfig audit m in the same transaction.
+	SetDeliveryConfig(ctx context.Context, m Mutation, input DeliveryConfigInput) error
+	DeleteDeliveryConfig(ctx context.Context, m Mutation) error
+	// RecordAttempt stores the environment's latest attempt (and failure).
+	RecordAttempt(ctx context.Context, environment identity.EnvironmentID, attempt Attempt) error
+	// Activity returns the environment's recorded attempts (empty if none).
+	Activity(ctx context.Context, environment identity.EnvironmentID) (Activity, error)
+	// Audit writes an audit event for a console action.
+	Audit(ctx context.Context, m Mutation) error
 }
 type Passwords interface {
 	Hash(password string) (string, error)

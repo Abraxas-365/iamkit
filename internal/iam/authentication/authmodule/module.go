@@ -52,7 +52,7 @@ func New(deps Deps) Module {
 	factory := func(url, token string) authentication.Delivery {
 		return authmail.WebhookDelivery{URL: url, Token: token}
 	}
-	deliverySvc := authsvc.NewDeliveryService(deliveryRepo, deps.Delivery, factory)
+	deliverySvc := authsvc.NewDeliveryService(deliveryRepo, deps.Delivery, factory, deps.Issuer)
 	service.SetDeliveryService(deliverySvc)
 	tokens := authsvc.NewTokens(repo, authjwt.New(deps.Key, deps.Issuer), authsecret.Generator{}, deps.OAuthTokens)
 	return Module{Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens), HTTP: authhttp.New(service, service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc}

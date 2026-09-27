@@ -158,6 +158,8 @@ func TestAllAPIPaths(t *testing.T) {
 	env.DeliveryConfig(ctx)
 	env.SetDeliveryConfig(ctx, SetDeliveryConfig{WebhookURL: "https://example.com/hook", WebhookToken: "tok"})
 	env.DeleteDeliveryConfig(ctx)
+	env.DeliveryStatus(ctx)
+	env.TestDelivery(ctx, "ops@example.com")
 
 	expected := []string{
 		// Users
@@ -208,6 +210,8 @@ func TestAllAPIPaths(t *testing.T) {
 		"GET /api/v1/environments/env-1/delivery",
 		"PUT /api/v1/environments/env-1/delivery",
 		"DELETE /api/v1/environments/env-1/delivery",
+		"GET /api/v1/environments/env-1/delivery/status",
+		"POST /api/v1/environments/env-1/delivery/test",
 	}
 	if len(paths) != len(expected) {
 		t.Fatalf("paths count %d != %d:\n  got:  %v\n  want: %v", len(paths), len(expected), paths, expected)

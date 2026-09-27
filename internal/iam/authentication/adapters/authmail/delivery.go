@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
@@ -42,12 +44,18 @@ func (d WebhookDelivery) Send(ctx context.Context, m authentication.Message) err
 	client := http.Client{Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	res, err := client.Do(req)
 	if err != nil {
-		return errx.Wrap(err, "email delivery failed", errx.TypeExternal)
+		e := errx.Wrap(err, "email delivery failed", errx.TypeExternal)
+		e.Code = authentication.CodeDeliveryUnreachable
+		var timeout net.Error
+		if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &timeout) && timeout.Timeout()) {
+			e.Code = authentication.CodeDeliveryTimeout
+		}
+		return e
 	}
 	defer res.Body.Close()
 	io.Copy(io.Discard, io.LimitReader(res.Body, 4096))
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return errx.External("email delivery rejected")
+		return authentication.DeliveryRejected(res.StatusCode)
 	}
 	return nil
 }
