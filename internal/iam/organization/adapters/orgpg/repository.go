@@ -56,16 +56,18 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.OrganizationID) (organization.Organization, error) {
 	var row struct {
-		ID       identity.OrganizationID `db:"id"`
-		Name     string                  `db:"name"`
-		Active   bool                    `db:"active"`
-		Metadata []byte                  `db:"metadata"`
+		ID              identity.OrganizationID `db:"id"`
+		Name            string                  `db:"name"`
+		Active          bool                    `db:"active"`
+		Metadata        []byte                  `db:"metadata"`
+		MFARequired     bool                    `db:"mfa_required"`
+		MFAForFederated bool                    `db:"mfa_for_federated"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT id,name,active,metadata FROM organizations WHERE environment_id=$1 AND id=$2`, environment, id)
+	err := r.db.GetContext(ctx, &row, `SELECT id,name,active,metadata,mfa_required,mfa_for_federated FROM organizations WHERE environment_id=$1 AND id=$2`, environment, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return organization.Organization{}, errx.NotFound("resource not found")
 	}
-	return organization.Organization{ID: row.ID, Name: row.Name, Active: row.Active, Metadata: json.RawMessage(row.Metadata)}, failure(err)
+	return organization.Organization{ID: row.ID, Name: row.Name, Active: row.Active, Metadata: json.RawMessage(row.Metadata), MFARequired: row.MFARequired, MFAForFederated: row.MFAForFederated}, failure(err)
 }
 func (r *Repository) UpdateMember(ctx context.Context, m organization.Mutation, org identity.OrganizationID, user identity.UserID, input organization.MemberUpdate) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -99,7 +101,7 @@ func (r *Repository) Update(ctx context.Context, m organization.Mutation, id ide
 		return failure(err)
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `UPDATE organizations SET name=coalesce($3,name),active=coalesce($4,active),metadata=coalesce($5::jsonb,metadata) WHERE environment_id=$1 AND id=$2`, m.Environment, id, input.Name, input.Active, metadata)
+	result, err := tx.ExecContext(ctx, `UPDATE organizations SET name=coalesce($3,name),active=coalesce($4,active),metadata=coalesce($5::jsonb,metadata),mfa_required=coalesce($6,mfa_required),mfa_for_federated=coalesce($7,mfa_for_federated) WHERE environment_id=$1 AND id=$2`, m.Environment, id, input.Name, input.Active, metadata, input.MFARequired, input.MFAForFederated)
 	if err != nil {
 		return conflict(err)
 	}

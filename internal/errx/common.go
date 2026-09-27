@@ -35,6 +35,15 @@ func Conflict(message string) *Error {
 	return New(message, TypeConflict)
 }
 
+// TooManyRequests creates a 429 error for a caller that must wait (e.g. a
+// locked second factor).
+func TooManyRequests(message string) *Error {
+	err := New(message, TypeBusiness)
+	err.Code = "TOO_MANY_REQUESTS"
+	err.HTTPStatus = 429
+	return err
+}
+
 // Business creates a business logic error
 func Business(message string) *Error {
 	return New(message, TypeBusiness)

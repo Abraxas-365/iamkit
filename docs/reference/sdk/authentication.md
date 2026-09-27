@@ -14,6 +14,14 @@ routes. Supply deadlines and never log token-pair values.
   for your invitation page; accepting does not sign in (see
   [invitations](../api/identity.md#invitations)).
 - `Profile`, `UpdateProfile`, `Organizations`, `Logout`, `AddMember`.
+- MFA: `Login` and `VerifyChallenge` succeed **without tokens** when a second
+  factor is needed — check `MFARequired` before using `AccessToken` (then
+  `ExpiresIn` is the 5-minute pending-login lifetime). Call `EnrollMFA(ctx, pair.MFAToken)`
+  first if `EnrollmentRequired`, then `VerifyMFA(ctx, pair.MFAToken, code)`.
+  Self-service: `ListFactors`, `StartTOTP`, `ConfirmTOTP`, `RemoveTOTP`,
+  `RegenerateRecoveryCodes` (all but `ListFactors` need a sign-in within 10
+  minutes, else 403 `REAUTHENTICATION_REQUIRED`). `Claims.HasMFA()` checks the `amr` claim
+  (see [MFA](../../guides/mfa.md)).
 - `Introspect(ctx, token, issuer, audience, environment, application, resource)`
   validates current state plus configured boundaries.
 

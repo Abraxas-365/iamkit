@@ -245,6 +245,9 @@ type Outcome struct {
 	Issued       authentication.Issued
 	Continuation string
 	Verified     authentication.Verified
+	// MFA is set instead of Issued when the headless login needs a second
+	// factor.
+	MFA *authentication.MFA
 }
 
 // Hosted reports whether the callback belongs to a hosted login.

@@ -10,6 +10,7 @@ package authclient
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -56,11 +57,47 @@ type PasswordLogin struct {
 	Password string `json:"password"`
 }
 
+// TokenPair is a login answer. When MFARequired is set there are no tokens
+// yet (AccessToken is empty and ExpiresIn is the pending login's lifetime):
+// continue with VerifyMFA (and EnrollMFA first if EnrollmentRequired).
+// Callers of Login/VerifyChallenge must check MFARequired before using
+// AccessToken.
 type TokenPair struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int    `json:"expires_in"`
+	// RecoveryCodes are returned once, by the login that enrolled the
+	// user's first authenticator.
+	RecoveryCodes []string `json:"recovery_codes,omitempty"`
+
+	MFARequired        bool     `json:"mfa_required,omitempty"`
+	MFAToken           string   `json:"mfa_token,omitempty"`
+	Factors            []string `json:"factors,omitempty"`
+	EnrollmentRequired bool     `json:"enrollment_required,omitempty"`
+}
+
+// Enrollment is an authenticator to add: show the otpauth URI as a QR code
+// (or the secret for manual entry).
+type Enrollment struct {
+	FactorID string `json:"factor_id,omitempty"`
+	Secret   string `json:"secret"`
+	URI      string `json:"otpauth_uri"`
+}
+
+// Factor is a second factor of the user (never its secret).
+type Factor struct {
+	ID          string     `json:"id"`
+	Kind        string     `json:"kind"`
+	ConfirmedAt *time.Time `json:"confirmed_at"`
+	LastUsedAt  *time.Time `json:"last_used_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+// Factors lists a user's second factors and remaining recovery codes.
+type Factors struct {
+	Factors                []Factor `json:"factors"`
+	RecoveryCodesRemaining int      `json:"recovery_codes_remaining"`
 }
 
 type Challenge struct {
@@ -174,6 +211,69 @@ func (c *Client) MachineToken(ctx context.Context, secret string) (TokenPair, er
 	var out TokenPair
 	err := c.request(ctx, "/machine-token", secret, nil, &out)
 	return out, err
+}
+
+// ── Multi-factor authentication ──
+
+// VerifyMFA completes a login that answered MFARequired with an
+// authenticator code or a recovery code.
+func (c *Client) VerifyMFA(ctx context.Context, mfaToken, code string) (TokenPair, error) {
+	var out TokenPair
+	err := c.request(ctx, "/mfa/verify", "", map[string]string{"mfa_token": mfaToken, "code": code}, &out)
+	return out, err
+}
+
+// EnrollMFA returns the authenticator to add for a login with
+// EnrollmentRequired; confirm it by calling VerifyMFA with its first code
+// (the answer then carries RecoveryCodes).
+func (c *Client) EnrollMFA(ctx context.Context, mfaToken string) (Enrollment, error) {
+	var out Enrollment
+	err := c.request(ctx, "/mfa/enroll", "", map[string]string{"mfa_token": mfaToken}, &out)
+	return out, err
+}
+
+func selfBody(environment, audience, code string) map[string]string {
+	return map[string]string{"environment_id": environment, "audience": audience, "code": code}
+}
+
+// ListFactors returns the authenticated user's second factors.
+func (c *Client) ListFactors(ctx context.Context, token, environment, audience string) (Factors, error) {
+	var out Factors
+	q := "?environment_id=" + url.QueryEscape(environment) + "&audience=" + url.QueryEscape(audience)
+	err := c.requestMethod(ctx, "GET", "/me/factors"+q, token, nil, &out)
+	return out, err
+}
+
+// StartTOTP creates an unconfirmed authenticator for the user; confirm it
+// with ConfirmTOTP.
+func (c *Client) StartTOTP(ctx context.Context, token, environment, audience string) (Enrollment, error) {
+	var out Enrollment
+	err := c.request(ctx, "/me/factors/totp", token, selfBody(environment, audience, ""), &out)
+	return out, err
+}
+
+// ConfirmTOTP activates the authenticator with its first code and returns
+// the recovery codes (shown once).
+func (c *Client) ConfirmTOTP(ctx context.Context, token, environment, audience, code string) ([]string, error) {
+	var out struct {
+		Codes []string `json:"recovery_codes"`
+	}
+	err := c.request(ctx, "/me/factors/totp/confirm", token, selfBody(environment, audience, code), &out)
+	return out.Codes, err
+}
+
+// RemoveTOTP deletes the authenticator; code (TOTP or recovery) proves possession.
+func (c *Client) RemoveTOTP(ctx context.Context, token, environment, audience, code string) error {
+	return c.requestMethod(ctx, "DELETE", "/me/factors/totp", token, selfBody(environment, audience, code), nil)
+}
+
+// RegenerateRecoveryCodes replaces the recovery codes; code proves possession.
+func (c *Client) RegenerateRecoveryCodes(ctx context.Context, token, environment, audience, code string) ([]string, error) {
+	var out struct {
+		Codes []string `json:"recovery_codes"`
+	}
+	err := c.request(ctx, "/me/factors/recovery-codes", token, selfBody(environment, audience, code), &out)
+	return out.Codes, err
 }
 
 // ── Challenges (OTP / email verification) ──

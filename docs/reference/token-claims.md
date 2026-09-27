@@ -16,6 +16,8 @@ Do not decode without verifying and treat that as authentication.
 | `sid` | User session identifier; absent for machines |
 | `actor_id` | Operator attribution on impersonated tokens |
 | `oauth_client_id` | OAuth client binding when applicable |
+| `amr` | How the session authenticated: `pwd`, `email` or `fed`, plus `otp` and `mfa` after a [second factor](../guides/mfa.md). Also in OIDC ID tokens |
+| `auth_time` | When the session signed in (Unix seconds); unchanged by refreshes. Absent on machine and impersonation tokens |
 
 Application-purpose tokens need subject, organization and session context.
 Machine tokens must not be interpreted as organization users. OIDC ID tokens

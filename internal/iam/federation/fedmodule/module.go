@@ -21,10 +21,11 @@ type Deps struct {
 	Cipher federation.Cipher
 	// Transport, when set, replaces the guarded transport for sealed-secret
 	// connections (tests with a loopback provider).
-	Transport    http.RoundTripper
-	Sessions     authentication.SessionCreator
-	ActorID      func(*fiber.Ctx) string
-	IssueSession func(*fiber.Ctx, authentication.Issued) error
+	Transport http.RoundTripper
+	Sessions  federation.Sessions
+	ActorID   func(*fiber.Ctx) string
+	// Respond answers a headless login: tokens or the mfa_required body.
+	Respond func(*fiber.Ctx, authentication.Result) error
 }
 type Module struct {
 	Commands federation.Commands
@@ -35,5 +36,5 @@ type Module struct {
 func New(deps Deps) Module {
 	provider := fedoidc.Provider{Issuer: deps.Issuer, Cipher: deps.Cipher, Guarded: deps.Transport}
 	service := fedsvc.New(fedpg.New(deps.DB), provider, deps.Cipher, mgmtsecret.Generator{}, deps.Sessions, deps.Issuer)
-	return Module{Commands: service, Flows: service, HTTP: fedhttp.New(service, service, service, deps.ActorID, deps.IssueSession)}
+	return Module{Commands: service, Flows: service, HTTP: fedhttp.New(service, service, service, deps.ActorID, deps.Respond)}
 }

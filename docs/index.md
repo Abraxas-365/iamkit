@@ -31,7 +31,8 @@ separate workspace-operator management API; its credential is intentionally broa
 - [Architecture and responsibility split](guides/application-integration.md)
 - [Signup and onboarding](guides/signup-and-onboarding.md)
 - [Password login](guides/password-login.md), [email OTP](guides/email-otp.md),
-  [password reset](guides/password-reset.md), [email verification](guides/email-verification.md)
+  [password reset](guides/password-reset.md), [email verification](guides/email-verification.md),
+  [multi-factor (TOTP)](guides/mfa.md)
 - [Email delivery webhook](guides/email-delivery.md)
 - [OIDC federation](guides/federation.md): [Google](guides/google-login.md),
   [Microsoft](guides/microsoft-login.md)

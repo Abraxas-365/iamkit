@@ -83,5 +83,7 @@ type Secrets interface {
 	Hash(raw string) []byte
 }
 type Sessions interface {
-	NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Issued, error)
+	// SignIn finishes a headless single sign-on: a session, or the pending
+	// second factor when multi-factor authentication applies.
+	SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Result, error)
 }

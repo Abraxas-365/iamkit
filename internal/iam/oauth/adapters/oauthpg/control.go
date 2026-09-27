@@ -135,13 +135,14 @@ func (t *authorization) Ticket(ctx context.Context, hash []byte) (oauth.Ticket, 
 	err := t.tx.GetContext(ctx, &row, `SELECT client_id,binding_hash,request_form,requested_at FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL FOR UPDATE`, hash)
 	return row, lookup(err)
 }
-func (t *authorization) SessionTimes(ctx context.Context, id identity.SessionID) (time.Time, time.Time, error) {
+func (t *authorization) Session(ctx context.Context, id identity.SessionID) (oauth.SessionInfo, error) {
 	var row struct {
-		Expires       time.Time `db:"expires_at"`
-		Authenticated time.Time `db:"authenticated_at"`
+		Expires       time.Time      `db:"expires_at"`
+		Authenticated time.Time      `db:"authenticated_at"`
+		AMR           pq.StringArray `db:"amr"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT expires_at,authenticated_at FROM sessions WHERE id=$1 AND revoked_at IS NULL`, id)
-	return row.Expires, row.Authenticated, lookup(err)
+	err := t.tx.GetContext(ctx, &row, `SELECT expires_at,authenticated_at,amr FROM sessions WHERE id=$1 AND revoked_at IS NULL`, id)
+	return oauth.SessionInfo{Expires: row.Expires, Authenticated: row.Authenticated, AMR: []string(row.AMR)}, lookup(err)
 }
 func (t *authorization) Consume(ctx context.Context, hash []byte) error {
 	_, err := t.tx.ExecContext(ctx, `UPDATE oauth_authorizations SET consumed_at=now() WHERE secret_hash=$1`, hash)

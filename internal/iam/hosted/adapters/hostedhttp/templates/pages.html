@@ -93,6 +93,44 @@
 {{end}}
 {{end}}
 
+{{define "mfa/content"}}
+<form method="post" action="/hosted/login/mfa">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<label for="code">Code</label>
+<input id="code" type="text" name="code" maxlength="20" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" required autofocus>
+<button type="submit">Verify</button>
+</form>
+<form method="get" action="/hosted/login">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<button type="submit" class="link">Start over</button>
+</form>
+{{end}}
+
+{{define "enroll/content"}}
+{{if .QR}}<img class="qr" src="{{.QR}}" alt="QR code for your authenticator app" width="232" height="232">{{end}}
+<p class="muted">Can't scan? Enter this key in the app:</p>
+<p><code>{{.Secret}}</code></p>
+<form method="post" action="/hosted/login/mfa">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<input type="hidden" name="enrolling" value="true">
+<label for="code">6-digit code</label>
+<input id="code" type="text" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autocomplete="one-time-code" required autofocus>
+<button type="submit">Verify and continue</button>
+</form>
+<form method="get" action="/hosted/login">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<button type="submit" class="link">Start over</button>
+</form>
+{{end}}
+
+{{define "recovery/content"}}
+<ul class="codes">{{range .RecoveryCodes}}<li><code>{{.}}</code></li>{{end}}</ul>
+<form method="post" action="/hosted/login/mfa/continue">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<button type="submit">I saved my codes — continue</button>
+</form>
+{{end}}
+
 {{define "invite/content"}}
 {{if .Invite}}
 <form method="post" action="/hosted/invite">

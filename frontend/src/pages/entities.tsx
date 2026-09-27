@@ -1,6 +1,6 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Link as LinkIcon, Eye, UserX } from 'lucide-react'
+import { Plus, Pencil, Trash2, Link as LinkIcon, Eye, UserX, ShieldCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -22,8 +22,10 @@ interface Entity {
   id: string; name?: string; email?: string; active?: boolean; prefix?: string; audience?: string;
   permissions?: string[]; redirect_uris?: string[]; resource_id?: string; resource_name?: string;
   organization_id?: string; organization_name?: string; user_id?: string; user_name?: string;
-  otp_enabled?: boolean; metadata?: Record<string, unknown>;
+  otp_enabled?: boolean; metadata?: Record<string, unknown>; mfa_required?: boolean; mfa_for_federated?: boolean;
 }
+interface Factor { id: string; kind: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
+interface Factors { factors: Factor[]; recovery_codes_remaining: number }
 const descriptions: Record<Kind, string> = {
   users: 'Manage end-user identities in this environment.',
   organizations: 'Tenant organizations and their memberships.',
@@ -39,7 +41,7 @@ function fieldsFor(kind: Kind, _base: string, row?: Entity): Field[] {
   const permissionTags: Field = { name: 'permissions', label: 'Permissions', type: 'tags', optional: true, tags: row?.permissions ?? [], prefix: row?.prefix, hint: row?.prefix ? `Type an action and press Enter. Auto-prefixed as ${row.prefix}:action.` : 'Define the prefix first — permissions will use it as a namespace.' }
   switch (kind) {
     case 'users': return row ? [name, { name: 'active', label: 'Active', type: 'checkbox', value: row.active }, { name: 'otp_enabled', label: 'Enable one-time password login', type: 'checkbox', value: row.otp_enabled }, { name: 'metadata', label: 'Metadata (JSON)', optional: true, value: row.metadata ? JSON.stringify(row.metadata) : '', hint: 'Arbitrary JSON object, e.g. {"team":"billing"}' }] : [name, { name: 'email', label: 'Email', type: 'email' }, { name: 'password', label: 'Initial password', type: 'password', optional: true, hint: 'Leave blank for OTP-only or OAuth login. If set, must be 12–72 characters long.' }, { name: 'otp_enabled', label: 'Enable one-time password login', type: 'checkbox' }]
-    case 'organizations': return row ? [name, { name: 'active', label: 'Active', type: 'checkbox', value: row.active }, { name: 'metadata', label: 'Metadata (JSON)', optional: true, value: row.metadata ? JSON.stringify(row.metadata) : '', hint: 'Arbitrary JSON object.' }] : [name]
+    case 'organizations': return row ? [name, { name: 'active', label: 'Active', type: 'checkbox', value: row.active }, { name: 'mfa_required', label: 'Require a second factor', type: 'checkbox', value: row.mfa_required, hint: 'Password and email-code sign-ins need an authenticator app; members without one enroll while signing in.' }, { name: 'mfa_for_federated', label: 'Also require it for SSO sign-ins', type: 'checkbox', value: row.mfa_for_federated, hint: 'By default the identity provider is trusted to have done its own MFA.' }, { name: 'metadata', label: 'Metadata (JSON)', optional: true, value: row.metadata ? JSON.stringify(row.metadata) : '', hint: 'Arbitrary JSON object.' }] : [name]
     case 'applications': return [name, { name: 'redirect_uris', label: 'Redirect URIs', type: 'tags', optional: true, tags: row?.redirect_uris ?? [], hint: 'Type a redirect URI and press Enter.' }, ...(row ? [{ name: 'active', label: 'Active', type: 'checkbox' as const, value: row.active }] : [])]
     case 'resources': {
       const createPerms: Field = { name: 'permissions', label: 'Permissions', type: 'tags', optional: true, tags: [], hint: 'Use prefix:action format (e.g. invoices:read). Must match the prefix above.' }
@@ -170,6 +172,33 @@ function GrantForm({ base, row, onClose, onSaved }: { base: string; row?: Entity
   </DialogContent></Dialog>
 }
 
+function FactorsDialog({ path, user, canWrite, onClose }: { path: string; user: Entity; canWrite: boolean; onClose: () => void }) {
+  const [data, setData] = useState<Factors | null>(null)
+  const [error, setError] = useState('')
+  const [reset, setReset] = useState(false)
+  const load = () => { setError(''); api.get<Factors>(`${path}/${user.id}/factors`).then(setData, e => setError(message(e))) }
+  useEffect(load, [path, user.id])
+  const date = (v: string | null) => v ? new Date(v).toLocaleString() : '—'
+  return <Dialog open onOpenChange={open => { if (!open) onClose() }}><DialogContent>
+    <DialogTitle className="pr-6 text-base font-semibold">Second factors</DialogTitle>
+    <DialogDescription className="text-muted-foreground">Authenticators of {user.name || user.email || user.id}. Secrets are never shown.</DialogDescription>
+    {error && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error}</div>}
+    {!data && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
+    {data && <div className="space-y-3 text-sm">
+      {data.factors.length === 0 ? <p className="text-muted-foreground">No second factor enrolled.</p> : <ul className="space-y-2">{data.factors.map(f => <li key={f.id} className="rounded-lg border p-3">
+        <p className="font-medium">{f.kind === 'totp' ? 'Authenticator app (TOTP)' : f.kind}{!f.confirmed_at && <span className="ml-2 text-xs text-muted-foreground">pending confirmation</span>}</p>
+        <p className="text-xs text-muted-foreground">Added {date(f.created_at)} · Last used {date(f.last_used_at)}</p>
+      </li>)}</ul>}
+      <p>Recovery codes remaining: <strong>{data.recovery_codes_remaining}</strong></p>
+    </div>}
+    <div className="flex justify-end gap-2 border-t pt-4">
+      {canWrite && data && (data.factors.length > 0 || data.recovery_codes_remaining > 0) && <Button variant="destructive" onClick={() => setReset(true)}>Reset factors</Button>}
+      <Button variant="outline" onClick={onClose}>Close</Button>
+    </div>
+    {reset && <ConfirmDialog title="Reset second factors?" description={`This removes every authenticator and recovery code of ${user.name || user.id} (for a lost device). If their organization requires MFA they will enroll again at the next sign-in.`} confirmLabel="Reset" onClose={() => setReset(false)} confirm={async () => { await api.delete(`${path}/${user.id}/factors`); toast.success('Second factors reset'); load() }} />}
+  </DialogContent></Dialog>
+}
+
 export default function EntitiesPage({ kind }: { kind: Kind }) {
   const { project, environment } = useParams()
   const base = `/environments/${environment}`
@@ -181,11 +210,13 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
   const [edit, setEdit] = useState<Entity | 'new' | null>(null)
   const openEdit = async (row: Entity) => {
     if (kind === 'users' || kind === 'organizations') {
-      try { const full = await api.get<Entity>(`${path}/${row.id}`); setEdit(full) } catch { setEdit(row) }
+      // List rows lack settings (status, MFA policy); editing one would reset them.
+      try { const full = await api.get<Entity>(`${path}/${row.id}`); setEdit(full) } catch (e) { toast.error(message(e)) }
     } else { setEdit(row) }
   }
   const [remove, setRemove] = useState<Entity | null>(null)
   const [purge, setPurge] = useState<Entity | null>(null)
+  const [factors, setFactors] = useState<Entity | null>(null)
   const [extra, setExtra] = useState(false)
   const extraConfig = kind === 'applications' ? { title: 'Link resource', path: '/application-resources', fields: [
     { name: 'application_id', label: 'Application', type: 'select' as const, selectPath: `${base}/applications`, selectMap: named },
@@ -209,7 +240,7 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
       <Button onClick={() => setEdit('new')}><Plus />{kind === 'grants' ? 'Set grant' : 'Create'}</Button>
     </div>} />
     <PaginationBar state={list} noun={kind} placeholder={`Search ${titles[kind].toLowerCase()}…`} />
-    <DataTable columns={[...columns, ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(row => {
+    <DataTable columns={[...columns, ...(canWrite || kind === 'users' ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(row => {
       const identity = <div className="space-y-1"><p className="font-medium">{row.name}{kind === 'resources' && row.prefix === 'iam' && <span className="ml-2 inline-block rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">System</span>}</p><ID value={row.id} /></div>
       const permissions = row.permissions?.length ? <CollapsibleScopes key={row.id} scopes={row.permissions} /> : <span className="text-xs text-muted-foreground">No permissions</span>
       const cells = kind === 'users' ? [identity, row.email, <Status active={!!row.active} />] :
@@ -217,11 +248,13 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
           kind === 'resources' ? [identity, <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">{row.prefix}</code>, row.audience, permissions] :
             kind === 'roles' ? [identity, <span className="text-sm">{row.resource_name || <ID value={row.resource_id!} />}</span>, permissions] :
               kind === 'grants' ? [<ID value={row.id} />, <div className="space-y-1"><p className="text-sm">{row.organization_name || <ID value={row.organization_id!} />}</p><p className="text-sm">{row.user_name || <ID value={row.user_id!} />}</p></div>, <div><p className="text-sm">{row.resource_name || <ID value={row.resource_id!} />}</p>{permissions}</div>] : [row.name, <ID value={row.id} />]
+      if (!canWrite && kind === 'users') cells.push(<Button variant="ghost" size="icon" aria-label={`Second factors of ${row.name || row.id}`} onClick={() => setFactors(row)}><ShieldCheck /></Button>)
       if (canWrite) cells.push(<div className="flex gap-1">
         {kind === 'organizations' && <Link to={`${envBase}/organizations/${row.id}/members`} className={buttonVariants({ variant: 'ghost', size: 'icon' })} aria-label={`Members of ${row.name}`}><Eye className="size-4" /></Link>}
         {kind === 'applications' && <Link to={`${envBase}/applications/${row.id}`} className={buttonVariants({ variant: 'ghost', size: 'icon' })} aria-label={`Details of ${row.name}`}><Eye className="size-4" /></Link>}
         <Button variant="ghost" size="icon" aria-label={`Edit ${row.name || row.id}`} onClick={() => openEdit(row)}><Pencil /></Button>
         {kind === 'users' ? <>
+          <Button variant="ghost" size="icon" aria-label={`Second factors of ${row.name || row.id}`} onClick={() => setFactors(row)}><ShieldCheck /></Button>
           {row.active && <Button variant="ghost" size="icon" aria-label={`Suspend ${row.name || row.id}`} onClick={() => setRemove(row)}><UserX /></Button>}
           <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" aria-label={`Permanently delete ${row.name || row.id}`} onClick={() => setPurge(row)}><Trash2 /></Button>
         </> : canDelete && <Button variant="ghost" size="icon" aria-label={`Delete ${row.name || row.id}`} onClick={() => setRemove(row)}><Trash2 /></Button>}
@@ -241,6 +274,7 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
     }} />}
     {remove && <ConfirmDialog title={kind === 'users' ? 'Suspend user?' : 'Delete access configuration?'} description={`This affects ${remove.name || remove.id} in the current environment. ${kind === 'users' ? 'You can reactivate the user by editing their status.' : 'This action cannot be undone.'}`} onClose={() => setRemove(null)} confirm={async () => { await api.delete(`${path}/${remove.id}`); list.reload() }} />}
     {purge && <ConfirmDialog title="Permanently delete user?" description={`This erases ${purge.name || purge.id} and every session, membership, grant, role assignment, and linked identity for them in this environment. This cannot be undone.`} confirmLabel="Delete permanently" confirmationText={purge.name || purge.id} onClose={() => setPurge(null)} confirm={async () => { await api.delete(`${path}/${purge.id}/permanent`); list.reload() }} />}
+    {factors && <FactorsDialog path={path} user={factors} canWrite={canWrite} onClose={() => setFactors(null)} />}
     {extra && extraConfig && <FormDialog title={extraConfig.title} description="Enter the IDs from this environment's list screens." fields={extraConfig.fields} onClose={() => setExtra(false)} submit={async values => { await api.post(`${base}${extraConfig.path}`, values) }} />}
   </div>
 }

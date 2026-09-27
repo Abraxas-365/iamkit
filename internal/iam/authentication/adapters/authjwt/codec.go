@@ -24,10 +24,13 @@ func New(key *rsa.PrivateKey, issuer string) *Codec { return &Codec{key, issuer}
 // claims is the JWT payload — all ID fields remain plain strings for JWT serialization.
 type claims struct {
 	identity.Access
-	Purpose       string `json:"purpose"`
-	SessionID     string `json:"sid,omitempty"`
-	OAuthClientID string `json:"oauth_client_id,omitempty"`
-	ActorID       string `json:"actor_id,omitempty"`
+	Purpose       string   `json:"purpose"`
+	SessionID     string   `json:"sid,omitempty"`
+	OAuthClientID string   `json:"oauth_client_id,omitempty"`
+	ActorID       string   `json:"actor_id,omitempty"`
+	AMR           []string `json:"amr,omitempty"`
+	// NumericDate accepts the float form fosite writes (1.7e+09).
+	AuthTime *jwt.NumericDate `json:"auth_time,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -46,6 +49,7 @@ func (c *Codec) Sign(input authentication.Token) (string, error) {
 		SessionID:     input.SessionID.String(),
 		OAuthClientID: input.OAuthClientID.String(),
 		ActorID:       input.ActorID.String(),
+		AMR:           input.AMR,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   input.Subject.String(),
 			Issuer:    c.issuer,
@@ -55,6 +59,9 @@ func (c *Codec) Sign(input authentication.Token) (string, error) {
 			NotBefore: jwt.NewNumericDate(time.Unix(input.NotBefore, 0)),
 			ExpiresAt: jwt.NewNumericDate(time.Unix(input.ExpiresAt, 0)),
 		},
+	}
+	if input.AuthTime != 0 {
+		payload.AuthTime = jwt.NewNumericDate(time.Unix(input.AuthTime, 0))
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, payload)
 	token.Header["kid"] = c.KeyID()
@@ -92,6 +99,7 @@ func (c *Codec) parse(raw string, extra ...jwt.ParserOption) (authentication.Tok
 		SessionID:     mustParseSession(payload.SessionID),
 		OAuthClientID: mustParseClient(payload.OAuthClientID),
 		ActorID:       mustParseOperator(payload.ActorID),
+		AMR:           payload.AMR,
 		Subject:       mustParseUser(payload.Subject),
 		Issuer:        payload.Issuer,
 		Audience:      []string(payload.Audience),
@@ -100,6 +108,9 @@ func (c *Codec) parse(raw string, extra ...jwt.ParserOption) (authentication.Tok
 	}
 	if payload.IssuedAt != nil {
 		out.IssuedAt = payload.IssuedAt.Unix()
+	}
+	if payload.AuthTime != nil {
+		out.AuthTime = payload.AuthTime.Unix()
 	}
 	if payload.NotBefore != nil {
 		out.NotBefore = payload.NotBefore.Unix()

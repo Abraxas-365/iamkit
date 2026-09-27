@@ -207,15 +207,16 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 			ar.GrantScope(scope)
 		}
 		ar.GrantAudience(client.Audience)
-		expires, authenticated, err := tx.SessionTimes(c.Context(), access.Session)
+		info, err := tx.Session(c.Context(), access.Session)
 		if err != nil {
 			return err
 		}
 		session = oauthfosite.NewSession()
 		session.Subject = access.User.String()
-		session.Deadline = expires
+		session.Deadline = info.Expires
 		session.IDTokenClaims().Subject = access.User.String()
-		session.IDTokenClaims().AuthTime = authenticated
+		session.IDTokenClaims().AuthTime = info.Authenticated
+		session.IDTokenClaims().AuthenticationMethodsReferences = info.AMR
 		session.IDTokenClaims().RequestedAt = row.Requested
 		session.IDTokenClaims().Extra = map[string]interface{}{"environment_id": client.Environment.String(), "organization_id": access.Organization.String()}
 		session.IDTokenHeaders().Extra = map[string]interface{}{"kid": h.tokens.KeyID()}
@@ -224,7 +225,10 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		session.AccessClaims.Issuer = h.issuer
 		session.AccessClaims.Audience = []string{client.Audience}
 		session.AccessClaims.IssuedAt = time.Now()
-		session.AccessClaims.Extra = map[string]interface{}{"purpose": "application", "environment_id": client.Environment.String(), "organization_id": access.Organization.String(), "application_id": client.Application.String(), "resource_id": client.Resource.String(), "permissions": access.Permissions, "sid": access.Session.String(), "oauth_client_id": client.ID.String()}
+		session.AccessClaims.Extra = map[string]interface{}{"purpose": "application", "environment_id": client.Environment.String(), "organization_id": access.Organization.String(), "application_id": client.Application.String(), "resource_id": client.Resource.String(), "permissions": access.Permissions, "sid": access.Session.String(), "oauth_client_id": client.ID.String(), "auth_time": info.Authenticated.Unix()}
+		if len(info.AMR) > 0 {
+			session.AccessClaims.Extra["amr"] = info.AMR
+		}
 		return nil
 	})
 	if err != nil {

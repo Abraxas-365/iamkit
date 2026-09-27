@@ -18,7 +18,24 @@ type Claims struct {
 	SessionID      string   `json:"sid,omitempty"`
 	ActorID        string   `json:"actor_id,omitempty"`
 	OAuthClientID  string   `json:"oauth_client_id,omitempty"`
+	// AMR is how the session was authenticated: "pwd", "email" or "fed",
+	// plus "otp"/"mfa" after a second factor.
+	AMR []string `json:"amr,omitempty"`
+	// AuthTime is when the user signed in (kept across refreshes); compare
+	// it with a maximum age for step-up checks.
+	AuthTime *jwt.NumericDate `json:"auth_time,omitempty"`
 	jwt.RegisteredClaims
+}
+
+// HasMFA reports whether the session passed a second factor (amr "mfa");
+// use it to require step-up for sensitive actions.
+func (c Claims) HasMFA() bool {
+	for _, m := range c.AMR {
+		if m == "mfa" {
+			return true
+		}
+	}
+	return false
 }
 
 func (c Claims) HasPermission(required string) bool {

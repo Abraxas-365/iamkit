@@ -9,6 +9,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
+	"github.com/Abraxas-365/iamkit/internal/iam/mfa"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -55,25 +56,71 @@ func (f *fakeAuthenticator) Issue(_ context.Context, b authentication.Context, v
 
 type fakeRepository struct {
 	hosted.Repository
-	saved   map[string]authentication.Verified
+	saved   map[string]hosted.Login
 	deleted int
 }
 
-func (r *fakeRepository) SaveLogin(_ context.Context, hash []byte, _ identity.EnvironmentID, v authentication.Verified, _ time.Time) error {
-	r.saved[string(hash)] = v
+func (r *fakeRepository) SaveLogin(_ context.Context, hash []byte, _ identity.EnvironmentID, l hosted.Login, _ time.Time) error {
+	r.saved[string(hash)] = l
 	return nil
 }
-func (r *fakeRepository) Login(_ context.Context, hash []byte, _ identity.EnvironmentID) (authentication.Verified, error) {
-	v, ok := r.saved[string(hash)]
+func (r *fakeRepository) Login(_ context.Context, hash []byte, _ identity.EnvironmentID) (hosted.Login, error) {
+	l, ok := r.saved[string(hash)]
 	if !ok {
-		return v, errx.Unauthorized("sign in again")
+		return l, errx.Unauthorized("sign in again")
 	}
-	return v, nil
+	return l, nil
+}
+func (r *fakeRepository) Attempt(_ context.Context, hash []byte, limit int) (bool, error) {
+	l, ok := r.saved[string(hash)]
+	if !ok || l.Attempts >= limit {
+		return false, nil
+	}
+	l.Attempts++
+	r.saved[string(hash)] = l
+	return true, nil
 }
 func (r *fakeRepository) DeleteLogin(_ context.Context, hash []byte) error {
+	if _, ok := r.saved[string(hash)]; ok {
+		r.deleted++
+	}
 	delete(r.saved, string(hash))
-	r.deleted++
 	return nil
+}
+
+// fakeSecondFactor: enrolled users need a code, required organizations
+// make the others enroll; "123456" is the right code.
+type fakeSecondFactor struct {
+	enrolled bool
+	required map[identity.OrganizationID]bool
+	verified int
+}
+
+func (f *fakeSecondFactor) Requirement(_ context.Context, b authentication.Context, _ identity.UserID, federated bool) (authentication.Requirement, error) {
+	if federated {
+		return authentication.Requirement{}, nil
+	}
+	if f.enrolled {
+		return authentication.Requirement{Needed: true, Factors: []string{"totp", "recovery"}}, nil
+	}
+	if f.required[b.OrganizationID] {
+		return authentication.Requirement{Needed: true, Enroll: true}, nil
+	}
+	return authentication.Requirement{}, nil
+}
+func (f *fakeSecondFactor) Verify(_ context.Context, _ identity.EnvironmentID, _ identity.UserID, code string, enroll bool) (mfa.Verification, error) {
+	if code != "123456" {
+		return mfa.Verification{}, errx.Unauthorized("invalid verification code")
+	}
+	f.verified++
+	if enroll {
+		f.enrolled = true
+		return mfa.Verification{Proof: mfa.ProofTOTP, RecoveryCodes: []string{"aaaa-bbbb-cccc"}}, nil
+	}
+	return mfa.Verification{Proof: mfa.ProofTOTP}, nil
+}
+func (f *fakeSecondFactor) Enrolling(context.Context, identity.EnvironmentID, identity.UserID) (authentication.Enrollment, error) {
+	return authentication.Enrollment{Secret: "ABC", URI: "otpauth://totp/x"}, nil
 }
 
 type hashSecrets struct{}
@@ -101,9 +148,14 @@ func setup(orgs ...identity.OrganizationID) (*Service, *fakeAuthenticator, *fake
 	for _, o := range orgs {
 		auth.organizations = append(auth.organizations, authentication.Organization{ID: o, Name: o.String()})
 	}
-	repo := &fakeRepository{saved: map[string]authentication.Verified{}}
+	repo := &fakeRepository{saved: map[string]hosted.Login{}}
 	fed := &fakeFederation{}
-	return New(repo, hashSecrets{}, fakeAuthorizations{hosted: true}, auth, nil, fed), auth, repo, fed
+	return New(repo, hashSecrets{}, fakeAuthorizations{hosted: true}, auth, nil, fed, nil), auth, repo, fed
+}
+
+func setupMFA(second *fakeSecondFactor, orgs ...identity.OrganizationID) (*Service, *fakeAuthenticator, *fakeRepository) {
+	_, auth, repo, fed := setup(orgs...)
+	return New(repo, hashSecrets{}, fakeAuthorizations{hosted: true}, auth, nil, fed, second), auth, repo
 }
 
 var request = hosted.Request{Ticket: "ik_authorize_t", Binding: "bind"}
@@ -131,9 +183,9 @@ func TestPasswordSeveralOrganizationsThenChoose(t *testing.T) {
 	if len(auth.issued) != 0 {
 		t.Fatal("no session before the organization is chosen")
 	}
-	login, err := s.Choose(context.Background(), request, orgB)
-	if err != nil || login.Organization != orgB {
-		t.Fatalf("choose: %+v %v", login, err)
+	out, err = s.Choose(context.Background(), request, orgB)
+	if err != nil || out.Login == nil || out.Login.Organization != orgB {
+		t.Fatalf("choose: %+v %v", out, err)
 	}
 	if repo.deleted != 1 || len(repo.saved) != 0 {
 		t.Fatal("pending login must be single-use")
@@ -187,11 +239,11 @@ func TestOrganizationSSOOnlyEntersItsOrganization(t *testing.T) {
 
 func TestNonHostedClientRefused(t *testing.T) {
 	_, auth, repo, fed := setup(orgA)
-	s := New(repo, hashSecrets{}, fakeAuthorizations{hosted: false}, auth, nil, fed)
+	s := New(repo, hashSecrets{}, fakeAuthorizations{hosted: false}, auth, nil, fed, nil)
 	if _, err := s.Password(context.Background(), request, "a@example.com", "right"); err == nil {
 		t.Fatal("headless client must not use hosted pages")
 	}
-	s = New(repo, hashSecrets{}, fakeAuthorizations{hosted: true, err: errx.Unauthorized("bad ticket")}, auth, nil, fed)
+	s = New(repo, hashSecrets{}, fakeAuthorizations{hosted: true, err: errx.Unauthorized("bad ticket")}, auth, nil, fed, nil)
 	if _, err := s.Page(context.Background(), request); err == nil {
 		t.Fatal("dead ticket must fail")
 	}
@@ -219,6 +271,72 @@ func TestIdentifyRoutes(t *testing.T) {
 	}
 	if fed.started[0].Application != app || fed.started[0].Resource != res {
 		t.Fatalf("SSO target %+v", fed.started[0])
+	}
+}
+
+func TestHostedSecondFactorBeforeChooser(t *testing.T) {
+	second := &fakeSecondFactor{enrolled: true}
+	s, auth, repo := setupMFA(second, orgA, orgB)
+	out, err := s.Password(context.Background(), request, "a@example.com", "right")
+	if err != nil || !out.SecondFactor || len(out.Organizations) != 0 {
+		t.Fatalf("want second factor first, got %+v %v", out, err)
+	}
+	if out, err = s.Choose(context.Background(), request, orgA); err != nil || !out.SecondFactor {
+		t.Fatalf("choosing before the second factor must ask for it again: %+v %v", out, err)
+	}
+	if len(auth.issued) != 0 {
+		t.Fatal("no session before the second factor")
+	}
+	for range 5 {
+		if _, err = s.SecondFactor(context.Background(), request, "000000"); err == nil {
+			t.Fatal("wrong code accepted")
+		}
+	}
+	if _, err = s.SecondFactor(context.Background(), request, "123456"); err == nil || len(repo.saved) != 0 {
+		t.Fatal("after 5 wrong codes the login must be dropped")
+	}
+
+	// Fresh login, right code → chooser → session.
+	s, auth, _ = setupMFA(second, orgA, orgB)
+	if _, err = s.Password(context.Background(), request, "a@example.com", "right"); err != nil {
+		t.Fatal(err)
+	}
+	out, err = s.SecondFactor(context.Background(), request, "123456")
+	if err != nil || len(out.Organizations) != 2 {
+		t.Fatalf("want chooser after code, got %+v %v", out, err)
+	}
+	out, err = s.Choose(context.Background(), request, orgB)
+	if err != nil || out.Login == nil || len(auth.issued) != 1 {
+		t.Fatalf("choose after mfa: %+v %v", out, err)
+	}
+}
+
+func TestHostedRequiredOrganizationEnrolls(t *testing.T) {
+	second := &fakeSecondFactor{required: map[identity.OrganizationID]bool{orgA: true}}
+	s, auth, repo := setupMFA(second, orgA)
+	out, err := s.Password(context.Background(), request, "a@example.com", "right")
+	if err != nil || out.Enroll == nil || out.Enroll.Secret == "" {
+		t.Fatalf("want enrollment, got %+v %v", out, err)
+	}
+	if e, err := s.Enrollment(context.Background(), request); err != nil || e.URI == "" {
+		t.Fatalf("enrollment page: %+v %v", e, err)
+	}
+	out, err = s.SecondFactor(context.Background(), request, "123456")
+	if err != nil || len(out.RecoveryCodes) == 0 || out.Login != nil {
+		t.Fatalf("want recovery codes, got %+v %v", out, err)
+	}
+	out, err = s.Continue(context.Background(), request)
+	if err != nil || out.Login == nil || len(auth.issued) != 1 || len(repo.saved) != 0 {
+		t.Fatalf("continue: %+v %v", out, err)
+	}
+}
+
+func TestHostedFederatedSkipsSecondFactor(t *testing.T) {
+	second := &fakeSecondFactor{enrolled: true}
+	s, auth, _ := setupMFA(second, orgA)
+	out, err := s.Federated(context.Background(), request, authentication.Verified{User: user, Method: authentication.MethodSSO})
+	if err != nil || out.Login == nil || len(auth.issued) != 1 {
+		t.Fatalf("federated login should skip MFA, got %+v %v", out, err)
 	}
 }
 

@@ -8,13 +8,18 @@ type Token struct {
 	SessionID     identity.SessionID  `json:"sid,omitempty"`
 	OAuthClientID identity.ClientID   `json:"oauth_client_id,omitempty"`
 	ActorID       identity.OperatorID `json:"actor_id,omitempty"`
-	Subject       identity.UserID     `json:"sub"`
-	Issuer        string              `json:"iss"`
-	Audience      []string            `json:"aud"`
-	ID            string              `json:"jti"`
-	IssuedAt      int64               `json:"iat"`
-	NotBefore     int64               `json:"nbf"`
-	ExpiresAt     int64               `json:"exp"`
+	// AMR lists how the session was authenticated (pwd, email, fed, otp, mfa).
+	AMR []string `json:"amr,omitempty"`
+	// AuthTime is when the session signed in (unix seconds); refreshes keep
+	// it, so it tells how fresh the proof of the user's credentials is.
+	AuthTime  int64           `json:"auth_time,omitempty"`
+	Subject   identity.UserID `json:"sub"`
+	Issuer    string          `json:"iss"`
+	Audience  []string        `json:"aud"`
+	ID        string          `json:"jti"`
+	IssuedAt  int64           `json:"iat"`
+	NotBefore int64           `json:"nbf"`
+	ExpiresAt int64           `json:"exp"`
 }
 type Profile struct {
 	ID            identity.UserID         `json:"id" db:"id"`

@@ -26,6 +26,7 @@ type Deps struct {
 	Delivery     authentication.Delivery
 	OAuthTokens  authentication.OAuthTokens // nil rejects every OAuth-issued access token
 	IssueSession func(*fiber.Ctx, authentication.Issued) error
+	SecondFactor authentication.SecondFactor // nil disables MFA
 }
 type Module struct {
 	Commands        authentication.Commands
@@ -38,12 +39,15 @@ type Module struct {
 }
 type federationSessions struct{ service *authsvc.Service }
 
-func (s federationSessions) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Issued, error) {
-	return s.service.NewSession(ctx, tx, boundary, user)
+func (s federationSessions) SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Result, error) {
+	return s.service.SignIn(ctx, tx, boundary, user, authentication.MethodSSO)
 }
 func New(deps Deps) Module {
 	repo := authpg.New(deps.DB)
 	service := authsvc.New(repo, authbcrypt.Hasher{}, authsecret.Generator{}, deps.Delivery)
+	if deps.SecondFactor != nil {
+		service.SetSecondFactor(deps.SecondFactor)
+	}
 	deliveryRepo := authpg.NewDeliveryConfigRepository(deps.DB)
 	factory := func(url, token string) authentication.Delivery {
 		return authmail.WebhookDelivery{URL: url, Token: token}
@@ -51,5 +55,5 @@ func New(deps Deps) Module {
 	deliverySvc := authsvc.NewDeliveryService(deliveryRepo, deps.Delivery, factory)
 	service.SetDeliveryService(deliverySvc)
 	tokens := authsvc.NewTokens(repo, authjwt.New(deps.Key, deps.Issuer), authsecret.Generator{}, deps.OAuthTokens)
-	return Module{Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens), HTTP: authhttp.New(service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc}
+	return Module{Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens), HTTP: authhttp.New(service, service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc}
 }

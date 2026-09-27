@@ -3,6 +3,7 @@ package authhttp
 import (
 	"strings"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -30,19 +31,33 @@ func (h *Tokens) Validate(c *fiber.Ctx, environment identity.EnvironmentID, audi
 	return h.validator.Validate(c.Context(), bearer(c), audience, environment)
 }
 func (h *Tokens) Issue(c *fiber.Ctx, t authentication.Token, audience, refresh string) error {
+	return h.IssueWith(c, t, audience, refresh, nil)
+}
+
+// IssueWith answers a login that enrolled its first second factor with
+// the recovery codes, shown this once.
+func (h *Tokens) IssueWith(c *fiber.Ctx, t authentication.Token, audience, refresh string, recoveryCodes []string) error {
 	raw, err := h.issuer.Issue(t, audience)
 	if err != nil {
 		return err
 	}
-	return tokenResponse(c, raw, refresh)
-}
-func tokenResponse(c *fiber.Ctx, raw, refresh string) error {
 	c.Set("Cache-Control", "no-store")
-	out := fiber.Map{"access_token": raw, "token_type": "Bearer", "expires_in": 900}
+	out := tokenBody(raw, refresh)
+	if len(recoveryCodes) > 0 {
+		out["recovery_codes"] = recoveryCodes
+	}
+	return c.JSON(out)
+}
+func tokenBody(raw, refresh string) fiber.Map {
+	out := fiber.Map{"access_token": raw, "token_type": "Bearer", "expires_in": int(config.TokenTTL.Seconds())}
 	if refresh != "" {
 		out["refresh_token"] = refresh
 	}
-	return c.JSON(out)
+	return out
+}
+func tokenResponse(c *fiber.Ctx, raw, refresh string) error {
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(tokenBody(raw, refresh))
 }
 func (h *Tokens) Machine(c *fiber.Ctx) error {
 	raw, err := h.issuer.Machine(c.Context(), bearer(c))

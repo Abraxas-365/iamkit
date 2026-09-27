@@ -15,12 +15,12 @@ type Handler struct {
 	queries  federation.Queries
 	flows    federation.Flows
 	actor    func(*fiber.Ctx) string
-	issue    func(*fiber.Ctx, authentication.Issued) error
+	respond  func(*fiber.Ctx, authentication.Result) error
 	hosted   func(*fiber.Ctx, federation.Outcome, error) error
 }
 
-func New(commands federation.Commands, queries federation.Queries, flows federation.Flows, actor func(*fiber.Ctx) string, issue func(*fiber.Ctx, authentication.Issued) error) *Handler {
-	return &Handler{commands: commands, queries: queries, flows: flows, actor: actor, issue: issue}
+func New(commands federation.Commands, queries federation.Queries, flows federation.Flows, actor func(*fiber.Ctx) string, respond func(*fiber.Ctx, authentication.Result) error) *Handler {
+	return &Handler{commands: commands, queries: queries, flows: flows, actor: actor, respond: respond}
 }
 
 // Continue sets where callbacks of hosted login starts resume. The hosted
@@ -172,7 +172,7 @@ func (h *Handler) Callback(c *fiber.Ctx) error {
 		return err
 	}
 	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: "", Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: -1})
-	return h.issue(c, out.Issued)
+	return h.respond(c, authentication.Result{Issued: out.Issued, MFA: out.MFA})
 }
 
 // Discover serves POST /identity/v1/discover: which login method an email

@@ -2,7 +2,6 @@ package oauth
 
 import (
 	"context"
-	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -33,7 +32,8 @@ type Flows interface {
 
 type Authorization interface {
 	Ticket(ctx context.Context, hash []byte) (Ticket, error)
-	SessionTimes(ctx context.Context, session identity.SessionID) (time.Time, time.Time, error)
+	// Session is the end-user session an authorization completes with.
+	Session(ctx context.Context, session identity.SessionID) (SessionInfo, error)
 	Consume(ctx context.Context, hash []byte) error
 	Commit() error
 	Rollback() error

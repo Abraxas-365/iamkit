@@ -49,7 +49,7 @@ func (t *testTransaction) CreateChallenge(context.Context, identity.ChallengeID,
 func (t *testTransaction) Resolve(context.Context, authentication.Context, identity.UserID) (authentication.Access, error) {
 	return authentication.Access{Audience: "api"}, t.resolve
 }
-func (t *testTransaction) CreateSession(context.Context, authentication.Context, identity.UserID, identity.SessionID, time.Time) error {
+func (t *testTransaction) CreateSession(context.Context, authentication.Context, identity.UserID, identity.SessionID, time.Time, time.Time, []string) error {
 	return nil
 }
 func (t *testTransaction) SaveRefresh(context.Context, []byte, identity.UserID, identity.SessionID, time.Time) error {
@@ -139,7 +139,9 @@ func TestIssuedBoundaryIsCanonical(t *testing.T) {
 		var out authentication.Issued
 		var err error
 		if op == "login" {
-			out, err = s.Login(context.Background(), b, "user@example.com", "password")
+			var result authentication.Result
+			result, err = s.Login(context.Background(), b, "user@example.com", "password")
+			out = result.Issued
 		} else {
 			out, err = s.Refresh(context.Background(), b, "ik_refresh_test")
 		}

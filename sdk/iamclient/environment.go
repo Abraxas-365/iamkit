@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Environment scopes management calls to a single IAMKit environment.
@@ -82,6 +83,24 @@ type CreateUser struct {
 type Organization struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// The MFA policy is filled by Organization(id) only; list results
+	// leave it false.
+	MFARequired     bool `json:"mfa_required,omitempty"`
+	MFAForFederated bool `json:"mfa_for_federated,omitempty"`
+}
+
+// Factor is a user's second factor.
+type Factor struct {
+	ID          string     `json:"id"`
+	Kind        string     `json:"kind"`
+	ConfirmedAt *time.Time `json:"confirmed_at"`
+	LastUsedAt  *time.Time `json:"last_used_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+type UserFactors struct {
+	Factors                []Factor `json:"factors"`
+	RecoveryCodesRemaining int      `json:"recovery_codes_remaining"`
 }
 
 type Membership struct {
@@ -184,6 +203,36 @@ func (e Environment) Organization(ctx context.Context, id string) (Organization,
 
 func (e Environment) UpdateOrganization(ctx context.Context, id string, input UserPatch) error {
 	return e.operation(ctx, "PATCH", []string{"organizations", id}, input, nil)
+}
+
+// OrganizationMFA is an organization's second-factor policy; nil fields
+// are left unchanged.
+type OrganizationMFA struct {
+	// Required: password and email-code logins need a second factor; users
+	// without one enroll while signing in.
+	Required *bool `json:"mfa_required,omitempty"`
+	// ForFederated: SSO logins follow the same rule instead of trusting
+	// the identity provider.
+	ForFederated *bool `json:"mfa_for_federated,omitempty"`
+}
+
+// SetOrganizationMFA changes an organization's second-factor policy.
+func (e Environment) SetOrganizationMFA(ctx context.Context, id string, input OrganizationMFA) error {
+	return e.operation(ctx, "PATCH", []string{"organizations", id}, input, nil)
+}
+
+// UserFactors lists a user's second factors (never secrets) and remaining
+// recovery codes.
+func (e Environment) UserFactors(ctx context.Context, user string) (UserFactors, error) {
+	var out UserFactors
+	err := e.operation(ctx, "GET", []string{"users", user, "factors"}, nil, &out)
+	return out, err
+}
+
+// ResetUserFactors removes every second factor and recovery code of a user
+// (lost device). Audited as mfa.reset.
+func (e Environment) ResetUserFactors(ctx context.Context, user string) error {
+	return e.operation(ctx, "DELETE", []string{"users", user, "factors"}, nil, nil)
 }
 
 func (e Environment) AddMember(ctx context.Context, input Membership) error {

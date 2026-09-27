@@ -19,6 +19,7 @@ type Service struct {
 	secrets     authentication.Secrets
 	delivery    authentication.Delivery
 	deliverySvc *DeliveryService
+	second      authentication.SecondFactor
 }
 
 func New(repository authentication.Repository, passwords authentication.Passwords, secrets authentication.Secrets, delivery authentication.Delivery) *Service {
@@ -26,8 +27,13 @@ func New(repository authentication.Repository, passwords authentication.Password
 }
 func (s *Service) SetDeliveryService(ds *DeliveryService) { s.deliverySvc = ds }
 
-func (s *Service) Login(ctx context.Context, boundary authentication.Context, email, password string) (authentication.Issued, error) {
-	var out authentication.Issued
+// SetSecondFactor enables multi-factor authentication of logins.
+func (s *Service) SetSecondFactor(second authentication.SecondFactor) { s.second = second }
+
+var _ authentication.MFACommands = (*Service)(nil)
+
+func (s *Service) Login(ctx context.Context, boundary authentication.Context, email, password string) (authentication.Result, error) {
+	var out authentication.Result
 	email, err := identity.Email(email)
 	if err != nil || boundary.Validate() != nil || len(password) > config.PasswordMaxLength {
 		return out, invalidCredentials()
@@ -51,8 +57,74 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 	if !matches {
 		return out, invalidCredentials()
 	}
-	out, err = s.NewSession(ctx, tx, boundary, user)
+	out, err = s.SignIn(ctx, tx, boundary, user, authentication.MethodPassword)
 	return out, credentialFailure(err)
+}
+
+// SignIn finishes a login whose first factor passed: it checks access to
+// the boundary, then either parks the login for its second factor or
+// creates the session. tx is committed or left for the caller to roll back.
+func (s *Service) SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string) (authentication.Result, error) {
+	amr := []string{authentication.MethodAMR(method)}
+	if s.second != nil {
+		// Access first, so the MFA answer never reveals a membership the
+		// user does not have.
+		if _, err := tx.Resolve(ctx, boundary, user); err != nil {
+			return authentication.Result{}, err
+		}
+		req, err := s.second.Requirement(ctx, boundary, user, method == authentication.MethodSSO)
+		if err != nil {
+			return authentication.Result{}, err
+		}
+		if req.Needed {
+			// Commit first: it keeps a consumed challenge consumed and
+			// releases row locks the pending-login insert would wait on.
+			if err = tx.Commit(); err != nil {
+				return authentication.Result{}, err
+			}
+			token, err := s.second.Begin(ctx, boundary, user, amr, req.Enroll)
+			if err != nil {
+				return authentication.Result{}, err
+			}
+			return authentication.Result{MFA: &authentication.MFA{Token: token, Factors: req.Factors, EnrollmentRequired: req.Enroll}}, nil
+		}
+	}
+	issued, err := s.NewSession(ctx, tx, boundary, user, amr)
+	return authentication.Result{Issued: issued}, err
+}
+
+// VerifyMFA completes a login with its second factor.
+func (s *Service) VerifyMFA(ctx context.Context, token, code string) (authentication.Issued, error) {
+	if s.second == nil {
+		return authentication.Issued{}, errx.NotFound("multi-factor authentication is not enabled")
+	}
+	var out authentication.Issued
+	// The session is created before the second-factor transaction commits:
+	// when it fails, the pending login, the confirmed factor and its
+	// recovery codes roll back and the user can try again.
+	done, err := s.second.Complete(ctx, token, code, func(done authentication.Completed) error {
+		tx, err := s.repository.Begin(ctx)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		out, err = s.NewSession(ctx, tx, done.Boundary, done.User, done.AMR)
+		return credentialFailure(err)
+	})
+	if err != nil {
+		return authentication.Issued{}, err
+	}
+	out.RecoveryCodes = done.RecoveryCodes
+	return out, nil
+}
+
+// EnrollMFA starts the authenticator of a login whose organization requires
+// a second factor the user does not have yet.
+func (s *Service) EnrollMFA(ctx context.Context, token string) (authentication.Enrollment, error) {
+	if s.second == nil {
+		return authentication.Enrollment{}, errx.NotFound("multi-factor authentication is not enabled")
+	}
+	return s.second.Enroll(ctx, token)
 }
 
 // invalidCredentials is the single response for every login credential
@@ -85,16 +157,19 @@ func requireNoSSO(ctx context.Context, tx authentication.Transaction, boundary a
 	return nil
 }
 
-func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Issued, error) {
+func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, amr []string) (authentication.Issued, error) {
 	sessionID := identity.NewSessionID()
-	out := authentication.Issued{Context: boundary, User: user, Session: sessionID}
+	// Whole seconds: auth_time is a Unix time, and the stored value must
+	// match the first token's claim exactly.
+	now := time.Now().Truncate(time.Second)
+	out := authentication.Issued{Context: boundary, User: user, Session: sessionID, AMR: amr, Authenticated: now}
 	access, err := tx.Resolve(ctx, boundary, user)
 	if err != nil {
 		return out, err
 	}
 	out.Access = access
-	expires := time.Now().Add(config.SessionTTL)
-	if err = tx.CreateSession(ctx, boundary, user, sessionID, expires); err != nil {
+	expires := now.Add(config.SessionTTL)
+	if err = tx.CreateSession(ctx, boundary, user, sessionID, now, expires, amr); err != nil {
 		return out, err
 	}
 	out.Refresh, err = s.saveRefresh(ctx, tx, user, sessionID, expires)
@@ -148,7 +223,7 @@ func (s *Service) Refresh(ctx context.Context, boundary authentication.Context, 
 	if err = tx.UseRefresh(ctx, s.secrets.Hash(token)); err != nil {
 		return out, err
 	}
-	out.User, out.Session = row.User, row.ID
+	out.User, out.Session, out.AMR, out.Authenticated = row.User, row.ID, row.AMR, row.Authenticated
 	out.Refresh, err = s.saveRefresh(ctx, tx, row.User, row.ID, row.Expires)
 	if err != nil {
 		return out, err
@@ -209,8 +284,8 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 	return id, tx.Commit()
 }
 
-func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.Context, challengeID identity.ChallengeID, code, purpose, password string) (authentication.Issued, error) {
-	var out authentication.Issued
+func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.Context, challengeID identity.ChallengeID, code, purpose, password string) (authentication.Result, error) {
+	var out authentication.Result
 	if boundary.EnvironmentID.IsZero() || challengeID.IsZero() || len(code) != 8 {
 		return out, errx.Unauthorized("invalid challenge")
 	}
@@ -258,7 +333,7 @@ func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.C
 		return out, err
 	}
 	if purpose == "login" {
-		return s.NewSession(ctx, tx, boundary, row.User)
+		return s.SignIn(ctx, tx, boundary, row.User, authentication.MethodCode)
 	}
 	return out, tx.Commit()
 }

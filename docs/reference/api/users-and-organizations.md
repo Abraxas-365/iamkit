@@ -15,7 +15,9 @@ Lists of users, organizations and members use the
 | `GET /users/:id` | User ID | 200 user |
 | `PATCH /users/:id` | Optional `name`, `active`, `otp_enabled`, `metadata` | 204 |
 | `DELETE /users/:id` | User ID | 204; suspend, not erase |
-| `DELETE /users/:id/permanent` | User ID | 204; permanently erases the user and every session, membership, group membership, grant, role assignment, position assignment, external identity, provisioned identity, and identity challenge referencing them. Irreversible. |
+| `DELETE /users/:id/permanent` | User ID | 204; permanently erases the user and every session, membership, group membership, grant, role assignment, position assignment, external identity, provisioned identity, second factor, recovery code and identity challenge referencing them. Irreversible. |
+| `GET /users/:id/factors` | User ID | 200 `{factors:[{id,kind,confirmed_at,last_used_at,created_at}],recovery_codes_remaining}`; never secrets |
+| `DELETE /users/:id/factors` | User ID | 204; removes every [second factor](../../guides/mfa.md) and recovery code (lost device) and clears a lockout; audited `mfa.reset`. 404 when the user has none |
 
 List items contain only `id,email,name,active`. Use `GET /users/:id` for
 `email_verified,otp_enabled,metadata` as well; missing list fields are not evidence
@@ -38,7 +40,7 @@ just the account.
 | `POST /organizations` | `name` | 201 `{id}` |
 | `GET /organizations` | List parameters | 200 page |
 | `GET /organizations/:id` | Organization ID | 200 organization |
-| `PATCH /organizations/:id` | Update fields: `name`, `metadata` | 204 |
+| `PATCH /organizations/:id` | Update fields: `name`, `metadata`, `mfa_required`, `mfa_for_federated` ([MFA policy](../../guides/mfa.md#policy)) | 204 |
 | `POST /memberships` | `organization_id`, `user_id` | 201 |
 | `GET /organizations/:organization/members` | Organization ID | 200 page |
 | `PATCH /organizations/:organization/members/:user` | `sso_bypass` | 204; 400 for an empty patch |

@@ -35,6 +35,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtsvc"
+	"github.com/Abraxas-365/iamkit/internal/iam/mfa/mfamodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/oauthmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
@@ -45,8 +46,10 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/sacctmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/adapters/userhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/usermodule"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/server"
 	"github.com/Abraxas-365/iamkit/internal/server/apiauth"
+	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
@@ -92,7 +95,12 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s := &server.Server{Control: managementModule.HTTP, Health: db.PingContext}
 	userModule := usermodule.New(usermodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Users = userModule.HTTP
-	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession})
+	// Built before authentication (its second factor); tokens are bound late.
+	mfaModule := mfamodule.New(mfamodule.Deps{DB: db, Cipher: o.sealer, ActorID: server.OperatorID, Validate: func(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
+		return s.Tokens.Validate(c, environment, audience)
+	}})
+	s.Factors = mfaModule.HTTP
+	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor})
 	s.Tokens = authenticationModule.Tokens
 	s.Auth = authenticationModule.HTTP
 	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService)
@@ -106,7 +114,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	authorizationModule := authzmodule.New(authzmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Grants = authorizationModule.Grants
 	s.Authorization = authorizationModule.HTTP
-	federationModule := fedmodule.New(fedmodule.Deps{DB: db, Issuer: issuer, Cipher: o.sealer, Transport: o.transport, Sessions: authenticationModule.Sessions, ActorID: server.OperatorID, IssueSession: s.IssueSession})
+	federationModule := fedmodule.New(fedmodule.Deps{DB: db, Issuer: issuer, Cipher: o.sealer, Transport: o.transport, Sessions: authenticationModule.Sessions, ActorID: server.OperatorID, Respond: s.RespondLogin})
 	s.Federation = federationModule.HTTP
 	provisioningModule := provmodule.New(provmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.ProvisioningControl = provisioningModule.Control
@@ -115,7 +123,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Applications = applicationModule.HTTP
 	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Key: key, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Tokens: s.Tokens, ActorID: server.OperatorID})
 	s.OAuth = oauthModule.HTTP
-	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: oauthModule.Flows, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, Finish: oauthModule.HTTP.Finish, ActorID: server.OperatorID})
+	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: oauthModule.Flows, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, Finish: oauthModule.HTTP.Finish, ActorID: server.OperatorID})
 	s.Hosted = hostedModule.HTTP
 	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
 	serviceAccountModule := sacctmodule.New(sacctmodule.Deps{DB: db})
@@ -138,6 +146,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Authorization:   authzhttp.New(authorizationModule.ResourceCommands, authorizationModule.ResourceQueries, actor),
 		Grants:          authzhttp.NewGrants(authorizationModule.GrantCommands, authorizationModule.GrantQueries, actor),
 		ServiceAccounts: saccthttp.New(serviceAccountModule.Commands, serviceAccountModule.Queries),
+		Factors:         mfaModule.HTTP.WithActor(actor),
 	}
 	return s
 }

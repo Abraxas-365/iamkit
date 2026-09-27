@@ -79,3 +79,11 @@ type Login struct {
 	Session      identity.SessionID
 	Permissions  []string
 }
+
+// SessionInfo is what tokens take from the end-user session: its lifetime,
+// when it was authenticated and how (amr claim).
+type SessionInfo struct {
+	Expires       time.Time
+	Authenticated time.Time
+	AMR           []string
+}

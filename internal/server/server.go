@@ -16,6 +16,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/adapters/imphttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmthttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/mfa/adapters/mfahttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/adapters/orghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning/adapters/provhttp"
@@ -41,9 +42,11 @@ type APIHandlerSet struct {
 	Authorization   *authzhttp.Handler
 	Grants          *authzhttp.Grants
 	ServiceAccounts *saccthttp.Handler
+	Factors         *mfahttp.Handler
 }
 
 type Server struct {
+	Factors             *mfahttp.Handler
 	Activity            *mgmthttp.Activity
 	ServiceAccounts     *saccthttp.Handler
 	ProvisioningControl *provhttp.Control
@@ -162,6 +165,12 @@ func (s *Server) App() *fiber.App {
 	auth.Post("/introspect", s.Tokens.Introspect)
 	auth.Post("/logout", s.Tokens.Logout)
 	auth.Post("/memberships", s.Tokens.AddMember)
+	if s.Factors != nil {
+		mfaLimit := limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }})
+		auth.Post("/mfa/verify", mfaLimit, s.Auth.VerifyMFA)
+		auth.Post("/mfa/enroll", mfaLimit, s.Auth.EnrollMFA)
+		s.Factors.RegisterSelf(auth, mfaLimit)
+	}
 	s.Provisioning.Register(app)
 	s.OAuth.Register(app)
 	s.hostedRoutes(app)

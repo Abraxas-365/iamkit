@@ -115,6 +115,9 @@ func (r *Repository) Delete(ctx context.Context, m user.Mutation, id identity.Us
 		`DELETE FROM identity_challenges WHERE environment_id=$1 AND user_id=$2`,
 		`DELETE FROM provisioned_identities WHERE environment_id=$1 AND user_id=$2`,
 		`DELETE FROM invitations WHERE environment_id=$1 AND (accepted_user_id=$2 OR email=(SELECT email FROM users WHERE environment_id=$1 AND id=$2))`,
+		`DELETE FROM mfa_logins WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM recovery_codes WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM user_factors WHERE environment_id=$1 AND user_id=$2`,
 	}
 	for _, stmt := range statements {
 		if _, err = tx.ExecContext(ctx, stmt, m.Environment, id); err != nil {

@@ -39,6 +39,32 @@ const (
 	FederationStateTTL = 5 * time.Minute
 )
 
+// Multi-factor authentication.
+const (
+	// MFALoginTTL bounds the wait for the second factor of a headless login.
+	MFALoginTTL = 5 * time.Minute
+	// MFAAttempts is the number of wrong codes one pending login allows.
+	MFAAttempts = 5
+	// MFAFailures wrong codes in a row (any login, pending token or
+	// self-service call) lock the user's factor for MFALockout, doubling
+	// with every further MFAFailures up to MFALockoutMax.
+	MFAFailures   = 10
+	MFALockout    = 15 * time.Minute
+	MFALockoutMax = 24 * time.Hour
+	// MFAFreshAuth is how recently a session must have signed in to add,
+	// remove or regenerate second factors.
+	MFAFreshAuth = 10 * time.Minute
+	// MFAEnrollTTL is how long an unconfirmed authenticator is shown again
+	// before a login enrollment starts a new one.
+	MFAEnrollTTL = 15 * time.Minute
+	// RecoveryCodes is how many recovery codes a user holds.
+	RecoveryCodes = 10
+	// TOTP parameters (RFC 6238 defaults understood by every authenticator app).
+	TOTPPeriod = 30 // seconds
+	TOTPDigits = 6
+	TOTPSkew   = 1 // steps accepted either side of now
+)
+
 // ExternalHTTPTimeout is the timeout for all outbound HTTP calls
 // (OIDC discovery, email webhooks, etc.).
 const ExternalHTTPTimeout = 10 * time.Second

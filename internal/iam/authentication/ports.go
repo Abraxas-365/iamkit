@@ -8,14 +8,27 @@ import (
 )
 
 type Commands interface {
-	Login(ctx context.Context, boundary Context, email, password string) (Issued, error)
+	Login(ctx context.Context, boundary Context, email, password string) (Result, error)
 	Refresh(ctx context.Context, boundary Context, token string) (Issued, error)
 	InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose string) (identity.ChallengeID, error)
-	VerifyChallenge(ctx context.Context, boundary Context, challenge identity.ChallengeID, code, purpose, password string) (Issued, error)
+	VerifyChallenge(ctx context.Context, boundary Context, challenge identity.ChallengeID, code, purpose, password string) (Result, error)
 }
 
-type SessionCreator interface {
-	NewSession(ctx context.Context, tx Transaction, boundary Context, user identity.UserID) (Issued, error)
+// SecondFactor is the multi-factor step of headless logins, implemented by
+// the mfa module. Nil disables MFA.
+type SecondFactor interface {
+	Requirement(ctx context.Context, boundary Context, user identity.UserID, federated bool) (Requirement, error)
+	Begin(ctx context.Context, boundary Context, user identity.UserID, amr []string, enroll bool) (string, error)
+	// Complete verifies the code of a pending login and runs issue before
+	// committing: when issue fails the verification rolls back.
+	Complete(ctx context.Context, token, code string, issue func(done Completed) error) (Completed, error)
+	Enroll(ctx context.Context, token string) (Enrollment, error)
+}
+
+// MFACommands finish a headless login that answered mfa_required.
+type MFACommands interface {
+	VerifyMFA(ctx context.Context, token, code string) (Issued, error)
+	EnrollMFA(ctx context.Context, token string) (Enrollment, error)
 }
 
 // Authenticator splits login in two for the hosted pages: verify who the
@@ -118,7 +131,9 @@ type Transaction interface {
 	// application linked to it.
 	AccessibleOrganizations(ctx context.Context, target Target, user identity.UserID) ([]Organization, error)
 	Resolve(ctx context.Context, boundary Context, user identity.UserID) (Access, error)
-	CreateSession(ctx context.Context, boundary Context, user identity.UserID, session identity.SessionID, expires time.Time) error
+	// CreateSession stores the session; authenticated is its auth_time,
+	// kept across refreshes.
+	CreateSession(ctx context.Context, boundary Context, user identity.UserID, session identity.SessionID, authenticated, expires time.Time, amr []string) error
 	SaveRefresh(ctx context.Context, hash []byte, user identity.UserID, session identity.SessionID, expires time.Time) error
 	Refresh(ctx context.Context, boundary Context, hash []byte) (Session, error)
 	RevokeSession(ctx context.Context, session identity.SessionID) error

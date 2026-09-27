@@ -24,6 +24,10 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	users.Patch("/:id", s.APIHandlers.Users.Update)
 	users.Delete("/:id", s.APIHandlers.Users.Suspend)
 	users.Delete("/:id/permanent", s.APIHandlers.Users.Delete)
+	if s.APIHandlers.Factors != nil {
+		users.Get("/:id/factors", s.APIHandlers.Factors.Factors)
+		users.Delete("/:id/factors", s.APIHandlers.Factors.Reset)
+	}
 
 	// Organizations
 	orgs := e.Group("/organizations", apiauth.ReadWrite(authorization.PermOrgsRead, authorization.PermOrgsWrite))

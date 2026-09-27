@@ -19,6 +19,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
+	"rsc.io/qr"
 )
 
 //go:embed templates/*.html
@@ -26,7 +27,7 @@ var files embed.FS
 
 var pages = func() map[string]*template.Template {
 	out := map[string]*template.Template{}
-	for _, name := range []string{"identify", "password", "code", "reset", "organization", "invite", "message"} {
+	for _, name := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "invite", "message"} {
 		t := template.Must(template.ParseFS(files, "templates/*.html"))
 		template.Must(t.New("content").Parse(`{{template "` + name + `/content" .}}`))
 		out[name] = t
@@ -76,6 +77,8 @@ func (h *Handler) Pages() map[string]fiber.Handler {
 		"POST /hosted/login/reset/verify": h.reset,
 		"POST /hosted/login/sso":          h.sso,
 		"POST /hosted/login/organization": h.organization,
+		"POST /hosted/login/mfa":          h.secondFactor,
+		"POST /hosted/login/mfa/continue": h.continueLogin,
 		"GET /hosted/invite":              h.invite,
 		"POST /hosted/invite":             h.accept,
 	}
@@ -92,6 +95,11 @@ type view struct {
 	Organizations                         []authentication.Organization
 	Token                                 string
 	Invite                                *invitation.Preview
+	// Second-factor pages: the authenticator to add (QR as a PNG data URI)
+	// and recovery codes shown once.
+	Secret        string
+	QR            template.URL
+	RecoveryCodes []string
 }
 
 type brand struct{ Name, Logo, Accent string }
@@ -121,7 +129,8 @@ func render(c *fiber.Ctx, status int, page string, v view) error {
 	if err := pages[page].ExecuteTemplate(&out, "layout", v); err != nil {
 		return errx.Wrap(err, "render hosted page", errx.TypeInternal)
 	}
-	c.Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+v.Nonce+"'; img-src https:; base-uri 'none'; frame-ancestors 'none'")
+	// data: images are the server-rendered enrollment QR code.
+	c.Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+v.Nonce+"'; img-src https: data:; base-uri 'none'; frame-ancestors 'none'")
 	c.Set("Cache-Control", "no-store")
 	c.Set("Content-Type", fiber.MIMETextHTMLCharsetUTF8)
 	return c.Status(status).Send(out.Bytes())
@@ -310,18 +319,82 @@ func (h *Handler) organization(c *fiber.Ctx) error {
 		return err
 	}
 	organization, _ := identity.ParseOrganizationID(c.FormValue("organization_id"))
-	login, err := h.flow.Choose(c.Context(), r, organization)
+	result, err := h.flow.Choose(c.Context(), r, organization)
 	if err != nil {
 		v.Title = "Sign in"
 		return h.retry(c, v, "identify", err)
 	}
-	return h.finish(c, r.Ticket, login)
+	return h.result(c, v, result)
 }
 
-// result finishes the authorization, or asks for the organization.
+func (h *Handler) secondFactor(c *fiber.Ctx) error {
+	r := h.request(c)
+	v, ok, err := h.base(c, r)
+	if !ok {
+		return err
+	}
+	enrolling := c.FormValue("enrolling") == "true"
+	result, err := h.flow.SecondFactor(c.Context(), r, c.FormValue("code"))
+	if err != nil {
+		var e *errx.Error
+		if enrolling && !(errx.As(err, &e) && e.Code == "LOGIN_EXPIRED") {
+			return h.enrollPage(c, r, v, err)
+		}
+		v.Title = "Two-step verification"
+		return h.retry(c, v, "mfa", err)
+	}
+	return h.result(c, v, result)
+}
+
+func (h *Handler) enrollPage(c *fiber.Ctx, r hosted.Request, v view, problem error) error {
+	enrollment, err := h.flow.Enrollment(c.Context(), r)
+	if err != nil {
+		v.Title = "Sign in"
+		return h.retry(c, v, "identify", err)
+	}
+	status := fiber.StatusOK
+	if problem != nil {
+		status, v.Error = failed(c, problem)
+	}
+	return h.renderEnroll(c, status, v, enrollment)
+}
+
+func (h *Handler) renderEnroll(c *fiber.Ctx, status int, v view, e authentication.Enrollment) error {
+	v.Title, v.Subtitle, v.Secret = "Set up two-step verification", "Your organization requires an authenticator app. Scan the code, then enter the 6-digit code it shows.", e.Secret
+	if code, err := qr.Encode(e.URI, qr.M); err == nil {
+		code.Scale = 4
+		v.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(code.PNG()))
+	}
+	return render(c, status, "enroll", v)
+}
+
+func (h *Handler) continueLogin(c *fiber.Ctx) error {
+	r := h.request(c)
+	v, ok, err := h.base(c, r)
+	if !ok {
+		return err
+	}
+	result, err := h.flow.Continue(c.Context(), r)
+	if err != nil {
+		v.Title = "Sign in"
+		return h.retry(c, v, "identify", err)
+	}
+	return h.result(c, v, result)
+}
+
+// result shows the next step or finishes the authorization.
 func (h *Handler) result(c *fiber.Ctx, v view, result hosted.Result) error {
-	if result.Login != nil {
+	switch {
+	case result.Login != nil:
 		return h.finish(c, v.Ticket, *result.Login)
+	case result.SecondFactor:
+		v.Title, v.Subtitle = "Two-step verification", "Enter the 6-digit code from your authenticator app, or a recovery code."
+		return render(c, fiber.StatusOK, "mfa", v)
+	case result.Enroll != nil:
+		return h.renderEnroll(c, fiber.StatusOK, v, *result.Enroll)
+	case len(result.RecoveryCodes) > 0:
+		v.Title, v.Subtitle, v.RecoveryCodes = "Save your recovery codes", "Each code signs you in once if you lose your authenticator. They will not be shown again.", result.RecoveryCodes
+		return render(c, fiber.StatusOK, "recovery", v)
 	}
 	v.Title, v.Subtitle, v.Organizations = "Choose an organization", "Your account belongs to several organizations.", result.Organizations
 	return render(c, fiber.StatusOK, "organization", v)
@@ -334,6 +407,10 @@ func (h *Handler) retry(c *fiber.Ctx, v view, page string, err error) error {
 	var e *errx.Error
 	if errx.As(err, &e) && e.Code == "SSO_REQUIRED" {
 		page, text = "identify", "Your organization requires single sign-on. Continue with your email to use it."
+	}
+	if errx.As(err, &e) && e.Code == "LOGIN_EXPIRED" {
+		// The parked login is gone (expired or out of attempts): start over.
+		page, v.Title = "identify", "Sign in"
 	}
 	v.Error = text
 	return render(c, status, page, v)

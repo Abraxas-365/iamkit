@@ -261,7 +261,8 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 		out.Verified = authentication.Verified{User: user, Email: claims.Email, Method: authentication.MethodSSO, Organization: connection.Organization}
 		return out, nil
 	}
-	out.Issued, err = s.sessions.NewSession(ctx, tx, row.Boundary, user)
+	result, err := s.sessions.SignIn(ctx, tx, row.Boundary, user)
+	out.Issued, out.MFA = result.Issued, result.MFA
 	if connection.Scoped() && unauthorized(err) {
 		// The provider proved the identity; what is missing is access
 		// (inactive membership, or no roles for a just-provisioned user).

@@ -39,7 +39,7 @@ plus grant checks because of middleware registration order.
 
 | Routes | Permissions |
 | --- | --- |
-| `/users`, `/users/:id`, `/users/:id/permanent` (create/list/get/patch/suspend/delete) | `iam:users:read`, `iam:users:write` |
+| `/users`, `/users/:id`, `/users/:id/permanent`, `/users/:id/factors` (create/list/get/patch/suspend/delete, factor list/reset) | `iam:users:read`, `iam:users:write` |
 | `/organizations`, `/organizations/:id` (create/list/get/patch) | `iam:orgs:read`, `iam:orgs:write` |
 | `/memberships`, `/organizations/:organization/members`, member removal, structure and group routes | `iam:members:read`, `iam:members:write` |
 | `/applications`, `/applications/:id` (create/list/get/patch) | `iam:apps:read`, `iam:apps:write` |

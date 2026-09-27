@@ -43,7 +43,11 @@ the same browser-binding cookie as the headless flow. The ticket is valid for
    One organization: it is chosen automatically. Several: the user picks one.
    None: the sign-in is refused. An organization SSO login always signs in to
    that organization only.
-4. **Back to your app.** IAMKit issues the session in the chosen organization
+4. **Second factor.** When the user has an authenticator (or the chosen
+   organization [requires MFA](mfa.md)), a code page follows; users who must
+   enroll get a QR code, then their recovery codes once. Enrolled users with
+   several organizations answer it before choosing (except after SSO).
+5. **Back to your app.** IAMKit issues the session in the chosen organization
    and redirects to your `redirect_uri` with `code` and `state`.
 
 No session exists until the organization is known. The verified login waiting
@@ -72,7 +76,7 @@ Accepting does not sign the user in; they sign in through your app next.
 ## Security properties
 
 - Pages are server-rendered HTML without JavaScript. Every response carries a
-  strict CSP (`default-src 'none'`, per-response style nonce, `img-src https:`,
+  strict CSP (`default-src 'none'`, per-response style nonce, `img-src https: data:` for the enrollment QR code,
   `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `no-store` and
   `Referrer-Policy: no-referrer`.
 - Every form action re-validates the ticket and its browser binding; a stolen

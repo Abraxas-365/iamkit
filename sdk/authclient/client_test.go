@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/sdk/apierror"
@@ -137,6 +138,58 @@ func TestAllIdentityPaths(t *testing.T) {
 		if paths[i] != p {
 			t.Errorf("path[%d] = %q, want %q", i, paths[i], p)
 		}
+	}
+}
+
+func TestMFAEndpoints(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.RequestURI())
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/identity/v1/login" {
+			w.Write([]byte(`{"mfa_required":true,"mfa_token":"ik_mfa_x","factors":["totp","recovery"],"enrollment_required":false,"expires_in":300}`))
+			return
+		}
+		w.Write([]byte(`{"access_token":"a","recovery_codes":["c1"],"secret":"S","otpauth_uri":"otpauth://totp/x","factors":[],"recovery_codes_remaining":3}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	ctx := context.Background()
+	pair, err := c.Login(ctx, PasswordLogin{})
+	if err != nil || !pair.MFARequired || pair.MFAToken != "ik_mfa_x" || pair.AccessToken != "" || len(pair.Factors) != 2 {
+		t.Fatalf("login = %+v %v", pair, err)
+	}
+	if pair, err = c.VerifyMFA(ctx, pair.MFAToken, "123456"); err != nil || pair.AccessToken != "a" || len(pair.RecoveryCodes) != 1 {
+		t.Fatalf("verify = %+v %v", pair, err)
+	}
+	if e, err := c.EnrollMFA(ctx, "ik_mfa_x"); err != nil || e.Secret != "S" || e.URI == "" {
+		t.Fatalf("enroll = %+v %v", e, err)
+	}
+	if f, err := c.ListFactors(ctx, "tok", "env", "https://a.example"); err != nil || f.RecoveryCodesRemaining != 3 {
+		t.Fatalf("factors = %+v %v", f, err)
+	}
+	c.StartTOTP(ctx, "tok", "env", "aud")
+	c.ConfirmTOTP(ctx, "tok", "env", "aud", "123456")
+	c.RemoveTOTP(ctx, "tok", "env", "aud", "123456")
+	c.RegenerateRecoveryCodes(ctx, "tok", "env", "aud", "123456")
+	want := []string{
+		"POST /identity/v1/login",
+		"POST /identity/v1/mfa/verify",
+		"POST /identity/v1/mfa/enroll",
+		"GET /identity/v1/me/factors?environment_id=env&audience=https%3A%2F%2Fa.example",
+		"POST /identity/v1/me/factors/totp",
+		"POST /identity/v1/me/factors/totp/confirm",
+		"DELETE /identity/v1/me/factors/totp",
+		"POST /identity/v1/me/factors/recovery-codes",
+	}
+	if strings.Join(calls, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("calls = %v", calls)
+	}
+}
+
+func TestClaimsHasMFA(t *testing.T) {
+	if (Claims{AMR: []string{"pwd"}}).HasMFA() || !(Claims{AMR: []string{"pwd", "otp", "mfa"}}).HasMFA() {
+		t.Fatal("HasMFA")
 	}
 }
 

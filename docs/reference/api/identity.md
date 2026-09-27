@@ -6,7 +6,9 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 
 | Method/path | Input/authority | Success |
 | --- | --- | --- |
-| `POST /login` | boundary + `email`, `password` | 200 token pair |
+| `POST /login` | boundary + `email`, `password` | 200 token pair, or an [MFA step](#multi-factor) |
+| `POST /mfa/verify` | `mfa_token`, `code` (TOTP or recovery) | 200 token pair (+ `recovery_codes` after enrollment); rate limited |
+| `POST /mfa/enroll` | `mfa_token` of a login with `enrollment_required` | 200 `{secret,otpauth_uri}`; rate limited |
 | `POST /refresh` | original boundary + `refresh_token` | 200 replacement token pair |
 | `POST /machine-token` | Bearer `ik_svc_…`; no body needed | 200 access token, no user refresh |
 | `POST /challenges` | `environment_id`, `email`, `purpose` | 202 challenge response |
@@ -22,6 +24,11 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 | `PATCH /me` | Bearer user token; `environment_id`, `audience`, `name` | 204 |
 | `GET /organizations` | Bearer user token; query `environment_id`, `audience` | 200 organization array |
 | `POST /memberships` | Bearer user token; `environment_id`, `audience`, `user_id` | 201; requires `iam:members:write` |
+| `GET /me/factors` | Bearer user token; query `environment_id`, `audience` | 200 `{factors,recovery_codes_remaining}` |
+| `POST /me/factors/totp` | Bearer user token; `environment_id`, `audience` | 201 `{factor_id,secret,otpauth_uri}` |
+| `POST /me/factors/totp/confirm` | Bearer user token; `environment_id`, `audience`, `code` | 200 `{recovery_codes}` |
+| `DELETE /me/factors/totp` | Bearer user token; `environment_id`, `audience`, `code` | 204 |
+| `POST /me/factors/recovery-codes` | Bearer user token; `environment_id`, `audience`, `code` | 200 `{recovery_codes}` |
 
 The membership endpoint uses the authenticated user's organization context; it
 is not unrestricted signup. Impersonated tokens cannot update self-service profiles.
@@ -56,6 +63,15 @@ families documented separately.
 
 Source: `internal/server/server.go`,
 `internal/iam/authentication/adapters/authhttp/{handler,tokens}.go`.
+
+## Multi-factor
+
+Password login, email-code login and the SSO callback return, instead of a
+token pair, `{mfa_required:true,mfa_token:"ik_mfa_…",factors,enrollment_required,expires_in}`
+when the user has an authenticator or the organization requires one. No
+session exists until `/mfa/verify` succeeds (5 minutes, 5 wrong codes).
+Self-service factor endpoints refuse impersonated tokens (403). See the
+[MFA guide](../../guides/mfa.md).
 
 ## Invitations
 

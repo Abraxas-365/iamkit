@@ -13,15 +13,23 @@ type Organization struct {
 	Name     string                  `json:"name"`
 	Active   bool                    `json:"active"`
 	Metadata json.RawMessage         `json:"metadata"`
+	// MFARequired: password and email-code logins need a second factor
+	// (users without one enroll while signing in).
+	MFARequired bool `json:"mfa_required"`
+	// MFAForFederated: SSO logins follow the same rule instead of trusting
+	// the identity provider.
+	MFAForFederated bool `json:"mfa_for_federated"`
 }
 type Summary struct {
 	ID   identity.OrganizationID `json:"id" db:"id"`
 	Name string                  `json:"name" db:"name"`
 }
 type Update struct {
-	Name     *string         `json:"name"`
-	Active   *bool           `json:"active"`
-	Metadata json.RawMessage `json:"metadata"`
+	Name            *string         `json:"name"`
+	Active          *bool           `json:"active"`
+	Metadata        json.RawMessage `json:"metadata"`
+	MFARequired     *bool           `json:"mfa_required"`
+	MFAForFederated *bool           `json:"mfa_for_federated"`
 }
 
 func (u Update) Validate() error {

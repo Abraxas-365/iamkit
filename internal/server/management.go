@@ -10,6 +10,9 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	s.Control.Register(r)
 	e := r.Group("/environments/:environment", s.Control.Environment)
 	s.Users.Register(e)
+	if s.Factors != nil {
+		s.Factors.Register(e)
+	}
 	s.Organizations.Register(e)
 	s.Authorization.Register(e)
 	s.Applications.Register(e)

@@ -115,7 +115,18 @@ func (s *Service) Issue(ctx context.Context, boundary authentication.Context, ve
 			return authentication.Issued{}, err
 		}
 	}
-	out, err := s.NewSession(ctx, tx, boundary, verified.User)
+	// Hosted pages verify the second factor before issuing; this is the
+	// backstop should a caller skip that step.
+	if s.second != nil && !authentication.HasMFA(verified.AMR) {
+		req, err := s.second.Requirement(ctx, boundary, verified.User, verified.Federated())
+		if err != nil {
+			return authentication.Issued{}, err
+		}
+		if req.Needed {
+			return authentication.Issued{}, errx.Forbidden("a second factor is required")
+		}
+	}
+	out, err := s.NewSession(ctx, tx, boundary, verified.User, verified.Methods())
 	if unauthorizedErr(err) {
 		return out, errx.Forbidden("you do not have access to this application in the selected organization")
 	}

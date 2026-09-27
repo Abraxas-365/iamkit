@@ -1,6 +1,7 @@
 package authhttp
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -9,12 +10,25 @@ import (
 
 type Handler struct {
 	commands authentication.Commands
+	mfa      authentication.MFACommands
 	issue    func(*fiber.Ctx, authentication.Issued) error
 }
 
-func New(commands authentication.Commands, issue func(*fiber.Ctx, authentication.Issued) error) *Handler {
-	return &Handler{commands, issue}
+func New(commands authentication.Commands, mfa authentication.MFACommands, issue func(*fiber.Ctx, authentication.Issued) error) *Handler {
+	return &Handler{commands, mfa, issue}
 }
+
+// Respond answers a login step: the token response, or 200
+// {mfa_required:true, mfa_token, factors, enrollment_required} when the
+// login continues at /identity/v1/mfa/verify.
+func Respond(c *fiber.Ctx, out authentication.Result, issue func(*fiber.Ctx, authentication.Issued) error) error {
+	if out.MFA == nil {
+		return issue(c, out.Issued)
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(fiber.Map{"mfa_required": true, "mfa_token": out.MFA.Token, "factors": out.MFA.Factors, "enrollment_required": out.MFA.EnrollmentRequired, "expires_in": int(config.MFALoginTTL.Seconds())})
+}
+
 func (h *Handler) Login(c *fiber.Ctx) error {
 	var input struct {
 		authentication.Context
@@ -28,7 +42,39 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	return Respond(c, out, h.issue)
+}
+
+// VerifyMFA completes a login with an authenticator or recovery code.
+func (h *Handler) VerifyMFA(c *fiber.Ctx) error {
+	var input struct {
+		Token string `json:"mfa_token"`
+		Code  string `json:"code"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	out, err := h.mfa.VerifyMFA(c.Context(), input.Token, input.Code)
+	if err != nil {
+		return err
+	}
 	return h.issue(c, out)
+}
+
+// EnrollMFA returns the authenticator secret of a login that must enroll.
+func (h *Handler) EnrollMFA(c *fiber.Ctx) error {
+	var input struct {
+		Token string `json:"mfa_token"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	out, err := h.mfa.EnrollMFA(c.Context(), input.Token)
+	if err != nil {
+		return err
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(out)
 }
 func (h *Handler) Refresh(c *fiber.Ctx) error {
 	var input struct {
@@ -76,7 +122,7 @@ func (h *Handler) VerifyChallenge(c *fiber.Ctx) error {
 		return err
 	}
 	if input.Purpose == "login" {
-		return h.issue(c, out)
+		return Respond(c, out, h.issue)
 	}
 	return c.SendStatus(204)
 }

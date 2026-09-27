@@ -7,6 +7,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
+	"github.com/Abraxas-365/iamkit/internal/iam/mfa"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -33,7 +34,21 @@ type Flow interface {
 	SSO(ctx context.Context, r Request, connection identity.ConnectionID) (federation.Start, error)
 	// Federated continues after a hosted single sign-on callback.
 	Federated(ctx context.Context, r Request, verified authentication.Verified) (Result, error)
-	Choose(ctx context.Context, r Request, organization identity.OrganizationID) (oauth.Login, error)
+	Choose(ctx context.Context, r Request, organization identity.OrganizationID) (Result, error)
+	// SecondFactor checks an authenticator or recovery code (or the first
+	// code of a new authenticator) for the parked login.
+	SecondFactor(ctx context.Context, r Request, code string) (Result, error)
+	// Enrollment returns the authenticator the parked login is adding.
+	Enrollment(ctx context.Context, r Request) (authentication.Enrollment, error)
+	// Continue finishes after the recovery codes were shown.
+	Continue(ctx context.Context, r Request) (Result, error)
+}
+
+// SecondFactor is the part of the mfa module the hosted pages use.
+type SecondFactor interface {
+	Requirement(ctx context.Context, boundary authentication.Context, user identity.UserID, federated bool) (authentication.Requirement, error)
+	Verify(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, code string, enroll bool) (mfa.Verification, error)
+	Enrolling(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (authentication.Enrollment, error)
 }
 
 // Invitations is the invitation use cases the hosted accept page uses.
@@ -55,7 +70,7 @@ type Authorizations interface {
 // Challenges is the part of the authentication commands the hosted pages use.
 type Challenges interface {
 	InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose string) (identity.ChallengeID, error)
-	VerifyChallenge(ctx context.Context, boundary authentication.Context, challenge identity.ChallengeID, code, purpose, password string) (authentication.Issued, error)
+	VerifyChallenge(ctx context.Context, boundary authentication.Context, challenge identity.ChallengeID, code, purpose, password string) (authentication.Result, error)
 }
 
 // Federation is the part of the federation flows the hosted pages use.
@@ -69,10 +84,14 @@ type Repository interface {
 	// Settings returns the environment's branding, or defaults.
 	Settings(ctx context.Context, environment identity.EnvironmentID) (Settings, error)
 	SaveSettings(ctx context.Context, m Mutation, input Settings) (Settings, error)
-	// SaveLogin keeps the verified user of an authorization until the
-	// organization is chosen, replacing an earlier one for the ticket.
-	SaveLogin(ctx context.Context, ticketHash []byte, environment identity.EnvironmentID, verified authentication.Verified, expires time.Time) error
-	// Login returns the unexpired verified user of an authorization.
-	Login(ctx context.Context, ticketHash []byte, environment identity.EnvironmentID) (authentication.Verified, error)
+	// SaveLogin parks the verified user of an authorization between steps,
+	// replacing an earlier one for the ticket (without lowering the attempts
+	// the same user already spent).
+	SaveLogin(ctx context.Context, ticketHash []byte, environment identity.EnvironmentID, login Login, expires time.Time) error
+	// Login returns the unexpired parked login of an authorization.
+	Login(ctx context.Context, ticketHash []byte, environment identity.EnvironmentID) (Login, error)
+	// Attempt reserves one second-factor try, atomically, while fewer than
+	// limit were made; false once they ran out.
+	Attempt(ctx context.Context, ticketHash []byte, limit int) (bool, error)
 	DeleteLogin(ctx context.Context, ticketHash []byte) error
 }

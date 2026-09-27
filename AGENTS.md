@@ -44,6 +44,7 @@ internal/
 | impersonation | `internal/iam/impersonation` | Audited admin impersonation |
 | invitation | `internal/iam/invitation` | Email invitations into organizations (token issue, preview, accept) |
 | management | `internal/iam/management` | Workspaces, projects, environments, operators, keys |
+| mfa | `internal/iam/mfa` | Second factors (TOTP), recovery codes, pending MFA logins, per-organization MFA policy |
 | oauth | `internal/iam/oauth` | OAuth2/OIDC server (authorization code + PKCE) |
 | organization | `internal/iam/organization` | Organizations, memberships, org units, positions, groups, verified domains |
 | provisioning | `internal/iam/provisioning` | SCIM user and group provisioning |
@@ -169,10 +170,13 @@ infrastructure concerns that should be swappable:
 | `Provider` | federation | OIDC provider discovery and credential approval |
 | `Flows` | federation | Browser login flows (`Discover`, `Start`, `StartHosted`, `Callback`, `EnvironmentConnections`), separate from Commands/Queries. `Callback` returns an `Outcome`: a session, or for hosted starts (`Continuation` = OAuth ticket) only the `Verified` identity |
 | `Authenticator` | authentication | Verify a credential without a session (`VerifyPassword`, `VerifyCode` → `Verified`), list accessible `Organizations`, then `Issue` the session once the organization is chosen (re-checks SSO enforcement) |
-| `Flow` | hosted | The hosted sign-in journey; consumes the `Authorizations` (pending OAuth ticket), `Challenges`, `Federation` and `Invitations` ports declared in `hosted/ports.go` plus `authentication.Authenticator` |
-| `Cipher` | federation | Seal/open stored client secrets; implemented by `internal/cryptox.Sealer` (`IAMKIT_ENCRYPTION_KEY`), injected via `bootstrap.WithSealer` |
+| `Flow` | hosted | The hosted sign-in journey; consumes the `Authorizations` (pending OAuth ticket), `Challenges`, `Federation`, `Invitations` and `SecondFactor` ports declared in `hosted/ports.go` plus `authentication.Authenticator`. The parked `hosted.Login{Verified, Chosen, Attempts}` carries state between pages; `hostedsvc.step` orders: MFA first for an enrolled user with several organizations (non-SSO logins; a factor applies in all of them) → chooser → MFA/enrollment for the chosen organization → `Issue`. Second-factor tries are reserved atomically (`Repository.Attempt`) before the code is checked |
+| `SecondFactor` | authentication | Login-time MFA (`Requirement`, `Begin`, `Complete`, `Enroll`), implemented by `mfasvc` (`mfa.Logins`). `Login`/`VerifyChallenge` return `authentication.Result{Issued, MFA}`: `SignIn` commits the credential transaction, then either issues the session or parks a pending `ik_mfa_` login. `authhttp.Respond` renders either shape; federation receives it as the injected `Respond` closure |
+| `Logins` | mfa | Everything login flows need from mfa (headless pending logins + hosted `Verify`/`Enrolling` without a pending token) |
+| `TOTP` | mfa | RFC 6238 codes/URIs (`mfatotp`, stdlib only, RFC test vectors) |
+| `Cipher` | federation, mfa | Seal/open stored secrets (client secrets, TOTP secrets); implemented by `internal/cryptox.Sealer` (`IAMKIT_ENCRYPTION_KEY`), injected via `bootstrap.WithSealer` |
 | `TokenCodec` | authentication | JWT sign/parse (combines `TokenIssuer` + `TokenValidator`) |
-| `Transaction` | authentication, invitation, oauth | Database transaction handle for multi-step mutations |
+| `Transaction` | authentication, invitation, mfa, oauth | Database transaction handle for multi-step mutations |
 
 These follow the same rule: defined in `ports.go`, implemented by adapters,
 consumed by services.
@@ -261,7 +265,7 @@ All entity identifiers use `identity.ID[T]`, a generic struct wrapping
 ```go
 type ID[T any] struct{ v uuid.UUID }
 
-// 21 entity types, each with an unexported tag:
+// 24 entity types, each with an unexported tag:
 type environmentTag struct{}
 type userTag        struct{}
 // ...
@@ -278,7 +282,7 @@ type UserID         = ID[userTag]
 - Unexported tags: external packages cannot construct arbitrary IDs — they must
   use `ParseXID()` or `NewXID()`.
 
-**API per entity type** (21 sets):
+**API per entity type** (24 sets):
 - `NewUserID() UserID` — generate new UUID
 - `ParseUserID(raw string) (UserID, error)` — validation boundary
 - `MustParseUserID(raw string) UserID` — panics, for tests/static init
@@ -584,6 +588,26 @@ sets `identity.EnvironmentID` on the Fiber context. `apiauth.Environment(c)`
 returns a typed ID. The middleware compares the JWT's environment against the
 path parameter — both are typed, so mismatches are caught at compile time.
 
+**`amr`** (authentication methods) is stored on `sessions.amr`, copied onto
+every access token issued for the session (including refreshes) and onto OIDC
+ID tokens via `oauth.Authorization.Session` → `oauth.SessionInfo`. First
+factors: `pwd`, `email`, `fed` (`authentication.MethodAMR`); a second factor
+appends `mfa.AMR(proof)` = `otp` + `mfa`. Headless second-factor logins park
+as `mfa_logins` rows keyed by the hash of an `ik_mfa_` token (5 min, 5
+attempts); no session exists until verification. Wrong codes also count per
+factor across every path (`user_factors.failed_attempts`): every
+`config.MFAFailures` in a row lock it for `mfa.Lockout` (15 min doubling,
+24 h max, 429 `MFA_LOCKED` via `errx.TooManyRequests`, audited `mfa.locked`); callers commit the
+transaction on a wrong code so the count sticks. Unconfirmed factors expire
+for confirmation after `config.MFAEnrollTTL` (`Factor.Enrollable`). `SecondFactor.Complete`
+runs the session-issuing callback before committing, so a failed session
+never loses recovery codes. Tokens carry `auth_time`
+(`sessions.authenticated_at`, written by `CreateSession` from the same
+second as the first token and kept across refreshes); the self-service
+`/identity/v1/me/factors*` routes (`mfahttp.RegisterSelf`) refuse
+impersonated tokens and require a sign-in within `config.MFAFreshAuth` for
+changes (`mfa.Fresh`, 403 `REAUTHENTICATION_REQUIRED`).
+
 ---
 
 ## Mutation & Audit Trail
@@ -601,7 +625,10 @@ type Mutation struct {
 
 Repository methods accept `Mutation` and insert into `audit_events` within the
 same transaction as the data change. The HTTP handler constructs `Mutation`
-from the authenticated context.
+from the authenticated context. Exception: when one command can emit several
+actions, the service sets `Action` itself (e.g. `mfasvc` writes `mfa.enrolled`,
+`mfa.removed`, `mfa.recovery_regenerated`, `mfa.recovery_used`, `mfa.reset`,
+`mfa.locked`).
 
 ---
 
@@ -616,6 +643,7 @@ from the authenticated context.
 | `github.com/golang-jwt/jwt/v5` | JWT signing/parsing | `authjwt/` only |
 | `github.com/ory/fosite` | OAuth2 server | `oauthfosite/` only |
 | `github.com/coreos/go-oidc/v3` | OIDC discovery | `fedoidc/` only |
+| `rsc.io/qr` | Enrollment QR code (PNG data URI) | `hostedhttp/` only |
 
 **Rule:** Domain packages and services never import framework types. They
 depend only on `identity`, `query`, `errx`, and stdlib.

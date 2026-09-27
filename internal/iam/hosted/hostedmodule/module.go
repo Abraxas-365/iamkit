@@ -19,6 +19,7 @@ type Deps struct {
 	Challenges     hosted.Challenges
 	Federation     hosted.Federation
 	Invitations    hosted.Invitations
+	SecondFactor   hosted.SecondFactor // nil: no multi-factor step
 	// Finish completes the OAuth authorization (oauthhttp.Handler.Finish).
 	Finish  hostedhttp.Finisher
 	ActorID func(*fiber.Ctx) string
@@ -32,6 +33,6 @@ type Module struct {
 }
 
 func New(deps Deps) Module {
-	service := hostedsvc.New(hostedpg.New(deps.DB), mgmtsecret.Generator{}, deps.Authorizations, deps.Authenticator, deps.Challenges, deps.Federation)
+	service := hostedsvc.New(hostedpg.New(deps.DB), mgmtsecret.Generator{}, deps.Authorizations, deps.Authenticator, deps.Challenges, deps.Federation, deps.SecondFactor)
 	return Module{Flow: service, Commands: service, Queries: service, HTTP: hostedhttp.New(service, service, service, deps.Invitations, deps.Finish, deps.ActorID)}
 }

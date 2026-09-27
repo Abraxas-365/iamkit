@@ -36,6 +36,9 @@ type Session struct {
 	Expires time.Time
 	Used    bool
 	Revoked bool
+	AMR     []string
+	// Authenticated is when the session signed in.
+	Authenticated time.Time
 }
 type Challenge struct {
 	User        identity.UserID
@@ -50,6 +53,74 @@ type Issued struct {
 	Session identity.SessionID
 	Refresh string
 	Access  Access
+	// AMR lists how the session was authenticated (pwd, email, fed, otp, mfa).
+	AMR []string
+	// Authenticated is when the session signed in (kept across refreshes).
+	Authenticated time.Time
+	// RecoveryCodes are shown once when this login enrolled the user's
+	// first second factor.
+	RecoveryCodes []string
+}
+
+// Result of a login step: a session, or — when a second factor applies —
+// the token to complete the login with (MFA).
+type Result struct {
+	Issued Issued
+	MFA    *MFA
+}
+
+// MFA is the answer of a login that needs a second factor. The login
+// continues at /identity/v1/mfa/verify (and /mfa/enroll when the
+// organization requires a factor the user does not have yet).
+type MFA struct {
+	Token              string   `json:"mfa_token"`
+	Factors            []string `json:"factors"`
+	EnrollmentRequired bool     `json:"enrollment_required"`
+}
+
+// Requirement says whether a login needs a second factor and whether the
+// user must enroll one first.
+type Requirement struct {
+	Needed  bool
+	Enroll  bool
+	Factors []string
+}
+
+// Completed is a login whose second factor was verified.
+type Completed struct {
+	Boundary      Context
+	User          identity.UserID
+	AMR           []string
+	RecoveryCodes []string
+}
+
+// Enrollment is a TOTP authenticator to add during a login.
+type Enrollment struct {
+	Secret string `json:"secret"`
+	URI    string `json:"otpauth_uri"`
+}
+
+// MethodAMR is the authentication method reference of a first factor.
+func MethodAMR(method string) string {
+	switch method {
+	case MethodPassword:
+		return "pwd"
+	case MethodCode:
+		return "email"
+	case MethodSSO:
+		return "fed"
+	}
+	return method
+}
+
+// HasMFA reports whether the method references include a second factor.
+func HasMFA(amr []string) bool {
+	for _, m := range amr {
+		if m == "mfa" {
+			return true
+		}
+	}
+	return false
 }
 
 // Login methods of a verified user.
@@ -68,6 +139,17 @@ type Verified struct {
 	Email        string
 	Method       string
 	Organization identity.OrganizationID
+	// AMR holds the second-factor references proven so far (otp, mfa).
+	AMR []string
+}
+
+// Federated reports whether the user signed in with single sign-on.
+func (v Verified) Federated() bool { return v.Method == MethodSSO }
+
+// Methods returns the session's method references: the first factor, then
+// any second factor.
+func (v Verified) Methods() []string {
+	return append([]string{MethodAMR(v.Method)}, v.AMR...)
 }
 
 // Target is the application and resource a hosted login signs in to; the

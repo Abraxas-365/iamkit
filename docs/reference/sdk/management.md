@@ -11,6 +11,8 @@ client-side on the first page), `Invitation`, `ResendInvitation` and
 Hosted login: `OAuthClient.HostedLogin` at creation, `UpdateOAuthClient(ctx, id,
 OAuthClientPatch{HostedLogin: &on})`, and branding with `LoginSettings` /
 `SetLoginSettings` (see [hosted login](../../guides/hosted-login.md)).
+MFA: `SetOrganizationMFA(ctx, org, OrganizationMFA{Required: &on})`,
+`UserFactors` and `ResetUserFactors` (see [MFA](../../guides/mfa.md)).
 
 For a list returning a page, a low-level pattern is:
 
