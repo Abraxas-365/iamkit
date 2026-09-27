@@ -256,8 +256,8 @@ function PickDialog({ title, description, label, path, mapItem, submit, onClose 
       <DialogDescription className="text-muted-foreground">{description}</DialogDescription>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">{label}</label>
-          <SearchSelect name="pick" path={path} mapItem={mapItem} disabled={busy} placeholder={`Search ${label.toLowerCase()}s…`} onChange={setValue} />
+          <label className="text-sm font-medium" htmlFor="group-pick">{label}</label>
+          <SearchSelect id="group-pick" name="pick" path={path} mapItem={mapItem} disabled={busy} placeholder={`Search ${label.toLowerCase()}s…`} onChange={setValue} />
         </div>
         {error && <ErrorState error={error} />}
         <div className="flex justify-end gap-2 border-t pt-4">

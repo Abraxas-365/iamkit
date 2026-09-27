@@ -39,7 +39,7 @@ export default function SetupPage() {
       pending.current = true; setBusy(true); setError('')
       try {
         // Verify the key is valid by calling /me with it
-        await request('/me', { headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json', 'X-IAMKit-Console': '1' } })
+        await request('/me', { headers: { 'X-API-Key': key, 'Content-Type': 'application/json', 'X-IAMKit-Console': '1' } })
         setApiKey(key)
         setStep('password')
       } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
@@ -66,7 +66,7 @@ export default function SetupPage() {
         await request('/password', {
           method: 'POST',
           body: JSON.stringify({ password }),
-          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'X-IAMKit-Console': '1' },
+          headers: { 'X-API-Key': apiKey, 'Content-Type': 'application/json', 'X-IAMKit-Console': '1' },
         })
         setSuccess('Password set successfully! You can now sign in with your email and password.')
         setStep('done')

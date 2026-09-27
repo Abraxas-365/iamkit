@@ -6,23 +6,22 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/url"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 )
 
-// WebhookDelivery delegates mail delivery to a trusted HTTPS service. It sends
+// WebhookDelivery delegates mail delivery to a trusted HTTPS service (HTTP
+// only on loopback). It sends
 // no management credentials and refuses redirects. The service receives the
 // recipient, purpose and one-time code or invitation token, and must treat
 // them as secrets.
 type WebhookDelivery struct{ URL, Token string }
 
 func (d WebhookDelivery) Validate() error {
-	u, err := url.Parse(d.URL)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" {
-		return errx.Validation("email webhook must use HTTPS")
+	if !authentication.SecureURL(d.URL) {
+		return errx.Validation("email webhook must use HTTPS (HTTP allowed only on loopback)")
 	}
 	return nil
 }

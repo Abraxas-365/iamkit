@@ -48,19 +48,21 @@ type DeliveryConfigInput struct {
 
 // Validate checks structural invariants for the delivery config input.
 func (d DeliveryConfigInput) Validate() error {
-	if !secureURL(d.WebhookURL) {
+	if !SecureURL(d.WebhookURL) {
 		return errx.Validation("webhook_url must use HTTPS (HTTP allowed only on loopback)")
 	}
 	if strings.TrimSpace(d.WebhookToken) == "" {
 		return errx.Validation("webhook_token is required")
 	}
-	if d.InvitationURL != "" && !secureURL(d.InvitationURL) {
+	if d.InvitationURL != "" && !SecureURL(d.InvitationURL) {
 		return errx.Validation("invitation_url must use HTTPS (HTTP allowed only on loopback)")
 	}
 	return nil
 }
 
-func secureURL(raw string) bool {
+// SecureURL reports whether raw is an absolute HTTPS URL, or HTTP on
+// loopback, without credentials or fragment.
+func SecureURL(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" {
 		return false
