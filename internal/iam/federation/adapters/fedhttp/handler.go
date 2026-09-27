@@ -1,6 +1,7 @@
 package fedhttp
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
@@ -15,10 +16,18 @@ type Handler struct {
 	flows    federation.Flows
 	actor    func(*fiber.Ctx) string
 	issue    func(*fiber.Ctx, authentication.Issued) error
+	hosted   func(*fiber.Ctx, federation.Outcome, error) error
 }
 
 func New(commands federation.Commands, queries federation.Queries, flows federation.Flows, actor func(*fiber.Ctx) string, issue func(*fiber.Ctx, authentication.Issued) error) *Handler {
-	return &Handler{commands, queries, flows, actor, issue}
+	return &Handler{commands: commands, queries: queries, flows: flows, actor: actor, issue: issue}
+}
+
+// Continue sets where callbacks of hosted login starts resume. The hosted
+// login module is assembled after federation, so the composition root sets
+// it once both exist.
+func (h *Handler) Continue(hosted func(*fiber.Ctx, federation.Outcome, error) error) {
+	h.hosted = hosted
 }
 func env(c *fiber.Ctx) identity.EnvironmentID {
 	id, _ := identity.ParseEnvironmentID(c.Params("environment"))
@@ -149,17 +158,21 @@ func (h *Handler) Start(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: out.Binding, Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: 300})
+	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: out.Binding, Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: int(config.FederationStateTTL.Seconds())})
 	c.Set("Cache-Control", "no-store")
 	return c.JSON(fiber.Map{"authorization_url": out.URL})
 }
 func (h *Handler) Callback(c *fiber.Ctx) error {
 	out, err := h.flows.Callback(c.Context(), c.Query("code"), c.Query("state"), c.Cookies("__Host-iamkit-federation"))
+	if out.Hosted() && h.hosted != nil {
+		c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: "", Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: -1})
+		return h.hosted(c, out, err)
+	}
 	if err != nil {
 		return err
 	}
 	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: "", Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: -1})
-	return h.issue(c, out)
+	return h.issue(c, out.Issued)
 }
 
 // Discover serves POST /identity/v1/discover: which login method an email

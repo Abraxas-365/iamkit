@@ -175,7 +175,7 @@ export function FederationPage() {
 }
 
 // --- OAuth Clients ---
-interface OAuthClient { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; public: boolean; active: boolean }
+interface OAuthClient { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; public: boolean; hosted_login: boolean; active: boolean }
 
 export function OAuthClientsPage() {
   const { environment } = useParams()
@@ -193,21 +193,26 @@ export function OAuthClientsPage() {
     { name: 'resource_id', label: 'Resource', type: 'select', selectPath: `${base}/resources`, selectMap: named },
     { name: 'redirect_uris', label: 'Redirect URIs', type: 'list', hint: 'Comma-separated absolute URLs.' },
     { name: 'public', label: 'Public client (no secret)', type: 'checkbox' },
+    { name: 'hosted_login', label: 'Hosted login pages', type: 'checkbox', hint: 'IAMKit shows its own sign-in pages instead of returning the authorization ticket to your UI.' },
   ]
+  const toggleHosted = async (c: OAuthClient) => {
+    try { await api.patch(`${path}/${c.id}`, { hosted_login: !c.hosted_login }); toast.success(c.hosted_login ? 'Hosted login disabled' : 'Hosted login enabled'); list.reload() } catch (e) { toast.error(message(e)) }
+  }
 
   return <div className="space-y-6">
     <PageHeader title="OAuth clients" description="OIDC/OAuth 2.0 client registrations bound to an application and resource." actions={canWrite && <Button onClick={() => setAdd(true)}><Plus className="size-4" /> Create</Button>} />
     <PaginationBar state={list} noun="clients" />
-    <DataTable columns={['Client ID', 'Application', 'Resource', 'Redirect URIs', 'Type', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
+    <DataTable columns={['Client ID', 'Application', 'Resource', 'Redirect URIs', 'Type', 'Sign-in', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
       const cells: React.ReactNode[] = [
         <ID value={c.id} />,
         <span className="text-sm">{c.application_name || <ID value={c.application_id} />}</span>,
         <span className="text-sm">{c.resource_name || <ID value={c.resource_id} />}</span>,
         <span className="text-xs break-all">{c.redirect_uris?.join(', ') || '—'}</span>,
         c.public ? 'Public' : 'Confidential',
+        c.hosted_login ? 'Hosted pages' : 'Your UI',
         <Status active={c.active} />,
       ]
-      if (canWrite) cells.push(c.active ? <Button variant="destructive" size="sm" onClick={() => setDisable(c)}>Disable</Button> : null)
+      if (canWrite) cells.push(c.active ? <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => void toggleHosted(c)}>{c.hosted_login ? 'Use your UI' : 'Use hosted pages'}</Button><Button variant="destructive" size="sm" onClick={() => setDisable(c)}>Disable</Button></div> : null)
       return cells
     })} />
     {add && <FormDialog title="Create OAuth client" description="Bind to an existing application and resource." fields={createFields} onClose={() => setAdd(false)} submit={async values => {

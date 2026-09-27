@@ -38,10 +38,11 @@ type Session struct {
 	Revoked bool
 }
 type Challenge struct {
-	User     identity.UserID
-	Email    string
-	Hash     []byte
-	Attempts int
+	User        identity.UserID
+	Environment identity.EnvironmentID
+	Email       string
+	Hash        []byte
+	Attempts    int
 }
 type Issued struct {
 	Context Context
@@ -49,4 +50,35 @@ type Issued struct {
 	Session identity.SessionID
 	Refresh string
 	Access  Access
+}
+
+// Login methods of a verified user.
+const (
+	MethodPassword = "password"
+	MethodCode     = "code"
+	MethodSSO      = "sso"
+)
+
+// Verified is a user who proved their identity before the organization of
+// the session was chosen (hosted login). Email is the address they signed in
+// with; Organization is set when the method already fixed it (organization
+// SSO).
+type Verified struct {
+	User         identity.UserID
+	Email        string
+	Method       string
+	Organization identity.OrganizationID
+}
+
+// Target is the application and resource a hosted login signs in to; the
+// organization is chosen after authentication.
+type Target struct {
+	Environment identity.EnvironmentID
+	Application identity.ApplicationID
+	Resource    identity.ResourceID
+}
+
+// Boundary completes the target with the chosen organization.
+func (t Target) Boundary(organization identity.OrganizationID) Context {
+	return Context{EnvironmentID: t.Environment, OrganizationID: organization, ApplicationID: t.Application, ResourceID: t.Resource}
 }

@@ -25,7 +25,9 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/authzmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/fedmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/hosted/hostedmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/impmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/invmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtbcrypt"
@@ -51,6 +53,12 @@ import (
 
 // Option customizes New; production callers pass none.
 type Option func(*options)
+
+// invitations joins the invitation use cases the hosted accept page needs.
+type invitations struct {
+	invitation.Commands
+	invitation.Queries
+}
 
 type options struct {
 	resolver  organization.Resolver
@@ -107,6 +115,9 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Applications = applicationModule.HTTP
 	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Key: key, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Tokens: s.Tokens, ActorID: server.OperatorID})
 	s.OAuth = oauthModule.HTTP
+	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: oauthModule.Flows, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, Finish: oauthModule.HTTP.Finish, ActorID: server.OperatorID})
+	s.Hosted = hostedModule.HTTP
+	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
 	serviceAccountModule := sacctmodule.New(sacctmodule.Deps{DB: db})
 	s.ServiceAccounts = serviceAccountModule.HTTP
 	s.Activity = managementModule.Activity

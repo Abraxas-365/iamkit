@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
@@ -98,7 +99,11 @@ func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentI
 	return row.connection(), failure(err)
 }
 func (r *Repository) SaveState(ctx context.Context, hash []byte, s federation.State) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,now()+interval '5 minutes')`, hash, s.Connection, s.Boundary.EnvironmentID, s.Boundary.OrganizationID, s.Boundary.ApplicationID, s.Boundary.ResourceID, s.Binding, s.Nonce, s.Verifier)
+	var continuation *string
+	if s.Continuation != "" {
+		continuation = &s.Continuation
+	}
+	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+make_interval(secs => $11))`, hash, s.Connection, s.Boundary.EnvironmentID, s.Boundary.OrganizationID, s.Boundary.ApplicationID, s.Boundary.ResourceID, s.Binding, s.Nonce, s.Verifier, continuation, config.FederationStateTTL.Seconds())
 	return conflict(err)
 }
 func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (federation.State, error) {
@@ -117,18 +122,19 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 		Binding      []byte                  `db:"binding_hash"`
 		Nonce        string                  `db:"nonce"`
 		Verifier     string                  `db:"verifier"`
+		Continuation sql.NullString          `db:"continuation"`
 	}
-	err = tx.GetContext(ctx, &row, `SELECT connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier FROM federation_states WHERE secret_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, hash)
+	err = tx.GetContext(ctx, &row, `SELECT connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation FROM federation_states WHERE secret_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, hash)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, failure(err)
 	}
 	if errors.Is(err, sql.ErrNoRows) || subtle.ConstantTimeCompare(row.Binding, binding) != 1 {
 		return out, errx.Unauthorized("invalid federation state or browser binding")
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE federation_states SET consumed_at=now() WHERE secret_hash=$1`, hash); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE federation_states SET consumed_at=now(), continuation=NULL WHERE secret_hash=$1`, hash); err != nil {
 		return out, failure(err)
 	}
-	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier}
+	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier, Continuation: row.Continuation.String}
 	return out, failure(tx.Commit())
 }
 func (r *Repository) LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, identity.UserID, error) {

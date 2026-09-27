@@ -62,6 +62,9 @@ func TestEnvironmentMissingEndpoints(t *testing.T) {
 	env.UnlinkExternalIdentity(ctx, "conn-1", "user-1")
 	env.ProvisioningCredentials(ctx)
 	env.OAuthClients(ctx)
+	env.UpdateOAuthClient(ctx, "client-1", OAuthClientPatch{})
+	env.LoginSettings(ctx)
+	env.SetLoginSettings(ctx, LoginSettings{})
 	env.RoleAssignments(ctx)
 	env.Grant(ctx, "grant-1")
 	env.DeleteGrant(ctx, "grant-1")
@@ -76,6 +79,9 @@ func TestEnvironmentMissingEndpoints(t *testing.T) {
 		"DELETE /management/v1/environments/env-1/external-identities/conn-1/user-1",
 		"GET /management/v1/environments/env-1/provisioning-credentials",
 		"GET /management/v1/environments/env-1/oauth-clients",
+		"PATCH /management/v1/environments/env-1/oauth-clients/client-1",
+		"GET /management/v1/environments/env-1/login-settings",
+		"PUT /management/v1/environments/env-1/login-settings",
 		"GET /management/v1/environments/env-1/role-assignments",
 		"GET /management/v1/environments/env-1/grants/grant-1",
 		"DELETE /management/v1/environments/env-1/grants/grant-1",

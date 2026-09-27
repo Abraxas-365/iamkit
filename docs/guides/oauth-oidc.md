@@ -8,7 +8,8 @@ universal OAuth requirement.
 ## Register
 
 Operator POSTs `/management/v1/environments/ENV_UUID/oauth-clients` with
-`application_id`, `resource_id`, `redirect_uris` and `public`. The app/resource must
+`application_id`, `resource_id`, `redirect_uris`, `public` and optionally
+`hosted_login`. The app/resource must
 be linked. Redirects must be exact HTTPS URLs. Capture `client_id`; a confidential
 client also receives `client_secret` once. Never put a confidential secret in a SPA.
 
@@ -20,7 +21,9 @@ client also receives `client_secret` once. Never put a confidential secret in a 
    state, nonce, scope including `openid`, `code_challenge`, and
    `code_challenge_method=S256`.
 3. IAMKit returns JSON containing `authorization_ticket` and client context, and
-   sets a Secure browser-binding cookie. It does **not** render a hosted login page.
+   sets a Secure browser-binding cookie (ticket valid 10 minutes). For clients
+   with `hosted_login` it instead redirects to its own pages; see
+   [hosted login](hosted-login.md) and skip to step 5.
 4. Your interaction UI signs the user in to the same app/resource and displays
    consent. POST `/oauth/authorize/complete` with the user access token, browser
    cookie and `{authorization_ticket,approve:true}`.

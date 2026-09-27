@@ -30,6 +30,13 @@ const (
 	OAuthAccessTokenLifespan   = 15 * time.Minute
 	OAuthRefreshTokenLifespan  = 24 * time.Hour
 	OAuthIDTokenLifespan       = 15 * time.Minute
+	// OAuthAuthorizationTicketTTL bounds the interaction between
+	// /oauth/authorize and completion; the hosted login pages (identify,
+	// verify, choose organization) run inside this window.
+	OAuthAuthorizationTicketTTL = 10 * time.Minute
+	// FederationStateTTL bounds a round trip to an external identity
+	// provider (state row and browser binding cookie).
+	FederationStateTTL = 5 * time.Minute
 )
 
 // ExternalHTTPTimeout is the timeout for all outbound HTTP calls

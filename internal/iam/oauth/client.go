@@ -11,4 +11,7 @@ type Client struct {
 	Redirects   []string
 	Public      bool
 	Secret      []byte
+	// HostedLogin sends the browser to IAMKit's hosted sign-in pages instead
+	// of returning the headless authorization ticket.
+	HostedLogin bool
 }

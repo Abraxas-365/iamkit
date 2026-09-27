@@ -6,8 +6,10 @@ issuer, including the public HTTPS origin.
 
 | Endpoint | Contract |
 | --- | --- |
-| `GET /oauth/authorize` | Authorization code request; returns JSON ticket/context and Secure binding cookie |
+| `GET /oauth/authorize` | Authorization code request; returns JSON ticket/context and Secure binding cookie, or `303` to `/hosted/login?ticket=…` for `hosted_login` clients |
 | `POST /oauth/authorize/complete` | JSON `authorization_ticket`, `approve`; requires browser cookie and matching user Bearer token |
+| `GET /hosted/login`, `POST /hosted/login/*` | [Hosted sign-in pages](../../guides/hosted-login.md) (HTML forms); every step requires the ticket and binding cookie |
+| `GET,POST /hosted/invite` | Hosted invitation preview/accept (`token`) |
 | `POST /oauth/token` | Form-encoded code or refresh grant; OAuth token response |
 | `POST /oauth/revoke` | Form-encoded `token`, client authentication; protocol revocation response |
 
@@ -22,14 +24,15 @@ Code exchange fields: `grant_type=authorization_code`, `code`, `redirect_uri`,
 confidential clients use `client_secret_basic` as advertised by discovery. Use a
 standards-aware library for form/Basic credential encoding.
 
-Authorization codes last five minutes; access and ID tokens fifteen minutes;
+Authorization codes last five minutes; authorization tickets ten minutes; access and ID tokens fifteen minutes;
 refresh lifespan is constrained by session validity. Replay protection is not a
 license to retry old rotating credentials indiscriminately. Token endpoint errors
 use OAuth fields (`error`, etc.), not the management JSON envelope.
 
 Client administration: POST/GET `/management/v1/environments/:environment/oauth-clients`,
-DELETE `.../oauth-clients/:id`. Create returns 201
-`{id,client_id,client_secret}`; list uses a page; disable returns 204.
+PATCH `.../oauth-clients/:id` (`{hosted_login}`), DELETE `.../oauth-clients/:id`. Create returns 201
+`{id,client_id,client_secret}`; list uses a page with `hosted_login`; update and disable return 204.
+Branding: GET/PUT `.../login-settings` `{display_name,logo_url,accent_color}` (200).
 
 Source: `internal/iam/oauth/adapters/oauthhttp/handler.go`,
 `oauthsvc/service.go`, `internal/config/constants.go`. Follow the

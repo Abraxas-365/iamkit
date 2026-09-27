@@ -53,15 +53,29 @@ func (t *Transaction) PasswordUser(ctx context.Context, b authentication.Context
 }
 func (t *Transaction) SSORequired(ctx context.Context, b authentication.Context, email string) (bool, error) {
 	var required bool
+	// A zero organization (hosted login, organization not chosen yet) checks
+	// every organization that enforces SSO for the email's domain.
 	err := t.tx.GetContext(ctx, &required, `SELECT EXISTS(
 		SELECT 1 FROM federation_connections c
 		JOIN organization_domains d ON d.organization_id=c.organization_id AND d.environment_id=c.environment_id
-		WHERE c.environment_id=$1 AND c.organization_id=$2 AND c.active AND c.enforcement='enforced'
+		WHERE c.environment_id=$1 AND ($2::uuid IS NULL OR c.organization_id=$2) AND c.active AND c.enforcement='enforced'
 		  AND d.domain=$3 AND d.verified_at IS NOT NULL
 		  AND NOT EXISTS(SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id AND u.environment_id=m.environment_id
-		                 WHERE m.environment_id=$1 AND m.organization_id=$2 AND u.email=$4 AND m.sso_bypass))`,
+		                 WHERE m.environment_id=$1 AND m.organization_id=c.organization_id AND u.email=$4 AND m.sso_bypass))`,
 		b.EnvironmentID, b.OrganizationID, identity.EmailDomain(email), email)
 	return required, failure(err)
+}
+func (t *Transaction) AccessibleOrganizations(ctx context.Context, target authentication.Target, user identity.UserID) ([]authentication.Organization, error) {
+	out := []authentication.Organization{}
+	err := t.tx.SelectContext(ctx, &out, `SELECT o.id,o.name,m.org_unit_id,m.manager_id FROM memberships m
+		JOIN users u ON u.id=m.user_id AND u.environment_id=m.environment_id
+		JOIN organizations o ON o.id=m.organization_id AND o.environment_id=m.environment_id
+		JOIN applications a ON a.id=$3 AND a.environment_id=m.environment_id
+		JOIN application_resources ar ON ar.environment_id=m.environment_id AND ar.application_id=a.id AND ar.resource_id=$4
+		WHERE m.environment_id=$1 AND m.user_id=$2 AND m.active AND u.active AND o.active AND a.active
+		  AND EXISTS(SELECT 1 FROM effective_grants g WHERE g.environment_id=m.environment_id AND g.organization_id=m.organization_id AND g.user_id=m.user_id AND g.resource_id=$4)
+		ORDER BY o.name, o.id`, target.Environment, user, target.Application, target.Resource)
+	return out, failure(err)
 }
 func Resolve(ctx context.Context, q sqlx.QueryerContext, b authentication.Context, user identity.UserID) (authentication.Access, error) {
 	var row struct {
@@ -141,12 +155,13 @@ func (t *Transaction) Challenge(ctx context.Context, id identity.ChallengeID, _ 
 		return out, errx.Unauthorized("invalid challenge")
 	}
 	var row struct {
-		User     identity.UserID `db:"user_id"`
-		Hash     []byte          `db:"secret_hash"`
-		Attempts int             `db:"attempts"`
+		User        identity.UserID        `db:"user_id"`
+		Environment identity.EnvironmentID `db:"environment_id"`
+		Hash        []byte                 `db:"secret_hash"`
+		Attempts    int                    `db:"attempts"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT user_id,secret_hash,attempts FROM identity_challenges WHERE id=$1 AND purpose=$2 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, id, purpose)
-	return authentication.Challenge{User: row.User, Email: account.Email, Hash: row.Hash, Attempts: row.Attempts}, credentialError(err)
+	err := t.tx.GetContext(ctx, &row, `SELECT user_id,environment_id,secret_hash,attempts FROM identity_challenges WHERE id=$1 AND purpose=$2 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, id, purpose)
+	return authentication.Challenge{User: row.User, Environment: row.Environment, Email: account.Email, Hash: row.Hash, Attempts: row.Attempts}, credentialError(err)
 }
 func (t *Transaction) FailChallenge(ctx context.Context, id identity.ChallengeID) error {
 	_, err := t.tx.ExecContext(ctx, `UPDATE identity_challenges SET attempts=attempts+1 WHERE id=$1`, id)

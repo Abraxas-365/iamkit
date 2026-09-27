@@ -40,6 +40,7 @@ internal/
 | authentication | `internal/iam/authentication` | Password login, sessions, refresh tokens, challenges |
 | authorization | `internal/iam/authorization` | Resources, roles, grants, role assignments, group role assignments |
 | federation | `internal/iam/federation` | External OIDC identity provider connections |
+| hosted | `internal/iam/hosted` | Server-rendered hosted sign-in/invitation pages for `hosted_login` OAuth clients, login branding |
 | impersonation | `internal/iam/impersonation` | Audited admin impersonation |
 | invitation | `internal/iam/invitation` | Email invitations into organizations (token issue, preview, accept) |
 | management | `internal/iam/management` | Workspaces, projects, environments, operators, keys |
@@ -166,7 +167,9 @@ infrastructure concerns that should be swappable:
 | `Delivery` | authentication | Send challenge codes and invitations (email webhook, `Message`) |
 | `Mailer` | invitation | Send invitation mail and build links; `invmail` adapts authentication delivery |
 | `Provider` | federation | OIDC provider discovery and credential approval |
-| `Flows` | federation | Browser login flows (`Discover`, `Start`, `Callback`), separate from Commands/Queries |
+| `Flows` | federation | Browser login flows (`Discover`, `Start`, `StartHosted`, `Callback`, `EnvironmentConnections`), separate from Commands/Queries. `Callback` returns an `Outcome`: a session, or for hosted starts (`Continuation` = OAuth ticket) only the `Verified` identity |
+| `Authenticator` | authentication | Verify a credential without a session (`VerifyPassword`, `VerifyCode` → `Verified`), list accessible `Organizations`, then `Issue` the session once the organization is chosen (re-checks SSO enforcement) |
+| `Flow` | hosted | The hosted sign-in journey; consumes the `Authorizations` (pending OAuth ticket), `Challenges`, `Federation` and `Invitations` ports declared in `hosted/ports.go` plus `authentication.Authenticator` |
 | `Cipher` | federation | Seal/open stored client secrets; implemented by `internal/cryptox.Sealer` (`IAMKIT_ENCRYPTION_KEY`), injected via `bootstrap.WithSealer` |
 | `TokenCodec` | authentication | JWT sign/parse (combines `TokenIssuer` + `TokenValidator`) |
 | `Transaction` | authentication, invitation, oauth | Database transaction handle for multi-step mutations |
@@ -196,7 +199,16 @@ consumed by services.
 
 7. **The composition root** (`internal/bootstrap/container.go`) calls module
    assemblers and wires cross-module dependencies (e.g. authentication sessions
-   into federation).
+   into federation). Cycles between HTTP adapters are closed there with a
+   setter: `fedhttp.Handler.Continue(hostedhttp.Handler.Federated)` lets the
+   federation callback resume a hosted login, and the hosted module receives
+   `oauthhttp.Handler.Finish` to complete the authorization.
+
+8. **Hosted pages** (`hostedhttp`) are server-rendered `html/template` files
+   embedded from `templates/`, without JavaScript. Every page sets its own CSP
+   with a per-response style nonce; `internal/server/hosted.go` mounts them
+   under `/hosted` with frame/referrer headers and per-route rate limits.
+   Every form action re-validates the OAuth ticket and its binding cookie.
 
 ### Interface Parameter Naming
 

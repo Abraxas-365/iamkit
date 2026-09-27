@@ -15,6 +15,7 @@ type ClientView struct {
 	ResourceName    string                 `json:"resource_name"`
 	Redirects       []string               `json:"redirect_uris"`
 	Public          bool                   `json:"public"`
+	HostedLogin     bool                   `json:"hosted_login"`
 	Active          bool                   `json:"active"`
 }
 
@@ -23,6 +24,19 @@ type Registration struct {
 	Resource    identity.ResourceID    `json:"resource_id"`
 	Redirects   []string               `json:"redirect_uris"`
 	Public      bool                   `json:"public"`
+	HostedLogin bool                   `json:"hosted_login"`
+}
+
+// ClientUpdate changes the settings of an existing client.
+type ClientUpdate struct {
+	HostedLogin *bool `json:"hosted_login"`
+}
+
+func (u ClientUpdate) Validate() error {
+	if u.HostedLogin == nil {
+		return errx.Validation("hosted_login is required")
+	}
+	return nil
 }
 
 func (r Registration) Validate() error {
@@ -49,4 +63,19 @@ type Ticket struct {
 	Binding   []byte            `db:"binding_hash"`
 	Form      string            `db:"request_form"`
 	Requested time.Time         `db:"requested_at"`
+}
+
+// Pending is an unfinished authorization: its active client and the
+// original authorize request form.
+type Pending struct {
+	Client *Client
+	Form   string
+}
+
+// Login is the session a hosted login completes an authorization with.
+type Login struct {
+	User         identity.UserID
+	Organization identity.OrganizationID
+	Session      identity.SessionID
+	Permissions  []string
 }

@@ -33,7 +33,8 @@ With management authority, use
 - `PUT`: replace with `{"webhook_url":"https://mail.example.com/iamkit","webhook_token":"PRIVATE_DELIVERY_TOKEN"}`;
   both fields are required, success is 204. Optional `invitation_url` (same URL
   rules) is your page that accepts [invitations](../reference/api/users-and-organizations.md#invitations);
-  IAMKit appends `token=…` to it and sends the result as `link`. Use private request files, not tracked
+  IAMKit appends `token=…` to it and sends the result as `link`. To use IAMKit's own accept page, set it to
+  `https://IAMKIT_HOST/hosted/invite` ([hosted login](hosted-login.md#invitations)). Use private request files, not tracked
   configuration or shell history. Endpoint changes control where challenge codes go.
 - `DELETE`: 204; removes the override and **restores global fallback**, not
   necessarily disables delivery. Deleting an absent override returns 404.

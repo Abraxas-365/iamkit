@@ -151,25 +151,53 @@ func (s *Service) Discover(ctx context.Context, environment identity.Environment
 	return out, nil
 }
 
+func (s *Service) EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]federation.ConnectionSummary, error) {
+	if environment.IsZero() {
+		return nil, errx.Validation("environment_id is required")
+	}
+	return s.repository.EnvironmentConnections(ctx, environment)
+}
+
 func (s *Service) Start(ctx context.Context, b authentication.Context, id identity.ConnectionID) (federation.Start, error) {
-	var out federation.Start
 	if err := b.Validate(); err != nil {
-		return out, err
+		return federation.Start{}, err
 	}
-	if id.IsZero() {
-		return out, errx.Validation("invalid federation context")
-	}
-	if !strings.HasPrefix(s.issuer, "https://") {
-		return out, errx.Validation("federation requires HTTPS issuer")
-	}
-	connection, err := s.repository.Find(ctx, b.EnvironmentID, id)
+	connection, err := s.connection(ctx, b.EnvironmentID, id)
 	if err != nil {
-		return out, err
+		return federation.Start{}, err
 	}
 	// An organization connection only signs users in to its organization.
 	if connection.Scoped() && connection.Organization != b.OrganizationID {
-		return out, errx.Validation("connection belongs to another organization")
+		return federation.Start{}, errx.Validation("connection belongs to another organization")
 	}
+	return s.start(ctx, connection, federation.State{Connection: id, Boundary: b})
+}
+
+func (s *Service) StartHosted(ctx context.Context, target authentication.Target, id identity.ConnectionID, continuation string) (federation.Start, error) {
+	if target.Environment.IsZero() || target.Application.IsZero() || target.Resource.IsZero() || continuation == "" {
+		return federation.Start{}, errx.Validation("invalid federation context")
+	}
+	connection, err := s.connection(ctx, target.Environment, id)
+	if err != nil {
+		return federation.Start{}, err
+	}
+	// Organization connections fix the organization now; environment
+	// connections leave it to the hosted organization choice.
+	return s.start(ctx, connection, federation.State{Connection: id, Boundary: target.Boundary(connection.Organization), Continuation: continuation})
+}
+
+func (s *Service) connection(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
+	if id.IsZero() {
+		return federation.Connection{}, errx.Validation("invalid federation context")
+	}
+	if !strings.HasPrefix(s.issuer, "https://") {
+		return federation.Connection{}, errx.Validation("federation requires HTTPS issuer")
+	}
+	return s.repository.Find(ctx, environment, id)
+}
+
+func (s *Service) start(ctx context.Context, connection federation.Connection, row federation.State) (federation.Start, error) {
+	var out federation.Start
 	state, hash, err := s.secrets.Generate("ik_state_")
 	if err != nil {
 		return out, err
@@ -187,14 +215,15 @@ func (s *Service) Start(ctx context.Context, b authentication.Context, id identi
 	if err != nil {
 		return out, err
 	}
-	if err = s.repository.SaveState(ctx, hash, federation.State{Connection: id, Boundary: b, Binding: bindingHash, Nonce: nonce, Verifier: verifier}); err != nil {
+	row.Binding, row.Nonce, row.Verifier = bindingHash, nonce, verifier
+	if err = s.repository.SaveState(ctx, hash, row); err != nil {
 		return out, err
 	}
 	return federation.Start{URL: address, Binding: binding}, nil
 }
 
-func (s *Service) Callback(ctx context.Context, code, state, binding string) (authentication.Issued, error) {
-	var out authentication.Issued
+func (s *Service) Callback(ctx context.Context, code, state, binding string) (federation.Outcome, error) {
+	var out federation.Outcome
 	if code == "" || state == "" {
 		return out, errx.Unauthorized("invalid federation callback")
 	}
@@ -202,6 +231,7 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (au
 	if err != nil {
 		return out, err
 	}
+	out.Continuation = row.Continuation
 	connection, err := s.repository.Find(ctx, row.Boundary.EnvironmentID, row.Connection)
 	if err != nil {
 		return out, err
@@ -226,7 +256,12 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (au
 		}
 	}
 	defer tx.Rollback()
-	out, err = s.sessions.NewSession(ctx, tx, row.Boundary, user)
+	if out.Hosted() {
+		// The hosted pages choose the organization and issue the session.
+		out.Verified = authentication.Verified{User: user, Email: claims.Email, Method: authentication.MethodSSO, Organization: connection.Organization}
+		return out, nil
+	}
+	out.Issued, err = s.sessions.NewSession(ctx, tx, row.Boundary, user)
 	if connection.Scoped() && unauthorized(err) {
 		// The provider proved the identity; what is missing is access
 		// (inactive membership, or no roles for a just-provisioned user).

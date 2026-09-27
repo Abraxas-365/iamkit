@@ -14,9 +14,12 @@ requires owner. Credential responses are secrets and must be captured once.
 | `DELETE /federation-connections/:id` | — | 204; disable |
 | `POST /external-identities` | `connection_id,user_id,subject` | 204 |
 | `DELETE /external-identities/:connection/:user` | — | 204 |
-| `POST /oauth-clients` | `application_id,resource_id,redirect_uris,public` | 201 `{id,client_id,client_secret}` |
-| `GET /oauth-clients` | — | 200 page |
+| `POST /oauth-clients` | `application_id,resource_id,redirect_uris,public`, optional `hosted_login` | 201 `{id,client_id,client_secret}` |
+| `GET /oauth-clients` | — | 200 page (includes `hosted_login`) |
+| `PATCH /oauth-clients/:id` | `hosted_login` | 204 |
 | `DELETE /oauth-clients/:id` | — | 204 |
+| `GET /login-settings` | — | 200 `{environment_id,display_name,logo_url,accent_color,updated_at}` (defaults when unset) |
+| `PUT /login-settings` | `display_name` (≤100), `logo_url` (HTTPS), `accent_color` (`#rrggbb`) | 200 normalized settings |
 | `POST /service-accounts` | `name,application_id,resource_id,permissions`, optional `expires_in` | 201 `{id,secret,expires_at}` |
 | `GET /service-accounts` | — | 200 page |
 | `DELETE /service-accounts/:id` | — | 204 |

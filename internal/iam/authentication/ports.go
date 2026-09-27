@@ -18,6 +18,20 @@ type SessionCreator interface {
 	NewSession(ctx context.Context, tx Transaction, boundary Context, user identity.UserID) (Issued, error)
 }
 
+// Authenticator splits login in two for the hosted pages: verify who the
+// user is (no organization yet), then issue the session once the
+// organization is chosen.
+type Authenticator interface {
+	VerifyPassword(ctx context.Context, environment identity.EnvironmentID, email, password string) (Verified, error)
+	VerifyCode(ctx context.Context, environment identity.EnvironmentID, challenge identity.ChallengeID, code string) (Verified, error)
+	// Organizations lists the organizations in which the user may use the
+	// target application and resource.
+	Organizations(ctx context.Context, target Target, user identity.UserID) ([]Organization, error)
+	// Issue creates the session; password and code logins are refused where
+	// the organization enforces SSO.
+	Issue(ctx context.Context, boundary Context, verified Verified) (Issued, error)
+}
+
 type SessionCommands interface {
 	Logout(ctx context.Context, token Token) error
 	UpdateProfile(ctx context.Context, token Token, name string) error
@@ -99,6 +113,10 @@ type Transaction interface {
 	// the email: it has an active enforced connection, has verified the
 	// email's domain, and the email's user has no sso_bypass membership.
 	SSORequired(ctx context.Context, boundary Context, email string) (bool, error)
+	// AccessibleOrganizations lists active organizations where the user is an
+	// active member with grants on the target resource of an active
+	// application linked to it.
+	AccessibleOrganizations(ctx context.Context, target Target, user identity.UserID) ([]Organization, error)
 	Resolve(ctx context.Context, boundary Context, user identity.UserID) (Access, error)
 	CreateSession(ctx context.Context, boundary Context, user identity.UserID, session identity.SessionID, expires time.Time) error
 	SaveRefresh(ctx context.Context, hash []byte, user identity.UserID, session identity.SessionID, expires time.Time) error

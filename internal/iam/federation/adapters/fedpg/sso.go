@@ -10,6 +10,15 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
+// EnvironmentConnections lists active connections not owned by an
+// organization. Their users must already be linked: environment
+// connections never provision.
+func (r *Repository) EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]federation.ConnectionSummary, error) {
+	out := []federation.ConnectionSummary{}
+	err := r.db.SelectContext(ctx, &out, `SELECT id,name FROM federation_connections WHERE environment_id=$1 AND organization_id IS NULL AND active ORDER BY name, id`, environment)
+	return out, failure(err)
+}
+
 func (r *Repository) HasVerifiedDomain(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (bool, error) {
 	var ok bool
 	err := r.db.GetContext(ctx, &ok, `SELECT EXISTS(SELECT 1 FROM organization_domains WHERE environment_id=$1 AND organization_id=$2 AND verified_at IS NOT NULL)`, environment, organization)

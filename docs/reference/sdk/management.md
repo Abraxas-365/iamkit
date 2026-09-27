@@ -8,6 +8,9 @@ Use `context.WithTimeout` and check every returned error before using an ID.
 Invitations: `Invite`, `Invitations(ctx, org, status)` (status filtered
 client-side on the first page), `Invitation`, `ResendInvitation` and
 `RevokeInvitation`; the issued token is returned only by `Invite` and resend.
+Hosted login: `OAuthClient.HostedLogin` at creation, `UpdateOAuthClient(ctx, id,
+OAuthClientPatch{HostedLogin: &on})`, and branding with `LoginSettings` /
+`SetLoginSettings` (see [hosted login](../../guides/hosted-login.md)).
 
 For a list returning a page, a low-level pattern is:
 

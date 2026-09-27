@@ -45,6 +45,15 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	id := identity.NewClientID()
 	return id, raw, s.repository.Create(ctx, environment, id, input, hash)
 }
+func (s *Service) Update(ctx context.Context, m oauth.Mutation, id identity.ClientID, input oauth.ClientUpdate) error {
+	if id.IsZero() {
+		return errx.Validation("invalid client")
+	}
+	if err := input.Validate(); err != nil {
+		return err
+	}
+	return s.repository.Update(ctx, m, id, input)
+}
 func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
 	if id.IsZero() {
 		return errx.Validation("invalid client")
@@ -74,6 +83,28 @@ func (s *Service) Start(ctx context.Context, client *oauth.Client, form string) 
 		return "", "", err
 	}
 	return ticket, binding, s.repository.SaveTicket(ctx, hash, bindingHash, client, form)
+}
+
+func (s *Service) Pending(ctx context.Context, ticket, binding string) (oauth.Pending, error) {
+	if !strings.HasPrefix(ticket, "ik_authorize_") || binding == "" {
+		return oauth.Pending{}, invalidTicket()
+	}
+	row, err := s.repository.PendingTicket(ctx, s.secrets.Hash(ticket))
+	if err != nil {
+		return oauth.Pending{}, invalidTicket()
+	}
+	if subtle.ConstantTimeCompare(row.Binding, s.secrets.Hash(binding)) != 1 {
+		return oauth.Pending{}, invalidTicket()
+	}
+	client, err := s.Client(ctx, row.Client)
+	if err != nil {
+		return oauth.Pending{}, err
+	}
+	return oauth.Pending{Client: client, Form: row.Form}, nil
+}
+
+func invalidTicket() error {
+	return errx.Unauthorized("invalid authorization ticket or browser binding")
 }
 
 func (s *Service) Complete(ctx context.Context, ticket, binding string, approve bool, prepare func(oauth.Ticket, oauth.Authorization) error) error {

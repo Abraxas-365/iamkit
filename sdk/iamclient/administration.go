@@ -62,6 +62,14 @@ type OAuthClient struct {
 	ResourceID    string   `json:"resource_id"`
 	RedirectURIs  []string `json:"redirect_uris"`
 	Public        bool     `json:"public"`
+	// HostedLogin sends /oauth/authorize to IAMKit's hosted sign-in pages
+	// instead of returning the authorization ticket to your UI.
+	HostedLogin bool `json:"hosted_login,omitempty"`
+}
+
+// OAuthClientPatch changes an OAuth client; nil fields are unchanged.
+type OAuthClientPatch struct {
+	HostedLogin *bool `json:"hosted_login,omitempty"`
 }
 
 type OAuthCredential struct {
@@ -359,6 +367,10 @@ func (e Environment) OAuthClients(ctx context.Context) ([]OAuthCredential, error
 
 func (e Environment) DisableOAuthClient(ctx context.Context, id string) error {
 	return e.operation(ctx, "DELETE", []string{"oauth-clients", id}, nil, nil)
+}
+
+func (e Environment) UpdateOAuthClient(ctx context.Context, id string, input OAuthClientPatch) error {
+	return e.operation(ctx, "PATCH", []string{"oauth-clients", id}, input, nil)
 }
 
 // ── Federation ──

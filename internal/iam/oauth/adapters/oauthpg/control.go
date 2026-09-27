@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
@@ -42,16 +43,24 @@ func (r *Repository) Environment(ctx context.Context, id identity.ClientID) (ide
 	return environment, lookup(err)
 }
 func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID, input oauth.Registration, hash []byte) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash) VALUES($1,$2,$3,$4,$5,$6,$7)`, id, environment, input.Application, input.Resource, pq.Array(input.Redirects), input.Public, hash)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash,hosted_login) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, id, environment, input.Application, input.Resource, pq.Array(input.Redirects), input.Public, hash, input.HostedLogin)
 	return conflict(err)
 }
+func (r *Repository) Update(ctx context.Context, m oauth.Mutation, id identity.ClientID, input oauth.ClientUpdate) error {
+	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login) WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin)
+}
 func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
+	return r.audited(ctx, m, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
+}
+
+// audited runs a single-client change together with its audit event.
+func (r *Repository) audited(ctx context.Context, m oauth.Mutation, statement string, args ...any) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
+	res, err := tx.ExecContext(ctx, statement, args...)
 	if err != nil {
 		return failure(err)
 	}
@@ -89,21 +98,27 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		ResourceName    string                 `db:"resource_name"`
 		Redirects       pq.StringArray         `db:"redirect_uris"`
 		Public          bool                   `db:"public"`
+		HostedLogin     bool                   `db:"hosted_login"`
 		Active          bool                   `db:"active"`
 	}
-	sel := fmt.Sprintf("SELECT oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.public, oc.active %s ORDER BY a.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
+	sel := fmt.Sprintf("SELECT oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.public, oc.hosted_login, oc.active %s ORDER BY a.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
 		return query.Paginated[oauth.ClientView]{}, failure(err)
 	}
 	out := make([]oauth.ClientView, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), Public: row.Public, Active: row.Active})
+		out = append(out, oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), Public: row.Public, HostedLogin: row.HostedLogin, Active: row.Active})
 	}
 	return query.NewPaginated(out, total, page), nil
 }
 func (r *Repository) SaveTicket(ctx context.Context, hash, binding []byte, client *oauth.Client, form string) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_authorizations(secret_hash,environment_id,client_id,binding_hash,request_form,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval '5 minutes')`, hash, client.Environment, client.ID, binding, form)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_authorizations(secret_hash,environment_id,client_id,binding_hash,request_form,expires_at) VALUES($1,$2,$3,$4,$5,now()+make_interval(secs => $6))`, hash, client.Environment, client.ID, binding, form, config.OAuthAuthorizationTicketTTL.Seconds())
 	return failure(err)
+}
+func (r *Repository) PendingTicket(ctx context.Context, hash []byte) (oauth.Ticket, error) {
+	var row oauth.Ticket
+	err := r.db.GetContext(ctx, &row, `SELECT client_id,binding_hash,request_form,requested_at FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL`, hash)
+	return row, lookup(err)
 }
 
 type authorization struct{ tx *sqlx.Tx }

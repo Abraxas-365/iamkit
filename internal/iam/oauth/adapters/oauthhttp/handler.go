@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
@@ -40,7 +42,23 @@ func env(c *fiber.Ctx) identity.EnvironmentID {
 func (h *Handler) RegisterManagement(r fiber.Router) {
 	r.Post("/oauth-clients", h.create)
 	r.Get("/oauth-clients", h.list)
+	r.Patch("/oauth-clients/:id", h.update)
 	r.Delete("/oauth-clients/:id", h.disable)
+}
+func (h *Handler) update(c *fiber.Ctx) error {
+	clientID, err := identity.ParseClientID(c.Params("id"))
+	if err != nil {
+		return errx.Validation("invalid client id")
+	}
+	var input oauth.ClientUpdate
+	if err = c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	m := oauth.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
+	if err = h.commands.Update(c.Context(), m, clientID, input); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
 }
 func (h *Handler) create(c *fiber.Ctx) error {
 	var input oauth.Registration
@@ -130,8 +148,11 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-authorization", Value: binding, Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: 300})
+	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-authorization", Value: binding, Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: int(config.OAuthAuthorizationTicketTTL.Seconds())})
 	c.Set("Cache-Control", "no-store")
+	if client.HostedLogin {
+		return c.Redirect("/hosted/login?"+url.Values{"ticket": {ticket}}.Encode(), fiber.StatusSeeOther)
+	}
 	return c.JSON(fiber.Map{"authorization_ticket": ticket, "client_id": client.ID, "environment_id": client.Environment, "application_id": client.Application, "resource_id": client.Resource, "audience": client.Audience, "scopes": ar.GetRequestedScopes()})
 }
 func (h *Handler) complete(c *fiber.Ctx) error {
@@ -142,21 +163,39 @@ func (h *Handler) complete(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
+	return h.finish(c, input.Ticket, input.Approve, func(client *oauth.Client) (oauth.Login, error) {
+		access, err := h.tokens.Validate(c, client.Environment, client.Audience)
+		if err != nil {
+			return oauth.Login{}, errx.Forbidden("login does not match client")
+		}
+		if err = oauthsvc.ValidateLogin(access, client); err != nil {
+			return oauth.Login{}, err
+		}
+		return oauth.Login{User: access.Subject, Organization: access.OrganizationID, Session: access.SessionID, Permissions: access.Permissions}, nil
+	})
+}
+
+// Finish completes a hosted authorization with a session the hosted login
+// pages issued for the ticket's client, and redirects to the client.
+func (h *Handler) Finish(c *fiber.Ctx, ticket string, login oauth.Login) error {
+	return h.finish(c, ticket, true, func(*oauth.Client) (oauth.Login, error) { return login, nil })
+}
+
+// finish consumes the ticket and answers the original authorize request
+// with a code for the login's session.
+func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*oauth.Client) (oauth.Login, error)) error {
 	var p fosite.OAuth2Provider
 	var ar fosite.AuthorizeRequester
 	var session *oauthfosite.Session
-	err := h.flows.Complete(c.Context(), input.Ticket, c.Cookies("__Host-iamkit-authorization"), input.Approve, func(row oauth.Ticket, tx oauth.Authorization) error {
+	err := h.flows.Complete(c.Context(), ticket, c.Cookies("__Host-iamkit-authorization"), approve, func(row oauth.Ticket, tx oauth.Authorization) error {
 		var client *oauth.Client
 		var err error
 		p, client, _, err = h.load(c, row.Client)
 		if err != nil {
 			return err
 		}
-		access, err := h.tokens.Validate(c, client.Environment, client.Audience)
+		access, err := login(client)
 		if err != nil {
-			return errx.Forbidden("login does not match client")
-		}
-		if err = oauthsvc.ValidateLogin(access, client); err != nil {
 			return err
 		}
 		req := httptest.NewRequest("GET", "https://iamkit.invalid/oauth/authorize?"+row.Form, nil).WithContext(c.Context())
@@ -168,29 +207,30 @@ func (h *Handler) complete(c *fiber.Ctx) error {
 			ar.GrantScope(scope)
 		}
 		ar.GrantAudience(client.Audience)
-		expires, authenticated, err := tx.SessionTimes(c.Context(), access.SessionID)
+		expires, authenticated, err := tx.SessionTimes(c.Context(), access.Session)
 		if err != nil {
 			return err
 		}
 		session = oauthfosite.NewSession()
-		session.Subject = access.Subject.String()
+		session.Subject = access.User.String()
 		session.Deadline = expires
-		session.IDTokenClaims().Subject = access.Subject.String()
+		session.IDTokenClaims().Subject = access.User.String()
 		session.IDTokenClaims().AuthTime = authenticated
 		session.IDTokenClaims().RequestedAt = row.Requested
-		session.IDTokenClaims().Extra = map[string]interface{}{"environment_id": client.Environment.String(), "organization_id": access.OrganizationID.String()}
+		session.IDTokenClaims().Extra = map[string]interface{}{"environment_id": client.Environment.String(), "organization_id": access.Organization.String()}
 		session.IDTokenHeaders().Extra = map[string]interface{}{"kid": h.tokens.KeyID()}
 		session.AccessHeaders.Extra = map[string]interface{}{"kid": h.tokens.KeyID()}
-		session.AccessClaims.Subject = access.Subject.String()
+		session.AccessClaims.Subject = access.User.String()
 		session.AccessClaims.Issuer = h.issuer
 		session.AccessClaims.Audience = []string{client.Audience}
 		session.AccessClaims.IssuedAt = time.Now()
-		session.AccessClaims.Extra = map[string]interface{}{"purpose": "application", "environment_id": client.Environment.String(), "organization_id": access.OrganizationID.String(), "application_id": client.Application.String(), "resource_id": client.Resource.String(), "permissions": access.Permissions, "sid": access.SessionID.String(), "oauth_client_id": client.ID.String()}
+		session.AccessClaims.Extra = map[string]interface{}{"purpose": "application", "environment_id": client.Environment.String(), "organization_id": access.Organization.String(), "application_id": client.Application.String(), "resource_id": client.Resource.String(), "permissions": access.Permissions, "sid": access.Session.String(), "oauth_client_id": client.ID.String()}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
+	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-authorization", Value: "", Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: -1})
 	out, err := p.NewAuthorizeResponse(c.Context(), ar, session)
 	w := httptest.NewRecorder()
 	if err != nil {

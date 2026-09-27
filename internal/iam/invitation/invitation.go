@@ -184,6 +184,8 @@ type Accepted struct {
 
 // Preview is what an accept page may show to the token holder.
 type Preview struct {
+	// Environment brands the hosted accept page; not part of the API body.
+	Environment      identity.EnvironmentID  `json:"-"`
 	Organization     identity.OrganizationID `json:"organization_id"`
 	OrganizationName string                  `json:"organization_name"`
 	Email            string                  `json:"email"`

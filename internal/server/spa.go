@@ -31,7 +31,7 @@ func (s *Server) spaRoutes(app *fiber.App, assets fs.FS) {
 			}
 			// Skip API paths — let them 404 normally.
 			path := c.Path()
-			for _, prefix := range []string{"/management/", "/identity/", "/api/", "/scim/", "/health", "/.well-known/"} {
+			for _, prefix := range []string{"/management/", "/identity/", "/api/", "/scim/", "/hosted/", "/oauth/", "/health", "/.well-known/"} {
 				if strings.HasPrefix(path, prefix) {
 					return true
 				}

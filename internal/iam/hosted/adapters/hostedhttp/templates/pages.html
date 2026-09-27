@@ -1,0 +1,112 @@
+{{define "identify/content"}}
+<form method="post" action="/hosted/login/identify">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<label for="email">Email</label>
+<input id="email" type="email" name="email" value="{{.Email}}" autocomplete="username" required autofocus>
+<button type="submit">Continue</button>
+</form>
+{{if .Connections}}
+<div class="divider">or</div>
+{{range .Connections}}
+<form method="post" action="/hosted/login/sso">
+<input type="hidden" name="ticket" value="{{$.Ticket}}">
+<input type="hidden" name="connection_id" value="{{.ID}}">
+<button type="submit" class="secondary">Continue with {{.Name}}</button>
+</form>
+{{end}}
+{{end}}
+{{end}}
+
+{{define "password/content"}}
+<form method="post" action="/hosted/login/password">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<input type="hidden" name="email" value="{{.Email}}">
+<p class="muted">{{.Email}}</p>
+<label for="password">Password</label>
+<input id="password" type="password" name="password" autocomplete="current-password" required autofocus>
+<button type="submit">Sign in</button>
+</form>
+<div class="row">
+<form method="post" action="/hosted/login/code">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<input type="hidden" name="email" value="{{.Email}}">
+<button type="submit" class="link">Email me a code</button>
+</form>
+<form method="post" action="/hosted/login/reset">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<input type="hidden" name="email" value="{{.Email}}">
+<button type="submit" class="link">Forgot password?</button>
+</form>
+</div>
+{{if .Connection}}
+<div class="divider">or</div>
+<form method="post" action="/hosted/login/sso">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<input type="hidden" name="connection_id" value="{{.Connection}}">
+<button type="submit" class="secondary">Sign in with single sign-on</button>
+</form>
+{{end}}
+<form method="get" action="/hosted/login">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<button type="submit" class="link">Use another email</button>
+</form>
+{{end}}
+
+{{define "code/content"}}
+<form method="post" action="/hosted/login/code/verify">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<input type="hidden" name="challenge_id" value="{{.Challenge}}">
+<label for="code">Code</label>
+<input id="code" type="text" name="code" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="one-time-code" required autofocus>
+<button type="submit">Verify</button>
+</form>
+<form method="get" action="/hosted/login">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<button type="submit" class="link">Start over</button>
+</form>
+{{end}}
+
+{{define "reset/content"}}
+<form method="post" action="/hosted/login/reset/verify">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<input type="hidden" name="challenge_id" value="{{.Challenge}}">
+<input type="hidden" name="email" value="{{.Email}}">
+<label for="code">Code</label>
+<input id="code" type="text" name="code" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="one-time-code" required autofocus>
+<label for="password">New password</label>
+<input id="password" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" required>
+<button type="submit">Set password</button>
+</form>
+<form method="get" action="/hosted/login">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<button type="submit" class="link">Start over</button>
+</form>
+{{end}}
+
+{{define "organization/content"}}
+{{range .Organizations}}
+<form method="post" action="/hosted/login/organization">
+<input type="hidden" name="ticket" value="{{$.Ticket}}">
+<input type="hidden" name="organization_id" value="{{.ID}}">
+<button type="submit" class="secondary">{{.Name}}</button>
+</form>
+{{end}}
+{{end}}
+
+{{define "invite/content"}}
+{{if .Invite}}
+<form method="post" action="/hosted/invite">
+<input type="hidden" name="token" value="{{.Token}}">
+<p class="muted">{{.Invite.Email}}</p>
+<label for="name">Name</label>
+<input id="name" type="text" name="name" maxlength="200" autocomplete="name" autofocus>
+{{if .Invite.PasswordRequired}}
+<label for="password">Password</label>
+<input id="password" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" required>
+{{end}}
+<button type="submit">Accept invitation</button>
+</form>
+{{end}}
+{{end}}
+
+{{define "message/content"}}{{end}}

@@ -29,6 +29,7 @@ type Deps struct {
 }
 type Module struct {
 	Commands        authentication.Commands
+	Authenticator   authentication.Authenticator
 	Validator       authentication.TokenValidator
 	Tokens          *authhttp.Tokens
 	HTTP            *authhttp.Handler
@@ -50,5 +51,5 @@ func New(deps Deps) Module {
 	deliverySvc := authsvc.NewDeliveryService(deliveryRepo, deps.Delivery, factory)
 	service.SetDeliveryService(deliverySvc)
 	tokens := authsvc.NewTokens(repo, authjwt.New(deps.Key, deps.Issuer), authsecret.Generator{}, deps.OAuthTokens)
-	return Module{Commands: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens), HTTP: authhttp.New(service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc}
+	return Module{Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens), HTTP: authhttp.New(service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc}
 }

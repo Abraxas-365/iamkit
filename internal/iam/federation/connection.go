@@ -225,12 +225,36 @@ const (
 )
 
 type State struct {
-	Connection      identity.ConnectionID
+	Connection identity.ConnectionID
+	// Boundary.OrganizationID is zero for a hosted start through an
+	// environment connection: the organization is chosen after the callback.
 	Boundary        authentication.Context
 	Binding         []byte
 	Nonce, Verifier string
+	// Continuation is the OAuth authorization ticket a hosted login start
+	// resumes after the callback; empty for headless starts.
+	Continuation string
 }
 type Start struct{ URL, Binding string }
+
+// Outcome of a federation callback: the session of a headless start, or,
+// for a hosted login start, the verified user and the authorization ticket
+// to resume. Continuation is set even when the callback fails after the
+// state was consumed, so the hosted pages can show the error.
+type Outcome struct {
+	Issued       authentication.Issued
+	Continuation string
+	Verified     authentication.Verified
+}
+
+// Hosted reports whether the callback belongs to a hosted login.
+func (o Outcome) Hosted() bool { return o.Continuation != "" }
+
+// ConnectionSummary is what a sign-in page shows for a connection.
+type ConnectionSummary struct {
+	ID   identity.ConnectionID `json:"id" db:"id"`
+	Name string                `json:"name" db:"name"`
+}
 type Mutation struct {
 	Environment identity.EnvironmentID
 	Actor       string

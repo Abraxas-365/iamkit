@@ -12,6 +12,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedhttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/hosted/adapters/hostedhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/adapters/imphttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmthttp"
@@ -62,6 +63,7 @@ type Server struct {
 	Impersonation       *imphttp.Handler
 	Auth                *authhttp.Handler
 	OAuth               *oauthhttp.Handler
+	Hosted              *hostedhttp.Handler
 	Users               *userhttp.Handler
 	Delivery            *authhttp.DeliveryHandler
 
@@ -162,6 +164,7 @@ func (s *Server) App() *fiber.App {
 	auth.Post("/memberships", s.Tokens.AddMember)
 	s.Provisioning.Register(app)
 	s.OAuth.Register(app)
+	s.hostedRoutes(app)
 	s.apiRoutes(app, rateLimit)
 	s.spaRoutes(app, s.Console)
 	return app

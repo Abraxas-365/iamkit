@@ -456,3 +456,32 @@ func (e Environment) SetDeliveryConfig(ctx context.Context, input SetDeliveryCon
 func (e Environment) DeleteDeliveryConfig(ctx context.Context) error {
 	return e.client.Do(ctx, "DELETE", e.path("delivery"), nil, nil)
 }
+
+// ── Hosted login ──
+
+// LoginSettings brands the hosted sign-in and invitation pages. Empty
+// fields use the defaults ("Sign in", no logo, blue accent).
+type LoginSettings struct {
+	EnvironmentID string `json:"environment_id,omitempty"`
+	DisplayName   string `json:"display_name"`
+	// LogoURL must be an https URL.
+	LogoURL string `json:"logo_url"`
+	// AccentColor is "#rrggbb".
+	AccentColor string `json:"accent_color"`
+	UpdatedAt   string `json:"updated_at,omitempty"`
+}
+
+// LoginSettings returns the hosted login branding for this environment.
+func (e Environment) LoginSettings(ctx context.Context) (LoginSettings, error) {
+	var out LoginSettings
+	err := e.client.Do(ctx, "GET", e.path("login-settings"), nil, &out)
+	return out, err
+}
+
+// SetLoginSettings replaces the hosted login branding and returns the
+// normalized result.
+func (e Environment) SetLoginSettings(ctx context.Context, input LoginSettings) (LoginSettings, error) {
+	var out LoginSettings
+	err := e.client.Do(ctx, "PUT", e.path("login-settings"), input, &out)
+	return out, err
+}

@@ -265,6 +265,7 @@ func (s *Service) Preview(ctx context.Context, token string) (invitation.Preview
 		return invitation.Preview{}, invitation.ErrInvalid
 	}
 	return invitation.Preview{
+		Environment:  t.Environment,
 		Organization: t.Invitation.Organization, OrganizationName: t.OrgName,
 		Email: invitation.Mask(t.Invitation.Email), ExpiresAt: t.Invitation.ExpiresAt, Status: status,
 		PasswordRequired: !t.Account.Exists() && !t.SSORequired, SSORequired: t.SSORequired,

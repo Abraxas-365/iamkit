@@ -23,7 +23,14 @@ type Queries interface {
 type Flows interface {
 	Discover(ctx context.Context, environment identity.EnvironmentID, email string) (Discovery, error)
 	Start(ctx context.Context, boundary authentication.Context, connection identity.ConnectionID) (Start, error)
-	Callback(ctx context.Context, code, state, binding string) (authentication.Issued, error)
+	// StartHosted starts a login for the hosted pages: the organization is
+	// the connection's own, or chosen after the callback for environment
+	// connections. continuation is the authorization ticket to resume.
+	StartHosted(ctx context.Context, target authentication.Target, connection identity.ConnectionID, continuation string) (Start, error)
+	Callback(ctx context.Context, code, state, binding string) (Outcome, error)
+	// EnvironmentConnections lists the active connections that serve the
+	// whole environment (social and workforce providers shown as buttons).
+	EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]ConnectionSummary, error)
 }
 
 type Repository interface {
@@ -41,6 +48,7 @@ type Repository interface {
 	// Discover returns the SSO route for a verified domain; the zero value
 	// when no organization verified it or it has no active connection.
 	Discover(ctx context.Context, environment identity.EnvironmentID, domain string) (Discovery, error)
+	EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]ConnectionSummary, error)
 	SaveState(ctx context.Context, hash []byte, s State) error
 	ConsumeState(ctx context.Context, stateHash, bindingHash []byte) (State, error)
 	// LinkedUser returns an open transaction and the linked active user, or
