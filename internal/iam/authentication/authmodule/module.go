@@ -39,8 +39,8 @@ type Module struct {
 }
 type federationSessions struct{ service *authsvc.Service }
 
-func (s federationSessions) SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Result, error) {
-	return s.service.SignIn(ctx, tx, boundary, user, authentication.MethodSSO)
+func (s federationSessions) SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, email string, organizationSSO bool) (authentication.Result, error) {
+	return s.service.SignInFederated(ctx, tx, boundary, user, email, organizationSSO)
 }
 func New(deps Deps) Module {
 	repo := authpg.New(deps.DB)

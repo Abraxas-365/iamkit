@@ -40,21 +40,28 @@ func conflict(err error) error {
 
 // connectionRow maps nullable columns onto federation.Connection.
 type connectionRow struct {
-	ID           identity.ConnectionID   `db:"id"`
-	Environment  identity.EnvironmentID  `db:"environment_id"`
-	Organization identity.OrganizationID `db:"organization_id"`
-	Name         string                  `db:"name"`
-	Issuer       string                  `db:"issuer"`
-	Client       string                  `db:"client_id"`
-	SecretEnv    sql.NullString          `db:"secret_env"`
-	Sealed       sql.NullString          `db:"secret_sealed"`
-	JIT          bool                    `db:"jit_provisioning"`
-	JITGroup     identity.GroupID        `db:"jit_group_id"`
-	Enforcement  string                  `db:"enforcement"`
+	ID                 identity.ConnectionID   `db:"id"`
+	Environment        identity.EnvironmentID  `db:"environment_id"`
+	Organization       identity.OrganizationID `db:"organization_id"`
+	Name               string                  `db:"name"`
+	Issuer             string                  `db:"issuer"`
+	Client             string                  `db:"client_id"`
+	SecretEnv          sql.NullString          `db:"secret_env"`
+	Sealed             sql.NullString          `db:"secret_sealed"`
+	JIT                bool                    `db:"jit_provisioning"`
+	JITGroup           identity.GroupID        `db:"jit_group_id"`
+	Enforcement        string                  `db:"enforcement"`
+	Provider           string                  `db:"provider"`
+	Options            options                 `db:"options"`
+	Signup             bool                    `db:"signup"`
+	LinkEmail          bool                    `db:"link_email"`
+	SignupOrganization identity.OrganizationID `db:"signup_organization_id"`
+	SignupGroup        identity.GroupID        `db:"signup_group_id"`
 }
 
 func (r connectionRow) connection() federation.Connection {
-	return federation.Connection{ID: r.ID, Environment: r.Environment, Organization: r.Organization, Name: r.Name, Issuer: r.Issuer, Client: r.Client, SecretEnv: r.SecretEnv.String, Sealed: r.Sealed.String, JIT: r.JIT, JITGroup: r.JITGroup, Enforcement: r.Enforcement}
+	return federation.Connection{ID: r.ID, Environment: r.Environment, Organization: r.Organization, Name: r.Name, Issuer: r.Issuer, Client: r.Client, SecretEnv: r.SecretEnv.String, Sealed: r.Sealed.String, JIT: r.JIT, JITGroup: r.JITGroup, Enforcement: r.Enforcement,
+		Provider: r.Provider, Options: federation.Options(r.Options), Signup: r.Signup, LinkEmail: r.LinkEmail, SignupOrganization: r.SignupOrganization, SignupGroup: r.SignupGroup}
 }
 
 func null(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }
@@ -70,8 +77,8 @@ func (r *Repository) Create(ctx context.Context, m federation.Mutation, c federa
 		return failure(err)
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO federation_connections(id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-		c.ID, c.Environment, c.Organization, c.Name, c.Issuer, c.Client, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO federation_connections(id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+		c.ID, c.Environment, c.Organization, c.Name, c.Issuer, c.Client, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, c.Provider, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup); err != nil {
 		return conflict(err)
 	}
 	m.Target += "/" + c.ID.String()
@@ -84,11 +91,11 @@ func (r *Repository) Create(ctx context.Context, m federation.Mutation, c federa
 // Update rewrites the mutable settings of an active connection. When the
 // secret changes, the legacy reference is cleared in the same statement.
 func (r *Repository) Update(ctx context.Context, m federation.Mutation, c federation.Connection) error {
-	return r.mutate(ctx, m, `UPDATE federation_connections SET name=$3,secret_env=$4,secret_sealed=$5,jit_provisioning=$6,jit_group_id=$7,enforcement=$8 WHERE id=$1 AND environment_id=$2 AND active`,
-		c.ID, c.Environment, c.Name, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement)
+	return r.mutate(ctx, m, `UPDATE federation_connections SET name=$3,secret_env=$4,secret_sealed=$5,jit_provisioning=$6,jit_group_id=$7,enforcement=$8,options=$9,signup=$10,link_email=$11,signup_organization_id=$12,signup_group_id=$13 WHERE id=$1 AND environment_id=$2 AND active`,
+		c.ID, c.Environment, c.Name, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup)
 }
 
-const connectionColumns = `id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement`
+const connectionColumns = `id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id`
 
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
 	var row connectionRow
@@ -137,19 +144,19 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier, Continuation: row.Continuation.String}
 	return out, failure(tx.Commit())
 }
-func (r *Repository) LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, identity.UserID, error) {
+func (r *Repository) LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, federation.Account, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return nil, identity.UserID{}, failure(err)
+		return nil, federation.Account{}, failure(err)
 	}
-	var user identity.UserID
-	err = tx.GetContext(ctx, &user, `SELECT u.id FROM external_identities x JOIN users u ON u.id=x.user_id AND u.environment_id=x.environment_id WHERE x.connection_id=$1 AND x.environment_id=$2 AND x.subject=$3 AND u.active FOR UPDATE OF u`, connection, environment, subject)
+	var user federation.Account
+	err = tx.GetContext(ctx, &user, `SELECT u.id, u.email FROM external_identities x JOIN users u ON u.id=x.user_id AND u.environment_id=x.environment_id WHERE x.connection_id=$1 AND x.environment_id=$2 AND x.subject=$3 AND u.active FOR UPDATE OF u`, connection, environment, subject)
 	if err != nil {
 		tx.Rollback()
 		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, identity.UserID{}, failure(err)
+			return nil, federation.Account{}, failure(err)
 		}
-		return nil, identity.UserID{}, nil
+		return nil, federation.Account{}, nil
 	}
 	return authpg.Wrap(tx), user, nil
 }
@@ -200,7 +207,7 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		return query.Paginated[federation.ConnectionView]{}, failure(err)
 	}
 	out := []federation.ConnectionView{}
-	sel := fmt.Sprintf(`SELECT c.id, c.organization_id, c.name, c.issuer, c.client_id, c.active, c.jit_provisioning, c.enforcement,
+	sel := fmt.Sprintf(`SELECT c.id, c.organization_id, c.name, c.provider, c.issuer, c.client_id, c.active, c.jit_provisioning, c.enforcement, c.signup, c.link_email,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
 		%s ORDER BY c.name LIMIT %d OFFSET %d`, base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &out, sel, args...); err != nil {
@@ -209,15 +216,20 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 	return query.NewPaginated(out, total, page), nil
 }
 func (r *Repository) FindDetail(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.ConnectionDetail, error) {
-	var out federation.ConnectionDetail
-	err := r.db.GetContext(ctx, &out, `SELECT c.id, c.organization_id, c.name, c.issuer, c.client_id, COALESCE(c.secret_env,'') AS secret_env,
+	var row struct {
+		federation.ConnectionDetail
+		Options options `db:"options"`
+	}
+	err := r.db.GetContext(ctx, &row, `SELECT c.id, c.organization_id, c.name, c.provider, c.options, c.issuer, c.client_id, COALESCE(c.secret_env,'') AS secret_env,
 		CASE WHEN c.secret_sealed IS NULL THEN 'env' ELSE 'sealed' END AS secret_source,
-		c.active, c.jit_provisioning, c.jit_group_id, c.enforcement, c.created_at,
+		c.active, c.jit_provisioning, c.jit_group_id, c.enforcement, c.signup, c.link_email, c.signup_organization_id, c.signup_group_id, c.created_at,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
 		FROM federation_connections c WHERE c.id=$1 AND c.environment_id=$2`, id, environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		return federation.ConnectionDetail{}, errx.NotFound("federation connection not found")
 	}
+	out := row.ConnectionDetail
+	out.Options = federation.Options(row.Options)
 	return out, failure(err)
 }
 func (r *Repository) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID, page query.Pagination) (query.Paginated[federation.ExternalIdentityView], error) {

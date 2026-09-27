@@ -5,51 +5,12 @@
 package hosted
 
 import (
-	"net/url"
-	"regexp"
-	"strings"
-	"time"
-	"unicode/utf8"
-
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
-
-// Settings brand the hosted pages of an environment. Empty values fall back
-// to IAMKit defaults.
-type Settings struct {
-	Environment identity.EnvironmentID `json:"environment_id" db:"environment_id"`
-	DisplayName string                 `json:"display_name" db:"display_name"`
-	LogoURL     string                 `json:"logo_url" db:"logo_url"`
-	AccentColor string                 `json:"accent_color" db:"accent_color"`
-	UpdatedAt   *time.Time             `json:"updated_at,omitempty" db:"updated_at"`
-}
-
-var accent = regexp.MustCompile(`^#[0-9a-f]{6}$`)
-
-// Validate normalizes and checks the branding. The logo must be an https URL
-// (the pages' content security policy only loads https images).
-func (s *Settings) Validate() error {
-	s.DisplayName = strings.TrimSpace(s.DisplayName)
-	s.LogoURL = strings.TrimSpace(s.LogoURL)
-	s.AccentColor = strings.ToLower(strings.TrimSpace(s.AccentColor))
-	if utf8.RuneCountInString(s.DisplayName) > 100 {
-		return errx.Validation("display_name must be at most 100 characters")
-	}
-	if s.LogoURL != "" {
-		u, err := url.Parse(s.LogoURL)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || len(s.LogoURL) > 2048 {
-			return errx.Validation("logo_url must be an https URL")
-		}
-	}
-	if s.AccentColor != "" && !accent.MatchString(s.AccentColor) {
-		return errx.Validation("accent_color must be a #rrggbb color")
-	}
-	return nil
-}
 
 type Mutation struct {
 	Environment identity.EnvironmentID
@@ -65,9 +26,11 @@ type Request struct {
 	Binding string
 }
 
-// Page is what the first sign-in page shows.
+// Page is what the first sign-in page shows: the branding, the methods
+// the client offers, and its environment connections.
 type Page struct {
 	Settings    Settings
+	SignIn      SignIn
 	Connections []federation.ConnectionSummary
 }
 

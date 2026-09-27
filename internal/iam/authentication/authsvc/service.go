@@ -65,6 +65,23 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 // the boundary, then either parks the login for its second factor or
 // creates the session. tx is committed or left for the caller to roll back.
 func (s *Service) SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string) (authentication.Result, error) {
+	return s.signIn(ctx, tx, boundary, user, method, false)
+}
+
+// SignInFederated finishes a headless single sign-on. Only an
+// organization's own connection (organizationSSO) satisfies its SSO
+// enforcement and may stand in for its second factor; a user of an
+// environment (social) connection is held to both like a password login.
+func (s *Service) SignInFederated(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, email string, organizationSSO bool) (authentication.Result, error) {
+	if !organizationSSO {
+		if err := requireNoSSO(ctx, tx, boundary, email); err != nil {
+			return authentication.Result{}, err
+		}
+	}
+	return s.signIn(ctx, tx, boundary, user, authentication.MethodSSO, organizationSSO)
+}
+
+func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string, federated bool) (authentication.Result, error) {
 	amr := []string{authentication.MethodAMR(method)}
 	if s.second != nil {
 		// Access first, so the MFA answer never reveals a membership the
@@ -72,7 +89,7 @@ func (s *Service) SignIn(ctx context.Context, tx authentication.Transaction, bou
 		if _, err := tx.Resolve(ctx, boundary, user); err != nil {
 			return authentication.Result{}, err
 		}
-		req, err := s.second.Requirement(ctx, boundary, user, method == authentication.MethodSSO)
+		req, err := s.second.Requirement(ctx, boundary, user, federated)
 		if err != nil {
 			return authentication.Result{}, err
 		}

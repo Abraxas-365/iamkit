@@ -46,10 +46,10 @@ func TestConnectionInputDefaultsAndRules(t *testing.T) {
 func TestUpdateClearsGroup(t *testing.T) {
 	c := Connection{Organization: identity.NewOrganizationID(), JIT: true, JITGroup: identity.NewGroupID(), Enforcement: EnforcementOptional}
 	var zero identity.GroupID
-	if got := (ConnectionUpdate{JITGroup: &zero}).Apply(c); !got.JITGroup.IsZero() {
+	if got, err := (ConnectionUpdate{JITGroup: &zero}).Apply(c); err != nil || !got.JITGroup.IsZero() {
 		t.Fatal("group not cleared")
 	}
-	if got := (ConnectionUpdate{}).Apply(c); got.JITGroup != c.JITGroup {
+	if got, err := (ConnectionUpdate{}).Apply(c); err != nil || got.JITGroup != c.JITGroup {
 		t.Fatal("empty update changed group")
 	}
 }

@@ -77,26 +77,56 @@ type OAuthCredential struct {
 	ClientSecret string `json:"client_secret,omitempty"`
 }
 
-// Federation is an OIDC identity provider connection. Set OrganizationID
-// for an organization connection (SSO, JIT provisioning, enforcement); leave
-// it empty for a legacy environment-wide one. On create, provide exactly one
-// of ClientSecret (stored encrypted; requires IAMKIT_ENCRYPTION_KEY) or
-// SecretEnv (an approved deployment variable). ClientSecret is never
-// returned.
+// Federation providers. Presets derive their issuer; ProviderOIDC (the
+// default) needs Issuer.
+const (
+	ProviderOIDC      = "oidc"
+	ProviderGoogle    = "google"
+	ProviderMicrosoft = "microsoft"
+	ProviderGitHub    = "github"
+	ProviderApple     = "apple"
+)
+
+// FederationOptions configures a preset provider. Microsoft requires Tenant
+// ("common", "organizations", "consumers" or a tenant ID) and takes Tenants
+// to restrict common/organizations. Apple requires TeamID and KeyID.
+type FederationOptions struct {
+	Tenant  string   `json:"tenant,omitempty"`
+	Tenants []string `json:"tenants,omitempty"`
+	TeamID  string   `json:"team_id,omitempty"`
+	KeyID   string   `json:"key_id,omitempty"`
+}
+
+// Federation is an identity provider connection. Set OrganizationID for an
+// organization connection (SSO, JIT provisioning, enforcement); leave it
+// empty for an environment (social login) connection, which may sign up
+// new users into SignupOrganizationID and link existing users by verified
+// email. On create, provide exactly one of ClientSecret (stored encrypted;
+// requires IAMKIT_ENCRYPTION_KEY; for Apple the .p8 PEM) or SecretEnv (an
+// approved deployment variable). ClientSecret is never returned.
 type Federation struct {
-	ID             string `json:"id,omitempty"`
-	OrganizationID string `json:"organization_id,omitempty"`
-	Name           string `json:"name"`
-	Issuer         string `json:"issuer"`
-	ClientID       string `json:"client_id"`
-	SecretEnv      string `json:"secret_env,omitempty"`
-	ClientSecret   string `json:"client_secret,omitempty"`
+	ID             string             `json:"id,omitempty"`
+	OrganizationID string             `json:"organization_id,omitempty"`
+	Name           string             `json:"name"`
+	Provider       string             `json:"provider,omitempty"`
+	Options        *FederationOptions `json:"options,omitempty"`
+	// Issuer is required for ProviderOIDC; presets return the derived one.
+	Issuer       string `json:"issuer,omitempty"`
+	ClientID     string `json:"client_id"`
+	SecretEnv    string `json:"secret_env,omitempty"`
+	ClientSecret string `json:"client_secret,omitempty"`
+	// Environment connections only.
+	Signup               bool   `json:"signup,omitempty"`
+	LinkEmail            bool   `json:"link_email,omitempty"`
+	SignupOrganizationID string `json:"signup_organization_id,omitempty"`
+	SignupGroupID        string `json:"signup_group_id,omitempty"`
 	// JITProvisioning defaults to true for organization connections.
 	JITProvisioning *bool  `json:"jit_provisioning,omitempty"`
 	JITGroupID      string `json:"jit_group_id,omitempty"`
 	// Enforcement is "optional" (default) or "enforced".
 	Enforcement string `json:"enforcement,omitempty"`
 	// Read-only.
+	CallbackURL  string     `json:"callback_url,omitempty"`
 	SecretSource string     `json:"secret_source,omitempty"`
 	Active       bool       `json:"active,omitempty"`
 	Linked       int        `json:"linked,omitempty"`
@@ -104,21 +134,31 @@ type Federation struct {
 }
 
 // FederationPatch changes a connection; nil fields are left unchanged.
-// JITGroupID set to "" clears the group. Setting ClientSecret on a
-// secret_env connection converts it to an encrypted secret.
+// JITGroupID and SignupGroupID set to "" clear the group; Signup false also
+// clears the sign-up organization and group. Setting ClientSecret on a
+// secret_env connection converts it to an encrypted secret. Options replace
+// the options whole; the Microsoft tenant cannot change, and a new Apple
+// KeyID needs a new ClientSecret.
 type FederationPatch struct {
-	Name            *string `json:"name,omitempty"`
-	ClientSecret    *string `json:"client_secret,omitempty"`
-	JITProvisioning *bool   `json:"jit_provisioning,omitempty"`
-	JITGroupID      *string `json:"jit_group_id,omitempty"`
-	Enforcement     *string `json:"enforcement,omitempty"`
+	Name                 *string            `json:"name,omitempty"`
+	ClientSecret         *string            `json:"client_secret,omitempty"`
+	JITProvisioning      *bool              `json:"jit_provisioning,omitempty"`
+	JITGroupID           *string            `json:"jit_group_id,omitempty"`
+	Enforcement          *string            `json:"enforcement,omitempty"`
+	Options              *FederationOptions `json:"options,omitempty"`
+	Signup               *bool              `json:"signup,omitempty"`
+	LinkEmail            *bool              `json:"link_email,omitempty"`
+	SignupOrganizationID *string            `json:"signup_organization_id,omitempty"`
+	SignupGroupID        *string            `json:"signup_group_id,omitempty"`
 }
 
 type ExternalIdentity struct {
 	ConnectionID string `json:"connection_id"`
 	UserID       string `json:"user_id"`
 	Subject      string `json:"subject"`
-	// Read-only: "linked" by an operator or "jit" on first login.
+	// Read-only: "linked" by an operator, "jit" on an organization
+	// connection's first login, "email" (linked by verified email) or
+	// "signup" on an environment connection's first login.
 	Origin    string     `json:"origin,omitempty"`
 	UserName  string     `json:"user_name,omitempty"`
 	UserEmail string     `json:"user_email,omitempty"`

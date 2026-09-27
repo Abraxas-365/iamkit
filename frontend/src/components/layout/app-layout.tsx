@@ -37,9 +37,9 @@ function Shell() {
   const { resolvedTheme, setTheme } = useTheme()
   const [signingOut, setSigningOut] = useState(false)
   const envBase = project && environment ? `/projects/${project}/environments/${environment}` : ''
-  const currentPage = environmentNav.find(([path]) => location.pathname.endsWith(`/${path}`))?.[1] ?? 'Workspace'
+  const currentPage = environmentNav.find(([path]) => location.pathname.endsWith(`/${path}`) || (envBase && location.pathname.startsWith(`${envBase}/${path}/`)))?.[1] ?? 'Workspace'
   function link(to: string, label: string, Icon: typeof Shield) {
-    const active = location.pathname === to
+    const active = location.pathname === to || (!!envBase && to.startsWith(envBase) && location.pathname.startsWith(`${to}/`))
     return <SidebarMenuItem key={to}><SidebarMenuButton isActive={active} render={<Link to={to} aria-current={active ? 'page' : undefined} />} onClick={() => setOpenMobile(false)}><Icon /><span>{label}</span></SidebarMenuButton></SidebarMenuItem>
   }
   return <>

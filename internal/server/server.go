@@ -155,6 +155,7 @@ func (s *Server) App() *fiber.App {
 	auth.Post("/challenges/verify", limiter.New(limiter.Config{Max: 30}), s.Auth.VerifyChallenge)
 	auth.Post("/federation/start", limiter.New(limiter.Config{Max: 20}), s.Federation.Start)
 	auth.Get("/federation/callback", limiter.New(limiter.Config{Max: 30}), s.Federation.Callback)
+	auth.Post("/federation/callback", limiter.New(limiter.Config{Max: 30}), s.Federation.CallbackForm)
 	auth.Post("/discover", limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.Discover)
 	if s.Invitations != nil {
 		auth.Post("/invitations/preview", limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Invitations.Preview)

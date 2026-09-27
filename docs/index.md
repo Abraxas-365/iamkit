@@ -34,8 +34,8 @@ separate workspace-operator management API; its credential is intentionally broa
   [password reset](guides/password-reset.md), [email verification](guides/email-verification.md),
   [multi-factor (TOTP)](guides/mfa.md)
 - [Email delivery webhook](guides/email-delivery.md)
-- [OIDC federation](guides/federation.md): [Google](guides/google-login.md),
-  [Microsoft](guides/microsoft-login.md)
+- [OIDC federation](guides/federation.md): [social login (Google, Microsoft, GitHub, Apple)](guides/social-login.md),
+  [Google](guides/google-login.md), [Microsoft](guides/microsoft-login.md)
 - [OAuth/OIDC clients](guides/oauth-oidc.md), [hosted login pages](guides/hosted-login.md)
 - [Organizations](guides/organizations.md), [service accounts](guides/service-accounts.md),
   [SCIM provisioning](guides/scim-provisioning.md), [impersonation](guides/impersonation.md)

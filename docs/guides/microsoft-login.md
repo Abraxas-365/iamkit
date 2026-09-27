@@ -1,28 +1,29 @@
 # Microsoft Entra ID login
 
-Prerequisites: [federation setup](federation.md), HTTPS IAMKit issuer and authority
-to register an Entra application. Validate the full login with a test tenant before
-rolling it out; this is not evidence of every Microsoft account-type combination.
+Two ways to use Microsoft:
 
-1. Register a web application and choose the intended tenant/account policy.
-2. Add `https://YOUR_IAMKIT_HOST/identity/v1/federation/callback` as an exact web
-   redirect URI. Create/store a client secret and record its expiry.
-3. For a single-tenant setup use the tenant-specific issuer
-   `https://login.microsoftonline.com/TENANT_UUID/v2.0`, not a guessed `common`
-   issuer. Compare the provider discovery document's issuer to the configured one.
-4. Approve the exact environment/issuer/client/secret reference in deployment
-   configuration, then create the local federation connection.
-5. Link the verified OIDC `sub` for this issuer/client to the local user. Do not
-   replace it with email, display name, or an Entra object ID without proving it
-   is the same subject claimed by the ID token.
-6. Start federation with a complete local access boundary and verify callback.
+- **Social login** for Microsoft accounts: an environment connection with
+  `"provider":"microsoft"` and `options.tenant` `common`, `organizations` or
+  `consumers`, optionally limited to `options.tenants`. See
+  [social login](social-login.md#microsoft) for the account types, the
+  per-tenant issuer check and when an email counts as verified (`xms_edov`).
+- **One organization's Entra tenant** as its enterprise SSO: an
+  [organization connection](federation.md#organization-sso) with
+  `"provider":"microsoft","options":{"tenant":"TENANT_ID"}` (or
+  `"provider":"oidc"` and issuer `https://login.microsoftonline.com/TENANT_ID/v2.0`).
 
-A general multi-tenant Microsoft login can require issuer handling beyond an
-exact tenant issuer; do not assume the generic adapter supports that merely
-because a `common` authorization URL exists. Prefer explicit trusted tenant
-connections unless the desired policy has been implemented and tested.
+Register a *Web* application in Entra with the exact redirect URI
+`${JWT_ISSUER}/identity/v1/federation/callback`, create a client secret and
+record its expiry: rotate it with `PATCH {"client_secret":"…"}` before it
+expires. The account types chosen in the registration must match
+`options.tenant`, which cannot change after creation.
 
-Test issuer mismatch, expired client secret, unlinked subject and local grant
-denial. Microsoft authentication does not imply permission in InvoiceCloud.
+Multi-tenant tokens are verified against the issuer of the tenant that signed
+them (`https://login.microsoftonline.com/{tid}/v2.0`), so a token from one
+tenant can never pass as another's.
+
+Test an allowed and a refused tenant, an expired client secret, an unlinked
+subject and local grant denial. Microsoft authentication does not imply
+permission in your application.
 
 Provider documentation: [Microsoft OIDC protocol](https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc).

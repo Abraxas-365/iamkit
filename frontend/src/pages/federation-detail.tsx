@@ -12,18 +12,24 @@ import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
 import { ConfirmDialog, DataTable, FormDialog, ID, PageHeader, Status, type Field } from '@/components/library/patterns'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { providerLabel } from './federation-connection-form'
 
-interface ConnectionDetail {
+export interface ConnectionDetail {
   id: string; organization_id: string | null; name: string; issuer: string; client_id: string
+  provider?: string; options?: { tenant?: string; tenants?: string[]; team_id?: string; key_id?: string }
   secret_env: string; secret_source: 'env' | 'sealed'; active: boolean; linked: number
   jit_provisioning: boolean; jit_group_id: string | null; enforcement: 'optional' | 'enforced'
-  created_at: string
+  signup?: boolean; link_email?: boolean; signup_organization_id?: string | null; signup_group_id?: string | null
+  callback_url?: string; created_at: string
 }
 interface ExternalIdentity {
   connection_id: string; subject: string
   user_id: string; user_name: string; user_email: string
-  origin: 'linked' | 'jit'; created_at: string
+  origin: 'linked' | 'jit' | 'email' | 'signup'; created_at: string
 }
+
+const origins: Record<string, string> = { jit: 'Just-in-time', email: 'Verified email', signup: 'Sign-up', linked: 'Linked' }
+const tenants: Record<string, string> = { common: 'Work, school and personal accounts', organizations: 'Work and school accounts', consumers: 'Personal accounts' }
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id), inactive: item.active === false })
 
@@ -81,9 +87,17 @@ export default function FederationDetailPage() {
 
     {/* Connection info */}
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <InfoCard label="Provider" value={providerLabel(conn.provider ?? 'oidc')} />
       <InfoCard label="Scope" value={conn.organization_id ? `Organization ${conn.organization_id}` : 'Environment-wide'} mono={!!conn.organization_id} />
       <InfoCard label="Issuer" value={conn.issuer} mono />
-      <InfoCard label="Client ID" value={conn.client_id} mono />
+      <InfoCard label={conn.provider === 'apple' ? 'Services ID' : 'Client ID'} value={conn.client_id} mono />
+      {conn.provider === 'microsoft' && conn.options?.tenant && <InfoCard label="Accounts" value={(tenants[conn.options.tenant] ?? `Tenant ${conn.options.tenant}`) + (conn.options.tenants?.length ? ` · only ${conn.options.tenants.length} allowed tenant${conn.options.tenants.length > 1 ? 's' : ''}` : '')} />}
+      {conn.provider === 'apple' && <InfoCard label="Apple team / key" value={`${conn.options?.team_id ?? ''} / ${conn.options?.key_id ?? ''}`} mono />}
+      {!conn.organization_id && <>
+        <InfoCard label="Sign-up" value={conn.signup ? (conn.signup_group_id ? `On, joins organization ${conn.signup_organization_id} and group ${conn.signup_group_id}` : `On, joins organization ${conn.signup_organization_id}`) : 'Off: only existing or linked users'} />
+        <InfoCard label="Email linking" value={conn.link_email ? 'On: verified email signs in to the matching account' : 'Off'} />
+      </>}
+      {conn.callback_url && <InfoCard label="Redirect URI" value={conn.callback_url} mono />}
       <InfoCard label="Client secret" value={conn.secret_source === 'sealed' ? 'Stored encrypted' : `Env variable ${conn.secret_env}`} mono={conn.secret_source !== 'sealed'} />
       {conn.organization_id && <>
         <InfoCard label="Just-in-time provisioning" value={conn.jit_provisioning ? (conn.jit_group_id ? `On, joins group ${conn.jit_group_id}` : 'On, no default group') : 'Off'} />
@@ -116,7 +130,7 @@ export default function FederationDetailPage() {
               <ID value={id.user_id} />
             </div>,
             <span className="break-all font-mono text-xs">{id.subject}</span>,
-            <span className="text-xs text-muted-foreground" title={id.created_at ? new Date(id.created_at).toLocaleString() : undefined}>{id.origin === 'jit' ? 'Just-in-time' : 'Linked'}</span>,
+            <span className="text-xs text-muted-foreground" title={id.created_at ? new Date(id.created_at).toLocaleString() : undefined}>{origins[id.origin] ?? 'Linked'}</span>,
           ]
           if (canWrite) cells.push(
             <Button variant="ghost" size="icon" aria-label={`Unlink ${id.user_name || id.user_id}`} onClick={() => setUnlinking(id)}>
@@ -138,7 +152,7 @@ export default function FederationDetailPage() {
 
     {editing && <FormDialog
       title="Edit connection"
-      description="Leave the secret empty to keep the current one. Enforcement requires a verified domain."
+      description={conn.organization_id ? 'Leave the secret empty to keep the current one. Enforcement requires a verified domain.' : 'Leave the secret empty to keep the current one. Sign-up needs an organization for new users.'}
       fields={editFields(conn, base)}
       onClose={() => setEditing(false)}
       submit={async values => {
@@ -164,11 +178,21 @@ export default function FederationDetailPage() {
 }
 
 export function editFields(conn: ConnectionDetail, base: string): Field[] {
+  const apple = conn.provider === 'apple'
   const fields: Field[] = [
     { name: 'name', label: 'Name', value: conn.name },
-    { name: 'client_secret', label: conn.secret_source === 'sealed' ? 'New client secret' : 'Client secret (replaces env variable)', type: 'password', optional: true, hint: 'Stored encrypted.' },
+    { name: 'client_secret', label: apple ? 'New private key (.p8)' : conn.secret_source === 'sealed' ? 'New client secret' : 'Client secret (replaces env variable)', type: 'password', optional: true, hint: apple ? 'Paste the whole key, including the BEGIN and END lines. Stored encrypted.' : 'Stored encrypted.' },
   ]
-  if (!conn.organization_id) return fields
+  if (apple) fields.push({ name: 'key_id', label: 'Key ID', value: conn.options?.key_id ?? '', hint: 'Change it together with the new private key.' })
+  if (conn.provider === 'microsoft' && (conn.options?.tenant === 'common' || conn.options?.tenant === 'organizations')) {
+    fields.push({ name: 'tenants', label: 'Allowed tenants', type: 'tags', optional: true, tags: conn.options?.tenants ?? [], hint: 'Only these tenant IDs may sign in; empty accepts any tenant.' })
+  }
+  if (!conn.organization_id) return [...fields,
+    { name: 'link_email', label: 'Link existing accounts by verified email', type: 'checkbox', value: !!conn.link_email },
+    { name: 'signup', label: 'Create accounts for new users', type: 'checkbox', value: !!conn.signup },
+    { name: 'signup_organization_id', label: 'Sign-up organization', type: 'select', optional: true, value: conn.signup_organization_id ?? '', selectPath: `${base}/organizations`, selectMap: named, hint: 'Required for sign-up.' },
+    ...(conn.signup_organization_id ? [{ name: 'signup_group_id', label: 'Sign-up default group', type: 'select' as const, optional: true, value: conn.signup_group_id ?? '', selectPath: `${base}/organizations/${conn.signup_organization_id}/groups`, selectMap: named, hint: 'Save a new organization first to pick one of its groups.' }] : []),
+  ]
   return [...fields,
     { name: 'jit_provisioning', label: 'Just-in-time provisioning', type: 'checkbox', value: conn.jit_provisioning },
     { name: 'jit_group_id', label: 'Default group', type: 'select', optional: true, value: conn.jit_group_id ?? '', selectPath: `${base}/organizations/${conn.organization_id}/groups`, selectMap: named, hint: 'Users provisioned on first login join this operator-managed group.' },
@@ -182,6 +206,18 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
   const patch: Record<string, unknown> = {}
   if (values.name !== conn.name) patch.name = values.name
   if (values.client_secret) patch.client_secret = values.client_secret
+  if (conn.provider === 'apple' && typeof values.key_id === 'string' && values.key_id !== (conn.options?.key_id ?? '')) patch.options = { ...conn.options, key_id: values.key_id }
+  if (typeof values.tenants === 'string') {
+    const next = values.tenants.split(',').map(t => t.trim()).filter(Boolean)
+    if (next.join(',') !== (conn.options?.tenants ?? []).join(',')) patch.options = { ...conn.options, tenants: next }
+  }
+  if (!conn.organization_id) {
+    if (values.link_email !== undefined && values.link_email !== !!conn.link_email) patch.link_email = values.link_email
+    if (values.signup !== undefined && values.signup !== !!conn.signup) patch.signup = values.signup
+    const org = values.signup ? values.signup_organization_id : ''
+    if (values.signup && org !== (conn.signup_organization_id ?? '')) { patch.signup_organization_id = org; patch.signup_group_id = '' }
+    else if (values.signup && values.signup_group_id !== undefined && values.signup_group_id !== (conn.signup_group_id ?? '')) patch.signup_group_id = values.signup_group_id
+  }
   if (conn.organization_id) {
     if (values.jit_provisioning !== conn.jit_provisioning) patch.jit_provisioning = values.jit_provisioning
     if (values.jit_group_id !== (conn.jit_group_id ?? '')) patch.jit_group_id = values.jit_group_id

@@ -143,8 +143,17 @@ type Verified struct {
 	AMR []string
 }
 
-// Federated reports whether the user signed in with single sign-on.
-func (v Verified) Federated() bool { return v.Method == MethodSSO }
+// Federated reports whether the user signed in with an organization's own
+// single sign-on, whose identity provider organizations may trust for the
+// second factor. Environment (social) connections do not count.
+func (v Verified) Federated() bool { return v.Method == MethodSSO && !v.Organization.IsZero() }
+
+// FederatedFor reports whether the login is the organization's own single
+// sign-on: only then may its identity provider stand in for its second
+// factor.
+func (v Verified) FederatedFor(organization identity.OrganizationID) bool {
+	return v.Federated() && v.Organization == organization
+}
 
 // Methods returns the session's method references: the first factor, then
 // any second factor.

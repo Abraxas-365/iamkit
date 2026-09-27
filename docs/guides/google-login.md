@@ -1,27 +1,24 @@
 # Google login
 
-Prerequisites: [federation setup](federation.md), HTTPS IAMKit issuer and a Google
-Cloud project you administer. This guide describes the registration contract;
-live provider login must be verified in your own test project.
+Two ways to use Google:
 
-1. Configure the Google OAuth consent screen and test users/publishing settings
-   appropriate to your application.
-2. Create a web application OAuth client. Add the exact redirect URI
-   `https://YOUR_IAMKIT_HOST/identity/v1/federation/callback`.
-3. Use issuer `https://accounts.google.com`, the assigned client ID and a private
-   `IAMKIT_PROVIDER_GOOGLE` secret variable in the deployment binding.
-4. Create the federation connection with the same issuer/client/secret reference.
-5. Enroll a local user and link the provider's verified `sub` for this client.
-   Do not copy an unverified token payload or infer the subject from email.
-6. Start federation with the user's intended organization/app/resource boundary.
+- **Social login** for everyone with a Google account: an environment
+  connection with `"provider":"google"`. See [social login](social-login.md#google),
+  which covers registration, sign-up and email linking.
+- **One organization's Google Workspace** as its enterprise SSO: an
+  [organization connection](federation.md#organization-sso) with
+  `"provider":"google"` and the organization's `organization_id`. JIT
+  provisioning then admits only emails of the organization's verified
+  domains, so other Google accounts are refused.
 
-The adapter requests `openid profile email`; it verifies the ID token rather
-than accepting an access token as identity proof. A successful Google sign-in
-still needs local membership and grants.
+Either way, register a *Web application* OAuth client in Google Cloud with the
+exact redirect URI `${JWT_ISSUER}/identity/v1/federation/callback`. IAMKit
+requests `openid profile email`, uses PKCE and a nonce, and verifies the ID
+token against `https://accounts.google.com`; it never accepts an access token
+as proof of identity.
 
-Test linked login and an unlinked Google account. For redirect mismatch, compare
-scheme/host/path against the provider registration exactly. For consent errors,
-check project audience/test-user settings before changing IAMKit authorization.
+For redirect mismatches compare scheme, host and path with the registration
+exactly; for consent errors check the consent screen's publishing status and
+test users. A Google sign-in still needs local membership and grants.
 
 Provider documentation: [Google OpenID Connect](https://developers.google.com/identity/openid-connect/openid-connect).
-Keep provider client secrets server-side and rotate through deployment storage.

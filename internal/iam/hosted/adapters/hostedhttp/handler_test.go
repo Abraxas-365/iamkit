@@ -21,7 +21,7 @@ func TestPagesRenderAndEscape(t *testing.T) {
 	connection := identity.NewConnectionID()
 	v := view{
 		Nonce: "n0nce", Title: "Sign in", Error: `<script>alert(1)</script>`,
-		Brand:  brandOf(hosted.Settings{DisplayName: `Acme "Corp"`, LogoURL: "https://cdn.example/logo.png", AccentColor: "#ff0000"}),
+		Brand:  brandOf(hosted.Settings{DisplayName: `Acme "Corp"`, LogoURL: "https://cdn.example/logo.png", AccentColor: "#ff0000"}, ""),
 		Ticket: "ik_authorize_x", Email: "a@example.com", Connection: &connection,
 		Connections:   []federation.ConnectionSummary{{ID: connection, Name: "Google"}},
 		Challenge:     identity.NewChallengeID(),
@@ -48,10 +48,142 @@ func TestPagesRenderAndEscape(t *testing.T) {
 	}
 }
 
+// The page shows only the methods the client offers, with provider logos.
+func TestSignInOptionsRender(t *testing.T) {
+	google := federation.ConnectionSummary{ID: identity.NewConnectionID(), Name: "Google", Provider: federation.ProviderGoogle}
+	render := func(page string, s hosted.SignIn) string {
+		v := view{Ticket: "t", Email: "a@example.com", SignIn: s, Connections: []federation.ConnectionSummary{google}}
+		out, err := document(page, &v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(out)
+	}
+	all := hosted.DefaultSignIn(identity.EnvironmentID{}, identity.ClientID{})
+	html := render("identify", all)
+	if !strings.Contains(html, `name="email"`) || !strings.Contains(html, "<svg") || !strings.Contains(html, "Continue with Google") {
+		t.Fatal("default identify page must show the email form and the Google logo")
+	}
+	html = render("identify", hosted.SignIn{AllConnections: true})
+	if strings.Contains(html, `name="email"`) || strings.Contains(html, ">or<") {
+		t.Fatal("connections-only client must not ask for the email")
+	}
+	html = render("password", hosted.SignIn{EmailCode: true})
+	if strings.Contains(html, `name="password"`) || strings.Contains(html, "Forgot password") || !strings.Contains(html, "Email me a code") {
+		t.Fatal("code-only client must not show the password")
+	}
+	html = render("password", hosted.SignIn{Password: true})
+	if strings.Contains(html, "Email me a code") || !strings.Contains(html, "Forgot password") {
+		t.Fatal("password-only client must not offer the code")
+	}
+}
+
 func TestBrandDefaults(t *testing.T) {
-	b := brandOf(hosted.Settings{})
-	if b.Name == "" || b.Accent != defaultAccent || b.Logo != "" {
+	b := brandOf(hosted.Settings{}, "")
+	if b.Name != "" || b.Accent != defaultAccent || b.Logo != "" || b.Header || len(b.Links) != 0 {
 		t.Fatalf("unexpected defaults %+v", b)
+	}
+	css := string(b.Vars)
+	if !strings.Contains(css, "--accent:#2563eb") || !strings.Contains(css, "--radius:12px") || strings.Contains(css, "prefers-color-scheme") {
+		t.Fatalf("default css %s", css)
+	}
+}
+
+func theme(s hosted.Settings) hosted.Settings {
+	if err := s.Validate(); err != nil {
+		panic(err)
+	}
+	return s
+}
+
+func TestBrandModes(t *testing.T) {
+	base := hosted.Settings{DisplayName: "Acme", LogoURL: "https://cdn.example/l.png", Theme: hosted.Theme{
+		LogoDarkURL: "https://cdn.example/d.png",
+		Light:       hosted.Palette{Primary: "#ffcc00", Background: "#fafafa"},
+		Dark:        hosted.Palette{Primary: "#ff6600", Card: "#111111"},
+	}}
+	light := brandOf(theme(base), "")
+	if !strings.Contains(string(light.Vars), "--accent:#ffcc00;--on-accent:#000000") || strings.Contains(string(light.Vars), "#ff6600") || light.LogoDark != "" {
+		t.Fatalf("light %+v", light)
+	}
+
+	dark := base
+	dark.Theme.Mode = hosted.ModeDark
+	b := brandOf(theme(dark), "")
+	if !strings.Contains(string(b.Vars), "--accent:#ff6600") || !strings.Contains(string(b.Vars), "--card:#111111") || b.Logo != "https://cdn.example/d.png" {
+		t.Fatalf("dark %+v", b)
+	}
+
+	adaptive := base
+	adaptive.Theme.Mode = hosted.ModeAdaptive
+	b = brandOf(theme(adaptive), "")
+	css := string(b.Vars)
+	if !strings.Contains(css, "@media (prefers-color-scheme: dark){:root{color-scheme:dark;--accent:#ff6600") || b.LogoDark != "https://cdn.example/d.png" {
+		t.Fatalf("adaptive %s %+v", css, b)
+	}
+	// A preview can force either scheme of an adaptive style.
+	if forced := brandOf(theme(adaptive), hosted.ModeDark); strings.Contains(string(forced.Vars), "@media") || !strings.Contains(string(forced.Vars), "--accent:#ff6600") {
+		t.Fatalf("forced dark %s", forced.Vars)
+	}
+
+	// Dark primary follows the light one when unset.
+	follow := hosted.Settings{AccentColor: "#123456", Theme: hosted.Theme{Mode: hosted.ModeDark}}
+	if b = brandOf(theme(follow), ""); !strings.Contains(string(b.Vars), "--accent:#123456;--on-accent:#ffffff") {
+		t.Fatalf("follow %s", b.Vars)
+	}
+}
+
+func TestLayoutThemeParts(t *testing.T) {
+	radius := 0
+	s := theme(hosted.Settings{DisplayName: "Acme <Billing>", LogoURL: "https://cdn.example/l.png", Theme: hosted.Theme{
+		Radius: &radius, Spacing: "compact", Align: "left", FaviconURL: "https://cdn.example/f.ico",
+		Header: hosted.Header{Show: true}, LogoPosition: "header",
+		Footer: hosted.Footer{Text: "© Acme <Inc>", Links: []hosted.Link{{Label: "Privacy", URL: "https://acme.example/privacy"}, {Label: "Help", URL: "mailto:help@acme.example"}}},
+	}})
+	v := view{Title: "Sign in", Brand: brandOf(s, "")}
+	out, err := document("identify", &v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(out)
+	for _, want := range []string{
+		`<title>Sign in · Acme &lt;Billing&gt;</title>`,
+		`<link rel="icon" href="https://cdn.example/f.ico">`,
+		`<header class="top"><img src="https://cdn.example/l.png" alt=""><div class="brand">Acme &lt;Billing&gt;</div></header>`,
+		`--radius:0px`, `--pad:24px`, `--align:flex-start`,
+		`<span>© Acme &lt;Inc&gt;</span>`,
+		`<a href="https://acme.example/privacy" target="_blank" rel="noopener noreferrer">Privacy</a>`,
+		`href="mailto:help@acme.example"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q in\n%s", want, html)
+		}
+	}
+	if strings.Count(html, `class="brand"`) != 1 {
+		t.Fatal("brand shown in the header and the card")
+	}
+
+	// Default layout: the name sits under the logo in the card.
+	v = view{Title: "Sign in", Brand: brandOf(theme(hosted.Settings{DisplayName: "Acme"}), "")}
+	out, _ = document("identify", &v)
+	if html = string(out); !strings.Contains(html, `<div class="brand">Acme</div>`) || strings.Contains(html, "<footer") || strings.Contains(html, `class="top"`) {
+		t.Fatalf("default layout\n%s", html)
+	}
+}
+
+func TestPreviewSamples(t *testing.T) {
+	for _, page := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "invite", "message"} {
+		v, ok := sample(page)
+		if !ok {
+			t.Fatalf("no sample for %s", page)
+		}
+		v.Brand = brandOf(hosted.Settings{}, hosted.ModeDark)
+		if _, err := document(page, &v); err != nil {
+			t.Fatalf("%s: %v", page, err)
+		}
+	}
+	if _, ok := sample("admin"); ok {
+		t.Fatal("unknown page previewed")
 	}
 }
 

@@ -254,3 +254,48 @@ func TestSchemaMFA(t *testing.T) {
 		t.Fatalf("MFA rows survived user deletion: %d", n)
 	}
 }
+
+// TestSchemaSocialLogin covers 011: known providers, sign-up bound to an
+// organization of the environment, no sign-up or linking on organization
+// connections, the new link origins, and per-client sign-in options.
+func TestSchemaSocialLogin(t *testing.T) {
+	db := freshDB(t)
+	f := newSchemaFixture(t, db)
+	insert := `INSERT INTO federation_connections(id,environment_id,organization_id,name,issuer,client_id,secret_sealed,provider,signup,link_email,signup_organization_id,signup_group_id) VALUES($1,$2,$3,'c',$4,'client','v1:x',$5,$6,$7,$8,$9)`
+	group, other := uuid.NewString(), uuid.NewString()
+	expectSQL(t, db, "group", okSQL, `INSERT INTO groups(id,environment_id,organization_id,name) VALUES($1,$2,$3,'G'),($4,$2,$5,'H')`, group, f.envA, f.orgA, other, f.orgA2)
+	expectSQL(t, db, "unknown provider", checkSQL, insert, uuid.NewString(), f.envA, nil, "https://a", "facebook", false, false, nil, nil)
+	expectSQL(t, db, "signup without organization", checkSQL, insert, uuid.NewString(), f.envA, nil, "https://a", "google", true, false, nil, nil)
+	expectSQL(t, db, "organization without signup", checkSQL, insert, uuid.NewString(), f.envA, nil, "https://a", "google", false, false, f.orgA, nil)
+	expectSQL(t, db, "signup on organization connection", checkSQL, insert, uuid.NewString(), f.envA, f.orgA, "https://a", "oidc", true, false, f.orgA, nil)
+	expectSQL(t, db, "link on organization connection", checkSQL, insert, uuid.NewString(), f.envA, f.orgA, "https://a", "oidc", false, true, nil, nil)
+	expectSQL(t, db, "signup organization of another environment", foreignSQL, insert, uuid.NewString(), f.envA, nil, "https://a", "google", true, false, f.orgB, nil)
+	expectSQL(t, db, "group of another organization", foreignSQL, insert, uuid.NewString(), f.envA, nil, "https://a", "google", true, false, f.orgA, other)
+	social := uuid.NewString()
+	expectSQL(t, db, "social", okSQL, insert, social, f.envA, nil, "https://accounts.google.com", "google", true, true, f.orgA, group)
+	expectSQL(t, db, "delete signup group", okSQL, `DELETE FROM groups WHERE id=$1`, group)
+	if n := count(t, db, `SELECT count(*) FROM federation_connections WHERE id=$1 AND signup_group_id IS NULL AND signup`, social); n != 1 {
+		t.Fatal("deleting the sign-up group must only clear it")
+	}
+	expectSQL(t, db, "second user", okSQL, `INSERT INTO users(id,environment_id,email,name,password_hash) VALUES($1,$2,'c@example.com','C','')`, other, f.envA)
+	for user, origin := range map[string]string{f.userA: "email", other: "signup"} {
+		expectSQL(t, db, "origin "+origin, okSQL, `INSERT INTO external_identities(connection_id,environment_id,subject,user_id,origin) VALUES($1,$2,$3,$4,$5)`, social, f.envA, origin, user, origin)
+	}
+
+	client := uuid.NewString()
+	expectSQL(t, db, "client", okSQL, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public) VALUES($1,$2,$3,$4,'{}',true)`, client, f.envA, f.app, f.res)
+	signIn := `INSERT INTO client_sign_in(client_id,environment_id,password,email_code,organization_sso,all_connections,connections) VALUES($1,$2,true,false,false,false,$3::uuid[])`
+	expectSQL(t, db, "client of another environment", foreignSQL, signIn, client, f.envB, "{}")
+	expectSQL(t, db, "sign-in", okSQL, signIn, client, f.envA, "{"+social+"}")
+	expectSQL(t, db, "one per client", uniqueSQL, signIn, client, f.envA, "{}")
+	expectSQL(t, db, "delete client", okSQL, `DELETE FROM oauth_clients WHERE id=$1`, client)
+	if n := count(t, db, `SELECT count(*) FROM client_sign_in WHERE client_id=$1`, client); n != 0 {
+		t.Fatal("sign-in options survived their client")
+	}
+
+	// A consumed hosted state of an environment connection drops its
+	// continuation.
+	state := `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,expires_at,consumed_at) VALUES($1,$2,$3,NULL,$4,$5,'b','n','v',$6,now(),$7)`
+	expectSQL(t, db, "state without organization or continuation", checkSQL, state, []byte("s1"), social, f.envA, f.app, f.res, nil, nil)
+	expectSQL(t, db, "consumed state", okSQL, state, []byte("s2"), social, f.envA, f.app, f.res, nil, "2026-01-01")
+}

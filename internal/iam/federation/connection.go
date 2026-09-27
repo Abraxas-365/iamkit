@@ -38,6 +38,15 @@ type Connection struct {
 	JIT          bool                    `db:"jit_provisioning"`
 	JITGroup     identity.GroupID        `db:"jit_group_id"`
 	Enforcement  string                  `db:"enforcement"`
+	Provider     string                  `db:"provider"`
+	Options      Options                 `db:"options"`
+	// Signup and LinkEmail let unlinked identities of an environment
+	// connection join: a new account in SignupOrganization (and
+	// SignupGroup), or a link to the account with the same verified email.
+	Signup             bool
+	LinkEmail          bool
+	SignupOrganization identity.OrganizationID
+	SignupGroup        identity.GroupID
 }
 
 // Scoped reports whether the connection belongs to one organization.
@@ -54,30 +63,75 @@ func (c Connection) Validate() error {
 	if !c.JIT && !c.JITGroup.IsZero() {
 		return errx.Validation("jit_group_id requires jit_provisioning")
 	}
+	if err := validOptions(c.Provider, c.Options); err != nil {
+		return err
+	}
+	if c.Scoped() && (c.Signup || c.LinkEmail) {
+		return errx.Validation("signup and link_email apply to environment connections; organization connections use jit_provisioning")
+	}
+	if c.Signup == c.SignupOrganization.IsZero() {
+		return errx.Validation("signup requires signup_organization_id, which only applies with signup")
+	}
+	if !c.Signup && !c.SignupGroup.IsZero() {
+		return errx.Validation("signup_group_id requires signup")
+	}
 	return nil
 }
 
 // ConnectionInput creates a connection. Exactly one of ClientSecret (stored
 // encrypted) or SecretEnv (legacy approved deployment variable) is required.
-// JIT defaults to on for organization connections.
+// JIT defaults to on for organization connections. Provider defaults to
+// oidc, which takes an Issuer; presets derive it (an Issuer given with a
+// preset must match). For Apple the secret is the .p8 private key.
 type ConnectionInput struct {
-	Organization identity.OrganizationID `json:"organization_id"`
-	Name         string                  `json:"name"`
-	Issuer       string                  `json:"issuer"`
-	Client       string                  `json:"client_id"`
-	SecretEnv    string                  `json:"secret_env"`
-	ClientSecret string                  `json:"client_secret"`
-	JIT          *bool                   `json:"jit_provisioning"`
-	JITGroup     identity.GroupID        `json:"jit_group_id"`
-	Enforcement  string                  `json:"enforcement"`
+	Organization       identity.OrganizationID `json:"organization_id"`
+	Name               string                  `json:"name"`
+	Provider           string                  `json:"provider"`
+	Options            Options                 `json:"options"`
+	Issuer             string                  `json:"issuer"`
+	Client             string                  `json:"client_id"`
+	SecretEnv          string                  `json:"secret_env"`
+	ClientSecret       string                  `json:"client_secret"`
+	JIT                *bool                   `json:"jit_provisioning"`
+	JITGroup           identity.GroupID        `json:"jit_group_id"`
+	Enforcement        string                  `json:"enforcement"`
+	Signup             bool                    `json:"signup"`
+	LinkEmail          bool                    `json:"link_email"`
+	SignupOrganization identity.OrganizationID `json:"signup_organization_id"`
+	SignupGroup        identity.GroupID        `json:"signup_group_id"`
+}
+
+// provider is the input's provider, oidc by default.
+func (i ConnectionInput) provider() string {
+	if i.Provider == "" {
+		return ProviderOIDC
+	}
+	return i.Provider
+}
+
+// issuer is the preset's issuer, or the given one for generic OIDC.
+func (i ConnectionInput) issuer() string {
+	if preset := Preset(i.provider(), i.Options.Normalized()); preset != "" {
+		return preset
+	}
+	return i.Issuer
 }
 
 func (i ConnectionInput) Validate() error {
 	if strings.TrimSpace(i.Name) == "" || len(i.Name) > 200 {
 		return errx.Validation("name is required and at most 200 characters")
 	}
-	if err := validIssuer(i.Issuer); err != nil {
+	if err := validOptions(i.provider(), i.Options.Normalized()); err != nil {
 		return err
+	}
+	if i.provider() != ProviderOIDC && i.Issuer != "" && i.Issuer != i.issuer() {
+		return errx.Validation("issuer is set by the provider preset")
+	}
+	if err := validIssuer(i.issuer()); err != nil {
+		return err
+	}
+	if i.provider() == ProviderApple && i.SecretEnv != "" {
+		return errx.Validation("Apple connections store their private key as client_secret")
 	}
 	if strings.TrimSpace(i.Client) == "" || len(i.Client) > 512 {
 		return errx.Validation("client_id is required and at most 512 characters")
@@ -94,13 +148,19 @@ func (i ConnectionInput) Validate() error {
 	if i.Enforcement != "" && i.Enforcement != EnforcementOptional && i.Enforcement != EnforcementEnforced {
 		return errx.Validation("enforcement must be optional or enforced")
 	}
+	if i.provider() == ProviderApple {
+		if _, err := ParseAppleKey(i.ClientSecret); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // Connection applies defaults and returns the connection to store; the
 // service seals ClientSecret separately.
 func (i ConnectionInput) Connection(environment identity.EnvironmentID) Connection {
-	c := Connection{Environment: environment, Organization: i.Organization, Name: strings.TrimSpace(i.Name), Issuer: i.Issuer, Client: i.Client, SecretEnv: i.SecretEnv, JIT: !i.Organization.IsZero(), JITGroup: i.JITGroup, Enforcement: i.Enforcement}
+	c := Connection{Environment: environment, Organization: i.Organization, Name: strings.TrimSpace(i.Name), Issuer: i.issuer(), Client: strings.TrimSpace(i.Client), SecretEnv: i.SecretEnv, JIT: !i.Organization.IsZero(), JITGroup: i.JITGroup, Enforcement: i.Enforcement,
+		Provider: i.provider(), Options: i.Options.Normalized(), Signup: i.Signup, LinkEmail: i.LinkEmail, SignupOrganization: i.SignupOrganization, SignupGroup: i.SignupGroup}
 	if i.JIT != nil {
 		c.JIT = *i.JIT
 	}
@@ -118,16 +178,24 @@ func validIssuer(raw string) error {
 	return nil
 }
 
-// ConnectionUpdate changes a connection. Issuer, client ID and organization
-// are fixed because linked subjects are only meaningful for them. A non-nil
-// JITGroup holding the zero ID clears the group. Setting ClientSecret on a
-// legacy connection converts it to an encrypted secret.
+// ConnectionUpdate changes a connection. Issuer, client ID, provider and
+// organization are fixed because linked subjects are only meaningful for
+// them. A non-nil JITGroup (or SignupGroup, SignupOrganization) holding the
+// zero ID clears it. Setting ClientSecret on a legacy connection converts
+// it to an encrypted secret. Options may change the Microsoft tenant
+// allow-list (not the tenant policy, which fixes the issuer) and the Apple
+// key ID (key rotation, with the new key as ClientSecret).
 type ConnectionUpdate struct {
-	Name         *string           `json:"name"`
-	ClientSecret *string           `json:"client_secret"`
-	JIT          *bool             `json:"jit_provisioning"`
-	JITGroup     *identity.GroupID `json:"jit_group_id"`
-	Enforcement  *string           `json:"enforcement"`
+	Name               *string                  `json:"name"`
+	ClientSecret       *string                  `json:"client_secret"`
+	JIT                *bool                    `json:"jit_provisioning"`
+	JITGroup           *identity.GroupID        `json:"jit_group_id"`
+	Enforcement        *string                  `json:"enforcement"`
+	Options            *Options                 `json:"options"`
+	Signup             *bool                    `json:"signup"`
+	LinkEmail          *bool                    `json:"link_email"`
+	SignupOrganization *identity.OrganizationID `json:"signup_organization_id"`
+	SignupGroup        *identity.GroupID        `json:"signup_group_id"`
 }
 
 func (u ConnectionUpdate) Validate() error {
@@ -143,8 +211,9 @@ func (u ConnectionUpdate) Validate() error {
 	return nil
 }
 
-// Apply returns c with the update's non-nil fields except the secret.
-func (u ConnectionUpdate) Apply(c Connection) Connection {
+// Apply returns c with the update's non-nil fields except the secret. It
+// fails when the options would change what the connection is.
+func (u ConnectionUpdate) Apply(c Connection) (Connection, error) {
 	if u.Name != nil {
 		c.Name = strings.TrimSpace(*u.Name)
 	}
@@ -157,7 +226,33 @@ func (u ConnectionUpdate) Apply(c Connection) Connection {
 	if u.Enforcement != nil {
 		c.Enforcement = *u.Enforcement
 	}
-	return c
+	if u.Signup != nil {
+		c.Signup = *u.Signup
+	}
+	if u.LinkEmail != nil {
+		c.LinkEmail = *u.LinkEmail
+	}
+	if u.SignupOrganization != nil {
+		c.SignupOrganization = *u.SignupOrganization
+	}
+	if u.SignupGroup != nil {
+		c.SignupGroup = *u.SignupGroup
+	}
+	// Turning sign-up off drops where it signed users up to.
+	if u.Signup != nil && !*u.Signup {
+		c.SignupOrganization, c.SignupGroup = identity.OrganizationID{}, identity.GroupID{}
+	}
+	if u.Options != nil {
+		o := u.Options.Normalized()
+		if o.Tenant != c.Options.Tenant || o.Team != c.Options.Team {
+			return c, errx.Validation("the tenant and Apple team of a connection cannot change; create another connection")
+		}
+		if o.Key != c.Options.Key && u.ClientSecret == nil {
+			return c, errx.Validation("a new Apple key_id needs its private key as client_secret")
+		}
+		c.Options = o
+	}
+	return c, nil
 }
 
 // Claims are the verified ID token claims federation uses. EmailVerified is
@@ -264,8 +359,9 @@ func (o Outcome) Hosted() bool { return o.Continuation != "" }
 
 // ConnectionSummary is what a sign-in page shows for a connection.
 type ConnectionSummary struct {
-	ID   identity.ConnectionID `json:"id" db:"id"`
-	Name string                `json:"name" db:"name"`
+	ID       identity.ConnectionID `json:"id" db:"id"`
+	Name     string                `json:"name" db:"name"`
+	Provider string                `json:"provider" db:"provider"`
 }
 type Mutation struct {
 	Environment identity.EnvironmentID
@@ -283,30 +379,41 @@ type ConnectionView struct {
 	ID           identity.ConnectionID    `json:"id" db:"id"`
 	Organization *identity.OrganizationID `json:"organization_id" db:"organization_id"`
 	Name         string                   `json:"name" db:"name"`
+	Provider     string                   `json:"provider" db:"provider"`
 	Issuer       string                   `json:"issuer" db:"issuer"`
 	ClientID     string                   `json:"client_id" db:"client_id"`
 	Active       bool                     `json:"active" db:"active"`
 	JIT          bool                     `json:"jit_provisioning" db:"jit_provisioning"`
 	Enforcement  string                   `json:"enforcement" db:"enforcement"`
+	Signup       bool                     `json:"signup" db:"signup"`
+	LinkEmail    bool                     `json:"link_email" db:"link_email"`
 	Linked       int                      `json:"linked" db:"linked"`
 }
 
 // ConnectionDetail never exposes the secret. SecretSource is "env" or
 // "sealed"; SecretEnv is set only for the legacy source.
 type ConnectionDetail struct {
-	ID           identity.ConnectionID    `json:"id" db:"id"`
-	Organization *identity.OrganizationID `json:"organization_id" db:"organization_id"`
-	Name         string                   `json:"name" db:"name"`
-	Issuer       string                   `json:"issuer" db:"issuer"`
-	ClientID     string                   `json:"client_id" db:"client_id"`
-	SecretEnv    string                   `json:"secret_env" db:"secret_env"`
-	SecretSource string                   `json:"secret_source" db:"secret_source"`
-	Active       bool                     `json:"active" db:"active"`
-	JIT          bool                     `json:"jit_provisioning" db:"jit_provisioning"`
-	JITGroup     *identity.GroupID        `json:"jit_group_id" db:"jit_group_id"`
-	Enforcement  string                   `json:"enforcement" db:"enforcement"`
-	Created      time.Time                `json:"created_at" db:"created_at"`
-	Linked       int                      `json:"linked" db:"linked"`
+	ID                 identity.ConnectionID    `json:"id" db:"id"`
+	Organization       *identity.OrganizationID `json:"organization_id" db:"organization_id"`
+	Name               string                   `json:"name" db:"name"`
+	Provider           string                   `json:"provider" db:"provider"`
+	Options            Options                  `json:"options" db:"-"`
+	Issuer             string                   `json:"issuer" db:"issuer"`
+	ClientID           string                   `json:"client_id" db:"client_id"`
+	SecretEnv          string                   `json:"secret_env" db:"secret_env"`
+	SecretSource       string                   `json:"secret_source" db:"secret_source"`
+	Active             bool                     `json:"active" db:"active"`
+	JIT                bool                     `json:"jit_provisioning" db:"jit_provisioning"`
+	JITGroup           *identity.GroupID        `json:"jit_group_id" db:"jit_group_id"`
+	Enforcement        string                   `json:"enforcement" db:"enforcement"`
+	Signup             bool                     `json:"signup" db:"signup"`
+	LinkEmail          bool                     `json:"link_email" db:"link_email"`
+	SignupOrganization *identity.OrganizationID `json:"signup_organization_id" db:"signup_organization_id"`
+	SignupGroup        *identity.GroupID        `json:"signup_group_id" db:"signup_group_id"`
+	// Callback is the redirect URI to register at the provider.
+	Callback string    `json:"callback_url" db:"-"`
+	Created  time.Time `json:"created_at" db:"created_at"`
+	Linked   int       `json:"linked" db:"linked"`
 }
 type ExternalIdentityView struct {
 	ConnectionID identity.ConnectionID `json:"connection_id" db:"connection_id"`

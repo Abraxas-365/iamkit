@@ -11,10 +11,17 @@ interface TagInputProps {
   className?: string
   /** Auto-prefix: user types "read" → "invoices:read" */
   prefix?: string
+  /** Called with the tags after each change */
+  onChange?: (tags: string[]) => void
 }
 
-export function TagInput({ id, name, defaultValue, disabled, placeholder, className, prefix }: TagInputProps) {
-  const [tags, setTags] = useState<string[]>(defaultValue ?? [])
+export function TagInput({ id, name, defaultValue, disabled, placeholder, className, prefix, onChange }: TagInputProps) {
+  const [tags, setTagsState] = useState<string[]>(defaultValue ?? [])
+  const setTags = (update: (prev: string[]) => string[]) => setTagsState(prev => {
+    const next = update(prev)
+    if (onChange && next !== prev) queueMicrotask(() => onChange(next))
+    return next
+  })
   const [input, setInput] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 

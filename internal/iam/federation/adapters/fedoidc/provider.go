@@ -90,47 +90,101 @@ func (p Provider) context(ctx context.Context, c federation.Connection) context.
 	return oidc.ClientContext(ctx, client)
 }
 
-func (p Provider) config(ctx context.Context, c federation.Connection) (*oidc.Provider, *oauth2.Config, error) {
+// session is what one authorization or callback needs: the provider's
+// OIDC metadata (nil for GitHub, which is OAuth 2.0 only) and client.
+type session struct {
+	oidc   *oidc.Provider
+	config *oauth2.Config
+}
+
+func (p Provider) session(ctx context.Context, c federation.Connection) (session, error) {
 	secret, err := p.secret(c)
 	if err != nil {
-		return nil, nil, err
+		return session{}, err
 	}
-	provider, err := oidc.NewProvider(ctx, c.Issuer)
+	config := &oauth2.Config{ClientID: c.Client, ClientSecret: secret, RedirectURL: p.Callback(), Scopes: []string{oidc.ScopeOpenID, "profile", "email"}}
+	switch c.Provider {
+	case federation.ProviderGitHub:
+		config.Endpoint = oauth2.Endpoint{AuthURL: GitHubEndpoints.Auth, TokenURL: GitHubEndpoints.Token, AuthStyle: oauth2.AuthStyleInParams}
+		config.Scopes = []string{"read:user", "user:email"}
+		return session{config: config}, nil
+	case federation.ProviderApple:
+		if config.ClientSecret, err = appleSecret(c, secret, time.Now()); err != nil {
+			return session{}, err
+		}
+		config.Scopes = []string{oidc.ScopeOpenID, "name", "email"}
+	}
+	discovery := ctx
+	if c.Provider == federation.ProviderMicrosoft {
+		// Microsoft metadata names a per-tenant issuer ("{tenantid}" for
+		// common and organizations, the tenant ID for consumers); Verify
+		// checks the token's issuer against its tenant instead.
+		discovery = oidc.InsecureIssuerURLContext(ctx, c.Issuer)
+	}
+	provider, err := oidc.NewProvider(discovery, c.Issuer)
 	if err != nil {
-		return nil, nil, federation.ErrProviderUnavailable(err)
+		return session{}, federation.ErrProviderUnavailable(err)
 	}
-	endpoint := provider.Endpoint()
-	for _, raw := range []string{endpoint.AuthURL, endpoint.TokenURL} {
+	config.Endpoint = provider.Endpoint()
+	if c.Provider == federation.ProviderApple {
+		config.Endpoint.AuthStyle = oauth2.AuthStyleInParams
+	}
+	for _, raw := range []string{config.Endpoint.AuthURL, config.Endpoint.TokenURL} {
 		u, err := url.Parse(raw)
 		if err != nil || u.Scheme != "https" || u.User != nil {
-			return nil, nil, errx.Validation("provider endpoints must use HTTPS")
+			return session{}, errx.Validation("provider endpoints must use HTTPS")
 		}
 	}
-	return provider, &oauth2.Config{ClientID: c.Client, ClientSecret: secret, Endpoint: endpoint, RedirectURL: p.Issuer + "/identity/v1/federation/callback", Scopes: []string{oidc.ScopeOpenID, "profile", "email"}}, nil
+	return session{oidc: provider, config: config}, nil
 }
+
 func (Provider) Verifier() string { return oauth2.GenerateVerifier() }
+
+// Callback is IAMKit's federation redirect URI.
+func (p Provider) Callback() string { return p.Issuer + "/identity/v1/federation/callback" }
+
 func (p Provider) Authorize(ctx context.Context, c federation.Connection, state, nonce, verifier string) (string, error) {
-	_, config, err := p.config(p.context(ctx, c), c)
+	s, err := p.session(p.context(ctx, c), c)
 	if err != nil {
 		return "", err
 	}
-	return config.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier)), nil
+	options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}
+	switch c.Provider {
+	case federation.ProviderGitHub:
+		// No ID token, so no nonce; state and PKCE bind the callback.
+	case federation.ProviderApple:
+		// Apple requires form_post when asking for the name or email, and
+		// does not support PKCE: the ID token's nonce binds the callback.
+		options = []oauth2.AuthCodeOption{oidc.Nonce(nonce), oauth2.SetAuthURLParam("response_mode", "form_post")}
+	default:
+		options = append(options, oidc.Nonce(nonce))
+	}
+	return s.config.AuthCodeURL(state, options...), nil
 }
+
 func (p Provider) Verify(ctx context.Context, c federation.Connection, code, nonce, verifier string) (federation.Claims, error) {
 	ctx = p.context(ctx, c)
-	provider, config, err := p.config(ctx, c)
+	s, err := p.session(ctx, c)
 	if err != nil {
 		return federation.Claims{}, err
 	}
-	token, err := config.Exchange(ctx, code, oauth2.VerifierOption(verifier))
+	var exchange []oauth2.AuthCodeOption
+	if c.Provider != federation.ProviderApple {
+		exchange = append(exchange, oauth2.VerifierOption(verifier))
+	}
+	token, err := s.config.Exchange(ctx, code, exchange...)
 	if err != nil {
 		return federation.Claims{}, errx.Unauthorized("provider exchange rejected")
+	}
+	if c.Provider == federation.ProviderGitHub {
+		return gitHubClaims(ctx, s.config.Client(ctx, token))
 	}
 	raw, ok := token.Extra("id_token").(string)
 	if !ok {
 		return federation.Claims{}, errx.Unauthorized("provider ID token required")
 	}
-	verified, err := provider.Verifier(&oidc.Config{ClientID: c.Client}).Verify(ctx, raw)
+	microsoft := c.Provider == federation.ProviderMicrosoft
+	verified, err := s.oidc.Verifier(&oidc.Config{ClientID: c.Client, SkipIssuerCheck: microsoft}).Verify(ctx, raw)
 	if err != nil || verified.Nonce != nonce {
 		return federation.Claims{}, errx.Unauthorized("invalid provider identity")
 	}
@@ -138,11 +192,20 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, code, non
 		Email         string `json:"email"`
 		EmailVerified any    `json:"email_verified"`
 		Name          string `json:"name"`
+		Tenant        string `json:"tid"`
+		DomainOwner   any    `json:"xms_edov"`
 	}
 	if err = verified.Claims(&claims); err != nil {
 		return federation.Claims{}, errx.Unauthorized("invalid provider identity")
 	}
-	return federation.Claims{Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name}, nil
+	out := federation.Claims{Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name}
+	if microsoft {
+		if verified.Issuer != MicrosoftIssuer(claims.Tenant) || !c.Options.AcceptsTenant(claims.Tenant) {
+			return federation.Claims{}, errx.Unauthorized("this Microsoft account is not accepted here")
+		}
+		out.EmailVerified = microsoftVerified(c.Options, claims.Tenant, claims.Email, claims.DomainOwner)
+	}
+	return out, nil
 }
 
 // flag reads email_verified, which some providers send as a string. An

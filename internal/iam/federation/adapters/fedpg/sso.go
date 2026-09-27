@@ -15,8 +15,14 @@ import (
 // connections never provision.
 func (r *Repository) EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]federation.ConnectionSummary, error) {
 	out := []federation.ConnectionSummary{}
-	err := r.db.SelectContext(ctx, &out, `SELECT id,name FROM federation_connections WHERE environment_id=$1 AND organization_id IS NULL AND active ORDER BY name, id`, environment)
+	err := r.db.SelectContext(ctx, &out, `SELECT id,name,provider FROM federation_connections WHERE environment_id=$1 AND organization_id IS NULL AND active ORDER BY name, id`, environment)
 	return out, failure(err)
+}
+
+func (r *Repository) ActiveOrganization(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (bool, error) {
+	var ok bool
+	err := r.db.GetContext(ctx, &ok, `SELECT EXISTS(SELECT 1 FROM organizations WHERE id=$1 AND environment_id=$2 AND active)`, organization, environment)
+	return ok, failure(err)
 }
 
 func (r *Repository) HasVerifiedDomain(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (bool, error) {
@@ -110,6 +116,67 @@ func (r *Repository) Provision(ctx context.Context, p federation.Provisioning) e
 		}
 	}
 	if err = audit(ctx, tx, federation.Mutation{Environment: p.Environment, Actor: user.String(), Action: "federation.jit", Target: "/federation-connections/" + p.Connection.String() + "/identities?user=" + user.String()}); err != nil {
+		return err
+	}
+	return failure(tx.Commit())
+}
+
+// Join links a first-time identity of an environment connection: to the
+// active user with the (provider-verified) email when j.Link, or to a new
+// passwordless user with a verified email in the sign-up organization (and
+// group) when j.Signup. An existing account is never linked without j.Link,
+// and a deactivated one never revived. The audit actor is the user.
+func (r *Repository) Join(ctx context.Context, j federation.Joining) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err)
+	}
+	defer tx.Rollback()
+	var existing struct {
+		ID     identity.UserID `db:"id"`
+		Active bool            `db:"active"`
+	}
+	err = tx.GetContext(ctx, &existing, `SELECT id, active FROM users WHERE environment_id=$1 AND email=$2 FOR UPDATE`, j.Environment, j.Email)
+	user, origin := existing.ID, "email"
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if !j.Signup {
+			return errx.Unauthorized("external identity is not linked")
+		}
+		var open bool
+		if err = tx.GetContext(ctx, &open, `SELECT EXISTS(SELECT 1 FROM organizations WHERE id=$1 AND environment_id=$2 AND active FOR SHARE)`, j.Organization, j.Environment); err != nil {
+			return failure(err)
+		}
+		if !open {
+			return errx.Unauthorized("sign-up is not available")
+		}
+		user, origin = j.User, "signup"
+		if _, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,email_verified) VALUES($1,$2,$3,$4,'',true)`, user, j.Environment, j.Email, j.Name); err != nil {
+			return conflict(err)
+		}
+		if _, err = tx.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, j.Environment, j.Organization, user); err != nil {
+			return failure(err)
+		}
+		if !j.Group.IsZero() {
+			if _, err = tx.ExecContext(ctx, `INSERT INTO group_members(group_id,environment_id,organization_id,user_id)
+				SELECT id,environment_id,organization_id,$4 FROM groups WHERE id=$1 AND environment_id=$2 AND organization_id=$3 AND connection_id IS NULL
+				ON CONFLICT DO NOTHING`, j.Group, j.Environment, j.Organization, user); err != nil {
+				return failure(err)
+			}
+		}
+	case err != nil:
+		return failure(err)
+	case !existing.Active:
+		return errx.Unauthorized("user is inactive")
+	case !j.Link:
+		return federation.ErrAccountExists()
+	}
+	// A user already linked to another subject of this connection is a
+	// conflict for an operator, not a second link.
+	if _, err = tx.ExecContext(ctx, `INSERT INTO external_identities(connection_id,environment_id,user_id,subject,origin) VALUES($1,$2,$3,$4,$5)`, j.Connection, j.Environment, user, j.Subject, origin); err != nil {
+		return conflict(err)
+	}
+	if err = audit(ctx, tx, federation.Mutation{Environment: j.Environment, Actor: user.String(), Action: "federation." + origin, Target: "/federation-connections/" + j.Connection.String() + "/identities?user=" + user.String()}); err != nil {
 		return err
 	}
 	return failure(tx.Commit())

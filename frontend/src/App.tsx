@@ -17,6 +17,7 @@ import ApplicationDetailPage from '@/pages/application-detail'
 import FederationDetailPage from '@/pages/federation-detail'
 import NotificationsPage from '@/pages/notifications'
 import HostedLoginPage from '@/pages/hosted-login'
+import BrandingEditorPage from '@/pages/branding-editor'
 export default function App() {
   return <Routes>
     <Route path="/login" element={<LoginPage />} />
@@ -41,6 +42,8 @@ export default function App() {
         <Route path="provisioning" element={<ProvisioningPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="hosted-login" element={<HostedLoginPage />} />
+        <Route path="hosted-login/default" element={<BrandingEditorPage key="default" />} />
+        <Route path="hosted-login/clients/:clientId" element={<BrandingEditorPage />} />
         <Route path="sessions" element={<ActivityPage />} />
         <Route path="audit-events" element={<ActivityPage audit />} />
       </Route>

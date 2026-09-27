@@ -1,6 +1,8 @@
 package fedhttp
 
 import (
+	"net/url"
+
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
@@ -173,6 +175,21 @@ func (h *Handler) Callback(c *fiber.Ctx) error {
 	}
 	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: "", Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: -1})
 	return h.respond(c, authentication.Result{Issued: out.Issued, MFA: out.MFA})
+}
+
+// CallbackForm serves Apple's form_post callback. The binding cookies are
+// SameSite=Lax, so a cross-site POST does not carry them; a 303 to the GET
+// callback (a top-level navigation) does.
+func (h *Handler) CallbackForm(c *fiber.Ctx) error {
+	q := url.Values{}
+	for _, key := range []string{"code", "state", "error"} {
+		if v := c.FormValue(key); v != "" {
+			q.Set(key, v)
+		}
+	}
+	c.Set("Cache-Control", "no-store")
+	c.Set("Referrer-Policy", "no-referrer")
+	return c.Redirect("/identity/v1/federation/callback?"+q.Encode(), fiber.StatusSeeOther)
 }
 
 // Discover serves POST /identity/v1/discover: which login method an email

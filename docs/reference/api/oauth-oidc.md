@@ -32,7 +32,8 @@ use OAuth fields (`error`, etc.), not the management JSON envelope.
 Client administration: POST/GET `/management/v1/environments/:environment/oauth-clients`,
 PATCH `.../oauth-clients/:id` (`{hosted_login}`), DELETE `.../oauth-clients/:id`. Create returns 201
 `{id,client_id,client_secret}`; list uses a page with `hosted_login`; update and disable return 204.
-Branding: GET/PUT `.../login-settings` `{display_name,logo_url,accent_color}` (200).
+Branding: GET/PUT `.../login-settings` `{display_name,logo_url,accent_color,theme}` (200), per-client styles under
+`.../login-settings/clients/:client` and previews at `.../login-settings/preview` (see [integrations](integrations.md)).
 
 Source: `internal/iam/oauth/adapters/oauthhttp/handler.go`,
 `oauthsvc/service.go`, `internal/config/constants.go`. Follow the

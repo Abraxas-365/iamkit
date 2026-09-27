@@ -8,13 +8,20 @@ kinds of connection:
   one tenant, e.g. Acme's Entra ID or Okta. They add email discovery,
   just-in-time (JIT) provisioning, a default group and optional enforcement.
   The client secret is stored encrypted.
-- **Environment connections** (no `organization_id`) are the original model:
-  any organization, explicitly linked users only, client secret held in an
-  approved deployment variable.
+- **Environment connections** (no `organization_id`) serve every
+  organization: [social login](social-login.md) with Google, Microsoft,
+  GitHub or Apple, optionally with sign-up and linking by verified email, or
+  explicitly linked users only.
 
-Prerequisite for both: an HTTPS issuer and the exact callback
-`${JWT_ISSUER}/identity/v1/federation/callback` registered at the provider with
-a server-side client secret.
+Every connection has a `provider`: a preset (`google`, `microsoft`, `github`,
+`apple`) whose issuer and endpoints IAMKit knows, or `oidc` (default) for any
+OpenID Connect provider with an `issuer`. Presets work for both kinds, e.g. an
+organization's Google Workspace or Entra tenant.
+
+Prerequisite for both: the exact callback
+`${JWT_ISSUER}/identity/v1/federation/callback` (`callback_url` on the
+connection detail) registered at the provider with a server-side client
+secret, and for `oidc` an HTTPS issuer.
 
 ## Organization SSO
 
@@ -106,16 +113,22 @@ with stored secrets, and requires every provider endpoint to be HTTPS.
 
 ## Environment connections
 
+For social login with sign-up and email linking, follow
+[social login](social-login.md). Without either, users must be linked
+explicitly:
+
 1. Configure `FEDERATION_CREDENTIAL_BINDINGS` and the referenced
-   `IAMKIT_PROVIDER_*` variable; see [configuration](../reference/configuration.md).
+   `IAMKIT_PROVIDER_*` variable; see [configuration](../reference/configuration.md),
+   or set `IAMKIT_ENCRYPTION_KEY` and send `client_secret` instead.
 2. POST `/management/v1/environments/ENV_UUID/federation-connections` using
    `X-API-Key` and `{name,issuer,client_id,secret_env}`. Save its 201 `{id}`.
 3. Obtain the verified provider subject for that exact issuer/client from a
    trusted enrollment process. POST `/external-identities` under the same prefix
    with `{connection_id,user_id,subject}`. Never use email as a substitute for `sub`.
 
-Environment connections never create users or link equal emails. One local
-user can be explicitly linked to several provider connections.
+With `signup` and `link_email` off (the default), environment connections
+never create users or link equal emails. One local user can be linked to
+several provider connections.
 
 ## Browser flow
 
@@ -151,4 +164,4 @@ an unverified domain, a JIT login with and without a default group, a provider
 email outside the verified domains (401), and `SSO_REQUIRED` for a password
 login after enforcing. If environment connection creation says binding not
 approved, compare all four deployment values exactly. See
-[Google](google-login.md) and [Microsoft](microsoft-login.md).
+[social login](social-login.md), [Google](google-login.md) and [Microsoft](microsoft-login.md).

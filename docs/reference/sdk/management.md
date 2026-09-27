@@ -9,8 +9,16 @@ Invitations: `Invite`, `Invitations(ctx, org, status)` (status filtered
 client-side on the first page), `Invitation`, `ResendInvitation` and
 `RevokeInvitation`; the issued token is returned only by `Invite` and resend.
 Hosted login: `OAuthClient.HostedLogin` at creation, `UpdateOAuthClient(ctx, id,
-OAuthClientPatch{HostedLogin: &on})`, and branding with `LoginSettings` /
-`SetLoginSettings` (see [hosted login](../../guides/hosted-login.md)).
+OAuthClientPatch{HostedLogin: &on})`, branding with `LoginSettings` /
+`SetLoginSettings` (`LoginTheme` for mode, colors, header and footer), and per-client
+styles with `ClientLoginStyles`, `ClientLoginSettings`, `SetClientLoginSettings` and
+`DeleteClientLoginSettings` (see [hosted login](../../guides/hosted-login.md)).
+Sign-in methods per client: `ClientSignIn`, `ClientSignIns`, `SetClientSignIn(ctx,
+client, SignIn{...})` and `DeleteClientSignIn`. Social login: `CreateFederation`
+with `Provider` (`ProviderGoogle`, `ProviderMicrosoft`, `ProviderGitHub`,
+`ProviderApple`), `Options *FederationOptions` and `Signup`/`LinkEmail`; the
+detail's `CallbackURL` is the redirect URI to register (see
+[social login](../../guides/social-login.md)).
 MFA: `SetOrganizationMFA(ctx, org, OrganizationMFA{Required: &on})`,
 `UserFactors` and `ResetUserFactors` (see [MFA](../../guides/mfa.md)).
 

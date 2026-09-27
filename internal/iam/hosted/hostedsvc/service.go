@@ -3,6 +3,7 @@ package hostedsvc
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
@@ -13,6 +14,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Service struct {
@@ -39,36 +41,76 @@ var (
 
 // pending checks the authorization and that its client uses hosted login.
 func (s *Service) pending(ctx context.Context, r hosted.Request) (authentication.Target, error) {
-	p, err := s.authorizations.Pending(ctx, r.Ticket, r.Binding)
+	client, err := s.client(ctx, r)
 	if err != nil {
 		return authentication.Target{}, err
 	}
-	if !p.Client.HostedLogin {
-		return authentication.Target{}, errx.Forbidden("client does not use hosted login")
-	}
-	return authentication.Target{Environment: p.Client.Environment, Application: p.Client.Application, Resource: p.Client.Resource}, nil
+	return authentication.Target{Environment: client.Environment, Application: client.Application, Resource: client.Resource}, nil
 }
 
-func (s *Service) Page(ctx context.Context, r hosted.Request) (hosted.Page, error) {
-	target, err := s.pending(ctx, r)
+func (s *Service) client(ctx context.Context, r hosted.Request) (*oauth.Client, error) {
+	p, err := s.authorizations.Pending(ctx, r.Ticket, r.Binding)
 	if err != nil {
-		return hosted.Page{}, err
+		return nil, err
 	}
-	settings, err := s.repository.Settings(ctx, target.Environment)
-	if err != nil {
-		return hosted.Page{}, err
+	if !p.Client.HostedLogin {
+		return nil, errx.Forbidden("client does not use hosted login")
 	}
-	connections, err := s.federation.EnvironmentConnections(ctx, target.Environment)
-	if err != nil {
-		return hosted.Page{}, err
-	}
-	return hosted.Page{Settings: settings, Connections: connections}, nil
+	return p.Client, nil
 }
+
+// Page brands the journey with the client's own style, or the
+// environment default when it has none.
+func (s *Service) Page(ctx context.Context, r hosted.Request) (hosted.Page, error) {
+	client, err := s.client(ctx, r)
+	if err != nil {
+		return hosted.Page{}, err
+	}
+	settings, err := s.style(ctx, client.Environment, client.ID)
+	if err != nil {
+		return hosted.Page{}, err
+	}
+	options, err := s.SignIn(ctx, client.Environment, client.ID)
+	if err != nil {
+		return hosted.Page{}, err
+	}
+	connections, err := s.federation.EnvironmentConnections(ctx, client.Environment)
+	if err != nil {
+		return hosted.Page{}, err
+	}
+	return hosted.Page{Settings: settings, SignIn: options, Connections: options.Offered(connections)}, nil
+}
+
+// offered checks the pending authorization and that its client offers the
+// method.
+func (s *Service) offered(ctx context.Context, r hosted.Request, method func(hosted.SignIn) bool) (authentication.Target, hosted.SignIn, error) {
+	client, err := s.client(ctx, r)
+	if err != nil {
+		return authentication.Target{}, hosted.SignIn{}, err
+	}
+	options, err := s.SignIn(ctx, client.Environment, client.ID)
+	if err != nil {
+		return authentication.Target{}, hosted.SignIn{}, err
+	}
+	if !method(options) {
+		return authentication.Target{}, hosted.SignIn{}, hosted.ErrMethodUnavailable()
+	}
+	return authentication.Target{Environment: client.Environment, Application: client.Application, Resource: client.Resource}, options, nil
+}
+
+func password(o hosted.SignIn) bool  { return o.Password }
+func emailCode(o hosted.SignIn) bool { return o.EmailCode }
+func emailForm(o hosted.SignIn) bool { return o.EmailForm() }
 
 // Identify routes the email: enforced organization SSO starts at once;
 // otherwise password, offering the organization's SSO when it has one.
+//
+// A client that does not offer organization SSO never routes to it: an
+// organization that enforces SSO then cannot sign in to it at all, which
+// the page says rather than letting a password attempt fail. A client that
+// offers only organization SSO accepts only emails that have it.
 func (s *Service) Identify(ctx context.Context, r hosted.Request, email string) (hosted.Route, error) {
-	target, err := s.pending(ctx, r)
+	target, options, err := s.offered(ctx, r, emailForm)
 	if err != nil {
 		return hosted.Route{}, err
 	}
@@ -76,10 +118,17 @@ func (s *Service) Identify(ctx context.Context, r hosted.Request, email string) 
 	if err != nil {
 		return hosted.Route{}, err
 	}
-	if d.Method != federation.MethodSSO || d.Connection == nil {
+	sso := d.Method == federation.MethodSSO && d.Connection != nil
+	switch {
+	case sso && d.Required && !options.OrganizationSSO:
+		e := errx.Forbidden("your organization requires single sign-on, which this application does not offer")
+		e.Code = "SSO_REQUIRED"
+		return hosted.Route{}, e
+	case !options.Password && !options.EmailCode && (!sso || !options.OrganizationSSO):
+		return hosted.Route{}, errx.Forbidden("this email cannot sign in to this application with single sign-on")
+	case !sso || !options.OrganizationSSO:
 		return hosted.Route{Method: federation.MethodPassword}, nil
-	}
-	if !d.Required {
+	case !d.Required && (options.Password || options.EmailCode):
 		return hosted.Route{Method: federation.MethodPassword, Connection: d.Connection}, nil
 	}
 	start, err := s.federation.StartHosted(ctx, target, *d.Connection, r.Ticket)
@@ -89,12 +138,12 @@ func (s *Service) Identify(ctx context.Context, r hosted.Request, email string) 
 	return hosted.Route{Method: federation.MethodSSO, Redirect: start.URL, Binding: start.Binding, Connection: d.Connection}, nil
 }
 
-func (s *Service) Password(ctx context.Context, r hosted.Request, email, password string) (hosted.Result, error) {
-	target, err := s.pending(ctx, r)
+func (s *Service) Password(ctx context.Context, r hosted.Request, email, secret string) (hosted.Result, error) {
+	target, _, err := s.offered(ctx, r, password)
 	if err != nil {
 		return hosted.Result{}, err
 	}
-	verified, err := s.authenticator.VerifyPassword(ctx, target.Environment, email, password)
+	verified, err := s.authenticator.VerifyPassword(ctx, target.Environment, email, secret)
 	if err != nil {
 		return hosted.Result{}, err
 	}
@@ -102,7 +151,7 @@ func (s *Service) Password(ctx context.Context, r hosted.Request, email, passwor
 }
 
 func (s *Service) SendCode(ctx context.Context, r hosted.Request, email string) (identity.ChallengeID, error) {
-	target, err := s.pending(ctx, r)
+	target, _, err := s.offered(ctx, r, emailCode)
 	if err != nil {
 		return identity.ChallengeID{}, err
 	}
@@ -110,7 +159,7 @@ func (s *Service) SendCode(ctx context.Context, r hosted.Request, email string) 
 }
 
 func (s *Service) VerifyCode(ctx context.Context, r hosted.Request, challenge identity.ChallengeID, code string) (hosted.Result, error) {
-	target, err := s.pending(ctx, r)
+	target, _, err := s.offered(ctx, r, emailCode)
 	if err != nil {
 		return hosted.Result{}, err
 	}
@@ -122,26 +171,37 @@ func (s *Service) VerifyCode(ctx context.Context, r hosted.Request, challenge id
 }
 
 func (s *Service) SendReset(ctx context.Context, r hosted.Request, email string) (identity.ChallengeID, error) {
-	target, err := s.pending(ctx, r)
+	target, _, err := s.offered(ctx, r, password)
 	if err != nil {
 		return identity.ChallengeID{}, err
 	}
 	return s.challenges.InitiateChallenge(ctx, target.Environment, email, "password_reset")
 }
 
-func (s *Service) Reset(ctx context.Context, r hosted.Request, challenge identity.ChallengeID, code, password string) error {
-	target, err := s.pending(ctx, r)
+func (s *Service) Reset(ctx context.Context, r hosted.Request, challenge identity.ChallengeID, code, secret string) error {
+	target, _, err := s.offered(ctx, r, password)
 	if err != nil {
 		return err
 	}
-	_, err = s.challenges.VerifyChallenge(ctx, authentication.Context{EnvironmentID: target.Environment}, challenge, code, "password_reset", password)
+	_, err = s.challenges.VerifyChallenge(ctx, authentication.Context{EnvironmentID: target.Environment}, challenge, code, "password_reset", secret)
 	return err
 }
 
+// SSO starts an offered environment connection, or the organization
+// connection the email form routed to when the client offers organization
+// SSO (StartHosted checks it is active in the environment).
 func (s *Service) SSO(ctx context.Context, r hosted.Request, connection identity.ConnectionID) (federation.Start, error) {
-	target, err := s.pending(ctx, r)
+	target, options, err := s.offered(ctx, r, func(hosted.SignIn) bool { return true })
 	if err != nil {
 		return federation.Start{}, err
+	}
+	environment, err := s.federation.EnvironmentConnections(ctx, target.Environment)
+	if err != nil {
+		return federation.Start{}, err
+	}
+	shared := slices.ContainsFunc(environment, func(c federation.ConnectionSummary) bool { return c.ID == connection })
+	if shared && !options.Shows(connection) || !shared && !options.OrganizationSSO {
+		return federation.Start{}, hosted.ErrMethodUnavailable()
 	}
 	return s.federation.StartHosted(ctx, target, connection, r.Ticket)
 }
@@ -197,7 +257,7 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 	organization := organizations[0].ID
 	login.Chosen = organization
 	if s.second != nil && !proven {
-		req, err := s.second.Requirement(ctx, target.Boundary(organization), verified.User, verified.Federated())
+		req, err := s.second.Requirement(ctx, target.Boundary(organization), verified.User, verified.FederatedFor(organization))
 		if err != nil {
 			return hosted.Result{}, err
 		}
@@ -260,7 +320,7 @@ func (s *Service) enrolling(ctx context.Context, target authentication.Target, l
 	if login.Chosen.IsZero() {
 		return false, nil
 	}
-	req, err := s.second.Requirement(ctx, target.Boundary(login.Chosen), login.Verified.User, login.Verified.Federated())
+	req, err := s.second.Requirement(ctx, target.Boundary(login.Chosen), login.Verified.User, login.Verified.FederatedFor(login.Chosen))
 	return req.Enroll, err
 }
 
@@ -348,13 +408,152 @@ func (s *Service) Settings(ctx context.Context, environment identity.Environment
 	if environment.IsZero() {
 		return hosted.Settings{}, errx.Validation("environment_id is required")
 	}
-	return s.repository.Settings(ctx, environment)
+	out, err := s.repository.Settings(ctx, environment)
+	if err != nil {
+		return hosted.Settings{}, err
+	}
+	return out, filled(&out)
 }
 
 func (s *Service) SaveSettings(ctx context.Context, m hosted.Mutation, input hosted.Settings) (hosted.Settings, error) {
 	if err := input.Validate(); err != nil {
 		return hosted.Settings{}, err
 	}
-	input.Environment = m.Environment
-	return s.repository.SaveSettings(ctx, m, input)
+	input.Environment, input.Client = m.Environment, nil
+	out, err := s.repository.SaveSettings(ctx, m, input)
+	if err != nil {
+		return hosted.Settings{}, err
+	}
+	return out, filled(&out)
+}
+
+func (s *Service) ClientSettings(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (hosted.Settings, error) {
+	if environment.IsZero() || client.IsZero() {
+		return hosted.Settings{}, errx.Validation("environment_id and client_id are required")
+	}
+	out, err := s.repository.ClientSettings(ctx, environment, client)
+	if err != nil {
+		return hosted.Settings{}, err
+	}
+	return out, filled(&out)
+}
+
+func (s *Service) ListClientSettings(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[hosted.Settings], error) {
+	if environment.IsZero() {
+		return query.Paginated[hosted.Settings]{}, errx.Validation("environment_id is required")
+	}
+	out, err := s.repository.ListClientSettings(ctx, environment, page)
+	if err != nil {
+		return query.Paginated[hosted.Settings]{}, err
+	}
+	for i := range out.Items {
+		if err = filled(&out.Items[i]); err != nil {
+			return query.Paginated[hosted.Settings]{}, err
+		}
+	}
+	return out, nil
+}
+
+func (s *Service) SaveClientSettings(ctx context.Context, m hosted.Mutation, client identity.ClientID, input hosted.Settings) (hosted.Settings, error) {
+	if client.IsZero() {
+		return hosted.Settings{}, errx.Validation("client_id is required")
+	}
+	if err := input.Validate(); err != nil {
+		return hosted.Settings{}, err
+	}
+	input.Environment, input.Client = m.Environment, &client
+	out, err := s.repository.SaveClientSettings(ctx, m, client, input)
+	if err != nil {
+		return hosted.Settings{}, err
+	}
+	return out, filled(&out)
+}
+
+func (s *Service) DeleteClientSettings(ctx context.Context, m hosted.Mutation, client identity.ClientID) error {
+	if client.IsZero() {
+		return errx.Validation("client_id is required")
+	}
+	return s.repository.DeleteClientSettings(ctx, m, client)
+}
+
+// Draft normalizes an unsaved style for a preview.
+func (s *Service) Draft(_ context.Context, environment identity.EnvironmentID, input hosted.Settings) (hosted.Settings, error) {
+	if err := input.Validate(); err != nil {
+		return hosted.Settings{}, err
+	}
+	input.Environment = environment
+	return input, nil
+}
+
+// SignIn is the client's sign-in options, or every method.
+func (s *Service) SignIn(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (hosted.SignIn, error) {
+	if environment.IsZero() || client.IsZero() {
+		return hosted.SignIn{}, errx.Validation("environment_id and client_id are required")
+	}
+	out, ok, err := s.repository.SignIn(ctx, environment, client)
+	if err != nil || !ok {
+		return hosted.DefaultSignIn(environment, client), err
+	}
+	return out, nil
+}
+
+func (s *Service) ListSignIn(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[hosted.SignIn], error) {
+	if environment.IsZero() {
+		return query.Paginated[hosted.SignIn]{}, errx.Validation("environment_id is required")
+	}
+	return s.repository.ListSignIn(ctx, environment, page)
+}
+
+// SaveSignIn stores a client's sign-in options. Listed connections must be
+// active environment connections; one disabled later simply stops showing.
+func (s *Service) SaveSignIn(ctx context.Context, m hosted.Mutation, client identity.ClientID, input hosted.SignIn) (hosted.SignIn, error) {
+	if client.IsZero() {
+		return hosted.SignIn{}, errx.Validation("client_id is required")
+	}
+	input.Normalize()
+	if err := input.Validate(); err != nil {
+		return hosted.SignIn{}, err
+	}
+	if len(input.Connections) > 0 {
+		environment, err := s.federation.EnvironmentConnections(ctx, m.Environment)
+		if err != nil {
+			return hosted.SignIn{}, err
+		}
+		for _, id := range input.Connections {
+			if !slices.ContainsFunc(environment, func(c federation.ConnectionSummary) bool { return c.ID == id }) {
+				return hosted.SignIn{}, errx.Validation("connection_ids must be active environment connections")
+			}
+		}
+	}
+	input.Environment, input.Client = m.Environment, client
+	return s.repository.SaveSignIn(ctx, m, client, input)
+}
+
+func (s *Service) DeleteSignIn(ctx context.Context, m hosted.Mutation, client identity.ClientID) error {
+	if client.IsZero() {
+		return errx.Validation("client_id is required")
+	}
+	return s.repository.DeleteSignIn(ctx, m, client)
+}
+
+// style is the client's own style, or the environment default.
+func (s *Service) style(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (hosted.Settings, error) {
+	out, err := s.repository.ClientSettings(ctx, environment, client)
+	var e *errx.Error
+	if errx.As(err, &e) && e.Type == errx.TypeNotFound {
+		out, err = s.repository.Settings(ctx, environment)
+	}
+	if err != nil {
+		return hosted.Settings{}, err
+	}
+	return out, filled(&out)
+}
+
+// filled completes stored branding with the defaults of unset values
+// (rows saved before the theme existed have an empty one).
+func filled(s *hosted.Settings) error {
+	if err := s.Validate(); err != nil {
+		return errx.Wrap(err, "stored hosted branding is invalid", errx.TypeInternal)
+	}
+	return nil
 }

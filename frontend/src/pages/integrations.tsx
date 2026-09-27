@@ -15,6 +15,7 @@ import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ConfirmDialog, DataTable, FormDialog, ID, PageHeader, Status, ErrorState, splitList } from '@/components/library/patterns'
 import type { Field } from '@/components/library/patterns'
+import { CreateConnectionDialog, providerLabel } from './federation-connection-form'
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id) })
 
@@ -128,7 +129,7 @@ export function ServiceAccountsPage() {
 }
 
 // --- Federation Connections ---
-interface FederationConnection { id: string; organization_id: string | null; name: string; issuer: string; client_id: string; active: boolean; linked: number; jit_provisioning: boolean; enforcement: string }
+interface FederationConnection { id: string; organization_id: string | null; name: string; provider: string; issuer: string; client_id: string; active: boolean; linked: number; jit_provisioning: boolean; enforcement: string; signup: boolean; link_email: boolean }
 
 export function FederationPage() {
   const { project, environment } = useParams()
@@ -143,15 +144,15 @@ export function FederationPage() {
   const detailPath = (id: string) => `/projects/${project}/environments/${environment}/federation/${id}`
 
   return <div className="space-y-6">
-    <PageHeader title="Federation connections" description="External OIDC identity providers. Users authenticate through these connections and are linked to local identities." actions={canWrite && <Button onClick={() => setAdd(true)}><Plus className="size-4" /> Create</Button>} />
+    <PageHeader title="Federation connections" description="Social login (Google, Microsoft, GitHub, Apple) for everyone, and organizations' own identity providers for enterprise SSO." actions={canWrite && <Button onClick={() => setAdd(true)}><Plus className="size-4" /> Create</Button>} />
     <PaginationBar state={list} noun="connections" />
-    <DataTable columns={['Name / ID', 'Scope', 'Issuer', 'Client ID', 'Linked', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
+    <DataTable columns={['Name / ID', 'Provider', 'Scope', 'Client ID', 'Linked', 'Status', ...(canWrite ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(c => {
       const cells: React.ReactNode[] = [
         <div className="space-y-1"><Link to={detailPath(c.id)} className="block font-medium text-primary hover:underline">{c.name}</Link><ID value={c.id} /></div>,
+        <div className="space-y-1"><span className="text-sm">{providerLabel(c.provider)}</span>{c.provider === 'oidc' && <span className="block text-xs break-all text-muted-foreground">{c.issuer}</span>}</div>,
         c.organization_id
           ? <div className="space-y-1"><span className="text-xs">Organization</span><ID value={c.organization_id} />{c.enforcement === 'enforced' && <span className="block text-xs font-medium text-primary">SSO enforced</span>}</div>
-          : <span className="text-xs text-muted-foreground">Environment</span>,
-        <span className="text-xs break-all">{c.issuer}</span>,
+          : <div className="space-y-1"><span className="text-xs text-muted-foreground">Environment</span>{(c.signup || c.link_email) && <span className="block text-xs">{[c.signup && 'Sign-up', c.link_email && 'Email linking'].filter(Boolean).join(' · ')}</span>}</div>,
         <span className="text-xs">{c.client_id}</span>,
         <span className="text-sm">{c.linked}</span>,
         <Status active={c.active} />,
@@ -159,17 +160,7 @@ export function FederationPage() {
       if (canWrite) cells.push(c.active ? <Button variant="destructive" size="sm" onClick={e => { e.stopPropagation(); setDisable(c) }}>Disable</Button> : null)
       return cells
     })} />
-    {add && <FormDialog title="Create federation connection" description="Connect an external OIDC identity provider. Organization connections support SSO discovery, just-in-time provisioning and enforcement." fields={[
-      { name: 'name', label: 'Name' },
-      { name: 'organization_id', label: 'Organization', type: 'select', optional: true, selectPath: `${base}/organizations`, selectMap: named, hint: 'Leave empty for an environment-wide connection.' },
-      { name: 'issuer', label: 'Issuer URL', hint: 'Must be HTTPS, e.g. https://login.microsoftonline.com/<tenant>/v2.0' },
-      { name: 'client_id', label: 'Client ID' },
-      { name: 'client_secret', label: 'Client secret', type: 'password', optional: true, hint: 'Stored encrypted; never shown again. Requires IAMKIT_ENCRYPTION_KEY.' },
-      { name: 'secret_env', label: 'Or: secret env variable', optional: true, hint: 'Legacy: an approved deployment variable, e.g. IAMKIT_PROVIDER_GOOGLE_SECRET. Provide exactly one secret source.' },
-    ]} onClose={() => setAdd(false)} submit={async values => {
-      const body = Object.fromEntries(Object.entries(values).filter(([, v]) => v !== ''))
-      await api.post(path, body); list.reload()
-    }} />}
+    {add && <CreateConnectionDialog base={base} onClose={() => setAdd(false)} onCreated={list.reload} />}
     {disable && <ConfirmDialog title="Disable connection?" description={`${disable.name} will no longer accept new logins.`} onClose={() => setDisable(null)} confirm={async () => { await api.delete(`${path}/${disable.id}`); list.reload() }} />}
   </div>
 }

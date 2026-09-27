@@ -57,7 +57,15 @@ func (s *Service) Update(ctx context.Context, m federation.Mutation, id identity
 	if err != nil {
 		return err
 	}
-	c := input.Apply(current)
+	c, err := input.Apply(current)
+	if err != nil {
+		return err
+	}
+	if c.Provider == federation.ProviderApple && input.ClientSecret != nil {
+		if _, err = federation.ParseAppleKey(*input.ClientSecret); err != nil {
+			return err
+		}
+	}
 	if err = s.check(ctx, c); err != nil {
 		return err
 	}
@@ -85,6 +93,24 @@ func (s *Service) check(ctx context.Context, c federation.Connection) error {
 		}
 		if !ok {
 			return errx.Validation("jit_group_id must be an operator-managed group of the organization")
+		}
+	}
+	if c.Signup {
+		ok, err := s.repository.ActiveOrganization(ctx, c.Environment, c.SignupOrganization)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errx.Validation("signup_organization_id must be an active organization")
+		}
+	}
+	if !c.SignupGroup.IsZero() {
+		ok, err := s.repository.OperatorGroup(ctx, c.Environment, c.SignupOrganization, c.SignupGroup)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errx.Validation("signup_group_id must be an operator-managed group of the signup organization")
 		}
 	}
 	if c.Enforcement != federation.EnforcementEnforced {
@@ -125,7 +151,9 @@ func (s *Service) Connection(ctx context.Context, environment identity.Environme
 	if connectionID.IsZero() {
 		return federation.ConnectionDetail{}, errx.NotFound("federation connection not found")
 	}
-	return s.repository.FindDetail(ctx, environment, connectionID)
+	out, err := s.repository.FindDetail(ctx, environment, connectionID)
+	out.Callback = s.provider.Callback()
+	return out, err
 }
 func (s *Service) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID, page query.Pagination) (query.Paginated[federation.ExternalIdentityView], error) {
 	if connectionID.IsZero() {
@@ -245,7 +273,7 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 		return out, err
 	}
 	if tx == nil {
-		if err = s.provision(ctx, connection, claims); err != nil {
+		if err = s.join(ctx, connection, claims); err != nil {
 			return out, err
 		}
 		if tx, user, err = s.repository.LinkedUser(ctx, row.Boundary.EnvironmentID, row.Connection, claims.Subject); err != nil {
@@ -256,19 +284,40 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 		}
 	}
 	defer tx.Rollback()
+	// Enforcement is checked for the account's own email: the provider's
+	// may differ for an operator-linked identity.
 	if out.Hosted() {
 		// The hosted pages choose the organization and issue the session.
-		out.Verified = authentication.Verified{User: user, Email: claims.Email, Method: authentication.MethodSSO, Organization: connection.Organization}
+		out.Verified = authentication.Verified{User: user.ID, Email: user.Email, Method: authentication.MethodSSO, Organization: connection.Organization}
 		return out, nil
 	}
-	result, err := s.sessions.SignIn(ctx, tx, row.Boundary, user)
+	// Only the organization's own identity provider stands in for its
+	// second factor; social providers do not.
+	result, err := s.sessions.SignIn(ctx, tx, row.Boundary, user.ID, user.Email, connection.Scoped())
 	out.Issued, out.MFA = result.Issued, result.MFA
-	if connection.Scoped() && unauthorized(err) {
+	if (connection.Scoped() || connection.Social()) && unauthorized(err) {
 		// The provider proved the identity; what is missing is access
 		// (inactive membership, or no roles for a just-provisioned user).
 		return out, errx.Forbidden("signed in, but the user has no access to this application")
 	}
 	return out, err
+}
+
+// join links an unlinked subject on first login when the connection allows
+// it: organization JIT provisioning, or sign-up and email linking of an
+// environment connection.
+func (s *Service) join(ctx context.Context, c federation.Connection, claims federation.Claims) error {
+	if c.Scoped() {
+		return s.provision(ctx, c, claims)
+	}
+	email, err := c.Joining(claims)
+	if err != nil {
+		return err
+	}
+	return s.repository.Join(ctx, federation.Joining{
+		Connection: c.ID, Environment: c.Environment, Organization: c.SignupOrganization, Group: c.SignupGroup,
+		User: identity.NewUserID(), Subject: claims.Subject, Email: email, Name: claims.DisplayName(email), Link: c.LinkEmail, Signup: c.Signup,
+	})
 }
 
 // provision links an unlinked subject on first login when the connection

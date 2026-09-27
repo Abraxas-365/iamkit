@@ -546,16 +546,64 @@ func (e Environment) TestDelivery(ctx context.Context, email string) (DeliveryAt
 
 // ── Hosted login ──
 
-// LoginSettings brands the hosted sign-in and invitation pages. Empty
-// fields use the defaults ("Sign in", no logo, blue accent).
+// LoginSettings brands the hosted sign-in and invitation pages: the
+// environment default, or one OAuth client's style (ClientID set). Empty
+// fields use the defaults (no name, no logo, blue accent, light theme).
 type LoginSettings struct {
 	EnvironmentID string `json:"environment_id,omitempty"`
+	ClientID      string `json:"client_id,omitempty"`
 	DisplayName   string `json:"display_name"`
 	// LogoURL must be an https URL.
 	LogoURL string `json:"logo_url"`
-	// AccentColor is "#rrggbb".
-	AccentColor string `json:"accent_color"`
-	UpdatedAt   string `json:"updated_at,omitempty"`
+	// AccentColor is "#rrggbb", the same color as Theme.Light.Primary.
+	AccentColor string     `json:"accent_color"`
+	Theme       LoginTheme `json:"theme"`
+	UpdatedAt   string     `json:"updated_at,omitempty"`
+}
+
+// LoginTheme is the look of the hosted pages. Zero values take defaults.
+type LoginTheme struct {
+	// Mode is "light", "dark" or "adaptive" (follows the browser).
+	Mode string `json:"mode,omitempty"`
+	// Radius is the corner radius in pixels, 0 to 24 (nil: 12).
+	Radius *int `json:"radius,omitempty"`
+	// Spacing is "compact", "normal" or "roomy".
+	Spacing string `json:"spacing,omitempty"`
+	// Align places the form: "center", "left" or "right".
+	Align string       `json:"align,omitempty"`
+	Light LoginPalette `json:"light"`
+	Dark  LoginPalette `json:"dark"`
+	// LogoDarkURL and FaviconURL must be https URLs.
+	LogoDarkURL string `json:"logo_dark_url,omitempty"`
+	FaviconURL  string `json:"favicon_url,omitempty"`
+	// LogoPosition is "card" or "header" (requires Header.Show).
+	LogoPosition string      `json:"logo_position,omitempty"`
+	Header       LoginHeader `json:"header"`
+	Footer       LoginFooter `json:"footer"`
+}
+
+// LoginPalette colors one scheme ("#rrggbb"; empty uses the default).
+type LoginPalette struct {
+	Primary    string `json:"primary,omitempty"`
+	Background string `json:"background,omitempty"`
+	Card       string `json:"card,omitempty"`
+	Text       string `json:"text,omitempty"`
+	Header     string `json:"header,omitempty"`
+}
+
+type LoginHeader struct {
+	Show bool `json:"show"`
+}
+
+type LoginFooter struct {
+	Text string `json:"text,omitempty"`
+	// Links: at most 5, https or mailto URLs.
+	Links []LoginLink `json:"links,omitempty"`
+}
+
+type LoginLink struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
 }
 
 // LoginSettings returns the hosted login branding for this environment.
@@ -571,4 +619,70 @@ func (e Environment) SetLoginSettings(ctx context.Context, input LoginSettings) 
 	var out LoginSettings
 	err := e.client.Do(ctx, "PUT", e.path("login-settings"), input, &out)
 	return out, err
+}
+
+// ClientLoginSettings returns an OAuth client's own style; a not-found
+// error means the client uses the environment default.
+func (e Environment) ClientLoginSettings(ctx context.Context, clientID string) (LoginSettings, error) {
+	var out LoginSettings
+	err := e.operation(ctx, "GET", []string{"login-settings", "clients", clientID}, nil, &out)
+	return out, err
+}
+
+// ClientLoginStyles lists the OAuth clients that have their own style.
+func (e Environment) ClientLoginStyles(ctx context.Context) ([]LoginSettings, error) {
+	return list[LoginSettings](e, ctx, "login-settings/clients")
+}
+
+// SetClientLoginSettings gives an OAuth client its own style (a complete
+// style, not an overlay on the default).
+func (e Environment) SetClientLoginSettings(ctx context.Context, clientID string, input LoginSettings) (LoginSettings, error) {
+	var out LoginSettings
+	err := e.operation(ctx, "PUT", []string{"login-settings", "clients", clientID}, input, &out)
+	return out, err
+}
+
+// DeleteClientLoginSettings returns an OAuth client to the default style.
+func (e Environment) DeleteClientLoginSettings(ctx context.Context, clientID string) error {
+	return e.operation(ctx, "DELETE", []string{"login-settings", "clients", clientID}, nil, nil)
+}
+
+// SignIn is the sign-in methods an OAuth client's hosted pages offer. At
+// least one must be on. With AllConnections every active environment
+// (social) connection is shown, otherwise only ConnectionIDs.
+type SignIn struct {
+	ClientID        string   `json:"client_id,omitempty"`
+	Password        bool     `json:"password"`
+	EmailCode       bool     `json:"email_code"`
+	OrganizationSSO bool     `json:"organization_sso"`
+	AllConnections  bool     `json:"all_connections"`
+	ConnectionIDs   []string `json:"connection_ids"`
+	// Read-only: false when the client offers every method by default.
+	Custom    bool       `json:"custom,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+// ClientSignIn returns the sign-in methods a client offers (every method
+// when it has none of its own).
+func (e Environment) ClientSignIn(ctx context.Context, clientID string) (SignIn, error) {
+	var out SignIn
+	err := e.operation(ctx, "GET", []string{"login-settings", "clients", clientID, "sign-in"}, nil, &out)
+	return out, err
+}
+
+// ClientSignIns lists the OAuth clients with their own sign-in methods.
+func (e Environment) ClientSignIns(ctx context.Context) ([]SignIn, error) {
+	return list[SignIn](e, ctx, "login-settings/sign-in")
+}
+
+// SetClientSignIn chooses the sign-in methods of a client.
+func (e Environment) SetClientSignIn(ctx context.Context, clientID string, input SignIn) (SignIn, error) {
+	var out SignIn
+	err := e.operation(ctx, "PUT", []string{"login-settings", "clients", clientID, "sign-in"}, input, &out)
+	return out, err
+}
+
+// DeleteClientSignIn makes a client offer every sign-in method again.
+func (e Environment) DeleteClientSignIn(ctx context.Context, clientID string) error {
+	return e.operation(ctx, "DELETE", []string{"login-settings", "clients", clientID, "sign-in"}, nil, nil)
 }

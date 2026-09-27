@@ -10,15 +10,36 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
-// Commands manage the branding of the hosted pages.
+// Commands manage the branding of the hosted pages: the environment
+// default and optional per-client styles.
 type Commands interface {
 	SaveSettings(ctx context.Context, m Mutation, input Settings) (Settings, error)
+	// SaveClientSettings replaces the style of one OAuth client.
+	SaveClientSettings(ctx context.Context, m Mutation, client identity.ClientID, input Settings) (Settings, error)
+	// DeleteClientSettings returns the client to the environment default.
+	DeleteClientSettings(ctx context.Context, m Mutation, client identity.ClientID) error
+	// SaveSignIn replaces which sign-in methods a client offers.
+	SaveSignIn(ctx context.Context, m Mutation, client identity.ClientID, input SignIn) (SignIn, error)
+	// DeleteSignIn returns the client to offering every method.
+	DeleteSignIn(ctx context.Context, m Mutation, client identity.ClientID) error
 }
 
 type Queries interface {
 	Settings(ctx context.Context, environment identity.EnvironmentID) (Settings, error)
+	// ClientSettings is the client's own style; not found when it uses the
+	// environment default.
+	ClientSettings(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (Settings, error)
+	ListClientSettings(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Settings], error)
+	// Draft validates and normalizes a style without saving it (previews).
+	Draft(ctx context.Context, environment identity.EnvironmentID, input Settings) (Settings, error)
+	// SignIn is the sign-in methods the client offers (every method when
+	// it has no options of its own).
+	SignIn(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (SignIn, error)
+	// ListSignIn lists the clients with sign-in options of their own.
+	ListSignIn(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[SignIn], error)
 }
 
 // Flow is the hosted sign-in journey. Every step re-checks the pending
@@ -84,6 +105,21 @@ type Repository interface {
 	// Settings returns the environment's branding, or defaults.
 	Settings(ctx context.Context, environment identity.EnvironmentID) (Settings, error)
 	SaveSettings(ctx context.Context, m Mutation, input Settings) (Settings, error)
+	// ClientSettings returns a client's own style; not found when it has none.
+	ClientSettings(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (Settings, error)
+	ListClientSettings(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Settings], error)
+	// SaveClientSettings and DeleteClientSettings audit m in the same
+	// transaction; an unknown client of the environment is not found.
+	SaveClientSettings(ctx context.Context, m Mutation, client identity.ClientID, input Settings) (Settings, error)
+	DeleteClientSettings(ctx context.Context, m Mutation, client identity.ClientID) error
+	// SignIn returns a client's sign-in options; ok is false when it has
+	// none of its own.
+	SignIn(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (SignIn, bool, error)
+	ListSignIn(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[SignIn], error)
+	// SaveSignIn and DeleteSignIn audit m in the same transaction; an
+	// unknown client of the environment is not found.
+	SaveSignIn(ctx context.Context, m Mutation, client identity.ClientID, input SignIn) (SignIn, error)
+	DeleteSignIn(ctx context.Context, m Mutation, client identity.ClientID) error
 	// SaveLogin parks the verified user of an authorization between steps,
 	// replacing an earlier one for the ticket (without lowering the attempts
 	// the same user already spent).

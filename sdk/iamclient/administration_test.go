@@ -65,6 +65,14 @@ func TestEnvironmentMissingEndpoints(t *testing.T) {
 	env.UpdateOAuthClient(ctx, "client-1", OAuthClientPatch{})
 	env.LoginSettings(ctx)
 	env.SetLoginSettings(ctx, LoginSettings{})
+	env.ClientLoginStyles(ctx)
+	env.ClientLoginSettings(ctx, "client-1")
+	env.SetClientLoginSettings(ctx, "client-1", LoginSettings{})
+	env.DeleteClientLoginSettings(ctx, "client-1")
+	env.ClientSignIns(ctx)
+	env.ClientSignIn(ctx, "client-1")
+	env.SetClientSignIn(ctx, "client-1", SignIn{Password: true})
+	env.DeleteClientSignIn(ctx, "client-1")
 	env.RoleAssignments(ctx)
 	env.Grant(ctx, "grant-1")
 	env.DeleteGrant(ctx, "grant-1")
@@ -82,6 +90,14 @@ func TestEnvironmentMissingEndpoints(t *testing.T) {
 		"PATCH /management/v1/environments/env-1/oauth-clients/client-1",
 		"GET /management/v1/environments/env-1/login-settings",
 		"PUT /management/v1/environments/env-1/login-settings",
+		"GET /management/v1/environments/env-1/login-settings/clients",
+		"GET /management/v1/environments/env-1/login-settings/clients/client-1",
+		"PUT /management/v1/environments/env-1/login-settings/clients/client-1",
+		"DELETE /management/v1/environments/env-1/login-settings/clients/client-1",
+		"GET /management/v1/environments/env-1/login-settings/sign-in",
+		"GET /management/v1/environments/env-1/login-settings/clients/client-1/sign-in",
+		"PUT /management/v1/environments/env-1/login-settings/clients/client-1/sign-in",
+		"DELETE /management/v1/environments/env-1/login-settings/clients/client-1/sign-in",
 		"GET /management/v1/environments/env-1/role-assignments",
 		"GET /management/v1/environments/env-1/grants/grant-1",
 		"DELETE /management/v1/environments/env-1/grants/grant-1",

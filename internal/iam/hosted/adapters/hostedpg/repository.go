@@ -28,34 +28,6 @@ func failure(err error) error {
 	return errx.Wrap(err, "hosted login persistence failed", errx.TypeInternal)
 }
 
-func (r *Repository) Settings(ctx context.Context, environment identity.EnvironmentID) (hosted.Settings, error) {
-	out := hosted.Settings{Environment: environment}
-	err := r.db.GetContext(ctx, &out, `SELECT environment_id,display_name,logo_url,accent_color,updated_at FROM login_settings WHERE environment_id=$1`, environment)
-	if errors.Is(err, sql.ErrNoRows) {
-		return hosted.Settings{Environment: environment}, nil
-	}
-	return out, failure(err)
-}
-
-func (r *Repository) SaveSettings(ctx context.Context, m hosted.Mutation, input hosted.Settings) (hosted.Settings, error) {
-	tx, err := r.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return hosted.Settings{}, failure(err)
-	}
-	defer tx.Rollback()
-	var out hosted.Settings
-	err = tx.GetContext(ctx, &out, `INSERT INTO login_settings(environment_id,display_name,logo_url,accent_color) VALUES($1,$2,$3,$4)
-		ON CONFLICT (environment_id) DO UPDATE SET display_name=EXCLUDED.display_name, logo_url=EXCLUDED.logo_url, accent_color=EXCLUDED.accent_color, updated_at=now()
-		RETURNING environment_id,display_name,logo_url,accent_color,updated_at`, m.Environment, input.DisplayName, input.LogoURL, input.AccentColor)
-	if err != nil {
-		return hosted.Settings{}, failure(err)
-	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
-		return hosted.Settings{}, failure(err)
-	}
-	return out, failure(tx.Commit())
-}
-
 func (r *Repository) SaveLogin(ctx context.Context, hash []byte, environment identity.EnvironmentID, l hosted.Login, expires time.Time) error {
 	v := l.Verified
 	// Re-saving the same user's login (a step, or the first factor again on

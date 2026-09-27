@@ -58,10 +58,22 @@ func New(flow hosted.Flow, commands hosted.Commands, queries hosted.Queries, inv
 	return &Handler{flow: flow, commands: commands, queries: queries, invitations: invitations, finish: finish, actor: actor}
 }
 
-// RegisterManagement serves the branding under /environments/:environment.
+// RegisterManagement serves the branding under /environments/:environment:
+// the environment default, per-client styles, and previews.
 func (h *Handler) RegisterManagement(e fiber.Router) {
 	e.Get("/login-settings", h.settings)
 	e.Put("/login-settings", h.saveSettings)
+	e.Get("/login-settings/clients", h.clientStyles)
+	e.Get("/login-settings/clients/:client", h.clientStyle)
+	e.Put("/login-settings/clients/:client", h.saveClientStyle)
+	e.Delete("/login-settings/clients/:client", h.deleteClientStyle)
+	e.Get("/login-settings/sign-in", h.signIns)
+	e.Get("/login-settings/clients/:client/sign-in", h.signIn)
+	e.Put("/login-settings/clients/:client/sign-in", h.saveSignIn)
+	e.Delete("/login-settings/clients/:client/sign-in", h.deleteSignIn)
+	e.Get("/login-settings/preview", h.savedPreview)
+	// A draft preview changes nothing; POST only carries the draft body.
+	e.Post("/login-settings/preview", h.draftPreview)
 }
 
 // Pages are the hosted page handlers; the server mounts them with its rate
@@ -91,10 +103,13 @@ type view struct {
 	Ticket, Email                         string
 	Connection                            *identity.ConnectionID
 	Connections                           []federation.ConnectionSummary
-	Challenge                             identity.ChallengeID
-	Organizations                         []authentication.Organization
-	Token                                 string
-	Invite                                *invitation.Preview
+	// SignIn is which methods the client offers; zero on pages that do
+	// not depend on it.
+	SignIn        hosted.SignIn
+	Challenge     identity.ChallengeID
+	Organizations []authentication.Organization
+	Token         string
+	Invite        *invitation.Preview
 	// Second-factor pages: the authenticator to add (QR as a PNG data URI)
 	// and recovery codes shown once.
 	Secret        string
@@ -102,38 +117,34 @@ type view struct {
 	RecoveryCodes []string
 }
 
-type brand struct{ Name, Logo, Accent string }
-
-func brandOf(s hosted.Settings) brand {
-	b := brand{Name: s.DisplayName, Logo: s.LogoURL, Accent: s.AccentColor}
-	if b.Name == "" {
-		b.Name = "Sign in"
-	}
-	if b.Accent == "" {
-		b.Accent = defaultAccent
-	}
-	return b
-}
-
 // render writes the page with a per-response nonce for its inline style.
 func render(c *fiber.Ctx, status int, page string, v view) error {
-	nonce := make([]byte, 16)
-	if _, err := rand.Read(nonce); err != nil {
-		return errx.Wrap(err, "generate nonce", errx.TypeInternal)
-	}
-	v.Nonce = base64.StdEncoding.EncodeToString(nonce)
-	if v.Brand.Accent == "" {
-		v.Brand = brandOf(hosted.Settings{})
-	}
-	var out bytes.Buffer
-	if err := pages[page].ExecuteTemplate(&out, "layout", v); err != nil {
-		return errx.Wrap(err, "render hosted page", errx.TypeInternal)
+	out, err := document(page, &v)
+	if err != nil {
+		return err
 	}
 	// data: images are the server-rendered enrollment QR code.
 	c.Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+v.Nonce+"'; img-src https: data:; base-uri 'none'; frame-ancestors 'none'")
 	c.Set("Cache-Control", "no-store")
 	c.Set("Content-Type", fiber.MIMETextHTMLCharsetUTF8)
-	return c.Status(status).Send(out.Bytes())
+	return c.Status(status).Send(out)
+}
+
+// document renders a page with a fresh nonce (stored in v).
+func document(page string, v *view) ([]byte, error) {
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, errx.Wrap(err, "generate nonce", errx.TypeInternal)
+	}
+	v.Nonce = base64.StdEncoding.EncodeToString(nonce)
+	if v.Brand.Vars == "" {
+		v.Brand = brandOf(hosted.Settings{}, "")
+	}
+	var out bytes.Buffer
+	if err := pages[page].ExecuteTemplate(&out, "layout", v); err != nil {
+		return nil, errx.Wrap(err, "render hosted page", errx.TypeInternal)
+	}
+	return out.Bytes(), nil
 }
 
 // message renders an error or information page.
@@ -176,7 +187,7 @@ func (h *Handler) base(c *fiber.Ctx, r hosted.Request) (view, bool, error) {
 		}
 		return view{}, false, message(c, status, "Sign-in expired", text)
 	}
-	return view{Brand: brandOf(page.Settings), Ticket: r.Ticket, Connections: page.Connections}, true, nil
+	return view{Brand: brandOf(page.Settings, ""), Ticket: r.Ticket, Connections: page.Connections, SignIn: page.SignIn}, true, nil
 }
 
 func (h *Handler) login(c *fiber.Ctx) error {
@@ -444,7 +455,7 @@ func (h *Handler) invitePage(c *fiber.Ctx, token string, preview invitation.Prev
 		code, text := failed(c, err)
 		return message(c, code, "Invitation", text)
 	}
-	v := view{Brand: brandOf(settings), Title: "Join " + preview.OrganizationName, Subtitle: "You were invited to join " + preview.OrganizationName + ".", Token: token, Invite: &preview, Error: problem}
+	v := view{Brand: brandOf(settings, ""), Title: "Join " + preview.OrganizationName, Subtitle: "You were invited to join " + preview.OrganizationName + ".", Token: token, Invite: &preview, Error: problem}
 	if preview.SSORequired {
 		v.Subtitle += " You will sign in with your organization's single sign-on."
 	}
@@ -470,7 +481,7 @@ func (h *Handler) accept(c *fiber.Ctx) error {
 	if accepted.SSORequired {
 		text = "You joined " + preview.OrganizationName + ". Sign in to the application with your organization's single sign-on."
 	}
-	return render(c, fiber.StatusOK, "message", view{Brand: brandOf(settings), Title: "Invitation accepted", Notice: text})
+	return render(c, fiber.StatusOK, "message", view{Brand: brandOf(settings, ""), Title: "Invitation accepted", Notice: text})
 }
 
 func (h *Handler) settings(c *fiber.Ctx) error {

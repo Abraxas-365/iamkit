@@ -53,11 +53,18 @@ type Repository interface {
 	ConsumeState(ctx context.Context, stateHash, bindingHash []byte) (State, error)
 	// LinkedUser returns an open transaction and the linked active user, or
 	// (nil, zero, nil) when the subject is not linked.
-	LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, identity.UserID, error)
+	LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, Account, error)
 	// Provision links the subject on first login, adopting the active user
 	// with the email or creating one, and commits. It fails unless the email's
 	// domain is verified by the organization.
 	Provision(ctx context.Context, p Provisioning) error
+	// Join links the subject of an environment connection on first login:
+	// to the active user with the email when j.Link, else by creating one in
+	// the organization when j.Signup; it fails with ErrAccountExists when the
+	// email's account may not be linked. It commits.
+	Join(ctx context.Context, j Joining) error
+	// ActiveOrganization reports whether the organization exists and is active.
+	ActiveOrganization(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (bool, error)
 	Link(ctx context.Context, m Mutation, connection identity.ConnectionID, user identity.UserID, subject string) error
 	Unlink(ctx context.Context, m Mutation, connection identity.ConnectionID, user identity.UserID) error
 	Disable(ctx context.Context, m Mutation, connection identity.ConnectionID) error
@@ -71,6 +78,8 @@ type Provider interface {
 	Authorize(ctx context.Context, c Connection, state, nonce, verifier string) (string, error)
 	Verify(ctx context.Context, c Connection, code, nonce, verifier string) (Claims, error)
 	Verifier() string
+	// Callback is the redirect URI operators register with providers.
+	Callback() string
 }
 
 // Cipher seals client secrets for storage at rest.
@@ -84,6 +93,8 @@ type Secrets interface {
 }
 type Sessions interface {
 	// SignIn finishes a headless single sign-on: a session, or the pending
-	// second factor when multi-factor authentication applies.
-	SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID) (authentication.Result, error)
+	// second factor when multi-factor authentication applies. Only
+	// organization SSO satisfies SSO enforcement for email and stands in for
+	// the organization's second factor.
+	SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, email string, organizationSSO bool) (authentication.Result, error)
 }
