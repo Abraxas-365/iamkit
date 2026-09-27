@@ -193,9 +193,9 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 	}
 	var sendErr error
 	if s.deliverySvc != nil {
-		sendErr = s.deliverySvc.Send(ctx, environment, email, purpose, code)
+		sendErr = s.deliverySvc.Send(ctx, environment, authentication.Message{Email: email, Purpose: purpose, Code: code})
 	} else {
-		sendErr = s.delivery.Send(ctx, email, purpose, code)
+		sendErr = s.delivery.Send(ctx, authentication.Message{Email: email, Purpose: purpose, Code: code})
 	}
 	if sendErr != nil {
 		slog.ErrorContext(ctx, "challenge delivery failed",

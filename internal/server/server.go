@@ -13,6 +13,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/adapters/imphttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/adapters/orghttp"
@@ -34,6 +35,7 @@ type APIHandlerSet struct {
 	Structure       *orghttp.Structure
 	Groups          *orghttp.Groups
 	Domains         *orghttp.Domains
+	Invitations     *invhttp.Handler
 	Applications    *apphttp.Handler
 	Authorization   *authzhttp.Handler
 	Grants          *authzhttp.Grants
@@ -50,6 +52,7 @@ type Server struct {
 	Structure           *orghttp.Structure
 	Groups              *orghttp.Groups
 	Domains             *orghttp.Domains
+	Invitations         *invhttp.Handler
 	Provisioning        *provhttp.Handler
 	Federation          *fedhttp.Handler
 	Authorization       *authzhttp.Handler
@@ -147,6 +150,10 @@ func (s *Server) App() *fiber.App {
 	auth.Post("/federation/start", limiter.New(limiter.Config{Max: 20}), s.Federation.Start)
 	auth.Get("/federation/callback", limiter.New(limiter.Config{Max: 30}), s.Federation.Callback)
 	auth.Post("/discover", limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.Discover)
+	if s.Invitations != nil {
+		auth.Post("/invitations/preview", limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Invitations.Preview)
+		auth.Post("/invitations/accept", limiter.New(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Invitations.Accept)
+	}
 	auth.Get("/me", s.Tokens.Profile)
 	auth.Patch("/me", s.Tokens.UpdateProfile)
 	auth.Get("/organizations", s.Tokens.Organizations)

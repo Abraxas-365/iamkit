@@ -41,6 +41,7 @@ internal/
 | authorization | `internal/iam/authorization` | Resources, roles, grants, role assignments, group role assignments |
 | federation | `internal/iam/federation` | External OIDC identity provider connections |
 | impersonation | `internal/iam/impersonation` | Audited admin impersonation |
+| invitation | `internal/iam/invitation` | Email invitations into organizations (token issue, preview, accept) |
 | management | `internal/iam/management` | Workspaces, projects, environments, operators, keys |
 | oauth | `internal/iam/oauth` | OAuth2/OIDC server (authorization code + PKCE) |
 | organization | `internal/iam/organization` | Organizations, memberships, org units, positions, groups, verified domains |
@@ -162,12 +163,13 @@ infrastructure concerns that should be swappable:
 |-----------|--------|---------|
 | `Passwords` | authentication, management | `Hash(string) (string, error)`, `Compare(string, string) bool` |
 | `Secrets` | authentication, federation, oauth, provisioning, serviceaccount | Token/key generation and hashing |
-| `Delivery` | authentication | Send verification codes (email webhook) |
+| `Delivery` | authentication | Send challenge codes and invitations (email webhook, `Message`) |
+| `Mailer` | invitation | Send invitation mail and build links; `invmail` adapts authentication delivery |
 | `Provider` | federation | OIDC provider discovery and credential approval |
 | `Flows` | federation | Browser login flows (`Discover`, `Start`, `Callback`), separate from Commands/Queries |
 | `Cipher` | federation | Seal/open stored client secrets; implemented by `internal/cryptox.Sealer` (`IAMKIT_ENCRYPTION_KEY`), injected via `bootstrap.WithSealer` |
 | `TokenCodec` | authentication | JWT sign/parse (combines `TokenIssuer` + `TokenValidator`) |
-| `Transaction` | authentication, oauth | Database transaction handle for multi-step mutations |
+| `Transaction` | authentication, invitation, oauth | Database transaction handle for multi-step mutations |
 
 These follow the same rule: defined in `ports.go`, implemented by adapters,
 consumed by services.

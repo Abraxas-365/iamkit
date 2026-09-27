@@ -425,6 +425,7 @@ type DeliveryConfig struct {
 	EnvironmentID string `json:"environment_id"`
 	WebhookURL    string `json:"webhook_url"`
 	HasToken      bool   `json:"has_token"`
+	InvitationURL string `json:"invitation_url"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
 }
@@ -433,6 +434,9 @@ type DeliveryConfig struct {
 type SetDeliveryConfig struct {
 	WebhookURL   string `json:"webhook_url"`
 	WebhookToken string `json:"webhook_token"`
+	// InvitationURL is the app page that accepts invitations; the token is
+	// added as the "token" query parameter. Optional.
+	InvitationURL string `json:"invitation_url,omitempty"`
 }
 
 // DeliveryConfig returns the delivery webhook configuration for this environment.

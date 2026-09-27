@@ -133,3 +133,42 @@ func TestOrganizationSSOEndpoints(t *testing.T) {
 		}
 	}
 }
+
+func TestInvitationEndpoints(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.RequestURI())
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "GET" && r.URL.Path == "/management/v1/environments/env-1/organizations/org-1/invitations" {
+			w.Write([]byte(`{"items":[{"id":"i-1","status":"pending"},{"id":"i-2","status":"accepted"}],"page":{"total":2}}`))
+			return
+		}
+		w.Write([]byte(`{"id":"i-1","token":"ik_inv_x","delivery":"sent"}`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	issued, err := env.Invite(ctx, "org-1", InvitationInput{Email: "bob@example.com"})
+	if err != nil || issued.Token != "ik_inv_x" || issued.ID != "i-1" || issued.Delivery != "sent" {
+		t.Fatalf("invite = %+v %v", issued, err)
+	}
+	if pending, err := env.Invitations(ctx, "org-1", "pending"); err != nil || len(pending) != 1 || pending[0].ID != "i-1" {
+		t.Fatalf("pending = %+v %v", pending, err)
+	}
+	env.Invitation(ctx, "org-1", "i-1")
+	env.ResendInvitation(ctx, "org-1", "i-1")
+	env.RevokeInvitation(ctx, "org-1", "i-1")
+	if _, err := env.Invite(ctx, "../x", InvitationInput{}); err == nil {
+		t.Fatal("unsafe segment accepted")
+	}
+	base := "/management/v1/environments/env-1/organizations/org-1/invitations"
+	expected := []string{"POST " + base, "GET " + base, "GET " + base + "/i-1", "POST " + base + "/i-1/resend", "DELETE " + base + "/i-1"}
+	if len(calls) != len(expected) {
+		t.Fatalf("calls %v", calls)
+	}
+	for i, want := range expected {
+		if calls[i] != want {
+			t.Errorf("call[%d] = %q, want %q", i, calls[i], want)
+		}
+	}
+}

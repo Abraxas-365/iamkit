@@ -29,6 +29,15 @@ the organization's own domains, and power the organization's
 [single sign-on](federation.md#organization-sso): email discovery,
 just-in-time provisioning and enforcement.
 
+To bring people in, use Members → Invitations (or
+`POST /organizations/:organization/invitations`) with the roles and groups they
+should get. IAMKit posts the token to your [delivery webhook](email-delivery.md);
+your invitation page previews it and accepts it through the
+[identity API](../reference/api/identity.md#invitations). New people choose a
+password there (or use SSO when the organization enforces it); existing users
+just join. The token is shown once in the console, for manual sharing when
+delivery is not configured.
+
 **Verify:** two memberships for one user can carry different permissions. Removing
 Acme access must not grant access to, or silently rewrite, the other tenant.
 

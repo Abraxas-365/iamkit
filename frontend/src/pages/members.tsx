@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Globe, KeyRound, ShieldCheck, UserMinus, Users, UsersRound, X } from 'lucide-react'
+import { ArrowLeft, Globe, KeyRound, MailPlus, ShieldCheck, UserMinus, Users, UsersRound, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -72,6 +72,7 @@ export default function MembersPage() {
         actions={<div className="flex gap-2">
           <Link to={`${orgsPath}/${orgId}/groups`} className={buttonVariants({ variant: 'outline' })}><UsersRound className="size-4" /> Groups</Link>
           <Link to={`${orgsPath}/${orgId}/domains`} className={buttonVariants({ variant: 'outline' })}><Globe className="size-4" /> Domains</Link>
+          <Link to={`${orgsPath}/${orgId}/invitations`} className={buttonVariants({ variant: 'outline' })}><MailPlus className="size-4" /> Invitations</Link>
         </div>}
       />
     </div>

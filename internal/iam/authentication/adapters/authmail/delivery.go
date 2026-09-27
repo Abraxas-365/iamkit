@@ -10,11 +10,13 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 )
 
 // WebhookDelivery delegates mail delivery to a trusted HTTPS service. It sends
 // no management credentials and refuses redirects. The service receives the
-// recipient, purpose and one-time code, and must treat them as secrets.
+// recipient, purpose and one-time code or invitation token, and must treat
+// them as secrets.
 type WebhookDelivery struct{ URL, Token string }
 
 func (d WebhookDelivery) Validate() error {
@@ -24,11 +26,11 @@ func (d WebhookDelivery) Validate() error {
 	}
 	return nil
 }
-func (d WebhookDelivery) Send(ctx context.Context, email, purpose, code string) error {
+func (d WebhookDelivery) Send(ctx context.Context, m authentication.Message) error {
 	if err := d.Validate(); err != nil {
 		return err
 	}
-	body, err := json.Marshal(map[string]string{"email": email, "purpose": purpose, "code": code})
+	body, err := json.Marshal(m)
 	if err != nil {
 		return errx.Wrap(err, "prepare email delivery", errx.TypeInternal)
 	}

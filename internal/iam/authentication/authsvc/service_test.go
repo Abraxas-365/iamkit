@@ -77,7 +77,7 @@ func (testSecrets) Code() (string, error)                   { return "12345678",
 
 type failedDelivery struct{}
 
-func (failedDelivery) Send(context.Context, string, string, string) error {
+func (failedDelivery) Send(context.Context, authentication.Message) error {
 	return errx.External("unavailable")
 }
 func testBoundary() authentication.Context {

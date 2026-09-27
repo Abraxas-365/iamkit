@@ -11,6 +11,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/sdk/apierror"
 	"github.com/Abraxas-365/iamkit/sdk/internal/transport"
@@ -96,6 +97,35 @@ type Discovery struct {
 	Required       bool   `json:"required"`
 }
 
+// InvitationPreview describes a pending invitation for an accept page.
+type InvitationPreview struct {
+	OrganizationID   string    `json:"organization_id"`
+	OrganizationName string    `json:"organization_name"`
+	Email            string    `json:"email"` // masked
+	ExpiresAt        time.Time `json:"expires_at"`
+	Status           string    `json:"status"`
+	PasswordRequired bool      `json:"password_required"`
+	SSORequired      bool      `json:"sso_required"`
+}
+
+// InvitationAcceptance accepts an invitation. Password is required for a
+// new account unless SSO is enforced, and rejected for an existing one.
+type InvitationAcceptance struct {
+	Token    string `json:"token"`
+	Name     string `json:"name,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+// AcceptedInvitation: the invitee then signs in (password, or SSO when
+// SSORequired).
+type AcceptedInvitation struct {
+	UserID         string `json:"user_id"`
+	OrganizationID string `json:"organization_id"`
+	Email          string `json:"email"`
+	Created        bool   `json:"created"`
+	SSORequired    bool   `json:"sso_required"`
+}
+
 type AddMemberRequest struct {
 	EnvironmentID string `json:"environment_id"`
 	Audience      string `json:"audience"`
@@ -168,6 +198,23 @@ func (c *Client) VerifyChallenge(ctx context.Context, input ChallengeVerificatio
 func (c *Client) Discover(ctx context.Context, environment, email string) (Discovery, error) {
 	var out Discovery
 	err := c.request(ctx, "/discover", "", map[string]string{"environment_id": environment, "email": email}, &out)
+	return out, err
+}
+
+// ── Invitations ──
+
+// PreviewInvitation returns what an accept page may show for token.
+func (c *Client) PreviewInvitation(ctx context.Context, token string) (InvitationPreview, error) {
+	var out InvitationPreview
+	err := c.request(ctx, "/invitations/preview", "", map[string]string{"token": token}, &out)
+	return out, err
+}
+
+// AcceptInvitation joins the invitee to the organization. It does not sign
+// them in.
+func (c *Client) AcceptInvitation(ctx context.Context, input InvitationAcceptance) (AcceptedInvitation, error) {
+	var out AcceptedInvitation
+	err := c.request(ctx, "/invitations/accept", "", input, &out)
 	return out, err
 }
 

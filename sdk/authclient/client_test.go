@@ -139,3 +139,26 @@ func TestAllIdentityPaths(t *testing.T) {
 		}
 	}
 }
+
+func TestInvitationEndpoints(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.RequestURI())
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"user_id":"u-1","sso_required":true,"organization_name":"Acme"}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	p, err := c.PreviewInvitation(context.Background(), "ik_inv_x")
+	if err != nil || p.OrganizationName != "Acme" || !p.SSORequired {
+		t.Fatalf("preview = %+v %v", p, err)
+	}
+	a, err := c.AcceptInvitation(context.Background(), InvitationAcceptance{Token: "ik_inv_x"})
+	if err != nil || a.UserID != "u-1" {
+		t.Fatalf("accept = %+v %v", a, err)
+	}
+	// Tokens travel in the body, never in the URL.
+	if len(calls) != 2 || calls[0] != "POST /identity/v1/invitations/preview" || calls[1] != "POST /identity/v1/invitations/accept" {
+		t.Fatalf("calls = %v", calls)
+	}
+}

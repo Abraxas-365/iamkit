@@ -17,10 +17,11 @@ const BcryptCost = 12
 const (
 	TokenTTL              = 15 * time.Minute // JWT (self-signed & ID tokens)
 	ImpersonationTokenTTL = 15 * time.Minute
-	SessionTTL            = 24 * time.Hour   // End-user session / refresh token window
-	OperatorSessionTTL    = 1 * time.Hour    // Operator (management) session
-	APIKeyTTL             = 24 * time.Hour   // Bootstrap / recovery API key expiry
-	SessionCookieMaxAge   = 3600             // seconds — matches OperatorSessionTTL
+	SessionTTL            = 24 * time.Hour // End-user session / refresh token window
+	OperatorSessionTTL    = 1 * time.Hour  // Operator (management) session
+	APIKeyTTL             = 24 * time.Hour // Bootstrap / recovery API key expiry
+	SessionCookieMaxAge   = 3600           // seconds — matches OperatorSessionTTL
+	InvitationTTL         = 7 * 24 * time.Hour
 )
 
 // OAuth 2.0 / OIDC lifespans (fosite).

@@ -10,7 +10,18 @@ Authorization: Bearer DELIVERY_TOKEN
 ```
 
 Purposes: `login`, `password_reset`, `email_verification`. The code is secret,
-single-use and valid for five minutes. No environment/app/resource or challenge
+single-use and valid for five minutes.
+
+Invitations use purpose `invitation` and carry no code:
+
+```json
+{"email":"bob@example.com","purpose":"invitation","token":"ik_inv_…","link":"https://app.example.com/join?token=ik_inv_…","organization":"Acme","inviter":"owner@example.com","expires_at":"2026-10-03T12:00:00Z"}
+```
+
+`link` is present only when the environment's delivery config sets
+`invitation_url`; otherwise build it from `token` yourself. The token is a
+secret valid for seven days. `inviter` is the inviting operator's email (or
+name) when known. Absent fields are omitted, so challenge payloads are unchanged. No environment/app/resource or challenge
 ID is included. The webhook is a delivery adapter, not a general notification bus.
 
 Any 2xx status is accepted; response bodies are not used. Other statuses fail.

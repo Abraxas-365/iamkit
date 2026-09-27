@@ -93,8 +93,8 @@ func (r *Repository) Suspend(ctx context.Context, environment identity.Environme
 
 // Delete permanently erases a user and every row that references it —
 // sessions, refresh tokens, grants, role assignments, position assignments,
-// memberships, external identities, identity challenges, and provisioned
-// identities. This is irreversible; callers that only want to disable sign-in
+// memberships, external identities, identity challenges, provisioned
+// identities, and invitations accepted by or addressed to the user. This is irreversible; callers that only want to disable sign-in
 // should use Suspend instead.
 func (r *Repository) Delete(ctx context.Context, m user.Mutation, id identity.UserID) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -114,6 +114,7 @@ func (r *Repository) Delete(ctx context.Context, m user.Mutation, id identity.Us
 		`DELETE FROM external_identities WHERE environment_id=$1 AND user_id=$2`,
 		`DELETE FROM identity_challenges WHERE environment_id=$1 AND user_id=$2`,
 		`DELETE FROM provisioned_identities WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM invitations WHERE environment_id=$1 AND (accepted_user_id=$2 OR email=(SELECT email FROM users WHERE environment_id=$1 AND id=$2))`,
 	}
 	for _, stmt := range statements {
 		if _, err = tx.ExecContext(ctx, stmt, m.Environment, id); err != nil {

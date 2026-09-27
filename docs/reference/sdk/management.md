@@ -5,6 +5,9 @@ for operator administration. `Environment(environmentID)` supplies typed entity
 methods. `CreateProject`, `CreateEnvironment`, `CreateUser`, `AddMember`,
 `BindResource`, `PutGrant` and integration helpers mirror management operations.
 Use `context.WithTimeout` and check every returned error before using an ID.
+Invitations: `Invite`, `Invitations(ctx, org, status)` (status filtered
+client-side on the first page), `Invitation`, `ResendInvitation` and
+`RevokeInvitation`; the issued token is returned only by `Invite` and resend.
 
 For a list returning a page, a low-level pattern is:
 

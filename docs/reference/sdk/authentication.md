@@ -10,6 +10,9 @@ routes. Supply deadlines and never log token-pair values.
   `VerifyChallenge(ctx, ChallengeVerification{...})`.
 - `StartFederation(ctx, FederationStart{...})`; browser-cookie handling is still
   your integration's responsibility, not a headless substitute for browser binding.
+- `PreviewInvitation(ctx, token)` and `AcceptInvitation(ctx, InvitationAcceptance{...})`
+  for your invitation page; accepting does not sign in (see
+  [invitations](../api/identity.md#invitations)).
 - `Profile`, `UpdateProfile`, `Organizations`, `Logout`, `AddMember`.
 - `Introspect(ctx, token, issuer, audience, environment, application, resource)`
   validates current state plus configured boundaries.

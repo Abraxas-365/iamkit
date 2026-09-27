@@ -2,14 +2,40 @@ package e2e_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/gofiber/fiber/v2"
 )
 
-type capturedMail struct{ Code string }
+type capturedMail struct {
+	mu   sync.Mutex
+	Code string
+	Sent []authentication.Message
+}
 
-func (m *capturedMail) Send(_ context.Context, _, _, code string) error { m.Code = code; return nil }
+func (m *capturedMail) Send(_ context.Context, msg authentication.Message) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if msg.Code != "" {
+		m.Code = msg.Code
+	}
+	m.Sent = append(m.Sent, msg)
+	return nil
+}
+
+// Last returns the latest message sent with purpose.
+func (m *capturedMail) Last(purpose string) (authentication.Message, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := len(m.Sent) - 1; i >= 0; i-- {
+		if m.Sent[i].Purpose == purpose {
+			return m.Sent[i], true
+		}
+	}
+	return authentication.Message{}, false
+}
 
 func migrationJourney(t *testing.T, call func(string, string, string, any, int) map[string]any, mail *capturedMail, owner, base, devbase, env, org, user, member, client, resource string) {
 	t.Helper()

@@ -51,6 +51,10 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 		s.APIHandlers.Domains.RegisterViews(structure)
 		s.APIHandlers.Domains.RegisterMutations(structure)
 	}
+	if s.APIHandlers.Invitations != nil {
+		s.APIHandlers.Invitations.RegisterViews(structure)
+		s.APIHandlers.Invitations.RegisterMutations(structure)
+	}
 
 	// Applications
 	apps := e.Group("/applications", apiauth.ReadWrite(authorization.PermAppsRead, authorization.PermAppsWrite))

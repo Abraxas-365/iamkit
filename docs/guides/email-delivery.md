@@ -29,9 +29,11 @@ With management authority, use
 `/management/v1/environments/ENV_UUID/delivery`:
 
 - `GET`: configuration with `environment_id`, `webhook_url`, `has_token`,
-  `created_at`, `updated_at`; never the token. Absent configuration returns 404.
+  `invitation_url`, `created_at`, `updated_at`; never the token. Absent configuration returns 404.
 - `PUT`: replace with `{"webhook_url":"https://mail.example.com/iamkit","webhook_token":"PRIVATE_DELIVERY_TOKEN"}`;
-  both fields are required, success is 204. Use private request files, not tracked
+  both fields are required, success is 204. Optional `invitation_url` (same URL
+  rules) is your page that accepts [invitations](../reference/api/users-and-organizations.md#invitations);
+  IAMKit appends `token=…` to it and sends the result as `link`. Use private request files, not tracked
   configuration or shell history. Endpoint changes control where challenge codes go.
 - `DELETE`: 204; removes the override and **restores global fallback**, not
   necessarily disables delivery. Deleting an absent override returns 404.
@@ -51,6 +53,8 @@ The payload has no environment/application/resource IDs. Separate environment
 endpoints can choose their own template, but cannot infer additional tenant or
 application context from fields IAMKit does not send.
 Delivery is synchronous with a 10-second timeout and no automatic retry queue.
+Invitation mail is sent after the invitation is saved: a failed delivery is
+reported as `delivery: "failed"` and does not undo the invitation.
 A non-2xx response or network failure rejects delivery; do not return success
 before your service has accepted responsibility for sending.
 

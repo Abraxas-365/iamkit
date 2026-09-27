@@ -27,7 +27,7 @@ func (s *DeliveryService) SetDeliveryConfig(ctx context.Context, environmentID i
 	if err := input.Validate(); err != nil {
 		return err
 	}
-	return s.repo.SetDeliveryConfig(ctx, environmentID, input.WebhookURL, input.WebhookToken)
+	return s.repo.SetDeliveryConfig(ctx, environmentID, input)
 }
 
 func (s *DeliveryService) DeleteDeliveryConfig(ctx context.Context, environmentID identity.EnvironmentID) error {
@@ -45,14 +45,26 @@ func (s *DeliveryService) DeliveryConfig(ctx context.Context, environmentID iden
 	return cfg, err
 }
 
-func (s *DeliveryService) Send(ctx context.Context, environmentID identity.EnvironmentID, email, purpose, code string) error {
+// InvitationURL returns the environment's invitation page, or "" when it
+// has none (the global webhook has no invitation page).
+func (s *DeliveryService) InvitationURL(ctx context.Context, environmentID identity.EnvironmentID) (string, error) {
+	cfg, _, err := s.repo.GetDeliveryConfig(ctx, environmentID)
+	var e *errx.Error
+	if errx.As(err, &e) && e.Type == errx.TypeNotFound {
+		return "", nil
+	}
+	return cfg.InvitationURL, err
+}
+
+// Send delivers through the environment's webhook, falling back to the
+// global one.
+func (s *DeliveryService) Send(ctx context.Context, environmentID identity.EnvironmentID, m authentication.Message) error {
 	cfg, token, err := s.repo.GetDeliveryConfig(ctx, environmentID)
 	if err == nil && s.factory != nil {
-		d := s.factory(cfg.WebhookURL, token)
-		return d.Send(ctx, email, purpose, code)
+		return s.factory(cfg.WebhookURL, token).Send(ctx, m)
 	}
 	if s.global != nil {
-		return s.global.Send(ctx, email, purpose, code)
+		return s.global.Send(ctx, m)
 	}
 	return errx.External("email delivery is not configured")
 }

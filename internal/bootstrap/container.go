@@ -26,6 +26,8 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/authzmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/fedmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/impmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invhttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/invitation/invmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
@@ -91,6 +93,8 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Groups = organizationModule.Groups
 	s.Domains = organizationModule.Domains
 	s.Organizations = organizationModule.HTTP
+	invitationModule := invmodule.New(invmodule.Deps{DB: db, Delivery: authenticationModule.DeliveryService, ActorID: server.OperatorID})
+	s.Invitations = invitationModule.HTTP
 	authorizationModule := authzmodule.New(authzmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Grants = authorizationModule.Grants
 	s.Authorization = authorizationModule.HTTP
@@ -118,6 +122,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Structure:       orghttp.NewStructure(organizationModule.StructureCommands, organizationModule.StructureQueries, actor),
 		Groups:          orghttp.NewGroups(organizationModule.GroupCommands, organizationModule.GroupQueries, actor),
 		Domains:         orghttp.NewDomains(organizationModule.DomainCommands, organizationModule.DomainQueries, actor),
+		Invitations:     invhttp.New(invitationModule.Commands, invitationModule.Queries, actor),
 		Applications:    apphttp.New(applicationModule.Commands, applicationModule.Queries, actor),
 		Authorization:   authzhttp.New(authorizationModule.ResourceCommands, authorizationModule.ResourceQueries, actor),
 		Grants:          authzhttp.NewGrants(authorizationModule.GrantCommands, authorizationModule.GrantQueries, actor),

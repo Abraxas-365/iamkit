@@ -139,6 +139,43 @@ Verified domains restrict SCIM adoption when a connection uses
 route email discovery, just-in-time provisioning and SSO enforcement for the
 organization's federation connections (see [federation](../../guides/federation.md#organization-sso)).
 
+## Invitations
+
+Invite a person by email into an organization. Prefix these paths with
+`/organizations/:organization`:
+
+| Method/path | Input | Success |
+| --- | --- | --- |
+| `POST /invitations` | `email`, `role_ids?`, `group_ids?` | 201 issued invitation (token shown once) |
+| `GET /invitations` | List parameters; `search` matches the email; `status` = `pending`\|`accepted`\|`revoked`\|`expired` | 200 page |
+| `GET /invitations/:invitation` | — | 200 invitation |
+| `POST /invitations/:invitation/resend` | — | 200 issued invitation with a new token and expiry; 422 once accepted or revoked |
+| `DELETE /invitations/:invitation` | — | 204; idempotent; 422 once accepted |
+
+An invitation is `{id,organization_id,email,role_ids,group_ids,inviter,expires_at,accepted_at,accepted_user_id?,revoked_at,created_at,status}`.
+`status` is derived, never stored. Create and resend also return `token`,
+`link` (only when the environment's delivery config has an `invitation_url`)
+and `delivery`: `sent`, `failed` (the webhook rejected it; the invitation is
+still valid, share the token yourself) or `skipped` (no webhook configured).
+Only a SHA-256 hash of the token is stored; it cannot be shown again.
+
+Rules: email is normalized (trimmed, lowercased); up to 50 roles and 50 groups.
+Roles must exist in the environment and groups must be operator-managed groups
+of the organization (directory groups are rejected), otherwise 422. Inviting an
+active member returns 409; so does a second pending invitation for the same
+email (resend or revoke the first). Expired pending invitations are revoked
+automatically when the email is invited again. Inactive organizations cannot
+invite (422). Invitations expire after 7 days; resend restarts the clock and
+invalidates the previous token. Viewers can read invitations but not change them.
+
+The invitee accepts through the public [identity API](identity.md#invitations).
+Erasing a user permanently also deletes invitations addressed to or accepted by
+them.
+
+**Verify (invitations):** invite a test address, confirm the webhook received the
+token, preview and accept it, then accept again (401) and read the invitation
+back as `accepted`.
+
 **Verify (domains):** add a domain, call `verify` before publishing the record (422), publish
 it, verify again (200, `verification_method: "dns"`), then try to claim it from
 another organization (409).
@@ -148,5 +185,5 @@ creating a resource grant: it must fail. Complete the
 [first application](../../start/first-application.md) workflow for permitted access.
 
 Source: `user/adapters/userhttp/handler.go`, `user/user.go`,
-`organization/adapters/orghttp/{handler,structure,groups,domains}.go`, `organization/adapters/orgdns` and domain types under
+`organization/adapters/orghttp/{handler,structure,groups,domains}.go`, `organization/adapters/orgdns`, `invitation/adapters/invhttp` and domain types under
 `internal/iam/`.

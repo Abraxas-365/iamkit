@@ -227,6 +227,81 @@ func (e Environment) UpdateMember(ctx context.Context, org, user string, input M
 	return e.operation(ctx, "PATCH", []string{"organizations", org, "members", user}, input, nil)
 }
 
+// ── Invitations ──
+
+// Invitation invites an email address into an organization. Status is one
+// of pending, accepted, revoked or expired.
+type Invitation struct {
+	ID             string     `json:"id"`
+	OrganizationID string     `json:"organization_id"`
+	Email          string     `json:"email"`
+	RoleIDs        []string   `json:"role_ids"`
+	GroupIDs       []string   `json:"group_ids"`
+	Inviter        string     `json:"inviter"`
+	ExpiresAt      time.Time  `json:"expires_at"`
+	AcceptedAt     *time.Time `json:"accepted_at"`
+	AcceptedUserID string     `json:"accepted_user_id,omitempty"`
+	RevokedAt      *time.Time `json:"revoked_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	Status         string     `json:"status"`
+}
+
+// IssuedInvitation is returned once by Invite and ResendInvitation: Token
+// (and Link, when the environment has an invitation_url) are never shown
+// again. Delivery is "sent", "failed" or "skipped".
+type IssuedInvitation struct {
+	Invitation
+	Token    string `json:"token"`
+	Link     string `json:"link,omitempty"`
+	Delivery string `json:"delivery"`
+}
+
+type InvitationInput struct {
+	Email    string   `json:"email"`
+	RoleIDs  []string `json:"role_ids,omitempty"`
+	GroupIDs []string `json:"group_ids,omitempty"`
+}
+
+func (e Environment) Invite(ctx context.Context, org string, input InvitationInput) (IssuedInvitation, error) {
+	var out IssuedInvitation
+	err := e.operation(ctx, "POST", []string{"organizations", org, "invitations"}, input, &out)
+	return out, err
+}
+
+// Invitations lists an organization's invitations; status "" returns all
+// (filtered client-side on the first page).
+func (e Environment) Invitations(ctx context.Context, org, status string) ([]Invitation, error) {
+	all, err := listOp[Invitation](e, ctx, []string{"organizations", org, "invitations"})
+	if err != nil || status == "" {
+		return all, err
+	}
+	out := []Invitation{}
+	for _, inv := range all {
+		if inv.Status == status {
+			out = append(out, inv)
+		}
+	}
+	return out, nil
+}
+
+func (e Environment) Invitation(ctx context.Context, org, id string) (Invitation, error) {
+	var out Invitation
+	err := e.operation(ctx, "GET", []string{"organizations", org, "invitations", id}, nil, &out)
+	return out, err
+}
+
+// ResendInvitation issues a new token (the previous one stops working) and
+// restarts the expiry.
+func (e Environment) ResendInvitation(ctx context.Context, org, id string) (IssuedInvitation, error) {
+	var out IssuedInvitation
+	err := e.operation(ctx, "POST", []string{"organizations", org, "invitations", id, "resend"}, nil, &out)
+	return out, err
+}
+
+func (e Environment) RevokeInvitation(ctx context.Context, org, id string) error {
+	return e.operation(ctx, "DELETE", []string{"organizations", org, "invitations", id}, nil, nil)
+}
+
 // ── operation helper for safe path composition ──
 
 func (e Environment) operation(ctx context.Context, method string, parts []string, input, output any) error {

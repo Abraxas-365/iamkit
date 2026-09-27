@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Mail, Globe, Shield, Clock, Pencil, Trash2, Plus } from 'lucide-react'
+import { Mail, Globe, Shield, Clock, Pencil, Trash2, Plus, MailPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -16,6 +16,7 @@ interface DeliveryConfig {
   environment_id: string
   webhook_url: string
   has_token: boolean
+  invitation_url: string
   created_at: string
   updated_at: string
 }
@@ -90,6 +91,14 @@ export default function NotificationsPage() {
               <CardTitle className="text-sm font-normal">{new Date(config.updated_at).toLocaleString()}</CardTitle>
             </CardHeader>
           </Card>
+          <Card>
+            <CardHeader>
+              <CardDescription className="flex items-center gap-1.5">
+                <MailPlus className="size-3.5" /> Invitation page
+              </CardDescription>
+              <CardTitle className="break-all font-mono text-sm font-normal">{config.invitation_url || <span className="font-sans text-muted-foreground">Not set: invitations carry only the token</span>}</CardTitle>
+            </CardHeader>
+          </Card>
         </div>
 
         {canWrite && (
@@ -135,7 +144,7 @@ export default function NotificationsPage() {
           </div>
           <div className="space-y-1.5">
             <p className="text-sm font-medium">2. IAMKit POSTs to your webhook</p>
-            <p className="text-xs text-muted-foreground">A JSON payload with <code className="text-[10px]">email</code>, <code className="text-[10px]">purpose</code> and <code className="text-[10px]">code</code>, authenticated with a Bearer token.</p>
+            <p className="text-xs text-muted-foreground">A JSON payload with <code className="text-[10px]">email</code>, <code className="text-[10px]">purpose</code> and <code className="text-[10px]">code</code> (invitations: <code className="text-[10px]">token</code>, <code className="text-[10px]">link</code>, <code className="text-[10px]">organization</code>), authenticated with a Bearer token.</p>
           </div>
           <div className="space-y-1.5">
             <p className="text-sm font-medium">3. Your service sends the email</p>
@@ -166,6 +175,7 @@ function DeliveryForm({ path, existing, onClose, onSaved }: { path: string; exis
         const data = {
           webhook_url: String(form.get('webhook_url') ?? '').trim(),
           webhook_token: String(form.get('webhook_token') ?? '').trim(),
+          invitation_url: String(form.get('invitation_url') ?? '').trim(),
         }
         if (!data.webhook_url || !data.webhook_token) {
           setError('Both URL and token are required.')
@@ -187,6 +197,11 @@ function DeliveryForm({ path, existing, onClose, onSaved }: { path: string; exis
           <label className="text-sm font-medium" htmlFor="webhook-token">Webhook token</label>
           <Input id="webhook-token" name="webhook_token" type="password" required disabled={busy} placeholder={existing ? '(enter new token)' : 'Bearer authentication secret'} autoComplete="off" />
           <p className="text-xs text-muted-foreground">Sent as <code className="text-[10px]">Authorization: Bearer &lt;token&gt;</code> with every delivery request.</p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium" htmlFor="invitation-url">Invitation page (optional)</label>
+          <Input id="invitation-url" name="invitation_url" type="url" disabled={busy} defaultValue={existing?.invitation_url ?? ''} placeholder="https://app.example.com/join" />
+          <p className="text-xs text-muted-foreground">Your page that accepts invitations. IAMKit adds <code className="text-[10px]">?token=…</code> and sends the result as <code className="text-[10px]">link</code>.</p>
         </div>
         {error && <ErrorState error={error} />}
         <div className="flex justify-end gap-2 border-t pt-4">
