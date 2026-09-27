@@ -15,7 +15,9 @@ internal/
   config/                Constants (TTLs, limits)
   errx/                  Typed application errors (the only error system)
   httpx/                 HTTP-specific helpers (parse pagination from Fiber ctx)
+  i18n/                  End-user text catalogs (locales/<code>.json), Resolve/T/Date — stdlib only
   identity/              Typed IDs, domain primitives, validation helpers
+  netx/                  Guarded dialing to operator-supplied hosts (public addresses only)
   query/                 Pagination types (Pagination, Paginated[T]) — transport-agnostic
   logx/                  Structured logging
   ptrx/                  Pointer helpers
@@ -126,7 +128,8 @@ Organization has `StructureCommands`/`StructureQueries`,
 `DomainCommands`/`DomainQueries`/`DomainRepository` (plus the `Resolver` DNS
 port, adapter `orgdns`, replaceable in tests via `bootstrap.WithResolver`);
 provisioning has the same trio for SCIM groups. Federation's `fedoidc` adapter
-dials providers through `GuardedTransport` (public addresses only) for
+dials providers through `GuardedTransport` (public addresses only, via
+`netx.GuardedDialer`) for
 sealed-secret connections; tests replace it via
 `bootstrap.WithFederationTransport`. Management has
 `ControlCommands`/`ControlQueries` and `ActivityCommands`/`ActivityQueries`.

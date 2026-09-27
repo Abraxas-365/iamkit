@@ -104,7 +104,7 @@ func (h *Handler) InitiateChallenge(c *fiber.Ctx) error {
 		return err
 	}
 	c.Set("Cache-Control", "no-store")
-	return c.Status(202).JSON(fiber.Map{"challenge_id": id, "message": "If eligible, a code will be sent.", "expires_in": 300})
+	return c.Status(202).JSON(fiber.Map{"challenge_id": id, "message": "If eligible, a code will be sent.", "expires_in": int(config.ChallengeTTL.Seconds())})
 }
 func (h *Handler) VerifyChallenge(c *fiber.Ctx) error {
 	var input struct {

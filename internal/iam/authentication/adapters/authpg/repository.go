@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -137,7 +138,7 @@ func (t *Transaction) CreateChallenge(ctx context.Context, id identity.Challenge
 	if _, err := t.tx.ExecContext(ctx, `UPDATE identity_challenges SET consumed_at=now() WHERE environment_id=$1 AND user_id=$2 AND purpose=$3 AND consumed_at IS NULL`, environment, user, purpose); err != nil {
 		return failure(err)
 	}
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO identity_challenges(id,environment_id,user_id,purpose,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval '5 minutes')`, id, environment, user, purpose, hash)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO identity_challenges(id,environment_id,user_id,purpose,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5,now()+make_interval(secs => $6))`, id, environment, user, purpose, hash, config.ChallengeTTL.Seconds())
 	return failure(err)
 }
 func (t *Transaction) Challenge(ctx context.Context, id identity.ChallengeID, _ identity.UserID, purpose string) (authentication.Challenge, error) {

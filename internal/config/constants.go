@@ -22,6 +22,9 @@ const (
 	APIKeyTTL             = 24 * time.Hour // Bootstrap / recovery API key expiry
 	SessionCookieMaxAge   = 3600           // seconds — matches OperatorSessionTTL
 	InvitationTTL         = 7 * 24 * time.Hour
+	// ChallengeTTL is how long an emailed one-time code (sign-in, password
+	// reset, email verification) stays valid; emails state it.
+	ChallengeTTL = 5 * time.Minute
 )
 
 // OAuth 2.0 / OIDC lifespans (fosite).

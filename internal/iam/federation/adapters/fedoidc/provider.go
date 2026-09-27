@@ -3,18 +3,16 @@ package fedoidc
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
+	"github.com/Abraxas-365/iamkit/internal/netx"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
@@ -226,29 +224,10 @@ func flag(v any) *bool {
 // GuardedTransport dials only public addresses. The check runs on the
 // resolved IP at connect time, so DNS rebinding cannot bypass it, and
 // environment proxies are ignored because they would hide the destination.
+// A refused dial is a plain error: discovery wraps it as 502, the provider
+// being misconfigured rather than the caller unauthorized.
 func GuardedTransport() http.RoundTripper {
-	dialer := &net.Dialer{Timeout: config.ExternalHTTPTimeout, Control: func(_, address string, _ syscall.RawConn) error {
-		host, _, err := net.SplitHostPort(address)
-		if err != nil {
-			return err
-		}
-		if ip := net.ParseIP(host); ip == nil || !Public(ip) {
-			// A plain error: discovery wraps it as 502, the provider being
-			// misconfigured rather than the caller unauthorized.
-			return errNotPublic
-		}
-		return nil
-	}}
-	return &http.Transport{DialContext: dialer.DialContext, TLSHandshakeTimeout: config.ExternalHTTPTimeout, ResponseHeaderTimeout: config.ExternalHTTPTimeout, IdleConnTimeout: 90 * time.Second, ForceAttemptHTTP2: true}
-}
-
-var errNotPublic = errors.New("provider address is not public")
-
-var sharedAddressSpace = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
-
-// Public reports whether ip is a globally routable unicast address.
-func Public(ip net.IP) bool {
-	return ip.IsGlobalUnicast() && !ip.IsPrivate() && !sharedAddressSpace.Contains(ip)
+	return &http.Transport{DialContext: netx.GuardedDialer().DialContext, TLSHandshakeTimeout: config.ExternalHTTPTimeout, ResponseHeaderTimeout: config.ExternalHTTPTimeout, IdleConnTimeout: 90 * time.Second, ForceAttemptHTTP2: true}
 }
 
 var _ federation.Provider = Provider{}
