@@ -97,7 +97,7 @@ func (p Provider) config(ctx context.Context, c federation.Connection) (*oidc.Pr
 	}
 	provider, err := oidc.NewProvider(ctx, c.Issuer)
 	if err != nil {
-		return nil, nil, errx.Wrap(err, "provider discovery failed", errx.TypeExternal)
+		return nil, nil, federation.ErrProviderUnavailable(err)
 	}
 	endpoint := provider.Endpoint()
 	for _, raw := range []string{endpoint.AuthURL, endpoint.TokenURL} {

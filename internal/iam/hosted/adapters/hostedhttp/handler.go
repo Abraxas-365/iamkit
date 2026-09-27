@@ -141,12 +141,17 @@ func message(c *fiber.Ctx, status int, title, text string) error {
 	return render(c, status, "message", view{Title: title, Error: text})
 }
 
-// failed renders a page for an error: client errors show their message;
-// anything else is logged and shown generically.
+// failed renders a page for an error: client errors show their message, an
+// unreachable identity provider gets its own explanation, and anything else
+// is logged and shown generically.
 func failed(c *fiber.Ctx, err error) (int, string) {
 	var e *errx.Error
 	if errx.As(err, &e) && e.HTTPStatus >= 400 && e.HTTPStatus < 500 {
 		return e.HTTPStatus, e.Message
+	}
+	if e != nil && e.Code == "PROVIDER_UNAVAILABLE" {
+		slog.Warn("hosted login: identity provider unavailable", "path", c.Path(), "err", err)
+		return fiber.StatusBadGateway, "Your organization's single sign-on provider is not responding. Try again in a few minutes, or contact your administrator if the problem continues."
 	}
 	slog.Error("hosted login", "path", c.Path(), "err", err)
 	return fiber.StatusInternalServerError, "Something went wrong. Please try again."

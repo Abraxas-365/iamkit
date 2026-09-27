@@ -79,6 +79,12 @@ may still use a password in another organization that does not enforce SSO.
 Emails outside the verified domains (contractors, guests) are unaffected.
 Password reset is not blocked, so a reset password simply stays unusable there.
 
+If the provider cannot be reached or its discovery document is unusable, the
+start fails with 502 code `PROVIDER_UNAVAILABLE` (the cause is logged, never
+returned); hosted sign-in pages tell the user the SSO provider is not
+responding. Check the issuer URL, DNS and outbound HTTPS — sealed-secret
+connections only reach public addresses.
+
 Break-glass: `PATCH /organizations/:organization/members/:user` with
 `{"sso_bypass":true}` (console: key icon on Members) lets that member keep
 using a password. Keep at least one administrator with the bypass before

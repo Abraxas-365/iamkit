@@ -186,6 +186,15 @@ func (c Connection) Admit(claims Claims) (string, error) {
 	return email, nil
 }
 
+// ErrProviderUnavailable is returned when the identity provider cannot be
+// reached or serves no usable discovery document (502 PROVIDER_UNAVAILABLE),
+// so callers can tell an outage apart from a rejected login.
+func ErrProviderUnavailable(cause error) error {
+	e := errx.Wrap(cause, "identity provider unavailable", errx.TypeExternal)
+	e.Code = "PROVIDER_UNAVAILABLE"
+	return e
+}
+
 // DisplayName is the provider's name claim, or the email's local part.
 func (c Claims) DisplayName(email string) string {
 	if name := strings.TrimSpace(c.Name); name != "" && len(name) <= 200 {

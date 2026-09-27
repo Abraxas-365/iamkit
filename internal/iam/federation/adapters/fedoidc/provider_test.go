@@ -1,9 +1,11 @@
 package fedoidc
 
 import (
+	"context"
 	"net"
 	"testing"
 
+	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -59,5 +61,21 @@ func TestEmailVerifiedFlag(t *testing.T) {
 		if got := flag(v); got == nil || *got != want {
 			t.Errorf("flag(%v) = %v", v, got)
 		}
+	}
+}
+
+type plainCipher struct{}
+
+func (plainCipher) Seal(plain []byte) (string, error)  { return string(plain), nil }
+func (plainCipher) Open(sealed string) ([]byte, error) { return []byte(sealed), nil }
+
+// An unreachable issuer is an outage (502 PROVIDER_UNAVAILABLE), not a
+// generic internal error, so the sign-in page can explain it.
+func TestUnreachableProviderIsUnavailable(t *testing.T) {
+	c := federation.Connection{Issuer: "https://idp.invalid", Client: "client", Sealed: "secret"}
+	_, err := Provider{Cipher: plainCipher{}}.Authorize(context.Background(), c, "state", "nonce", "verifier")
+	var e *errx.Error
+	if !errx.As(err, &e) || e.Code != "PROVIDER_UNAVAILABLE" || e.HTTPStatus != 502 {
+		t.Fatalf("got %v", err)
 	}
 }
