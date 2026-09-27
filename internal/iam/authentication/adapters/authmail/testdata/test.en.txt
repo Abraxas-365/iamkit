@@ -1,0 +1,8 @@
+Subject: Test email from Acme
+
+Email delivery works
+
+This test message confirms that Acme can send email. No action is needed.
+
+--
+You received this because someone tested email delivery for Acme.

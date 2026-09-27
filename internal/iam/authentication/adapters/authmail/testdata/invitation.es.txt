@@ -1,0 +1,12 @@
+Subject: Te invitaron a unirte a Acme Corp
+
+Únete a Acme Corp
+
+Bob te invitó a unirte a Acme Corp en Acme.
+
+Esta invitación vence el 4 de octubre de 2026.
+
+Aceptar invitación: https://app.acme.io/invite?token=ik_inv_token
+
+--
+Si no esperabas esta invitación, puedes ignorar este correo.

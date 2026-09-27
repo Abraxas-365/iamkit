@@ -15,31 +15,33 @@
   "date.month.11": "noviembre",
   "date.month.12": "diciembre",
 
-  "email.common.ignore": "Si no solicitaste esto, puedes ignorar este correo.",
   "email.common.link_fallback": "Si el botón no funciona, copia y pega este enlace en tu navegador:",
-  "email.common.sent_by": "Enviado por %s",
+  "email.common.token_label": "Código de invitación",
+  "email.common.someone": "Alguien",
 
-  "email.login.subject": "Tu código de acceso a %s",
+  "email.login.subject": "Tu código de acceso a {{app_name}}",
   "email.login.heading": "Tu código de acceso",
-  "email.login.body": "Ingresa este código para iniciar sesión. Vence en %d minutos.",
+  "email.login.body": "Ingresa este código para iniciar sesión en {{app_name}}. Vence en {{expires_in}} minutos.",
+  "email.login.footer": "Si no intentaste iniciar sesión, puedes ignorar este correo.",
 
-  "email.password_reset.subject": "Restablece tu contraseña de %s",
+  "email.password_reset.subject": "Restablece tu contraseña de {{app_name}}",
   "email.password_reset.heading": "Restablece tu contraseña",
-  "email.password_reset.body": "Ingresa este código para elegir una nueva contraseña. Vence en %d minutos.",
+  "email.password_reset.body": "Ingresa este código para elegir una nueva contraseña. Vence en {{expires_in}} minutos.",
+  "email.password_reset.footer": "Si no pediste restablecer tu contraseña, puedes ignorar este correo.",
 
-  "email.email_verification.subject": "Verifica tu correo para %s",
+  "email.email_verification.subject": "Verifica tu correo para {{app_name}}",
   "email.email_verification.heading": "Verifica tu correo",
-  "email.email_verification.body": "Ingresa este código para verificar tu dirección de correo. Vence en %d minutos.",
+  "email.email_verification.body": "Ingresa este código para verificar tu dirección de correo. Vence en {{expires_in}} minutos.",
+  "email.email_verification.footer": "Si no solicitaste esto, puedes ignorar este correo.",
 
-  "email.invitation.subject": "Te invitaron a unirte a %s",
-  "email.invitation.heading": "Únete a %s",
-  "email.invitation.body": "Te invitaron a unirte a %s.",
-  "email.invitation.body_inviter": "%s te invitó a unirte a %s.",
+  "email.invitation.subject": "Te invitaron a unirte a {{organization}}",
+  "email.invitation.heading": "Únete a {{organization}}",
+  "email.invitation.body": "{{inviter}} te invitó a unirte a {{organization}} en {{app_name}}.\n\nEsta invitación vence el {{expires_at}}.",
   "email.invitation.action": "Aceptar invitación",
-  "email.invitation.token": "Usa este código de invitación en la aplicación: %s",
-  "email.invitation.expires": "Esta invitación vence el %s.",
+  "email.invitation.footer": "Si no esperabas esta invitación, puedes ignorar este correo.",
 
-  "email.test.subject": "Correo de prueba de %s",
+  "email.test.subject": "Correo de prueba de {{app_name}}",
   "email.test.heading": "El envío de correos funciona",
-  "email.test.body": "Este mensaje de prueba se envió desde la consola de IAMKit. No necesitas hacer nada."
+  "email.test.body": "Este mensaje de prueba confirma que {{app_name}} puede enviar correos. No necesitas hacer nada.",
+  "email.test.footer": "Recibiste esto porque alguien probó el envío de correos de {{app_name}}."
 }

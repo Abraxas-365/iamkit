@@ -1,0 +1,10 @@
+Subject: Tu código de acceso a Acme
+
+Tu código de acceso
+
+Ingresa este código para iniciar sesión en Acme. Vence en 5 minutos.
+
+    12345678
+
+--
+Si no intentaste iniciar sesión, puedes ignorar este correo.

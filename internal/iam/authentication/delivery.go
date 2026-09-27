@@ -190,7 +190,7 @@ type PreviewInput struct {
 }
 
 // PreviewPurposes are the emails IAMKit renders.
-var PreviewPurposes = []string{"login", "password_reset", "email_verification", "invitation", PurposeTest}
+var PreviewPurposes = []string{PurposeLogin, PurposePasswordReset, PurposeEmailVerification, PurposeInvitation, PurposeTest}
 
 // Validate checks the purpose; an unknown locale falls back like any other.
 func (p PreviewInput) Validate() error {

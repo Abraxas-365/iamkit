@@ -1,0 +1,12 @@
+Subject: You're invited to join Acme Corp
+
+Join Acme Corp
+
+Bob invited you to join Acme Corp on Acme.
+
+This invitation expires on October 4, 2026.
+
+Accept invitation: https://app.acme.io/invite?token=ik_inv_token
+
+--
+If you weren't expecting this invitation, you can ignore this email.

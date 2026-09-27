@@ -1,0 +1,10 @@
+Subject: Your sign-in code for Acme
+
+Your sign-in code
+
+Enter this code to sign in to Acme. It expires in 5 minutes.
+
+    12345678
+
+--
+If you didn't try to sign in, you can safely ignore this email.

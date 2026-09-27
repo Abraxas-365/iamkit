@@ -64,15 +64,23 @@ type Mailer interface {
 	Deliver(ctx context.Context, email Email) error
 }
 
-// Renderer writes the email for a message in the brand's look; the language
-// is message.Locale when set, else the brand's.
+// Renderer writes the email for a message: the environment's brand
+// (Branding), language (message.Locale, else the brand's, else the
+// deployment default) and wording (Templates over DefaultCopy; draft, when
+// set, replaces the saved wording, for previews). The sender is left empty.
 type Renderer interface {
-	Render(ctx context.Context, message Message, brand Brand) (Email, error)
+	Render(ctx context.Context, message Message, draft *Copy) (Email, error)
 }
 
 // Branding reads how an environment's emails look (hosted login branding).
 type Branding interface {
 	Brand(ctx context.Context, environment identity.EnvironmentID) (Brand, error)
+}
+
+// Templates reads an environment's saved wording for one email in one
+// language; ok is false when it keeps IAMKit's defaults.
+type Templates interface {
+	Copy(ctx context.Context, environment identity.EnvironmentID, purpose, locale string) (copy Copy, ok bool, err error)
 }
 
 // Cipher seals delivery secrets (SMTP password, Resend API key) at rest

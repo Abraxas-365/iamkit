@@ -1,0 +1,8 @@
+Subject: Correo de prueba de Acme
+
+El envío de correos funciona
+
+Este mensaje de prueba confirma que Acme puede enviar correos. No necesitas hacer nada.
+
+--
+Recibiste esto porque alguien probó el envío de correos de Acme.

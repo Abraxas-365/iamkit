@@ -1,0 +1,18 @@
+{{define "email"}}{{.Heading}}
+{{range .Body}}
+{{range .}}{{.}}
+{{end}}{{end}}
+{{- if .Code}}
+    {{.Code}}
+{{end}}
+{{- if .Link}}
+{{.Action}}: {{.Link}}
+{{else if .Token}}
+{{.TokenLabel}}: {{.Token}}
+{{end}}
+{{- if .Footer}}
+--
+{{range $i, $p := .Footer}}{{if $i}}
+{{end}}{{range $p}}{{.}}
+{{end}}{{end}}{{end}}
+{{- end}}

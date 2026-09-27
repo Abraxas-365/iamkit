@@ -15,31 +15,33 @@
   "date.month.11": "November",
   "date.month.12": "December",
 
-  "email.common.ignore": "If you didn't request this, you can safely ignore this email.",
   "email.common.link_fallback": "If the button doesn't work, copy and paste this link into your browser:",
-  "email.common.sent_by": "Sent by %s",
+  "email.common.token_label": "Invitation code",
+  "email.common.someone": "Someone",
 
-  "email.login.subject": "Your sign-in code for %s",
+  "email.login.subject": "Your sign-in code for {{app_name}}",
   "email.login.heading": "Your sign-in code",
-  "email.login.body": "Enter this code to sign in. It expires in %d minutes.",
+  "email.login.body": "Enter this code to sign in to {{app_name}}. It expires in {{expires_in}} minutes.",
+  "email.login.footer": "If you didn't try to sign in, you can safely ignore this email.",
 
-  "email.password_reset.subject": "Reset your %s password",
+  "email.password_reset.subject": "Reset your {{app_name}} password",
   "email.password_reset.heading": "Reset your password",
-  "email.password_reset.body": "Enter this code to choose a new password. It expires in %d minutes.",
+  "email.password_reset.body": "Enter this code to choose a new password. It expires in {{expires_in}} minutes.",
+  "email.password_reset.footer": "If you didn't ask to reset your password, you can safely ignore this email.",
 
-  "email.email_verification.subject": "Verify your email for %s",
+  "email.email_verification.subject": "Verify your email for {{app_name}}",
   "email.email_verification.heading": "Verify your email",
-  "email.email_verification.body": "Enter this code to verify your email address. It expires in %d minutes.",
+  "email.email_verification.body": "Enter this code to verify your email address. It expires in {{expires_in}} minutes.",
+  "email.email_verification.footer": "If you didn't request this, you can safely ignore this email.",
 
-  "email.invitation.subject": "You're invited to join %s",
-  "email.invitation.heading": "Join %s",
-  "email.invitation.body": "You've been invited to join %s.",
-  "email.invitation.body_inviter": "%s invited you to join %s.",
+  "email.invitation.subject": "You're invited to join {{organization}}",
+  "email.invitation.heading": "Join {{organization}}",
+  "email.invitation.body": "{{inviter}} invited you to join {{organization}} on {{app_name}}.\n\nThis invitation expires on {{expires_at}}.",
   "email.invitation.action": "Accept invitation",
-  "email.invitation.token": "Use this invitation code in the application: %s",
-  "email.invitation.expires": "This invitation expires on %s.",
+  "email.invitation.footer": "If you weren't expecting this invitation, you can ignore this email.",
 
-  "email.test.subject": "Test email from %s",
+  "email.test.subject": "Test email from {{app_name}}",
   "email.test.heading": "Email delivery works",
-  "email.test.body": "This test message was sent from the IAMKit console. No action is needed."
+  "email.test.body": "This test message confirms that {{app_name}} can send email. No action is needed.",
+  "email.test.footer": "You received this because someone tested email delivery for {{app_name}}."
 }

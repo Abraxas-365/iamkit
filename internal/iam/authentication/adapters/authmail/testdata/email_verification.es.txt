@@ -1,0 +1,10 @@
+Subject: Verifica tu correo para Acme
+
+Verifica tu correo
+
+Ingresa este código para verificar tu dirección de correo. Vence en 5 minutos.
+
+    12345678
+
+--
+Si no solicitaste esto, puedes ignorar este correo.

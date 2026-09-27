@@ -1,0 +1,10 @@
+Subject: Verify your email for Acme
+
+Verify your email
+
+Enter this code to verify your email address. It expires in 5 minutes.
+
+    12345678
+
+--
+If you didn't request this, you can safely ignore this email.
