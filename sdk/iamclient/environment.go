@@ -3,6 +3,7 @@ package iamclient
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -469,46 +470,85 @@ func (e Environment) UnassignPosition(ctx context.Context, org, id string) error
 
 // ── Delivery Config ──
 
-// DeliveryConfig is the per-environment webhook delivery configuration.
+// Email delivery providers of an environment.
+const (
+	DeliveryWebhook = "webhook" // IAMKit posts JSON to your endpoint, which writes and sends the email
+	DeliverySMTP    = "smtp"    // IAMKit renders the email and sends it through an SMTP server
+	DeliveryResend  = "resend"  // IAMKit renders the email and sends it through the Resend API
+)
+
+// DeliveryConfig is the per-environment email delivery configuration.
+// Secrets are never returned: HasToken says a webhook token is stored,
+// HasSecret an SMTP password or Resend API key.
 type DeliveryConfig struct {
 	EnvironmentID string `json:"environment_id"`
+	// Provider is DeliveryWebhook, DeliverySMTP or DeliveryResend.
+	Provider      string `json:"provider"`
 	WebhookURL    string `json:"webhook_url"`
 	HasToken      bool   `json:"has_token"`
 	InvitationURL string `json:"invitation_url"`
+	FromEmail     string `json:"from_email"`
+	FromName      string `json:"from_name"`
+	ReplyTo       string `json:"reply_to"`
+	SMTPHost      string `json:"smtp_host"`
+	SMTPPort      int    `json:"smtp_port"`
+	SMTPUsername  string `json:"smtp_username"`
+	SMTPTLS       string `json:"smtp_tls"`
+	HasSecret     bool   `json:"has_secret"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
 }
 
-// SetDeliveryConfig creates or replaces the per-environment delivery webhook.
+// SetDeliveryConfig creates or replaces the per-environment delivery.
+// Set only the fields of the chosen Provider (empty = DeliveryWebhook):
+//
+//   - webhook: WebhookURL, WebhookToken
+//   - smtp: FromEmail, FromName, ReplyTo, SMTPHost, SMTPPort (default 587),
+//     SMTPUsername, SMTPPassword, SMTPTLS ("starttls" or "tls"; 465 implies tls)
+//   - resend: FromEmail, FromName, ReplyTo, APIKey
+//
+// An empty SMTPPassword or APIKey keeps the stored one when the provider is
+// unchanged. Storing either needs IAMKIT_ENCRYPTION_KEY on the server.
 type SetDeliveryConfig struct {
-	WebhookURL   string `json:"webhook_url"`
-	WebhookToken string `json:"webhook_token"`
+	Provider     string `json:"provider,omitempty"`
+	WebhookURL   string `json:"webhook_url,omitempty"`
+	WebhookToken string `json:"webhook_token,omitempty"`
 	// InvitationURL is the app page that accepts invitations; the token is
-	// added as the "token" query parameter. Optional.
+	// added as the "token" query parameter. Optional: with smtp or resend
+	// and no URL, invitations link to IAMKit's hosted invite page.
 	InvitationURL string `json:"invitation_url,omitempty"`
+	FromEmail     string `json:"from_email,omitempty"`
+	FromName      string `json:"from_name,omitempty"`
+	ReplyTo       string `json:"reply_to,omitempty"`
+	SMTPHost      string `json:"smtp_host,omitempty"`
+	SMTPPort      int    `json:"smtp_port,omitempty"`
+	SMTPUsername  string `json:"smtp_username,omitempty"`
+	SMTPPassword  string `json:"smtp_password,omitempty"`
+	SMTPTLS       string `json:"smtp_tls,omitempty"`
+	APIKey        string `json:"api_key,omitempty"`
 }
 
-// DeliveryConfig returns the delivery webhook configuration for this environment.
+// DeliveryConfig returns the delivery configuration for this environment.
 func (e Environment) DeliveryConfig(ctx context.Context) (DeliveryConfig, error) {
 	var out DeliveryConfig
 	err := e.client.Do(ctx, "GET", e.path("delivery"), nil, &out)
 	return out, err
 }
 
-// SetDeliveryConfig creates or replaces the delivery webhook for this environment.
+// SetDeliveryConfig creates or replaces the delivery for this environment.
 func (e Environment) SetDeliveryConfig(ctx context.Context, input SetDeliveryConfig) error {
 	return e.client.Do(ctx, "PUT", e.path("delivery"), input, nil)
 }
 
-// DeleteDeliveryConfig removes the per-environment delivery webhook,
-// falling back to the global EMAIL_WEBHOOK_URL.
+// DeleteDeliveryConfig removes the per-environment delivery, falling back
+// to the global sender (EMAIL_PROVIDER and related settings).
 func (e Environment) DeleteDeliveryConfig(ctx context.Context) error {
 	return e.client.Do(ctx, "DELETE", e.path("delivery"), nil, nil)
 }
 
 // DeliveryAttempt is the outcome of one delivery. Reason is a fixed,
-// secret-free description; Status is the webhook's HTTP status when it
-// answered.
+// secret-free description; Status is the HTTP status of the webhook or
+// Resend API when it answered.
 type DeliveryAttempt struct {
 	Source    string `json:"source"` // environment, global or none
 	Purpose   string `json:"purpose"`
@@ -519,10 +559,12 @@ type DeliveryAttempt struct {
 	At        string `json:"at"`
 }
 
-// DeliveryStatus says which webhook serves the environment (environment,
-// global or none) and its latest attempt and failure.
+// DeliveryStatus says which configuration serves the environment
+// (environment, global or none), its provider and its latest attempt and
+// failure.
 type DeliveryStatus struct {
 	Source              string           `json:"source"`
+	Provider            string           `json:"provider"`
 	GlobalConfigured    bool             `json:"global_configured"`
 	HostedInvitationURL string           `json:"hosted_invitation_url"`
 	LastAttempt         *DeliveryAttempt `json:"last_attempt"`
@@ -536,12 +578,108 @@ func (e Environment) DeliveryStatus(ctx context.Context) (DeliveryStatus, error)
 	return out, err
 }
 
-// TestDelivery sends {"email","purpose":"test"} through the effective
-// webhook. A failed delivery is returned as an attempt, not an error.
+// TestDelivery sends a test message through the effective delivery. A
+// failed delivery is returned as an attempt, not an error.
 func (e Environment) TestDelivery(ctx context.Context, email string) (DeliveryAttempt, error) {
 	var out DeliveryAttempt
 	err := e.client.Do(ctx, "POST", e.path("delivery/test"), map[string]string{"email": email}, &out)
 	return out, err
+}
+
+// Email purposes IAMKit renders (previews and templates).
+const (
+	EmailLogin         = "login"
+	EmailPasswordReset = "password_reset"
+	EmailVerification  = "email_verification"
+	EmailInvitation    = "invitation"
+	EmailTest          = "test"
+)
+
+// EmailCopy is the wording of one email. Empty fields use IAMKit's default;
+// the {{placeholders}} allowed are listed in EmailTemplate.Placeholders.
+type EmailCopy struct {
+	Subject string `json:"subject"`
+	Heading string `json:"heading"`
+	Body    string `json:"body"`
+	// Action is the button label; only emails with a link have one.
+	Action string `json:"action"`
+	Footer string `json:"footer"`
+}
+
+// DeliveryPreview selects a sample email: its purpose and language (empty
+// = the environment's email language). Template previews unsaved wording,
+// AppName an unsaved brand name (the hosted display_name).
+type DeliveryPreview struct {
+	Purpose  string     `json:"purpose"`
+	Locale   string     `json:"locale,omitempty"`
+	Template *EmailCopy `json:"template,omitempty"`
+	AppName  *string    `json:"app_name,omitempty"`
+}
+
+// EmailPreview is a rendered sample email.
+type EmailPreview struct {
+	Subject string `json:"subject"`
+	HTML    string `json:"html"`
+	Text    string `json:"text"`
+}
+
+// PreviewDelivery renders a sample email with the environment's branding
+// and wording (or input.Template). It works with any provider; only smtp
+// and resend send what it shows. Without a Template it is a read (GET).
+func (e Environment) PreviewDelivery(ctx context.Context, input DeliveryPreview) (EmailPreview, error) {
+	var out EmailPreview
+	if input.Template == nil {
+		q := url.Values{"purpose": {input.Purpose}}
+		if input.Locale != "" {
+			q.Set("locale", input.Locale)
+		}
+		err := e.client.do(ctx, "GET", e.path("delivery/preview"), q, nil, &out)
+		return out, err
+	}
+	err := e.client.Do(ctx, "POST", e.path("delivery/preview"), input, &out)
+	return out, err
+}
+
+// EmailTemplateSummary says whether one email and language has custom wording.
+type EmailTemplateSummary struct {
+	Purpose    string `json:"purpose"`
+	Locale     string `json:"locale"`
+	Customized bool   `json:"customized"`
+	UpdatedAt  string `json:"updated_at,omitempty"`
+}
+
+// EmailTemplate is the saved wording (empty fields = default), IAMKit's
+// defaults and the placeholders the wording may use.
+type EmailTemplate struct {
+	EmailTemplateSummary
+	Template     EmailCopy `json:"template"`
+	Defaults     EmailCopy `json:"defaults"`
+	Placeholders []string  `json:"placeholders"`
+}
+
+// EmailTemplates lists every email purpose in every available language.
+func (e Environment) EmailTemplates(ctx context.Context) ([]EmailTemplateSummary, error) {
+	return list[EmailTemplateSummary](e, ctx, "delivery/templates")
+}
+
+// EmailTemplate returns the wording of one email in one language (an
+// available code, e.g. "es").
+func (e Environment) EmailTemplate(ctx context.Context, purpose, locale string) (EmailTemplate, error) {
+	var out EmailTemplate
+	err := e.operation(ctx, "GET", []string{"delivery", "templates", purpose, locale}, nil, &out)
+	return out, err
+}
+
+// SetEmailTemplate saves the wording of one email in one language.
+func (e Environment) SetEmailTemplate(ctx context.Context, purpose, locale string, input EmailCopy) (EmailTemplate, error) {
+	var out EmailTemplate
+	err := e.operation(ctx, "PUT", []string{"delivery", "templates", purpose, locale}, input, &out)
+	return out, err
+}
+
+// ResetEmailTemplate returns one email in one language to IAMKit's wording.
+func (e Environment) ResetEmailTemplate(ctx context.Context, purpose, locale string) error {
+	return e.operation(ctx, "DELETE", []string{"delivery", "templates", purpose, locale}, nil, nil)
 }
 
 // ── Hosted login ──
@@ -558,7 +696,23 @@ type LoginSettings struct {
 	// AccentColor is "#rrggbb", the same color as Theme.Light.Primary.
 	AccentColor string     `json:"accent_color"`
 	Theme       LoginTheme `json:"theme"`
-	UpdatedAt   string     `json:"updated_at,omitempty"`
+	// Locale is the default language of the environment's emails (a code
+	// from Locales; "" = the server's EMAIL_LOCALE). Nil keeps the stored
+	// value; client styles have none. The name, logo and primary color of
+	// the default style also brand emails sent through smtp or resend.
+	Locale    *string `json:"locale,omitempty"`
+	UpdatedAt string  `json:"updated_at,omitempty"`
+}
+
+// Locale is a language IAMKit has text for.
+type Locale struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// Locales lists the languages available for emails and hosted pages.
+func (e Environment) Locales(ctx context.Context) ([]Locale, error) {
+	return list[Locale](e, ctx, "login-settings/locales")
 }
 
 // LoginTheme is the look of the hosted pages. Zero values take defaults.
@@ -580,6 +734,10 @@ type LoginTheme struct {
 	LogoPosition string      `json:"logo_position,omitempty"`
 	Header       LoginHeader `json:"header"`
 	Footer       LoginFooter `json:"footer"`
+	// BackgroundImageURL (https) covers the page behind the card;
+	// BackgroundOverlay (0-90 %) tints it with the background color.
+	BackgroundImageURL string `json:"background_image_url,omitempty"`
+	BackgroundOverlay  int    `json:"background_overlay,omitempty"`
 }
 
 // LoginPalette colors one scheme ("#rrggbb"; empty uses the default).

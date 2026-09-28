@@ -127,6 +127,13 @@ func (c *client) do(method, path string, body any) (json.RawMessage, error) {
 	}
 
 	if resp.StatusCode >= 400 {
+		// The server wraps errors: {"error": {"message", "type", ...}}.
+		var wrapped struct {
+			Error apiError `json:"error"`
+		}
+		if json.Unmarshal(raw, &wrapped) == nil && wrapped.Error.Message != "" {
+			return nil, &wrapped.Error
+		}
 		var ae apiError
 		if json.Unmarshal(raw, &ae) == nil && ae.Message != "" {
 			return nil, &ae

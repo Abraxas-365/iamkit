@@ -69,13 +69,14 @@ func fedGetCmd() *cobra.Command {
 
 func fedCreateCmd() *cobra.Command {
 	var name, provider, issuer, clientID, secretEnv, secretFile, tenant, team, key, org, signupOrg, signupGroup string
-	var tenants []string
+	var tenants, domains []string
 	var linkEmail bool
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a federation connection",
 		Example: `  iam federation create --provider google --name Google --client-id ID --client-secret-file secret.txt --link-email
   iam federation create --provider microsoft --tenant common --name Microsoft --client-id ID --client-secret-file secret.txt
+  iam federation create --provider google --domains acme.com --name "Acme Google" --client-id ID --client-secret-file secret.txt --organization ORG_ID
   iam federation create --provider apple --name Apple --client-id com.example.web --team-id TEAM --key-id KEY --client-secret-file AuthKey.p8
   iam federation create --name Okta --issuer https://acme.okta.com --client-id ID --secret-env IAMKIT_PROVIDER_OKTA --organization ORG_ID`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -101,6 +102,9 @@ func fedCreateCmd() *cobra.Command {
 			}
 			if len(tenants) > 0 {
 				options["tenants"] = tenants
+			}
+			if len(domains) > 0 {
+				options["domains"] = domains
 			}
 			if team != "" {
 				options["team_id"] = team
@@ -141,6 +145,7 @@ func fedCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&secretFile, "client-secret-file", "", "File with the client secret, stored encrypted; Apple: the .p8 key")
 	cmd.Flags().StringVar(&tenant, "tenant", "", "Microsoft: common, organizations, consumers or a tenant ID")
 	cmd.Flags().StringSliceVar(&tenants, "tenants", nil, "Microsoft: tenant IDs allowed under common/organizations")
+	cmd.Flags().StringSliceVar(&domains, "domains", nil, "Google: only accept Google Workspace accounts of these domains")
 	cmd.Flags().StringVar(&team, "team-id", "", "Apple: team ID")
 	cmd.Flags().StringVar(&key, "key-id", "", "Apple: key ID")
 	cmd.Flags().StringVar(&org, "organization", "", "Organization ID for an organization SSO connection")

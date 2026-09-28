@@ -62,6 +62,7 @@ func TestWorkspaceOps(t *testing.T) {
 	ctx := context.Background()
 	c.Me(ctx)
 	c.SetPassword(ctx, "newpass123456")
+	c.ChangePassword(ctx, "newpass123456", "newerpass123456")
 	c.CreateKey(ctx, "720h")
 	c.Keys(ctx)
 	c.RevokeKey(ctx, "key-1")
@@ -75,6 +76,7 @@ func TestWorkspaceOps(t *testing.T) {
 	c.Logout(ctx)
 	expected := []string{
 		"GET /management/v1/me",
+		"POST /management/v1/password",
 		"POST /management/v1/password",
 		"POST /management/v1/keys",
 		"GET /management/v1/keys",

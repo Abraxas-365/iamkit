@@ -3,6 +3,7 @@ package authclient
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -213,5 +214,33 @@ func TestInvitationEndpoints(t *testing.T) {
 	// Tokens travel in the body, never in the URL.
 	if len(calls) != 2 || calls[0] != "POST /identity/v1/invitations/preview" || calls[1] != "POST /identity/v1/invitations/accept" {
 		t.Fatalf("calls = %v", calls)
+	}
+}
+
+func TestInitiateChallengeLocale(t *testing.T) {
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(b))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"challenge_id":"ch-1"}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	if _, err := c.InitiateChallenge(context.Background(), "env", "a@b.com", "login"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := c.InitiateChallengeWith(context.Background(), ChallengeRequest{Environment: "env", Email: "a@b.com", Purpose: "login", Locale: "es"})
+	if err != nil || out.ID != "ch-1" {
+		t.Fatalf("challenge = %+v %v", out, err)
+	}
+	want := []string{
+		`{"environment_id":"env","email":"a@b.com","purpose":"login"}`,
+		`{"environment_id":"env","email":"a@b.com","purpose":"login","locale":"es"}`,
+	}
+	for i, b := range bodies {
+		if strings.TrimSpace(b) != want[i] {
+			t.Errorf("body[%d] = %s, want %s", i, b, want[i])
+		}
 	}
 }

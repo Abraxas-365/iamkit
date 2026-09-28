@@ -11,6 +11,7 @@ package apiclient
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/sdk/apierror"
@@ -48,11 +49,19 @@ func (c *Client) SetToken(token string) { c.token = token }
 
 // Do calls an API-relative path, for example /environments/<id>/users.
 func (c *Client) Do(ctx context.Context, method, path string, input, output any) error {
+	return c.do(ctx, method, path, nil, input, output)
+}
+
+// do is Do with an encoded query string; path itself never carries one.
+func (c *Client) do(ctx context.Context, method, path string, query url.Values, input, output any) error {
 	if c.token == "" {
 		return &apierror.Error{Code: "UNAUTHORIZED", Message: "bearer token required", HTTPStatus: 401}
 	}
 	if !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || strings.ContainsAny(path, "?#\\") {
 		return &apierror.Error{Code: "VALIDATION", Message: "invalid API path", HTTPStatus: 400}
+	}
+	if len(query) > 0 {
+		path += "?" + query.Encode()
 	}
 	return transport.Do(c.http, ctx, method, c.baseURL+"/api/v1"+path, []transport.Header{
 		{Key: "Authorization", Value: "Bearer " + c.token},

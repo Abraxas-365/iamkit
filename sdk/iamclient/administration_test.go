@@ -3,8 +3,10 @@ package iamclient
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -192,5 +194,99 @@ func TestInvitationEndpoints(t *testing.T) {
 		if calls[i] != want {
 			t.Errorf("call[%d] = %q, want %q", i, calls[i], want)
 		}
+	}
+}
+
+func TestDeliveryEndpoints(t *testing.T) {
+	var calls, bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.RequestURI())
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, strings.TrimSpace(string(b)))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/management/v1/environments/env-1/delivery":
+			w.Write([]byte(`{"provider":"smtp","smtp_host":"smtp.acme.io","smtp_port":587,"has_secret":true}`))
+		case "/management/v1/environments/env-1/delivery/templates", "/management/v1/environments/env-1/login-settings/locales":
+			w.Write([]byte(`{"items":[{"purpose":"login","locale":"es","customized":true,"code":"es","name":"Español"}]}`))
+		case "/management/v1/environments/env-1/delivery/preview":
+			w.Write([]byte(`{"subject":"Tu código","html":"<p>","text":"123456"}`))
+		default:
+			w.Write([]byte(`{"purpose":"login","locale":"es","template":{"subject":"Hola"},"placeholders":["code"]}`))
+		}
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+
+	err := env.SetDeliveryConfig(ctx, SetDeliveryConfig{Provider: DeliverySMTP, FromEmail: "no-reply@acme.io", SMTPHost: "smtp.acme.io", SMTPPort: 587, SMTPUsername: "mailer", SMTPTLS: "starttls"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err := env.DeliveryConfig(ctx); err != nil || cfg.Provider != DeliverySMTP || cfg.SMTPHost != "smtp.acme.io" || !cfg.HasSecret {
+		t.Fatalf("config = %+v %v", cfg, err)
+	}
+	// Webhook input without the new fields keeps the old wire shape.
+	env.SetDeliveryConfig(ctx, SetDeliveryConfig{WebhookURL: "https://mail.example/hook", WebhookToken: "tok"})
+	p, err := env.PreviewDelivery(ctx, DeliveryPreview{Purpose: EmailLogin, Locale: "es", Template: &EmailCopy{Subject: "Hola"}})
+	if err != nil || p.Subject != "Tu código" || p.Text != "123456" {
+		t.Fatalf("preview = %+v %v", p, err)
+	}
+	// Without a draft the preview is a read.
+	env.PreviewDelivery(ctx, DeliveryPreview{Purpose: EmailInvitation, Locale: "es"})
+	if items, err := env.EmailTemplates(ctx); err != nil || len(items) != 1 || !items[0].Customized {
+		t.Fatalf("templates = %+v %v", items, err)
+	}
+	if tpl, err := env.EmailTemplate(ctx, EmailLogin, "es"); err != nil || tpl.Template.Subject != "Hola" || tpl.Placeholders[0] != "code" {
+		t.Fatalf("template = %+v %v", tpl, err)
+	}
+	env.SetEmailTemplate(ctx, EmailLogin, "es", EmailCopy{Subject: "Hola"})
+	env.ResetEmailTemplate(ctx, EmailLogin, "es")
+	if locales, err := env.Locales(ctx); err != nil || len(locales) != 1 || locales[0].Name != "Español" {
+		t.Fatalf("locales = %+v %v", locales, err)
+	}
+	if _, err := env.EmailTemplate(ctx, "../x", "es"); err == nil {
+		t.Fatal("unsafe segment accepted")
+	}
+
+	base := "/management/v1/environments/env-1/"
+	expected := []string{
+		"PUT " + base + "delivery", "GET " + base + "delivery", "PUT " + base + "delivery", "POST " + base + "delivery/preview",
+		"GET " + base + "delivery/preview?locale=es&purpose=invitation", "GET " + base + "delivery/templates", "GET " + base + "delivery/templates/login/es", "PUT " + base + "delivery/templates/login/es",
+		"DELETE " + base + "delivery/templates/login/es", "GET " + base + "login-settings/locales",
+	}
+	if strings.Join(calls, "\n") != strings.Join(expected, "\n") {
+		t.Fatalf("calls:\n%s", strings.Join(calls, "\n"))
+	}
+	wantBodies := map[int]string{
+		0: `{"provider":"smtp","from_email":"no-reply@acme.io","smtp_host":"smtp.acme.io","smtp_port":587,"smtp_username":"mailer","smtp_tls":"starttls"}`,
+		2: `{"webhook_url":"https://mail.example/hook","webhook_token":"tok"}`,
+		3: `{"purpose":"login","locale":"es","template":{"subject":"Hola","heading":"","body":"","action":"","footer":""}}`,
+	}
+	for i, want := range wantBodies {
+		if bodies[i] != want {
+			t.Errorf("body[%d] = %s, want %s", i, bodies[i], want)
+		}
+	}
+}
+
+func TestLoginSettingsLocale(t *testing.T) {
+	var bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(b))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"display_name":"Acme","locale":"es"}`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	es := "es"
+	out, err := env.SetLoginSettings(context.Background(), LoginSettings{DisplayName: "Acme", Locale: &es})
+	if err != nil || out.Locale == nil || *out.Locale != "es" {
+		t.Fatalf("settings = %+v %v", out, err)
+	}
+	env.SetLoginSettings(context.Background(), LoginSettings{DisplayName: "Acme"})
+	if !strings.Contains(bodies[0], `"locale":"es"`) || strings.Contains(bodies[1], "locale") {
+		t.Fatalf("bodies = %v", bodies)
 	}
 }

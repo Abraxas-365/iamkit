@@ -280,8 +280,24 @@ func (c *Client) RegenerateRecoveryCodes(ctx context.Context, token, environment
 
 // InitiateChallenge starts an email-based challenge (login, registration, etc.).
 func (c *Client) InitiateChallenge(ctx context.Context, environment, email, purpose string) (Challenge, error) {
+	return c.InitiateChallengeWith(ctx, ChallengeRequest{Environment: environment, Email: email, Purpose: purpose})
+}
+
+// ChallengeRequest starts an email challenge. Locale is the email language
+// (a tag such as "es" or an Accept-Language list); empty uses the
+// environment's email language. It applies when IAMKit writes the email
+// (smtp, resend); the webhook payload is unchanged.
+type ChallengeRequest struct {
+	Environment string `json:"environment_id"`
+	Email       string `json:"email"`
+	Purpose     string `json:"purpose"`
+	Locale      string `json:"locale,omitempty"`
+}
+
+// InitiateChallengeWith is InitiateChallenge with every option.
+func (c *Client) InitiateChallengeWith(ctx context.Context, input ChallengeRequest) (Challenge, error) {
 	var out Challenge
-	err := c.request(ctx, "/challenges", "", map[string]string{"environment_id": environment, "email": email, "purpose": purpose}, &out)
+	err := c.request(ctx, "/challenges", "", input, &out)
 	return out, err
 }
 

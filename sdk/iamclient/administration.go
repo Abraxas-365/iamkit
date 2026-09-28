@@ -89,10 +89,12 @@ const (
 
 // FederationOptions configures a preset provider. Microsoft requires Tenant
 // ("common", "organizations", "consumers" or a tenant ID) and takes Tenants
-// to restrict common/organizations. Apple requires TeamID and KeyID.
+// to restrict common/organizations. Google takes Domains to accept only
+// Google Workspace accounts of those domains. Apple requires TeamID and KeyID.
 type FederationOptions struct {
 	Tenant  string   `json:"tenant,omitempty"`
 	Tenants []string `json:"tenants,omitempty"`
+	Domains []string `json:"domains,omitempty"`
 	TeamID  string   `json:"team_id,omitempty"`
 	KeyID   string   `json:"key_id,omitempty"`
 }

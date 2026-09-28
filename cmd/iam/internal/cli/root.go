@@ -61,6 +61,7 @@ Workspace-level commands (me, projects, environments, operators, keys) do not.`,
 	// Entity commands (require --environment)
 	cmd.AddCommand(usersCmd())
 	cmd.AddCommand(organizationsCmd())
+	cmd.AddCommand(groupsCmd())
 	cmd.AddCommand(applicationsCmd())
 	cmd.AddCommand(resourcesCmd())
 	cmd.AddCommand(rolesCmd())

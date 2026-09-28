@@ -160,6 +160,12 @@ func TestAllAPIPaths(t *testing.T) {
 	env.DeleteDeliveryConfig(ctx)
 	env.DeliveryStatus(ctx)
 	env.TestDelivery(ctx, "ops@example.com")
+	env.PreviewDelivery(ctx, DeliveryPreview{Purpose: EmailLogin, Locale: "es"})
+	env.PreviewDelivery(ctx, DeliveryPreview{Purpose: EmailLogin, Template: &EmailCopy{Subject: "Hola"}})
+	env.EmailTemplates(ctx)
+	env.EmailTemplate(ctx, EmailLogin, "es")
+	env.SetEmailTemplate(ctx, EmailLogin, "es", EmailCopy{Subject: "Hola"})
+	env.ResetEmailTemplate(ctx, EmailLogin, "es")
 
 	expected := []string{
 		// Users
@@ -212,6 +218,12 @@ func TestAllAPIPaths(t *testing.T) {
 		"DELETE /api/v1/environments/env-1/delivery",
 		"GET /api/v1/environments/env-1/delivery/status",
 		"POST /api/v1/environments/env-1/delivery/test",
+		"GET /api/v1/environments/env-1/delivery/preview",
+		"POST /api/v1/environments/env-1/delivery/preview",
+		"GET /api/v1/environments/env-1/delivery/templates",
+		"GET /api/v1/environments/env-1/delivery/templates/login/es",
+		"PUT /api/v1/environments/env-1/delivery/templates/login/es",
+		"DELETE /api/v1/environments/env-1/delivery/templates/login/es",
 	}
 	if len(paths) != len(expected) {
 		t.Fatalf("paths count %d != %d:\n  got:  %v\n  want: %v", len(paths), len(expected), paths, expected)

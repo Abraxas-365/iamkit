@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/sdk/internal/transport"
@@ -45,11 +46,19 @@ func New(baseURL, key string, opts ...Option) *Client {
 // Do calls a management-relative path, for example /projects. End-user tokens
 // are not interchangeable with Key. Caller controls context cancellation.
 func (c *Client) Do(ctx context.Context, method, path string, input, output any) error {
+	return c.do(ctx, method, path, nil, input, output)
+}
+
+// do is Do with an encoded query string; path itself never carries one.
+func (c *Client) do(ctx context.Context, method, path string, query url.Values, input, output any) error {
 	if !strings.HasPrefix(c.key, "ik_mgmt_") {
 		return fmt.Errorf("management credential required")
 	}
 	if !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || strings.ContainsAny(path, "?#\\") {
 		return fmt.Errorf("invalid management path")
+	}
+	if len(query) > 0 {
+		path += "?" + query.Encode()
 	}
 	return transport.Do(c.http, ctx, method, c.baseURL+"/management/v1"+path, []transport.Header{
 		{Key: "X-API-Key", Value: c.key},

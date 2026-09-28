@@ -42,9 +42,16 @@ func (c *Client) Me(ctx context.Context) (Operator, error) {
 	return out, c.Do(ctx, "GET", "/me", nil, &out)
 }
 
-// SetPassword sets or changes the operator's console password.
+// SetPassword sets the operator's console password. With a management key
+// no current password is needed; see ChangePassword otherwise.
 func (c *Client) SetPassword(ctx context.Context, password string) error {
 	return c.Do(ctx, "POST", "/password", map[string]string{"password": password}, nil)
+}
+
+// ChangePassword changes the operator's console password, proving the
+// current one. Other console sessions of the operator end.
+func (c *Client) ChangePassword(ctx context.Context, current, password string) error {
+	return c.Do(ctx, "POST", "/password", map[string]string{"current_password": current, "password": password}, nil)
 }
 
 // Logout terminates the current management session.

@@ -298,6 +298,33 @@ env.RevokeSession(ctx, "session-id")
 events, _ := env.AuditEvents(ctx)
 ```
 
+#### Email Delivery
+
+```go
+// SMTP (or DeliveryResend with APIKey); secrets are write-only and need
+// IAMKIT_ENCRYPTION_KEY on the server.
+env.SetDeliveryConfig(ctx, iamclient.SetDeliveryConfig{
+    Provider:     iamclient.DeliverySMTP,
+    FromEmail:    "no-reply@acme.example",
+    SMTPHost:     "smtp.sendgrid.net",
+    SMTPUsername: "apikey",
+    SMTPPassword: os.Getenv("SMTP_PASSWORD"),
+})
+status, _ := env.DeliveryStatus(ctx)
+attempt, _ := env.TestDelivery(ctx, "ops@acme.example")
+
+// Wording of one email in one language; empty fields keep IAMKit's text.
+env.SetEmailTemplate(ctx, iamclient.EmailLogin, "es", iamclient.EmailCopy{
+    Subject: "Tu código para {{app_name}}",
+})
+preview, _ := env.PreviewDelivery(ctx, iamclient.DeliveryPreview{
+    Purpose: iamclient.EmailLogin, Locale: "es",
+})
+env.ResetEmailTemplate(ctx, iamclient.EmailLogin, "es")
+```
+
+`apiclient.Environment` has the same delivery methods for scoped tokens.
+
 ---
 
 ## authclient — Identity API
@@ -346,6 +373,10 @@ tokens, _ := client.MachineToken(ctx, "ik_svc_...")
 
 ```go
 challenge, _ := client.InitiateChallenge(ctx, "env-uuid", "alice@example.com", "login")
+// Or pick the email language (applies when IAMKit writes the email: SMTP/Resend)
+challenge, _ = client.InitiateChallengeWith(ctx, authclient.ChallengeRequest{
+    Environment: "env-uuid", Email: "alice@example.com", Purpose: "login", Locale: "es",
+})
 // User receives email with code
 tokens, _ := client.VerifyChallenge(ctx, authclient.ChallengeVerification{
     LoginContext: authclient.LoginContext{...},
