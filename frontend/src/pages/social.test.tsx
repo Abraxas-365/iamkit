@@ -76,7 +76,7 @@ it('patches social settings of an environment connection', () => {
 it('creates a Google connection from the preset form', async () => {
   open('federation')
   await screen.findByRole('link', { name: 'GitHub' })
-  await userEvent.click(screen.getByRole('button', { name: /Create/ }))
+  await userEvent.click(screen.getAllByRole('button', { name: 'Add connection' })[0])
   const dialog = await screen.findByRole('dialog')
   expect(within(dialog).queryByLabelText('Issuer URL')).toBeNull()
   expect(within(dialog).getByText(/\/identity\/v1\/federation\/callback$/)).toBeTruthy()
@@ -89,7 +89,7 @@ it('creates a Google connection from the preset form', async () => {
 it('asks for the Apple key, team and key ID', async () => {
   open('federation')
   await screen.findByRole('link', { name: 'GitHub' })
-  await userEvent.click(screen.getByRole('button', { name: /Create/ }))
+  await userEvent.click(screen.getAllByRole('button', { name: 'Add connection' })[0])
   const dialog = await screen.findByRole('dialog')
   await userEvent.click(within(dialog).getByRole('button', { name: 'Apple' }))
   expect(within(dialog).getByLabelText('Services ID')).toBeTruthy()
@@ -102,7 +102,8 @@ it('asks for the Apple key, team and key ID', async () => {
 it('chooses the sign-in methods of a client', async () => {
   open('hosted-login')
   expect(await screen.findByText('All methods')).toBeTruthy()
-  await userEvent.click(screen.getByRole('button', { name: 'Sign-in methods of Shop · Store' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Actions for Shop · Store' }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Choose sign-in methods' }))
   const dialog = await screen.findByRole('dialog')
   await userEvent.click(await within(dialog).findByLabelText(/^Password/))
   await userEvent.click(within(dialog).getByLabelText(/^Every environment connection/))

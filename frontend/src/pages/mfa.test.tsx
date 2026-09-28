@@ -34,7 +34,9 @@ beforeEach(() => {
           path === `${env}/users` ? page([{ id: 'u1', name: 'Alice', email: 'alice@example.com', active: true }]) :
             path === `${env}/users/u1/factors` ? factors :
               path === `${env}/organizations` ? page([{ id: 'org1', name: 'Acme' }]) :
-                path === `${env}/organizations/org1` ? { id: 'org1', name: 'Acme', active: true, mfa_required: true, mfa_for_federated: false } : []
+                path === `${env}/organizations/org1` ? { id: 'org1', name: 'Acme', active: true, mfa_required: true, mfa_for_federated: false } :
+                  path === `${env}/users/u1` ? { id: 'u1', name: 'Alice', email: 'alice@example.com', active: true } :
+                    path.startsWith(env) && !path.endsWith('/factors') ? page([]) : []
     return Response.json(data)
   })
 })
@@ -48,7 +50,7 @@ function calls(method: string) {
 
 it('shows a user\'s second factors and resets them', async () => {
   open('users')
-  await userEvent.click(await screen.findByRole('button', { name: 'Second factors of Alice' }))
+  await userEvent.click(await screen.findByRole('link', { name: 'Alice' }))
   await screen.findByText('Authenticator app (TOTP)')
   expect(screen.getByText('8')).toBeTruthy()
   await userEvent.click(screen.getByRole('button', { name: 'Reset factors' }))
@@ -57,29 +59,27 @@ it('shows a user\'s second factors and resets them', async () => {
   await screen.findByText('No second factor enrolled.')
 })
 
-it('edits an organization\'s MFA policy', async () => {
-  open('organizations')
-  await userEvent.click(await screen.findByRole('button', { name: 'Edit Acme' }))
-  const required = await screen.findByLabelText('Require a second factor') as HTMLInputElement
+it('edits an organization\'s MFA policy from its overview', async () => {
+  open('organizations/org1')
+  const required = await screen.findByRole('switch', { name: 'Require a second factor' }) as HTMLInputElement
   expect(required.checked).toBe(true)
-  await userEvent.click(screen.getByLabelText('Also require it for SSO sign-ins'))
-  await userEvent.click(screen.getByRole('button', { name: /save/i }))
-  await waitFor(() => expect(calls('PATCH')[0]?.body).toMatchObject({ mfa_required: true, mfa_for_federated: true }))
+  // Each switch saves on its own and only sends the field it changes.
+  await userEvent.click(screen.getByRole('switch', { name: 'Also require it for SSO sign-ins' }))
+  await waitFor(() => expect(calls('PATCH')).toEqual([{ url: `/management/v1${env}/organizations/org1`, body: { mfa_for_federated: true } }]))
 })
 
 it('lets viewers see factors but not reset them', async () => {
   role = 'viewer'
-  open('users')
-  await userEvent.click(await screen.findByRole('button', { name: 'Second factors of Alice' }))
+  open('users/u1')
   await screen.findByText('Authenticator app (TOTP)')
   expect(screen.queryByRole('button', { name: 'Reset factors' })).toBeNull()
+  expect((screen.getAllByRole('button').find(b => b.textContent?.includes('Suspend')))).toBeUndefined()
 })
 
-it('does not open a lossy edit form when the organization cannot be loaded', async () => {
+it('shows an error instead of a lossy form when the organization cannot be loaded', async () => {
   orgFails = true
-  open('organizations')
-  await userEvent.click(await screen.findByRole('button', { name: 'Edit Acme' }))
-  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/organizations/org1'))).toBe(true))
-  expect(screen.queryByLabelText('Require a second factor')).toBeNull()
+  open('organizations/org1')
+  await screen.findByText('unavailable')
+  expect(screen.queryByRole('switch', { name: 'Require a second factor' })).toBeNull()
   expect(calls('PATCH')).toHaveLength(0)
 })

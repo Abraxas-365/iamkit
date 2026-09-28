@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Ban, Plus, UserCog } from 'lucide-react'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
@@ -8,7 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { ConfirmDialog, DataTable, ErrorState, ID, PageHeader, Status } from '@/components/library/patterns'
+import { ConfirmDialog, CopyField, DataTable, EmptyState, EntityRef, ErrorState, PageHeader, Status } from '@/components/library/patterns'
+import { Badge } from '@/components/ui/badge'
+import { RowActions } from '@/components/ui/menu'
 
 interface Operator { id: string; email: string; role: string; active: boolean }
 interface Delegated { operator_id: string; key_id: string; secret: string; expires_at: string }
@@ -44,13 +47,14 @@ export default function OperatorsPage() {
   return <div className="space-y-6">
     <PageHeader title="Operators" description="Console operators and their workspace roles. Only owners can invite or disable operators." actions={isOwner && <Button onClick={() => { setAdd(true); setRole('admin'); setTtl('24h'); setError('') }}><Plus className="size-4" /> Invite operator</Button>} />
     <PaginationBar state={list} noun="operators" />
-    <DataTable columns={['Email', 'Role', 'Status', 'Operator ID', 'Actions']} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(op => [
-      op.email,
-      <span className="capitalize">{op.role}</span>,
-      <Status active={op.active} />,
-      <ID value={op.id} />,
-      isOwner && op.active && op.role !== 'owner' && <Button variant="destructive" size="sm" onClick={() => setDisable(op)}>Disable</Button>,
-    ])} />
+    <DataTable columns={['Operator', 'Role', 'Status', ...(isOwner ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload}
+      empty={<EmptyState icon={<UserCog />} title="No operators yet" description="Invite teammates to help manage projects and environments." />}
+      rows={list.data.map(op => [
+        <EntityRef name={op.email} id={op.id} secondary={op.id === principal?.operator_id ? 'You' : undefined} />,
+        <Badge variant="secondary" className="capitalize">{op.role}</Badge>,
+        <Status active={op.active} label={op.active ? 'Active' : 'Disabled'} />,
+        ...(isOwner ? [op.active && op.role !== 'owner' && <RowActions label={`Actions for ${op.email}`} actions={[{ label: 'Disable operator', icon: <Ban />, destructive: true, onSelect: () => setDisable(op) }]} />] : []),
+      ])} />
 
     {add && <Dialog open onOpenChange={open => { if (!open && !pending.current) setAdd(false) }}><DialogContent>
       <DialogTitle className="pr-6 text-base font-semibold">Invite operator</DialogTitle>
@@ -94,17 +98,14 @@ export default function OperatorsPage() {
       </form>
     </DialogContent></Dialog>}
 
-    {disable && <ConfirmDialog title="Disable operator?" description={`${disable.email} will lose all access. Their management keys will be revoked.`} onClose={() => setDisable(null)} confirm={async () => { await api.delete(`/operators/${disable.id}`); list.reload() }} />}
+    {disable && <ConfirmDialog title={`Disable ${disable.email}?`} description="They are signed out of the console immediately and all their management API keys are revoked." confirmLabel="Disable operator" onClose={() => setDisable(null)} confirm={async () => { await api.delete(`/operators/${disable.id}`); toast.success('Operator disabled'); list.reload() }} />}
 
     {secret && <Dialog open onOpenChange={open => { if (!open) setSecret(null) }}>
       <DialogContent>
         <DialogTitle className="font-semibold">Operator invited</DialogTitle>
         <DialogDescription className="text-muted-foreground">Share this API key with the operator. They can set their console password at <code className="text-xs">/setup</code>.</DialogDescription>
         <div className="space-y-2">
-          <p className="text-sm">Operator ID</p>
-          <code className="block break-all rounded-lg bg-muted p-3 text-xs select-all">{secret.operator_id}</code>
-          <p className="text-sm">API key (shown once)</p>
-          <code className="block break-all rounded-lg bg-muted p-3 text-xs select-all">{secret.secret}</code>
+          <CopyField label="API key (shown once)" value={secret.secret} />
           <p className="text-xs text-muted-foreground">Expires {new Date(secret.expires_at).toLocaleString()}</p>
         </div>
         <Button onClick={() => setSecret(null)}>I have saved the key</Button>

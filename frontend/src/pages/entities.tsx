@@ -1,20 +1,24 @@
-import { useEffect, useId, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Link as LinkIcon, Eye, UserX, ShieldCheck } from 'lucide-react'
+import { useId, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { AppWindow, ArrowRight, Building2, Eye, KeyRound, Pencil, Plus, ShieldCheck, Tags, Trash2, UserX, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
+import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { RowActions, type Action } from '@/components/ui/menu'
 import { Input } from '@/components/ui/input'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
 import { CollapsibleScopes } from '@/components/ui/collapsible-scopes'
 import { PermissionPicker } from '@/components/ui/permission-picker'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { ConfirmDialog, DataTable, FormDialog, ID, PageHeader, Status, splitList } from '@/components/library/patterns'
-import type { Field } from '@/components/library/patterns'
+import { ConfirmDialog, CopyText, DataTable, EmptyState, EntityRef, FormDialog, PageHeader, Status, splitList } from '@/components/library/patterns'
+import type { Column, Field } from '@/components/library/patterns'
+import { RedirectList } from './integrations'
 
 type Kind = 'users' | 'organizations' | 'applications' | 'resources' | 'roles' | 'grants'
 
@@ -24,8 +28,6 @@ interface Entity {
   organization_id?: string; organization_name?: string; user_id?: string; user_name?: string;
   otp_enabled?: boolean; metadata?: Record<string, unknown>; mfa_required?: boolean; mfa_for_federated?: boolean;
 }
-interface Factor { id: string; kind: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
-interface Factors { factors: Factor[]; recovery_codes_remaining: number }
 const descriptions: Record<Kind, string> = {
   users: 'Manage end-user identities in this environment.',
   organizations: 'Tenant organizations and their memberships.',
@@ -35,6 +37,24 @@ const descriptions: Record<Kind, string> = {
   grants: 'Direct resource permissions granted to users within an organization.',
 }
 const titles: Record<Kind, string> = { users: 'Users', organizations: 'Organizations', applications: 'Applications', resources: 'Resources & scopes', roles: 'Roles', grants: 'Grants' }
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+const singular: Record<Kind, string> = { users: 'user', organizations: 'organization', applications: 'application', resources: 'resource', roles: 'role', grants: 'grant' }
+const icons: Record<Kind, ReactNode> = { users: <Users />, organizations: <Building2 />, applications: <AppWindow />, resources: <KeyRound />, roles: <Tags />, grants: <ShieldCheck /> }
+const empties: Record<Kind, [string, string]> = {
+  users: ['No users yet', 'Create users here, invite them to an organization, or let them sign up through social login or SCIM.'],
+  organizations: ['No organizations yet', 'Organizations are your customers or teams. Users sign in to an organization and get roles within it.'],
+  applications: ['No applications yet', 'An application is a product your users sign in to — a web app, mobile app or CLI.'],
+  resources: ['No resources yet', 'A resource is an API your applications call. Define its permissions (scopes) here.'],
+  roles: ['No roles yet', 'Roles bundle permissions of a resource so you can give them to members in one step.'],
+  grants: ['No direct grants', 'Grants give one user permissions within an organization without a role. Prefer roles for anything you repeat.'],
+}
+const createHints: Record<Kind, string> = {
+  users: 'You can add the user to organizations on the next page.',
+  organizations: 'You can add members, SSO and domains on the next page.',
+  applications: 'Link resources and create OAuth clients for it afterwards.',
+  resources: 'The prefix namespaces every permission of this resource.',
+  roles: '', grants: '',
+}
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id), inactive: item.active === false })
 function fieldsFor(kind: Kind, _base: string, row?: Entity): Field[] {
   const name: Field = { name: 'name', label: 'Name', value: row?.name }
@@ -74,7 +94,7 @@ function RoleForm({ base, row, onClose, onSaved }: { base: string; row?: Entity;
       try {
         if (row) await api.put(`${base}/roles/${row.id}`, data)
         else await api.post(`${base}/roles`, data)
-        toast.success('Saved successfully'); onSaved(); onClose()
+        toast.success(row ? 'Role updated' : 'Role created'); onSaved(); onClose()
       } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
     }}>
       <div className="space-y-1.5">
@@ -125,7 +145,7 @@ function GrantForm({ base, row, onClose, onSaved }: { base: string; row?: Entity
       pending.current = true; setBusy(true); setError('')
       try {
         await api.put(`${base}/grants`, data)
-        toast.success('Saved successfully'); onSaved(); onClose()
+        toast.success(row ? 'Grant updated' : 'Grant saved'); onSaved(); onClose()
       } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
     }}>
       <div className="space-y-1.5">
@@ -172,39 +192,13 @@ function GrantForm({ base, row, onClose, onSaved }: { base: string; row?: Entity
   </DialogContent></Dialog>
 }
 
-function FactorsDialog({ path, user, canWrite, onClose }: { path: string; user: Entity; canWrite: boolean; onClose: () => void }) {
-  const [data, setData] = useState<Factors | null>(null)
-  const [error, setError] = useState('')
-  const [reset, setReset] = useState(false)
-  const load = () => { setError(''); api.get<Factors>(`${path}/${user.id}/factors`).then(setData, e => setError(message(e))) }
-  useEffect(load, [path, user.id])
-  const date = (v: string | null) => v ? new Date(v).toLocaleString() : '—'
-  return <Dialog open onOpenChange={open => { if (!open) onClose() }}><DialogContent>
-    <DialogTitle className="pr-6 text-base font-semibold">Second factors</DialogTitle>
-    <DialogDescription className="text-muted-foreground">Authenticators of {user.name || user.email || user.id}. Secrets are never shown.</DialogDescription>
-    {error && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error}</div>}
-    {!data && !error && <p className="text-sm text-muted-foreground">Loading…</p>}
-    {data && <div className="space-y-3 text-sm">
-      {data.factors.length === 0 ? <p className="text-muted-foreground">No second factor enrolled.</p> : <ul className="space-y-2">{data.factors.map(f => <li key={f.id} className="rounded-lg border p-3">
-        <p className="font-medium">{f.kind === 'totp' ? 'Authenticator app (TOTP)' : f.kind}{!f.confirmed_at && <span className="ml-2 text-xs text-muted-foreground">pending confirmation</span>}</p>
-        <p className="text-xs text-muted-foreground">Added {date(f.created_at)} · Last used {date(f.last_used_at)}</p>
-      </li>)}</ul>}
-      <p>Recovery codes remaining: <strong>{data.recovery_codes_remaining}</strong></p>
-    </div>}
-    <div className="flex justify-end gap-2 border-t pt-4">
-      {canWrite && data && (data.factors.length > 0 || data.recovery_codes_remaining > 0) && <Button variant="destructive" onClick={() => setReset(true)}>Reset factors</Button>}
-      <Button variant="outline" onClick={onClose}>Close</Button>
-    </div>
-    {reset && <ConfirmDialog title="Reset second factors?" description={`This removes every authenticator and recovery code of ${user.name || user.id} (for a lost device). If their organization requires MFA they will enroll again at the next sign-in.`} confirmLabel="Reset" onClose={() => setReset(false)} confirm={async () => { await api.delete(`${path}/${user.id}/factors`); toast.success('Second factors reset'); load() }} />}
-  </DialogContent></Dialog>
-}
-
 export default function EntitiesPage({ kind }: { kind: Kind }) {
   const { project, environment } = useParams()
   const base = `/environments/${environment}`
   const envBase = `/projects/${project}/environments/${environment}`
   const path = `${base}/${kind}`
   const list = usePaginatedList<Entity>(path)
+  const navigate = useNavigate()
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
   const [edit, setEdit] = useState<Entity | 'new' | null>(null)
@@ -216,65 +210,89 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
   }
   const [remove, setRemove] = useState<Entity | null>(null)
   const [purge, setPurge] = useState<Entity | null>(null)
-  const [factors, setFactors] = useState<Entity | null>(null)
-  const [extra, setExtra] = useState(false)
-  const extraConfig = kind === 'applications' ? { title: 'Link resource', path: '/application-resources', fields: [
-    { name: 'application_id', label: 'Application', type: 'select' as const, selectPath: `${base}/applications`, selectMap: named },
-    { name: 'resource_id', label: 'Resource', type: 'select' as const, selectPath: `${base}/resources`, selectMap: named },
-  ] } :
-    kind === 'organizations' ? { title: 'Add member', path: '/memberships', fields: [
-      { name: 'organization_id', label: 'Organization', type: 'select' as const, selectPath: `${base}/organizations`, selectMap: named },
-      { name: 'user_id', label: 'User', type: 'select' as const, selectPath: `${base}/users`, selectMap: named },
-    ] } :
-      kind === 'roles' ? { title: 'Assign role', path: '/role-assignments', fields: [
-        { name: 'organization_id', label: 'Organization', type: 'select' as const, selectPath: `${base}/organizations`, selectMap: named },
-        { name: 'user_id', label: 'User', type: 'select' as const, selectPath: `${base}/users`, selectMap: named },
-        { name: 'role_id', label: 'Role', type: 'select' as const, selectPath: `${base}/roles`, selectMap: named },
-      ] } : null
-  const columns = kind === 'users' ? ['Name / ID', 'Email', 'Status'] : kind === 'applications' ? ['Name / ID', 'Redirect URIs', 'Status'] : kind === 'resources' ? ['Name / ID', 'Prefix', 'Audience', 'Scopes'] : kind === 'roles' ? ['Name / ID', 'Resource', 'Permissions'] : kind === 'grants' ? ['Grant ID', 'Organization / User', 'Resource / Permissions'] : ['Name', 'ID']
-  const canDelete = kind === 'users' || kind === 'roles' || kind === 'grants'
+  const [assign, setAssign] = useState(false)
+  const label = (row: Entity) => row.name || row.email || (kind === 'grants' && row.user_name ? `${row.user_name}'s grant` : row.id)
+  const detail = (row: Entity) => kind === 'users' ? `${envBase}/users/${row.id}` : kind === 'organizations' ? `${envBase}/organizations/${row.id}` : kind === 'applications' ? `${envBase}/applications/${row.id}` : undefined
+  const name = (row: Entity, secondary?: ReactNode) => {
+    const to = detail(row)
+    return <span className="block min-w-0">
+      <span className="flex flex-wrap items-center gap-2">{to ? <Link to={to} className="font-medium hover:text-primary hover:underline">{label(row)}</Link> : <span className="font-medium">{label(row)}</span>}{kind === 'resources' && row.prefix === 'iam' && <Badge variant="secondary" className="bg-primary/10 text-primary">System</Badge>}</span>
+      {secondary ?? <CopyText value={row.id} short label={`Copy ${singular[kind]} ID`} />}
+    </span>
+  }
+  const permissions = (row: Entity) => row.permissions?.length ? <CollapsibleScopes key={row.id} scopes={row.permissions} /> : <span className="text-xs text-muted-foreground">No permissions</span>
+  const columns: Column[] = kind === 'users' ? [{ header: 'User' }, { header: 'Status' }]
+    : kind === 'organizations' ? [{ header: 'Organization' }, { header: 'Status' }]
+      : kind === 'applications' ? [{ header: 'Application' }, { header: 'Redirect URIs', hideBelow: 'md' }, { header: 'Status' }]
+        : kind === 'resources' ? [{ header: 'Resource' }, { header: 'Prefix', hideBelow: 'sm' }, { header: 'Audience', hideBelow: 'lg' }, { header: 'Scopes', hideBelow: 'md' }]
+          : kind === 'roles' ? [{ header: 'Role' }, { header: 'Resource', hideBelow: 'sm' }, { header: 'Permissions', hideBelow: 'md' }]
+            : [{ header: 'User' }, { header: 'Resource / Permissions' }]
+  const cells = (row: Entity): ReactNode[] => {
+    switch (kind) {
+      case 'users': return [name(row, row.email), <Status active={!!row.active} label={row.active ? 'Active' : 'Suspended'} />]
+      case 'organizations': return [name(row), <Status active={row.active !== false} />]
+      case 'applications': return [name(row), <RedirectList uris={row.redirect_uris ?? null} />, <Status active={!!row.active} />]
+      case 'resources': return [name(row, <span className="block truncate text-xs text-muted-foreground">{row.audience}</span>), <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">{row.prefix}</code>, <span className="break-all text-sm">{row.audience}</span>, permissions(row)]
+      case 'roles': return [name(row), <span className="text-sm">{row.resource_name || '—'}</span>, permissions(row)]
+      case 'grants': return [<EntityRef name={row.user_name} id={row.user_id} to={`${envBase}/users/${row.user_id}`} secondary={<>in <Link to={`${envBase}/organizations/${row.organization_id}`} className="hover:underline">{row.organization_name || 'organization'}</Link></>} />, <div className="space-y-1"><p className="text-sm">{row.resource_name}</p>{permissions(row)}</div>]
+    }
+  }
+  const actions = (row: Entity): Action[] => {
+    const open = detail(row)
+    const out: Action[] = open ? [{ label: kind === 'users' ? 'View profile' : 'Open', icon: <ArrowRight />, onSelect: () => navigate(open) }] : []
+    if (!canWrite) return out
+    if (kind === 'organizations') out.push({ label: 'Members', icon: <Users />, onSelect: () => navigate(`${envBase}/organizations/${row.id}/members`) })
+    if (kind !== 'organizations' && kind !== 'users') out.push({ label: 'Edit', icon: <Pencil />, onSelect: () => openEdit(row) })
+    if (kind === 'users') {
+      out.push({ label: 'Edit', icon: <Pencil />, onSelect: () => openEdit(row) })
+      if (row.active) out.push({ label: 'Suspend', icon: <UserX />, onSelect: () => setRemove(row) })
+      out.push({ label: 'Delete permanently', icon: <Trash2 />, destructive: true, onSelect: () => setPurge(row) })
+    }
+    if (kind === 'roles' || kind === 'grants') out.push({ label: kind === 'roles' ? 'Delete role' : 'Revoke grant', icon: <Trash2 />, destructive: true, onSelect: () => setRemove(row) })
+    return out
+  }
+  const create = canWrite && <Button onClick={() => setEdit('new')}><Plus />{kind === 'grants' ? 'Grant permissions' : `Create ${singular[kind]}`}</Button>
   return <div className="space-y-6">
-    <PageHeader title={titles[kind]} description={descriptions[kind]} actions={canWrite && <div className="flex flex-wrap gap-2">
+    <PageHeader title={titles[kind]} description={descriptions[kind]} actions={<>
       {kind === 'roles' && <Link to={`${envBase}/role-assignments`} className={buttonVariants({ variant: 'outline' })}><Eye className="size-4" /> View assignments</Link>}
-      {extraConfig && <Button variant="outline" onClick={() => setExtra(true)}><LinkIcon />{extraConfig.title}</Button>}
-      <Button onClick={() => setEdit('new')}><Plus />{kind === 'grants' ? 'Set grant' : 'Create'}</Button>
-    </div>} />
+      {kind === 'roles' && canWrite && <Button variant="outline" onClick={() => setAssign(true)}><ShieldCheck /> Assign role</Button>}
+      {create}
+    </>} />
     <PaginationBar state={list} noun={kind} placeholder={`Search ${titles[kind].toLowerCase()}…`} />
-    <DataTable columns={[...columns, ...(canWrite || kind === 'users' ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(row => {
-      const identity = <div className="space-y-1"><p className="font-medium">{row.name}{kind === 'resources' && row.prefix === 'iam' && <span className="ml-2 inline-block rounded bg-primary/10 px-1.5 py-0.5 text-xs text-primary">System</span>}</p><ID value={row.id} /></div>
-      const permissions = row.permissions?.length ? <CollapsibleScopes key={row.id} scopes={row.permissions} /> : <span className="text-xs text-muted-foreground">No permissions</span>
-      const cells = kind === 'users' ? [identity, row.email, <Status active={!!row.active} />] :
-        kind === 'applications' ? [identity, <span className="text-xs">{row.redirect_uris?.join(', ') || '—'}</span>, <Status active={!!row.active} />] :
-          kind === 'resources' ? [identity, <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">{row.prefix}</code>, row.audience, permissions] :
-            kind === 'roles' ? [identity, <span className="text-sm">{row.resource_name || <ID value={row.resource_id!} />}</span>, permissions] :
-              kind === 'grants' ? [<ID value={row.id} />, <div className="space-y-1"><p className="text-sm">{row.organization_name || <ID value={row.organization_id!} />}</p><p className="text-sm">{row.user_name || <ID value={row.user_id!} />}</p></div>, <div><p className="text-sm">{row.resource_name || <ID value={row.resource_id!} />}</p>{permissions}</div>] : [row.name, <ID value={row.id} />]
-      if (!canWrite && kind === 'users') cells.push(<Button variant="ghost" size="icon" aria-label={`Second factors of ${row.name || row.id}`} onClick={() => setFactors(row)}><ShieldCheck /></Button>)
-      if (canWrite) cells.push(<div className="flex gap-1">
-        {kind === 'organizations' && <Link to={`${envBase}/organizations/${row.id}/members`} className={buttonVariants({ variant: 'ghost', size: 'icon' })} aria-label={`Members of ${row.name}`}><Eye className="size-4" /></Link>}
-        {kind === 'applications' && <Link to={`${envBase}/applications/${row.id}`} className={buttonVariants({ variant: 'ghost', size: 'icon' })} aria-label={`Details of ${row.name}`}><Eye className="size-4" /></Link>}
-        <Button variant="ghost" size="icon" aria-label={`Edit ${row.name || row.id}`} onClick={() => openEdit(row)}><Pencil /></Button>
-        {kind === 'users' ? <>
-          <Button variant="ghost" size="icon" aria-label={`Second factors of ${row.name || row.id}`} onClick={() => setFactors(row)}><ShieldCheck /></Button>
-          {row.active && <Button variant="ghost" size="icon" aria-label={`Suspend ${row.name || row.id}`} onClick={() => setRemove(row)}><UserX /></Button>}
-          <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" aria-label={`Permanently delete ${row.name || row.id}`} onClick={() => setPurge(row)}><Trash2 /></Button>
-        </> : canDelete && <Button variant="ghost" size="icon" aria-label={`Delete ${row.name || row.id}`} onClick={() => setRemove(row)}><Trash2 /></Button>}
-      </div>)
-      return cells
-    })} />
+    <DataTable
+      columns={[...columns, 'Actions']}
+      loading={list.loading} error={list.error} retry={list.reload}
+      rowHref={kind === 'users' || kind === 'organizations' || kind === 'applications' ? i => detail(list.data[i])! : undefined}
+      empty={list.search ? <EmptyState title={`No ${titles[kind].toLowerCase()} match “${list.search}”`} /> : <EmptyState icon={icons[kind]} title={empties[kind][0]} description={empties[kind][1]} action={create} />}
+      rows={list.data.map(row => [...cells(row), <RowActions label={`Actions for ${label(row)}`} actions={actions(row)} />])} />
     {edit && kind === 'roles' && <RoleForm base={base} row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} onSaved={list.reload} />}
     {edit && kind === 'grants' && <GrantForm base={base} row={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} onSaved={list.reload} />}
-    {edit && kind !== 'roles' && kind !== 'grants' && <FormDialog title={edit === 'new' ? `Create ${kind === 'resources' ? 'resource' : kind.slice(0, -1)}` : 'Edit configuration'} description={kind === 'resources' && edit !== 'new' ? 'Removing scopes also removes those permissions from grants, roles, and service accounts.' : 'Changes apply only to this environment. IDs are available in the corresponding list screens.'} fields={fieldsFor(kind, base, edit === 'new' ? undefined : edit)} onClose={() => setEdit(null)} submit={async values => {
+    {edit && kind !== 'roles' && kind !== 'grants' && <FormDialog title={edit === 'new' ? `Create ${singular[kind]}` : `Edit ${label(edit)}`} description={kind === 'resources' && edit !== 'new' ? 'Removing scopes also removes those permissions from grants, roles, and service accounts.' : createHints[kind]} submitLabel={edit === 'new' ? 'Create' : 'Save'} success={`${capital(singular[kind])} ${edit === 'new' ? 'created' : 'updated'}`} fields={fieldsFor(kind, base, edit === 'new' ? undefined : edit)} onClose={() => setEdit(null)} submit={async values => {
       const data: Record<string, unknown> = { ...values }
       for (const field of ['permissions', 'redirect_uris']) if (field in values) data[field] = splitList(values[field])
-      if ('metadata' in values && values.metadata) try { data.metadata = JSON.parse(String(values.metadata)) } catch { /* send raw */ }
-      if (edit === 'new') await api.post(path, data)
-      else if (kind === 'resources') await api.put(`${path}/${edit.id}`, data)
+      if ('metadata' in values) {
+        if (values.metadata) try { data.metadata = JSON.parse(String(values.metadata)) } catch { throw new Error('Metadata must be valid JSON') }
+        else delete data.metadata
+      }
+      if (edit === 'new') {
+        const created = await api.post<{ id?: string }>(path, data)
+        list.reload()
+        // Users and organizations are configured on their own page.
+        if (created?.id && (kind === 'users' || kind === 'organizations')) navigate(`${envBase}/${kind}/${created.id}`)
+        return
+      }
+      if (kind === 'resources') await api.put(`${path}/${edit.id}`, data)
       else await api.patch(`${path}/${edit.id}`, data)
       list.reload()
     }} />}
-    {remove && <ConfirmDialog title={kind === 'users' ? 'Suspend user?' : 'Delete access configuration?'} description={`This affects ${remove.name || remove.id} in the current environment. ${kind === 'users' ? 'You can reactivate the user by editing their status.' : 'This action cannot be undone.'}`} onClose={() => setRemove(null)} confirm={async () => { await api.delete(`${path}/${remove.id}`); list.reload() }} />}
-    {purge && <ConfirmDialog title="Permanently delete user?" description={`This erases ${purge.name || purge.id} and every session, membership, grant, role assignment, and linked identity for them in this environment. This cannot be undone.`} confirmLabel="Delete permanently" confirmationText={purge.name || purge.id} onClose={() => setPurge(null)} confirm={async () => { await api.delete(`${path}/${purge.id}/permanent`); list.reload() }} />}
-    {factors && <FactorsDialog path={path} user={factors} canWrite={canWrite} onClose={() => setFactors(null)} />}
-    {extra && extraConfig && <FormDialog title={extraConfig.title} description="Enter the IDs from this environment's list screens." fields={extraConfig.fields} onClose={() => setExtra(false)} submit={async values => { await api.post(`${base}${extraConfig.path}`, values) }} />}
+    {remove && (kind === 'users'
+      ? <ConfirmDialog title={`Suspend ${label(remove)}?`} description="They can no longer sign in and their sessions stop refreshing. You can reactivate them from their page." confirmLabel="Suspend" onClose={() => setRemove(null)} confirm={async () => { await api.delete(`${path}/${remove.id}`); toast.success('User suspended'); list.reload() }} />
+      : <ConfirmDialog title={kind === 'roles' ? `Delete role ${label(remove)}?` : `Revoke ${remove.user_name ?? 'this user'}'s grant?`} description={kind === 'roles' ? 'Everyone holding this role, directly or through a group, loses its permissions at their next token. This cannot be undone.' : `${remove.user_name ?? 'The user'} loses these ${remove.resource_name ?? ''} permissions in ${remove.organization_name ?? 'the organization'} at their next token.`} confirmLabel={kind === 'roles' ? 'Delete role' : 'Revoke grant'} onClose={() => setRemove(null)} confirm={async () => { await api.delete(`${path}/${remove.id}`); toast.success(kind === 'roles' ? 'Role deleted' : 'Grant revoked'); list.reload() }} />)}
+    {purge && <ConfirmDialog title={`Permanently delete ${label(purge)}?`} description={`This erases ${label(purge)} and every session, membership, grant, role assignment, and linked identity for them in this environment. This cannot be undone.`} confirmLabel="Delete permanently" confirmationText={label(purge)} onClose={() => setPurge(null)} confirm={async () => { await api.delete(`${path}/${purge.id}/permanent`); toast.success('User deleted'); list.reload() }} />}
+    {assign && <FormDialog title="Assign a role" description="Give a user a role within one organization." submitLabel="Assign role" success="Role assigned" fields={[
+      { name: 'user_id', label: 'User', type: 'select', selectPath: `${base}/users`, selectMap: named },
+      { name: 'organization_id', label: 'Organization', type: 'select', selectPath: `${base}/organizations`, selectMap: named },
+      { name: 'role_id', label: 'Role', type: 'select', selectPath: `${base}/roles`, selectMap: named },
+    ]} onClose={() => setAssign(false)} submit={async values => { await api.post(`${base}/role-assignments`, values) }} />}
   </div>
 }

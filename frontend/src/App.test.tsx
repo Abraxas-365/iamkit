@@ -68,7 +68,8 @@ it('edits grant permissions without changing the recipient tuple', async () => {
   grants = true
   const user = userEvent.setup()
   open('/projects/project1/environments/env1/grants')
-  await user.click(await screen.findByRole('button', { name: 'Edit grant1' }))
+  await user.click(await screen.findByRole('button', { name: 'Actions for grant1' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Edit' }))
   // Verify org/user/resource are displayed as read-only (hidden inputs, not editable selects)
   expect(screen.queryByRole('combobox', { name: 'Organization' })).toBeNull()
   expect(screen.queryByRole('combobox', { name: 'User' })).toBeNull()

@@ -52,11 +52,12 @@ it('lists groups and makes directory groups read-only', async () => {
   open(`${envBase}/organizations/org1/groups`)
   await screen.findByText('Finance')
   expect(screen.getByText('Groups of Acme')).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Edit Finance' })).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Delete Finance' })).toBeTruthy()
+  await userEvent.click(screen.getByRole('button', { name: 'Actions for Finance' }))
+  expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeTruthy()
+  expect(screen.getByRole('menuitem', { name: 'Delete group' })).toBeTruthy()
+  await userEvent.keyboard('{Escape}')
   expect(screen.getByText('Directory')).toBeTruthy()
-  expect(screen.queryByRole('button', { name: 'Edit Engineering' })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Delete Engineering' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Actions for Engineering' })).toBeNull()
 })
 
 it('creates a group', async () => {
@@ -73,8 +74,9 @@ it('shows group roles and members, and removes a member', async () => {
   open(`${envBase}/organizations/org1/groups/g1`)
   await screen.findByText('reader')
   expect(screen.getByText('Billing API')).toBeTruthy()
-  await user.click(await screen.findByRole('button', { name: 'Remove Jane' }))
-  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove' }))
+  await user.click(await screen.findByRole('button', { name: 'Actions for Jane' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Remove from group' }))
+  await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove' }))
   await waitFor(() => expect(calls('POST')).toEqual([{ url: `/management/v1${org}/groups/g1/members`, body: { remove: ['u1'] } }]))
 })
 
@@ -83,7 +85,7 @@ it('lets operators bind roles to directory groups but not change members', async
   await screen.findByText(/managed by a provisioning directory/)
   expect(screen.getByRole('button', { name: /Assign role/ })).toBeTruthy()
   expect(screen.queryByRole('button', { name: /Add member/ })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Remove Jane' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Actions for Jane' })).toBeNull()
 })
 
 it('hides group write controls for a viewer', async () => {
@@ -99,7 +101,8 @@ it('shows a member effective roles with their source', async () => {
   const user = userEvent.setup()
   role = 'viewer'
   open(`${envBase}/organizations/org1/members`)
-  await user.click(await screen.findByRole('button', { name: 'Access of Jane' }))
+  await user.click(await screen.findByRole('button', { name: 'Actions for Jane' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'View access' }))
   const dialog = await screen.findByRole('dialog')
   await within(dialog).findByText('reader')
   expect(within(dialog).getByText('via Finance')).toBeTruthy()

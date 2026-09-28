@@ -1,179 +1,111 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { Ban, KeyRound, Link2, Pencil, Plus, RotateCcw, Unlink } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { CollapsibleScopes } from '@/components/ui/collapsible-scopes'
-import { PaginationBar } from '@/components/ui/pagination-bar'
-import { SearchSelect } from '@/components/ui/search-select'
-import { ConfirmDialog, DataTable, ID, PageHeader, Status } from '@/components/library/patterns'
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { RowActions } from '@/components/ui/menu'
+import { Skeleton } from '@/components/ui/skeleton'
+import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, FormDialog, Properties, Status, splitList } from '@/components/library/patterns'
+import type { OAuthClient } from './integrations'
 
-interface Application { id: string; name: string; redirect_uris: string[]; active: boolean }
+interface Application { id: string; name: string; redirect_uris: string[] | null; active: boolean }
 interface Resource { id: string; name: string; prefix: string; audience: string; permissions: string[] }
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id) })
 
+/** ApplicationDetailPage shows one application: its redirect URIs, the APIs
+ * it may call, and the OAuth clients your code uses to sign users in to it. */
 export default function ApplicationDetailPage() {
   const { project, environment, appId } = useParams()
   const base = `/environments/${environment}`
-  const appsPath = `/projects/${project}/environments/${environment}/applications`
-
+  const console = `/projects/${project}/environments/${environment}`
+  const path = `${base}/applications/${appId}`
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
 
   const [app, setApp] = useState<Application | null>(null)
-  const [appLoading, setAppLoading] = useState(true)
-  const [appError, setAppError] = useState('')
-
-  const linkedResources = usePaginatedList<Resource>(`${base}/applications/${appId}/resources`)
-
+  const [error, setError] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [toggling, setToggling] = useState(false)
   const [linking, setLinking] = useState(false)
   const [unlinking, setUnlinking] = useState<Resource | null>(null)
+  const resources = usePaginatedList<Resource>(`${path}/resources`, { limit: 100 })
+  const clientParams = useMemo(() => ({ application_id: appId ?? '' }), [appId])
+  const clients = usePaginatedList<OAuthClient>(`${base}/oauth-clients`, { extraParams: clientParams, limit: 100 })
 
-  useEffect(() => {
-    if (!environment || !appId) return
-    setAppLoading(true)
-    api.get<Application>(`${base}/applications/${appId}`)
-      .then(data => { setApp(data); setAppLoading(false); setAppError('') })
-      .catch(e => { setAppError(message(e)); setAppLoading(false) })
-  }, [environment, appId, base])
+  const load = useCallback(() => { setError(''); api.get<Application>(path).then(setApp).catch(e => setError(message(e))) }, [path])
+  useEffect(load, [load])
 
-  if (appLoading) return <div className="space-y-6">
-    <Link to={appsPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-      <ArrowLeft className="size-3.5" />Back to applications
-    </Link>
-    <p className="text-sm text-muted-foreground">Loading application…</p>
-  </div>
+  const back = <BackLink to={`${console}/applications`}>All applications</BackLink>
+  if (error) return <div className="space-y-4">{back}<ErrorState error={error} retry={load} /></div>
+  if (!app) return <div role="status" className="space-y-4">{back}<Skeleton className="h-9 w-64" /><Skeleton className="h-40" /><span className="sr-only">Loading application…</span></div>
 
-  if (appError || !app) return <div className="space-y-6">
-    <Link to={appsPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-      <ArrowLeft className="size-3.5" />Back to applications
-    </Link>
-    <p className="text-sm text-destructive">{appError || 'Application not found'}</p>
-  </div>
+  const link = canWrite && <Button variant="outline" size="sm" onClick={() => setLinking(true)}><Link2 /> Link resource</Button>
+  const newClient = canWrite && <Link to={`${console}/oauth-clients?create=${app.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}><Plus className="size-4" /> Create OAuth client</Link>
 
-  return <div className="space-y-8">
+  return <div className="space-y-6">
     <div className="space-y-3">
-      <Link to={appsPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="size-3.5" />Back to applications
-      </Link>
-      <PageHeader title={app.name} description={app.id} actions={<Status active={app.active} />} />
-    </div>
-
-    {/* Application info */}
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <InfoCard label="Redirect URIs" value={app.redirect_uris?.length ? app.redirect_uris.join('\n') : '—'} mono />
-      <InfoCard label="Status" value={app.active ? 'Active' : 'Inactive'} />
-    </div>
-
-    {/* Linked resources */}
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-mono text-lg font-semibold">Linked resources</h2>
-          <p className="text-sm text-muted-foreground">API resources this application can request tokens for.</p>
-        </div>
-        {canWrite && <Button variant="outline" onClick={() => setLinking(true)}><Plus className="size-4" /> Link resource</Button>}
+      {back}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h1 className="font-mono text-2xl font-bold tracking-tight">{app.name}</h1>
+        <Status active={app.active} />
       </div>
-
-      <PaginationBar state={linkedResources} noun="resources" />
-
-      <DataTable
-        columns={['Name / ID', 'Prefix', 'Audience', 'Scopes', ...(canWrite ? ['Actions'] : [])]}
-        loading={linkedResources.loading}
-        error={linkedResources.error}
-        retry={linkedResources.reload}
-        rows={linkedResources.data.map(r => {
-          const scopes = r.permissions?.length
-            ? <CollapsibleScopes key={r.id} scopes={r.permissions} />
-            : <span className="text-xs text-muted-foreground">No scopes</span>
-          const cells: React.ReactNode[] = [
-            <div className="space-y-1"><p className="font-medium">{r.name}</p><ID value={r.id} /></div>,
-            <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">{r.prefix}</code>,
-            <span className="text-sm">{r.audience}</span>,
-            scopes,
-          ]
-          if (canWrite) cells.push(
-            <Button variant="ghost" size="icon" aria-label={`Unlink ${r.name}`} onClick={() => setUnlinking(r)}>
-              <Trash2 className="size-4" />
-            </Button>,
-          )
-          return cells
-        })}
-      />
+      <CopyText value={app.id} short label="Copy application ID" />
     </div>
 
-    {/* Link resource dialog */}
-    {linking && <LinkResourceDialog
-      base={base}
-      appId={appId!}
-      onClose={() => setLinking(false)}
-      onLinked={() => { linkedResources.reload(); setLinking(false) }}
-    />}
+    <DetailSection title="Details" actions={canWrite && <Button variant="outline" size="sm" onClick={() => setEditing(true)}><Pencil /> Edit</Button>}>
+      <Properties items={[
+        ['Name', app.name],
+        ['Redirect URIs', app.redirect_uris?.length ? <ul className="space-y-1">{app.redirect_uris.map(u => <li key={u} className="break-all font-mono text-xs">{u}</li>)}</ul> : <span className="text-muted-foreground">None</span>],
+      ]} />
+    </DetailSection>
 
-    {/* Unlink confirm */}
-    {unlinking && (
-      <ConfirmDialog
-        title="Unlink resource?"
-        description={`"${app.name}" will no longer be able to request tokens for "${unlinking.name}". Existing tokens are not revoked.`}
-        onClose={() => setUnlinking(null)}
-        confirm={async () => {
-          await api.delete(`${base}/application-resources/${appId}/${unlinking.id}`)
-          linkedResources.reload()
-        }}
-      />
-    )}
+    <DetailSection title="Resources" description="APIs this application can request tokens for, and the scopes they define." actions={resources.data.length > 0 && link}>
+      <DataTable
+        columns={['Resource', { header: 'Audience', hideBelow: 'lg' }, { header: 'Scopes', hideBelow: 'md' }, ...(canWrite ? ['Actions'] : [])]}
+        loading={resources.loading} error={resources.error} retry={resources.reload}
+        empty={<EmptyState icon={<KeyRound />} title="No resources linked" description="Link the APIs this application calls so it can request tokens for them." action={link} />}
+        rows={resources.data.map(r => [
+          <span className="block"><span className="font-medium">{r.name}</span> <code className="rounded bg-secondary px-1 py-0.5 font-mono text-[11px]">{r.prefix}</code></span>,
+          <span className="break-all text-sm">{r.audience}</span>,
+          r.permissions?.length ? <CollapsibleScopes key={r.id} scopes={r.permissions} /> : <span className="text-xs text-muted-foreground">No scopes</span>,
+          ...(canWrite ? [<RowActions label={`Actions for ${r.name}`} actions={[{ label: 'Unlink resource', icon: <Unlink />, destructive: true, onSelect: () => setUnlinking(r) }]} />] : []),
+        ])} />
+    </DetailSection>
+
+    <DetailSection title="OAuth clients" description="Credentials your code uses to sign users in to this application." actions={clients.data.length > 0 && newClient}>
+      <DataTable
+        columns={['Client', { header: 'Type', hideBelow: 'sm' }, 'Status']}
+        loading={clients.loading} error={clients.error} retry={clients.reload}
+        rowHref={i => `${console}/oauth-clients/${clients.data[i].id}`}
+        empty={<EmptyState icon={<KeyRound />} title="No OAuth clients" description={resources.data.length ? 'Create a client to start signing users in to this application.' : 'Link a resource first, then create a client for it.'} action={resources.data.length ? newClient : undefined} />}
+        rows={clients.data.map(c => [
+          <EntityRef name={c.resource_name} id={c.id} to={`${console}/oauth-clients/${c.id}`} secondary={c.hosted_login ? 'Hosted sign-in page' : 'Your own sign-in UI'} />,
+          <Badge variant="secondary">{c.public ? 'Public (PKCE)' : 'Confidential'}</Badge>,
+          <Status active={c.active} label={c.active ? 'Active' : 'Disabled'} />,
+        ])} />
+    </DetailSection>
+
+    {canWrite && <DetailSection danger title={app.active ? 'Deactivate application' : 'Reactivate application'} description={app.active ? 'Users can no longer sign in to it and its clients stop issuing tokens. Nothing is deleted.' : 'Users can sign in to it again through its active clients.'}>
+      <Button variant={app.active ? 'destructive' : 'outline'} onClick={() => setToggling(true)}>{app.active ? <><Ban /> Deactivate</> : <><RotateCcw /> Reactivate</>}</Button>
+    </DetailSection>}
+
+    {editing && <FormDialog title={`Edit ${app.name}`} description="Redirect URIs must match exactly what your application sends." fields={[
+      { name: 'name', label: 'Name', value: app.name },
+      { name: 'redirect_uris', label: 'Redirect URIs', value: (app.redirect_uris ?? []).join(', '), hint: 'Comma-separated. HTTPS, or http://localhost for development.' },
+    ]} onClose={() => setEditing(false)} submit={async values => { await api.patch(path, { name: values.name, redirect_uris: splitList(values.redirect_uris) }); load() }} />}
+    {toggling && (app.active
+      ? <ConfirmDialog title={`Deactivate ${app.name}?`} description="Users can no longer sign in to it, and its OAuth clients stop issuing tokens. You can reactivate it later." confirmLabel="Deactivate" onClose={() => setToggling(false)} confirm={async () => { await api.delete(path); toast.success('Application deactivated'); load() }} />
+      : <ConfirmDialog title={`Reactivate ${app.name}?`} description="Users can sign in to it again through its active OAuth clients." confirmLabel="Reactivate" onClose={() => setToggling(false)} confirm={async () => { await api.patch(path, { active: true }); toast.success('Application reactivated'); load() }} />)}
+    {linking && <FormDialog title={`Link a resource to ${app.name}`} description="The application can then request tokens for this API." submitLabel="Link resource" success="Resource linked" fields={[
+      { name: 'resource_id', label: 'Resource', type: 'select', selectPath: `${base}/resources`, selectMap: named },
+    ]} onClose={() => setLinking(false)} submit={async values => { await api.post(`${base}/application-resources`, { application_id: app.id, resource_id: values.resource_id }); resources.reload() }} />}
+    {unlinking && <ConfirmDialog title={`Unlink ${unlinking.name}?`} description={`${app.name} can no longer request new tokens for ${unlinking.name}. Tokens already issued stay valid until they expire.`} confirmLabel="Unlink" onClose={() => setUnlinking(null)} confirm={async () => { await api.delete(`${base}/application-resources/${app.id}/${unlinking.id}`); toast.success('Resource unlinked'); resources.reload() }} />}
   </div>
-}
-
-function InfoCard({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return <div className="rounded-lg border bg-card p-4">
-    <p className="text-xs font-medium text-muted-foreground">{label}</p>
-    <p className={`mt-1 text-sm ${mono ? 'whitespace-pre-wrap font-mono' : ''}`}>{value}</p>
-  </div>
-}
-
-function LinkResourceDialog({ base, appId, onClose, onLinked }: { base: string; appId: string; onClose: () => void; onLinked: () => void }) {
-  const [resourceId, setResourceId] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  return <Dialog open onOpenChange={open => { if (!open) onClose() }}>
-    <DialogContent>
-      <DialogTitle className="text-base font-semibold">Link resource</DialogTitle>
-      <DialogDescription className="text-muted-foreground">Select an API resource this application should be able to access.</DialogDescription>
-      <form className="space-y-4" onSubmit={async e => {
-        e.preventDefault()
-        if (!resourceId || busy) return
-        setBusy(true); setError('')
-        try {
-          await api.post(`${base}/application-resources`, { application_id: appId, resource_id: resourceId })
-          toast.success('Resource linked')
-          onLinked()
-        } catch (err) { setError(message(err)) } finally { setBusy(false) }
-      }}>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium">Resource</label>
-          <SearchSelect
-            name="resource_id"
-            path={`${base}/resources`}
-            mapItem={named}
-            required
-            disabled={busy}
-            placeholder="Search resources…"
-            onChange={setResourceId}
-          />
-        </div>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="flex justify-end gap-2 border-t pt-4">
-          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy || !resourceId}>{busy ? 'Linking…' : 'Link'}</Button>
-        </div>
-      </form>
-    </DialogContent>
-  </Dialog>
 }

@@ -164,11 +164,13 @@ export default function FederationDetailPage() {
     {/* Unlink confirm */}
     {unlinking && (
       <ConfirmDialog
-        title="Unlink identity?"
-        description={`Remove the external identity link for ${unlinking.user_name || unlinking.user_id}. They will no longer be able to sign in through this provider.`}
+        title={`Unlink ${unlinking.user_name || 'this user'}?`}
+        description={`${unlinking.user_name || unlinking.user_id} can no longer sign in through this connection. Their user account and other sign-in methods are kept.`}
+        confirmLabel="Unlink"
         onClose={() => setUnlinking(null)}
         confirm={async () => {
           await api.delete(`${base}/external-identities/${connectionId}/${unlinking.user_id}`)
+          toast.success('Identity unlinked')
           identities.reload()
           setConn(c => c ? { ...c, linked: Math.max(0, c.linked - 1) } : c)
         }}

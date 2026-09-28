@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { Ban, KeyRound, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -8,7 +9,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { ConfirmDialog, DataTable, ErrorState, ID, PageHeader } from '@/components/library/patterns'
+import { ConfirmDialog, CopyField, CopyText, DataTable, EmptyState, ErrorState, PageHeader, Time } from '@/components/library/patterns'
+import { Badge } from '@/components/ui/badge'
+import { RowActions } from '@/components/ui/menu'
 interface Key { id: string; operator_id: string; expires_at: string; revoked_at: string | null }
 interface Credential { secret: string; expires_at: string }
 const ttlOptions = [
@@ -22,6 +25,8 @@ const ttlOptions = [
 ]
 export function KeysPage() {
   const list = useList<Key>('/keys?limit=200')
+  const operators = useList<{ id: string; email: string }>('/operators?limit=200')
+  const emails = useMemo(() => new Map(operators.data.map(o => [o.id, o.email])), [operators.data])
   const { principal } = useAuth()
   const [secret, setSecret] = useState<Credential | null>(null)
   const [target, setTarget] = useState<Key | null>(null)
@@ -29,8 +34,20 @@ export function KeysPage() {
   const [ttl, setTtl] = useState('24h')
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
-  return <div className="space-y-6"><PageHeader title="Management API keys" description="For trusted server-side automation only." actions={<Button onClick={() => setShowCreate(true)}>Create key</Button>} />
-    <DataTable columns={['Key ID', 'Operator', 'Expires', 'Status', 'Actions']} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(k => [<ID value={k.id} />, <ID value={k.operator_id} />, new Date(k.expires_at).toLocaleString(), k.revoked_at ? 'Revoked' : Date.parse(k.expires_at) <= Date.now() ? 'Expired' : 'Active', !k.revoked_at && (principal?.role === 'owner' || principal?.operator_id === k.operator_id) && <Button variant="destructive" size="sm" onClick={() => setTarget(k)}>Revoke</Button>])} />
+  return <div className="space-y-6"><PageHeader title="Management API keys" description="For trusted server-side automation only." actions={<Button onClick={() => setShowCreate(true)}><Plus /> Create key</Button>} />
+    <DataTable columns={['Key', 'Operator', { header: 'Expires', nowrap: true }, 'Status', 'Actions']} loading={list.loading} error={list.error} retry={list.reload}
+      empty={<EmptyState icon={<KeyRound />} title="No API keys" description="Create a key to call the management API from your servers or CI." />}
+      rows={list.data.map(k => {
+        const [label, tone] = k.revoked_at ? ['Revoked', 'bg-destructive/10 text-destructive'] : Date.parse(k.expires_at) <= Date.now() ? ['Expired', 'bg-muted text-muted-foreground'] : ['Active', 'bg-success/10 text-success']
+        const email = emails.get(k.operator_id)
+        return [
+          <CopyText value={k.id} short label="Copy key ID" />,
+          k.operator_id === principal?.operator_id ? <span>You{email && <span className="block text-xs text-muted-foreground">{email}</span>}</span> : email ?? <CopyText value={k.operator_id} short label="Copy operator ID" />,
+          <Time value={k.expires_at} />,
+          <Badge variant="secondary" className={tone}>{label}</Badge>,
+          !k.revoked_at && (principal?.role === 'owner' || principal?.operator_id === k.operator_id) && <RowActions label={`Actions for key ${k.id.slice(0, 8)}`} actions={[{ label: 'Revoke key', icon: <Ban />, destructive: true, onSelect: () => setTarget(k) }]} />,
+        ]
+      })} />
     {showCreate && <Dialog open onOpenChange={open => { if (!open && !pending.current) setShowCreate(false) }}><DialogContent>
       <DialogTitle className="font-semibold">Create API key</DialogTitle>
       <DialogDescription className="text-muted-foreground">Choose how long this key should remain valid.</DialogDescription>
@@ -43,8 +60,8 @@ export function KeysPage() {
         <Button disabled={busy} onClick={async () => { if (pending.current) return; pending.current = true; setBusy(true); try { setSecret(await api.post<Credential>('/keys', { expires_in: ttl })); setShowCreate(false); list.reload() } catch (e) { toast.error(message(e)) } finally { pending.current = false; setBusy(false) } }}>{busy ? 'Creating…' : 'Create key'}</Button>
       </div>
     </DialogContent></Dialog>}
-    {secret && <Dialog open onOpenChange={open => { if (!open) setSecret(null) }}><DialogContent><DialogTitle className="font-semibold">Save your API key</DialogTitle><DialogDescription className="text-muted-foreground">This secret is shown once. Store it securely on your server, never in frontend code.</DialogDescription><code className="break-all rounded-lg bg-muted p-3 text-xs select-all">{secret.secret}</code><p className="text-xs">Expires {new Date(secret.expires_at).toLocaleString()}</p><Button onClick={() => setSecret(null)}>I have saved the key</Button></DialogContent></Dialog>}
-    {target && <ConfirmDialog title="Revoke API key?" description="Server integrations using this key will immediately lose access." onClose={() => setTarget(null)} confirm={async () => { await api.delete(`/keys/${target.id}`); list.reload() }} />}
+    {secret && <Dialog open onOpenChange={open => { if (!open) setSecret(null) }}><DialogContent><DialogTitle className="font-semibold">Save your API key</DialogTitle><DialogDescription className="text-muted-foreground">This secret is shown once. Store it securely on your server, never in frontend code.</DialogDescription><CopyField label="API key" value={secret.secret} /><p className="text-xs">Expires {new Date(secret.expires_at).toLocaleString()}</p><Button onClick={() => setSecret(null)}>I have saved the key</Button></DialogContent></Dialog>}
+    {target && <ConfirmDialog title="Revoke this API key?" description="Servers and scripts using it lose access immediately. This cannot be undone." confirmLabel="Revoke key" onClose={() => setTarget(null)} confirm={async () => { await api.delete(`/keys/${target.id}`); toast.success('API key revoked'); list.reload() }} />}
   </div>
 }
 export function SettingsPage() {

@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { UnsavedChangesGuard } from '@/components/library/unsaved-changes'
 import type { ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Monitor, Moon, Plus, Smartphone, Sun, Trash2, TriangleAlert } from 'lucide-react'
@@ -64,6 +65,9 @@ export default function BrandingEditorPage() {
   const [busy, setBusy] = useState(false)
   const [reset, setReset] = useState(false)
   const pending = useRef(false)
+  // Set while leaving on purpose (Discard of a new style, Reset) so the
+  // unsaved-changes guard does not ask again.
+  const discarding = useRef(false)
 
   const load = () => {
     setLoadError('')
@@ -82,12 +86,7 @@ export default function BrandingEditorPage() {
   useEffect(load, [path])
 
   const dirty = !!draft && (!saved || !same(draft, saved))
-  useEffect(() => {
-    if (!dirty || !canWrite) return
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault() }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty, canWrite])
+  const guard = <UnsavedChangesGuard when={dirty && canWrite} bypass={discarding} message="Your style changes have not been saved." />
 
   const title = clientId ? `Style: ${clientName(client) || clientId}` : 'Default style'
   const description = clientId ? 'Sign-in pages of this OAuth client. Invitation pages always use the default style.' : 'Used by every hosted sign-in and invitation page, unless an OAuth client has its own style.'
@@ -105,6 +104,7 @@ export default function BrandingEditorPage() {
   }
 
   return <div className="space-y-6 pb-20">
+    {guard}
     {header}
     {clientId && !saved && <div role="status" className="rounded-lg border border-dashed px-4 py-3 text-sm text-muted-foreground">
       This client uses the default style. The editor starts from a copy of it; saving gives the client its own style.
@@ -121,13 +121,13 @@ export default function BrandingEditorPage() {
       <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-4 px-6 py-3">
         <span className="text-sm text-muted-foreground">{saved ? 'Unsaved changes' : 'New client style (not saved)'}</span>
         <div className="flex gap-2">
-          <Button variant="outline" disabled={busy} onClick={() => { setSaveError(''); if (saved) setDraft(saved); else navigate(back) }}>Discard</Button>
+          <Button variant="outline" disabled={busy} onClick={() => { setSaveError(''); if (saved) setDraft(saved); else { discarding.current = true; navigate(back) } }}>Discard</Button>
           <Button disabled={busy} onClick={() => void save()}>{busy ? 'Saving…' : 'Save'}</Button>
         </div>
       </div>
     </div>}
     {reset && <ConfirmDialog title="Reset to the default style?" description="The client's own style is deleted and its sign-in pages use the environment default again." confirmLabel="Reset" onClose={() => setReset(false)}
-      confirm={async () => { await api.delete(path); toast.success('Client style reset'); navigate(back) }} />}
+      confirm={async () => { await api.delete(path); toast.success('Client style reset'); discarding.current = true; navigate(back) }} />}
   </div>
 }
 

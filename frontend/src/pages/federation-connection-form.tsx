@@ -71,10 +71,11 @@ export function useCallbackURL() {
   return `${issuer}/identity/v1/federation/callback`
 }
 
-export function CreateConnectionDialog({ base, onClose, onCreated }: { base: string; onClose: () => void; onCreated: () => void }) {
+export function CreateConnectionDialog({ base, organization, onClose, onCreated }: { base: string; organization?: { id: string; name: string }; onClose: () => void; onCreated: () => void }) {
   const id = useId()
   const callback = useCallbackURL()
-  const [v, setV] = useState<ConnectionValues>(initial)
+  // From an organization's page the connection is that organization's SSO.
+  const [v, setV] = useState<ConnectionValues>(organization ? { ...initial, provider: 'oidc', name: '', scope: 'organization', organization_id: organization.id } : initial)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
@@ -83,7 +84,7 @@ export function CreateConnectionDialog({ base, onClose, onCreated }: { base: str
     ...prev, provider,
     name: providers.some(p => p.label === prev.name) || prev.name === '' ? (provider === 'oidc' ? '' : providerLabel(provider)) : prev.name,
     // Social presets are environment connections; organizations bring their own IdP.
-    scope: provider === 'oidc' || provider === 'microsoft' ? prev.scope : 'environment',
+    scope: organization ? 'organization' : provider === 'oidc' || provider === 'microsoft' ? prev.scope : 'environment',
   }))
   const social = v.scope === 'environment'
   const field = (name: string, label: string, control: React.ReactNode, hint?: string) => <div className="space-y-1.5">
@@ -98,8 +99,8 @@ export function CreateConnectionDialog({ base, onClose, onCreated }: { base: str
 
   return <Dialog open onOpenChange={open => { if (!open && !pending.current) onClose() }}>
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-      <DialogTitle className="pr-6 text-base font-semibold">Create federation connection</DialogTitle>
-      <DialogDescription className="text-muted-foreground">Add a social login provider for the whole environment, or an organization's own identity provider.</DialogDescription>
+      <DialogTitle className="pr-6 text-base font-semibold">{organization ? `Add SSO for ${organization.name}` : 'Create federation connection'}</DialogTitle>
+      <DialogDescription className="text-muted-foreground">{organization ? `Connect ${organization.name}'s identity provider. Members with a verified domain are routed to it.` : "Add a social login provider for the whole environment, or an organization's own identity provider."}</DialogDescription>
       <form className="space-y-4" onSubmit={async e => {
         e.preventDefault(); if (pending.current) return
         pending.current = true; setBusy(true); setError('')
@@ -108,17 +109,17 @@ export function CreateConnectionDialog({ base, onClose, onCreated }: { base: str
         <fieldset className="space-y-2" disabled={busy}>
           <legend className="text-sm font-medium">Provider</legend>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {providers.map(p => <button key={p.value} type="button" aria-pressed={v.provider === p.value} onClick={() => pick(p.value)}
+            {providers.filter(p => !organization || p.value === 'oidc' || p.value === 'microsoft').map(p => <button key={p.value} type="button" aria-pressed={v.provider === p.value} onClick={() => pick(p.value)}
               className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${v.provider === p.value ? 'border-primary bg-primary/5 font-medium' : 'hover:bg-muted'}`}>{p.label}</button>)}
           </div>
           <p className="text-xs text-muted-foreground">{providers.find(p => p.value === v.provider)?.hint}</p>
         </fieldset>
 
-        {(v.provider === 'oidc' || v.provider === 'microsoft') && field('scope', 'Used by', <select id={`${id}-scope`} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={v.scope} disabled={busy} onChange={e => set('scope', e.target.value as ConnectionValues['scope'])}>
+        {!organization && (v.provider === 'oidc' || v.provider === 'microsoft') && field('scope', 'Used by', <select id={`${id}-scope`} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={v.scope} disabled={busy} onChange={e => set('scope', e.target.value as ConnectionValues['scope'])}>
           <option value="environment">Everyone (social login on the sign-in page)</option>
           <option value="organization">One organization (enterprise SSO)</option>
         </select>)}
-        {v.scope === 'organization' && field('organization_id', 'Organization', <SearchSelect id={`${id}-organization_id`} name="organization_id" path={`${base}/organizations`} mapItem={named} required disabled={busy} placeholder="Search organizations…" onChange={value => set('organization_id', value)} />,
+        {!organization && v.scope === 'organization' && field('organization_id', 'Organization', <SearchSelect id={`${id}-organization_id`} name="organization_id" path={`${base}/organizations`} mapItem={named} required disabled={busy} placeholder="Search organizations…" onChange={value => set('organization_id', value)} />,
           'Users with a verified domain of the organization are routed here. Configure just-in-time provisioning and enforcement after creating it.')}
 
         {field('name', 'Name', <Input id={`${id}-name`} value={v.name} required disabled={busy} onChange={e => set('name', e.target.value)} />, social ? 'Shown on the button: "Continue with …".' : undefined)}

@@ -171,7 +171,7 @@ export default function NotificationsPage() {
     <PurposesCard />
 
     {editing && <DeliveryForm path={path} existing={config} hostedURL={status.hosted_invitation_url} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load() }} />}
-    {removing && <ConfirmDialog title="Remove delivery config?" description={status.global_configured ? 'This environment will fall back to the global EMAIL_WEBHOOK_URL.' : 'No global EMAIL_WEBHOOK_URL is set: this environment will stop delivering codes and invitations.'} onClose={() => setRemoving(false)} confirm={async () => { await api.delete(path); toast.success('Delivery config removed'); load() }} />}
+    {removing && <ConfirmDialog title="Remove this environment's delivery settings?" confirmLabel="Remove settings" description={status.global_configured ? 'This environment will fall back to the global EMAIL_WEBHOOK_URL.' : 'No global EMAIL_WEBHOOK_URL is set: this environment will stop delivering codes and invitations.'} onClose={() => setRemoving(false)} confirm={async () => { await api.delete(path); toast.success('Delivery config removed'); load() }} />}
     {testing && <TestDialog path={path} source={status.source} onClose={() => { setTesting(false); load() }} />}
   </div>
 }

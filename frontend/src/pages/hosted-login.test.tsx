@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { AuthProvider } from '../lib/auth'
 import App from '../App'
 
@@ -52,10 +52,14 @@ it('lists the default style and client styles', async () => {
   // The hosted client is listed with the default style and can be customized.
   expect(await screen.findByText('Portal · Billing')).toBeTruthy()
   expect(screen.queryByText('Web · Billing')).toBeNull()
-  expect(screen.getByRole('link', { name: /Customize/ }).getAttribute('href')).toBe('/projects/project1/environments/env1/hosted-login/clients/c3')
-  // The styled client offers Edit and Reset.
+  expect(screen.getByRole('link', { name: 'Portal · Billing' }).getAttribute('href')).toBe('/projects/project1/environments/env1/hosted-login/clients/c3')
+  await userEvent.click(screen.getByRole('button', { name: 'Actions for Portal · Billing' }))
+  expect(await screen.findByRole('menuitem', { name: 'Customize style' })).toBeTruthy()
+  await userEvent.keyboard('{Escape}')
+  // The styled client can be reset to the default style.
   expect(screen.getByText('Custom')).toBeTruthy()
-  await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Actions for Admin · Billing' }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Reset to default style' }))
   await userEvent.click(await screen.findByRole('button', { name: 'Reset' }))
   await waitFor(() => expect(calls('DELETE')).toHaveLength(1))
   expect(calls('DELETE')[0].url).toContain(`${env}/login-settings/clients/c2`)
@@ -117,8 +121,40 @@ it('is read-only for viewers and previews the saved style', async () => {
 it('toggles hosted login on an OAuth client', async () => {
   open('oauth-clients')
   await screen.findByText('Your UI')
-  await userEvent.click(screen.getByRole('button', { name: 'Use hosted pages' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Actions for Web' }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Switch to hosted page' }))
   await waitFor(() => expect(calls('PATCH')).toHaveLength(1))
   expect(calls('PATCH')[0].url).toContain(`${env}/oauth-clients/c1`)
   expect(calls('PATCH')[0].body).toEqual({ hosted_login: true })
+})
+
+it('asks before leaving the editor with unsaved changes', async () => {
+  // A data router, as in main.tsx, so in-app navigation can be blocked.
+  const router = createMemoryRouter([{ path: '*', element: <AuthProvider><App /></AuthProvider> }], { initialEntries: ['/projects/project1/environments/env1/hosted-login/default'] })
+  render(<RouterProvider router={router} />)
+  const name = await screen.findByLabelText('Display name')
+  await userEvent.type(name, ' Inc')
+  // Keep editing: the draft stays.
+  await userEvent.click(screen.getAllByRole('link', { name: /Hosted login/ })[0])
+  const dialog = await screen.findByRole('dialog', { name: 'Leave without saving?' })
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe('Acme Inc')
+  expect(router.state.location.pathname).toBe('/projects/project1/environments/env1/hosted-login/default')
+  // Discard changes: the navigation goes through.
+  await userEvent.click(screen.getAllByRole('link', { name: /Hosted login/ })[0])
+  await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Discard changes' }))
+  await waitFor(() => expect(router.state.location.pathname).toBe('/projects/project1/environments/env1/hosted-login'))
+  expect(calls('PUT')).toHaveLength(0)
+})
+
+it('does not ask after saving', async () => {
+  const router = createMemoryRouter([{ path: '*', element: <AuthProvider><App /></AuthProvider> }], { initialEntries: ['/projects/project1/environments/env1/hosted-login/default'] })
+  render(<RouterProvider router={router} />)
+  await userEvent.type(await screen.findByLabelText('Display name'), ' Inc')
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Save' })).toBeNull())
+  await userEvent.click(screen.getAllByRole('link', { name: /Hosted login/ })[0])
+  await waitFor(() => expect(router.state.location.pathname).toBe('/projects/project1/environments/env1/hosted-login'))
+  expect(screen.queryByRole('dialog')).toBeNull()
 })

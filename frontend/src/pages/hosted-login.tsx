@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { Palette, Plus } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { LogIn, Palette, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { message } from '@/lib/utils'
 import { normalize, resolved } from '@/lib/branding'
 import type { Branding } from '@/lib/branding'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ConfirmDialog, DataTable, ErrorState, ID, PageHeader } from '@/components/library/patterns'
+import { ConfirmDialog, DataTable, EntityRef, ErrorState, PageHeader, shortId } from '@/components/library/patterns'
+import { RowActions } from '@/components/ui/menu'
 import { clientName, PreviewFrame } from '@/components/library/preview-frame'
 import { everyMethod, SignInDialog, summary, type SignIn } from './sign-in-options'
 
@@ -32,6 +33,7 @@ export default function HostedLoginPage() {
   const canWrite = principal?.role !== 'viewer'
   const base = `/environments/${environment}`
   const page = `/projects/${project}/environments/${environment}/hosted-login`
+  const go = useNavigate()
   const [fallback, setFallback] = useState<Branding | null>(null)
   const [styles, setStyles] = useState<Branding[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -106,26 +108,23 @@ export default function HostedLoginPage() {
         <h2 className="font-mono font-medium">Clients</h2>
         <p className="mt-1 text-sm text-muted-foreground">Give an OAuth client its own look and choose which sign-in methods it offers. Clients without their own use the default style and every method.</p>
       </div>
-      <DataTable columns={['Client', 'Client ID', 'Style', 'Colors', 'Sign-in methods', 'Actions']} loading={false} error="" retry={load} rows={rows.map(c => {
-        const own = styled.get(c.id)
-        return [
-          <span className="text-sm">{clientName(c) || '—'}{!c.hosted_login && <Badge variant="secondary" className="ml-2">Hosted login off</Badge>}</span>,
-          <ID value={c.id} />,
-          <span className="text-sm">{own ? <Badge className="bg-primary/10 text-primary">Custom</Badge> : <span className="text-muted-foreground">Default</span>} <span className="ml-1 text-xs text-muted-foreground">{modes[(own ?? fallback).theme.mode]}</span></span>,
-          <Swatches style={own ?? fallback} />,
-          <div className="flex items-center gap-2">
-            <span className={`text-sm ${offered.has(c.id) ? '' : 'text-muted-foreground'}`}>{summary(offered.get(c.id) ?? everyMethod(c.id), connections)}</span>
-            <Button variant="outline" size="sm" aria-label={`Sign-in methods of ${clientName(c) || c.id}`} onClick={() => setMethods(c)}>{canWrite ? 'Choose' : 'View'}</Button>
-            {offered.has(c.id) && canWrite && <Button variant="ghost" size="sm" aria-label={`Offer every method on ${clientName(c) || c.id}`} onClick={() => setResetMethods(c)}>Reset</Button>}
-          </div>,
-          <div className="flex gap-2">
-            {own
-              ? <Link to={`${page}/clients/${c.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}>{canWrite ? 'Edit' : 'View'}</Link>
-              : canWrite && <Link to={`${page}/clients/${c.id}`} className={buttonVariants({ variant: 'outline', size: 'sm' })}><Plus className="size-3.5" /> Customize</Link>}
-            {own && canWrite && <Button variant="ghost" size="sm" onClick={() => setReset(own)}>Reset</Button>}
-          </div>,
-        ]
-      })} />
+      <DataTable columns={['Client', 'Style', { header: 'Sign-in methods', hideBelow: 'md' }, 'Actions']} loading={false} error="" retry={load}
+        rowHref={i => `${page}/clients/${rows[i].id}`}
+        rows={rows.map(c => {
+          const own = styled.get(c.id)
+          const name = clientName(c) || shortId(c.id)
+          return [
+            <EntityRef name={name} id={c.id} to={`${page}/clients/${c.id}`} secondary={!c.hosted_login ? 'Hosted pages off' : undefined} />,
+            <span className="inline-flex items-center gap-2 text-sm"><Swatches style={own ?? fallback} />{own ? <Badge className="bg-primary/10 text-primary">Custom</Badge> : <span className="text-muted-foreground">Default</span>}<span className="text-xs text-muted-foreground">{modes[(own ?? fallback).theme.mode]}</span></span>,
+            <span className={`text-sm ${offered.has(c.id) ? '' : 'text-muted-foreground'}`}>{summary(offered.get(c.id) ?? everyMethod(c.id), connections)}</span>,
+            <RowActions label={`Actions for ${name}`} actions={[
+              { label: own ? (canWrite ? 'Edit style' : 'View style') : 'Customize style', icon: <Palette />, disabled: !own && !canWrite, onSelect: () => go(`${page}/clients/${c.id}`) },
+              { label: canWrite ? 'Choose sign-in methods' : 'View sign-in methods', icon: <LogIn />, onSelect: () => setMethods(c) },
+              ...(canWrite && own ? [{ label: 'Reset to default style', icon: <RotateCcw />, onSelect: () => setReset(own) }] : []),
+              ...(canWrite && offered.has(c.id) ? [{ label: 'Offer every method', icon: <RotateCcw />, onSelect: () => setResetMethods(c) }] : []),
+            ]} />,
+          ]
+        })} />
       {rows.length === 0 && <p className="text-xs text-muted-foreground">Turn on hosted pages for an OAuth client to give it a style.</p>}
     </section>
     {methods && <SignInDialog base={base} client={methods.id} name={clientName(methods) || methods.id} readOnly={!canWrite} onClose={() => setMethods(null)} onSaved={load} />}

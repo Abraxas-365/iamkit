@@ -47,8 +47,8 @@ it('lists invitations with their status', async () => {
   const table = within(screen.getByRole('table'))
   expect(table.getByText('Pending')).toBeTruthy()
   expect(table.getByText('Accepted')).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Resend to bob@example.com' })).toBeTruthy()
-  expect(screen.queryByRole('button', { name: 'Resend to carol@example.com' })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Actions for bob@example.com' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Actions for carol@example.com' })).toBeNull()
 })
 
 it('invites and shows the token once', async () => {
@@ -66,7 +66,8 @@ it('invites and shows the token once', async () => {
 it('resends with a new link and filters by status', async () => {
   open()
   await screen.findByText('bob@example.com')
-  await userEvent.click(screen.getByRole('button', { name: 'Resend to bob@example.com' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Actions for bob@example.com' }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Resend invitation' }))
   await screen.findByText('https://app.example/join?token=ik_inv_rotated')
   await userEvent.selectOptions(screen.getByLabelText('Filter by status'), 'expired')
   await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/invitations?') && String(url).includes('status=expired'))).toBe(true))
@@ -77,6 +78,5 @@ it('hides mutations from viewers', async () => {
   open()
   await screen.findByText('bob@example.com')
   expect(screen.queryByRole('button', { name: /Invite member/ })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Resend to bob@example.com' })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Revoke invitation for bob@example.com' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Actions for bob@example.com' })).toBeNull()
 })

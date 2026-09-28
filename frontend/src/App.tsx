@@ -9,6 +9,9 @@ import { KeysPage, SettingsPage } from '@/pages/settings'
 import OperatorsPage from '@/pages/operators'
 import { ServiceAccountsPage, FederationPage, OAuthClientsPage, ProvisioningPage } from '@/pages/integrations'
 import MembersPage from '@/pages/members'
+import OrganizationLayout from '@/pages/organization-layout'
+import { OrganizationConnections, OrganizationOverview } from '@/pages/organization-overview'
+import UserDetailPage from '@/pages/user-detail'
 import { GroupDetailPage, GroupsPage } from '@/pages/groups'
 import { DomainsPage } from '@/pages/domains'
 import { InvitationsPage } from '@/pages/invitations'
@@ -17,6 +20,8 @@ import ApplicationDetailPage from '@/pages/application-detail'
 import FederationDetailPage from '@/pages/federation-detail'
 import NotificationsPage from '@/pages/notifications'
 import HostedLoginPage from '@/pages/hosted-login'
+import EnvironmentHomePage from '@/pages/environment-home'
+import OAuthClientDetailPage from '@/pages/oauth-client-detail'
 import BrandingEditorPage from '@/pages/branding-editor'
 export default function App() {
   return <Routes>
@@ -27,18 +32,25 @@ export default function App() {
       <Route path="projects" element={<ProjectsPage />} />
       <Route path="projects/:project" element={<ProjectsPage />} />
       <Route path="projects/:project/environments/:environment">
+        <Route index element={<EnvironmentHomePage />} />
         {(['users', 'organizations', 'applications', 'resources', 'roles', 'grants'] as const).map(kind => <Route key={kind} path={kind} element={<EntitiesPage key={kind} kind={kind} />} />)}
-        <Route path="organizations/:orgId/members" element={<MembersPage />} />
-        <Route path="organizations/:orgId/groups" element={<GroupsPage />} />
-        <Route path="organizations/:orgId/groups/:groupId" element={<GroupDetailPage />} />
-        <Route path="organizations/:orgId/domains" element={<DomainsPage />} />
-        <Route path="organizations/:orgId/invitations" element={<InvitationsPage />} />
+        <Route path="organizations/:orgId" element={<OrganizationLayout />}>
+          <Route index element={<OrganizationOverview />} />
+          <Route path="members" element={<MembersPage />} />
+          <Route path="groups" element={<GroupsPage />} />
+          <Route path="groups/:groupId" element={<GroupDetailPage />} />
+          <Route path="domains" element={<DomainsPage />} />
+          <Route path="invitations" element={<InvitationsPage />} />
+          <Route path="connections" element={<OrganizationConnections />} />
+        </Route>
+        <Route path="users/:userId" element={<UserDetailPage />} />
         <Route path="applications/:appId" element={<ApplicationDetailPage />} />
         <Route path="role-assignments" element={<RoleAssignmentsPage />} />
         <Route path="service-accounts" element={<ServiceAccountsPage />} />
         <Route path="federation" element={<FederationPage />} />
         <Route path="federation/:connectionId" element={<FederationDetailPage />} />
         <Route path="oauth-clients" element={<OAuthClientsPage />} />
+        <Route path="oauth-clients/:clientId" element={<OAuthClientDetailPage />} />
         <Route path="provisioning" element={<ProvisioningPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="hosted-login" element={<HostedLoginPage />} />

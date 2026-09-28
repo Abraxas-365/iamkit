@@ -1,13 +1,13 @@
 import { Link, useOutletContext, useParams } from 'react-router-dom'
 import { useState } from 'react'
-import { ArrowRight, FolderKanban, Plus } from 'lucide-react'
+import { ArrowRight, FolderKanban, Layers, Plus } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useList } from '@/hooks/use-list'
 import type { Named } from '@/components/layout/app-layout'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { DataTable, FormDialog, ID, PageHeader } from '@/components/library/patterns'
+import { DataTable, EmptyState, EntityRef, FormDialog, ID, PageHeader } from '@/components/library/patterns'
 export function OverviewPage() {
   const { principal } = useAuth()
   return <div className="space-y-6"><PageHeader title="Workspace overview" description="One place to manage identities and control access to your applications." />
@@ -25,8 +25,12 @@ export function ProjectsPage() {
   const { principal } = useAuth()
   const [creating, setCreating] = useState(false)
   const singular = project ? 'environment' : 'project'
+  const href = (id: string) => project ? `/projects/${project}/environments/${id}` : `/projects/${id}`
   return <div className="space-y-6"><PageHeader title={project ? 'Environments' : 'Projects'} description={project ? 'Isolated identity and access configuration for each stage of your product.' : 'Organize your products and their environments.'} actions={principal?.role !== 'viewer' && <Button onClick={() => setCreating(true)}><Plus />Create {singular}</Button>} />
-    <DataTable columns={['Name', 'ID', '']} loading={list.loading} error={list.error} retry={list.reload} rows={list.data.map(item => [<span className="font-medium">{item.name}</span>, <ID value={item.id} />, <Link className="inline-flex items-center gap-2 text-primary hover:underline" to={project ? `/projects/${project}/environments/${item.id}/users` : `/projects/${item.id}`}>Open <ArrowRight className="size-3" /></Link>])} />
+    <DataTable columns={['Name', { header: '', align: 'right' }]} loading={list.loading} error={list.error} retry={list.reload}
+      rowHref={i => href(list.data[i].id)}
+      empty={<EmptyState icon={project ? <Layers /> : <FolderKanban />} title={`No ${singular}s yet`} description={project ? 'Create an environment such as development or production to start adding users and applications.' : 'Create a project for each product you secure with IAMKit.'} action={principal?.role !== 'viewer' && <Button variant="outline" onClick={() => setCreating(true)}><Plus />Create {singular}</Button>} />}
+      rows={list.data.map(item => [<EntityRef name={item.name} id={item.id} to={href(item.id)} />, <ArrowRight className="ml-auto size-4 text-muted-foreground" aria-hidden />])} />
     {creating && <FormDialog title={`Create ${singular}`} description={`Choose a name for this ${singular}.`} fields={[{ name: 'name', label: 'Name' }]} onClose={() => setCreating(false)} submit={async data => { await api.post(path, data); list.reload(); refreshStructure(); }} />}
   </div>
 }

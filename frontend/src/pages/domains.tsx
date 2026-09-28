@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, BadgeCheck, Check, Copy, Plus, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { BadgeCheck, Check, Copy, FileText, Globe, Plus, RefreshCw, ShieldAlert, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -10,7 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import { ConfirmDialog, DataTable, FormDialog, ID, PageHeader } from '@/components/library/patterns'
+import { useOrganization } from './organization-layout'
+import { ConfirmDialog, DataTable, EmptyState, FormDialog, Time } from '@/components/library/patterns'
+import { RowActions } from '@/components/ui/menu'
 
 export interface Domain {
   id: string; organization_id: string; domain: string
@@ -42,23 +44,18 @@ function CopyValue({ label, value }: { label: string; value: string }) {
 }
 
 export function DomainsPage() {
-  const { project, environment, orgId } = useParams()
+  const { environment, orgId } = useParams()
   const base = `/environments/${environment}`
   const path = `${base}/organizations/${orgId}/domains`
-  const envBase = `/projects/${project}/environments/${environment}`
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [orgName, setOrgName] = useState('')
+  const orgName = useOrganization().org.name
   const list = usePaginatedList<Domain>(path)
   const [adding, setAdding] = useState(false)
   const [instructions, setInstructions] = useState<Domain | null>(null)
   const [forcing, setForcing] = useState<Domain | null>(null)
   const [removing, setRemoving] = useState<Domain | null>(null)
   const [verifying, setVerifying] = useState('')
-
-  useEffect(() => {
-    api.get<{ name: string }>(`${base}/organizations/${orgId}`).then(o => setOrgName(o.name)).catch(() => {})
-  }, [base, orgId])
 
   async function verify(d: Domain) {
     setVerifying(d.id)
@@ -74,36 +71,34 @@ export function DomainsPage() {
     }
   }
 
-  return <div className="space-y-6">
-    <div className="space-y-3">
-      <Link to={`${envBase}/organizations/${orgId}/members`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
-        <ArrowLeft className="size-3.5" />Back to members
-      </Link>
-      <PageHeader
-        title={orgName ? `Domains of ${orgName}` : 'Domains'}
-        description="Verified domains prove the organization owns an email domain. SCIM can restrict member adoption to them, and SSO routing will use them."
-        actions={canWrite && <Button onClick={() => setAdding(true)}><Plus />Add domain</Button>}
-      />
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="text-lg font-semibold">Domains of {orgName}</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">Verified domains prove the organization owns an email domain. Users with a verified domain are routed to the organization's SSO, and SCIM can restrict member adoption to them.</p>
+      </div>
+      {canWrite && <Button onClick={() => setAdding(true)}><Plus />Add domain</Button>}
     </div>
 
     <PaginationBar state={list} noun="domains" placeholder="Search domains…" />
 
     <DataTable
-      columns={['Domain / ID', 'Status', 'Added', 'Actions']}
+      columns={['Domain', 'Status', { header: 'Added', hideBelow: 'sm', nowrap: true }, 'Actions']}
       loading={list.loading}
       error={list.error}
       retry={list.reload}
+      empty={<EmptyState icon={<Globe />} title="No domains yet" description="Verify a domain the organization owns to route its users to SSO and auto-join them." />}
       rows={list.data.map(d => [
-        <div className="space-y-1"><div className="font-medium">{d.domain}</div><ID value={d.id} /></div>,
+        <span className="font-medium">{d.domain}</span>,
         <DomainStatus domain={d} />,
-        <span className="text-sm text-muted-foreground">{new Date(d.created_at).toLocaleDateString()}</span>,
-        <div className="flex gap-1">
-          {!d.verified && <Button variant="ghost" size="sm" onClick={() => setInstructions(d)}>DNS record</Button>}
-          {canWrite && !d.verified && <>
-            <Button variant="ghost" size="icon" aria-label={`Verify ${d.domain}`} disabled={verifying === d.id} onClick={() => verify(d)}><RefreshCw className={verifying === d.id ? 'size-4 animate-spin' : 'size-4'} /></Button>
-            <Button variant="ghost" size="icon" aria-label={`Force-verify ${d.domain}`} onClick={() => setForcing(d)}><ShieldAlert className="size-4" /></Button>
-          </>}
-          {canWrite && <Button variant="ghost" size="icon" aria-label={`Remove ${d.domain}`} onClick={() => setRemoving(d)}><Trash2 /></Button>}
+        <Time value={d.created_at} />,
+        <div className="flex items-center justify-end gap-1">
+          {canWrite && !d.verified && <Button variant="outline" size="sm" aria-label={`Verify ${d.domain}`} disabled={verifying === d.id} onClick={() => verify(d)}><RefreshCw className={verifying === d.id ? 'animate-spin' : undefined} /> Verify</Button>}
+          <RowActions label={`Actions for ${d.domain}`} actions={[
+            ...(!d.verified ? [{ label: 'Show DNS record', icon: <FileText />, onSelect: () => setInstructions(d) }] : []),
+            ...(canWrite && !d.verified ? [{ label: 'Mark verified without DNS', icon: <ShieldAlert />, onSelect: () => setForcing(d) }] : []),
+            ...(canWrite ? [{ label: 'Remove domain', icon: <Trash2 />, destructive: true, onSelect: () => setRemoving(d) }] : []),
+          ]} />
         </div>,
       ])}
     />
@@ -139,18 +134,18 @@ export function DomainsPage() {
     </Dialog>}
 
     {forcing && <ConfirmDialog
-      title="Force-verify domain?"
+      title={`Mark ${forcing.domain} as verified?`}
       description={`Marks ${forcing.domain} as verified without DNS proof. Only do this when ownership was confirmed another way; the action is audited.`}
-      confirmLabel="Force-verify"
+      confirmLabel="Mark verified"
       confirmationText={forcing.domain}
       onClose={() => setForcing(null)}
       confirm={async () => { await api.post(`${path}/${forcing.id}/force-verify`); toast.success(`${forcing.domain} verified manually`); list.reload() }}
     />}
 
     {removing && <ConfirmDialog
-      title="Remove domain?"
-      description={`${removing.domain} will be released${removing.verified ? ' and lose its verification' : ''}. Another organization may claim it afterwards.`}
-      confirmLabel="Remove"
+      title={`Remove ${removing.domain}?`}
+      description={`${removing.domain} is released${removing.verified ? ' and loses its verification' : ''}. Another organization may claim it afterwards.`}
+      confirmLabel="Remove domain"
       onClose={() => setRemoving(null)}
       confirm={async () => { await api.delete(`${path}/${removing.id}`); toast.success('Domain removed'); list.reload() }}
     />}

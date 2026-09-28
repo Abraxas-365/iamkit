@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Trash2, X } from 'lucide-react'
+import { Tags, Trash2, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { Button } from '@/components/ui/button'
 import { PaginationBar } from '@/components/ui/pagination-bar'
-import { ConfirmDialog, DataTable, ID, PageHeader } from '@/components/library/patterns'
+import { BackLink, ConfirmDialog, DataTable, EmptyState, EntityRef, PageHeader } from '@/components/library/patterns'
+import { RowActions } from '@/components/ui/menu'
 
 interface RoleAssignment {
   organization_id: string; organization_name: string
@@ -45,7 +47,8 @@ export default function RoleAssignmentsPage() {
   const resources = usePaginatedList<Named>(`${base}/resources`, { limit: 200 })
 
   const hasFilters = Object.values(filters).some(Boolean) || list.rawSearch !== ''
-  const rolesPath = `/projects/${project}/environments/${environment}/roles`
+  const envBase = `/projects/${project}/environments/${environment}`
+  const rolesPath = `${envBase}/roles`
 
   const updateFilter = useCallback((patch: Partial<Filters>) => {
     setFilters(f => ({ ...f, ...patch }))
@@ -53,12 +56,10 @@ export default function RoleAssignmentsPage() {
 
   return <div className="space-y-6">
     <div className="space-y-3">
-      <Link to={rolesPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="size-3.5" />Back to roles
-      </Link>
+      <BackLink to={rolesPath}>Roles</BackLink>
       <PageHeader
         title="Role assignments"
-        description="All role assignments in this environment."
+        description="Who holds which role, in which organization. Roles granted through groups are shown on each organization's Groups tab."
       />
     </div>
 
@@ -75,46 +76,28 @@ export default function RoleAssignmentsPage() {
     </div>
 
     <DataTable
-      columns={['Role', 'Organization', 'User', 'Resource', ...(canWrite ? ['Actions'] : [])]}
+      columns={['User', 'Role', { header: 'Organization', hideBelow: 'md' }, ...(canWrite ? ['Actions'] : [])]}
       loading={list.loading}
       error={list.error}
       retry={list.reload}
-      rows={list.data.map(a => {
-        const cells: React.ReactNode[] = [
-          <div className="space-y-1">
-            <p className="font-medium">{a.role_name}</p>
-            <ID value={a.role_id} />
-          </div>,
-          <div className="space-y-1">
-            <p className="text-sm">{a.organization_name}</p>
-            <ID value={a.organization_id} />
-          </div>,
-          <div className="space-y-1">
-            <p className="text-sm">{a.user_name}</p>
-            <p className="text-xs text-muted-foreground">{a.user_email}</p>
-            <ID value={a.user_id} />
-          </div>,
-          <div className="space-y-1">
-            <p className="text-sm">{a.resource_name}</p>
-            <ID value={a.resource_id} />
-          </div>,
-        ]
-        if (canWrite) cells.push(
-          <Button variant="ghost" size="icon" aria-label="Unassign" onClick={() => setRemoving(a)}>
-            <Trash2 className="size-4" />
-          </Button>,
-        )
-        return cells
-      })}
+      empty={hasFilters ? <EmptyState title="No assignments match these filters" /> : <EmptyState icon={<Tags />} title="No roles assigned yet" description="Assign roles from a user's page, or with “Assign role” on the Roles page." />}
+      rows={list.data.map(a => [
+        <EntityRef name={a.user_name || a.user_email} id={a.user_id} to={`${envBase}/users/${a.user_id}`} secondary={a.user_name ? a.user_email : undefined} />,
+        <span className="block"><span className="font-medium">{a.role_name}</span><span className="block text-xs text-muted-foreground">{a.resource_name}</span></span>,
+        <Link to={`${envBase}/organizations/${a.organization_id}`} className="text-sm hover:text-primary hover:underline">{a.organization_name}</Link>,
+        ...(canWrite ? [<RowActions label={`Actions for ${a.user_name} as ${a.role_name}`} actions={[{ label: 'Remove role', icon: <Trash2 />, destructive: true, onSelect: () => setRemoving(a) }]} />] : []),
+      ])}
     />
 
     {removing && (
       <ConfirmDialog
-        title="Unassign role?"
-        description={`Remove "${removing.role_name}" from ${removing.user_name || removing.user_id} in ${removing.organization_name || removing.organization_id}.`}
+        title={`Remove role ${removing.role_name}?`}
+        description={`${removing.user_name || removing.user_email} loses this role in ${removing.organization_name} at their next token. Roles from groups are not affected.`}
+        confirmLabel="Remove role"
         onClose={() => setRemoving(null)}
         confirm={async () => {
           await api.delete(`${base}/role-assignments/${removing.role_id}/${removing.organization_id}/${removing.user_id}`)
+          toast.success('Role removed')
           list.reload()
         }}
       />

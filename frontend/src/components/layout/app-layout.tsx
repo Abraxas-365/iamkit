@@ -1,7 +1,7 @@
 import { Link, matchPath, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
-import { Activity, Bell, Blocks, Bot, Building2, FolderKanban, Globe, KeyRound, LayoutDashboard, Link2, LogIn, LogOut, Moon, Server, Settings, Shield, ShieldCheck, Sun, Tags, UserCog, Users } from 'lucide-react'
+import { Activity, Bell, Blocks, Bot, Building2, ChevronRight, FolderKanban, Home, Globe, KeyRound, LayoutDashboard, Link2, LogIn, LogOut, Moon, Server, Settings, Shield, ShieldCheck, Sun, Tags, UserCog, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth'
 import { message } from '@/lib/utils'
@@ -10,14 +10,19 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarSeparator, SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
 import { ErrorState } from '@/components/library/patterns'
+import { CommandPalette, type PaletteItem } from './command-palette'
 export interface Named { id: string; name: string }
-const environmentNav = [
-  ['users', 'Users', Users], ['organizations', 'Organizations', Building2], ['applications', 'Applications', Blocks],
-  ['resources', 'Resources & scopes', Shield], ['roles', 'Roles', Tags], ['grants', 'Grants', ShieldCheck],
-  ['service-accounts', 'Service accounts', Bot], ['federation', 'Federation', Globe], ['oauth-clients', 'OAuth clients', Link2], ['hosted-login', 'Hosted login', LogIn], ['provisioning', 'SCIM provisioning', Server],
-  ['notifications', 'Notifications', Bell],
-  ['sessions', 'Sessions', KeyRound], ['audit-events', 'Audit events', Activity],
-] as const
+type NavItem = readonly [path: string, label: string, icon: typeof Shield]
+const environmentNav: readonly (readonly [group: string, items: readonly NavItem[]])[] = [
+  ['Users & access', [['users', 'Users', Users], ['organizations', 'Organizations', Building2], ['roles', 'Roles', Tags], ['grants', 'Grants', ShieldCheck]]],
+  ['Applications', [['applications', 'Applications', Blocks], ['resources', 'Resources & scopes', Shield], ['oauth-clients', 'OAuth clients', Link2], ['service-accounts', 'Service accounts', Bot]]],
+  ['Sign-in', [['hosted-login', 'Hosted login', LogIn], ['federation', 'Social & SSO', Globe], ['provisioning', 'SCIM provisioning', Server], ['notifications', 'Notifications', Bell]]],
+  ['Monitoring', [['sessions', 'Sessions', KeyRound], ['audit-events', 'Audit events', Activity]]],
+]
+const allNav = environmentNav.flatMap(([, items]) => items)
+const subpages: Record<string, [string, string]> = { 'role-assignments': ['roles', 'Assignments'] }
+const workspacePages: [string, string][] = [['/projects', 'Projects'], ['/operators', 'Operators'], ['/keys', 'API keys'], ['/settings', 'Settings']]
+function workspacePage(path: string) { return workspacePages.find(([p]) => path === p || path.startsWith(`${p}/`))?.[1] ?? 'Overview' }
 export default function AppLayout() {
   const auth = useAuth()
   if (auth.loading) return <p role="status" className="p-8">Loading session…</p>
@@ -37,9 +42,25 @@ function Shell() {
   const { resolvedTheme, setTheme } = useTheme()
   const [signingOut, setSigningOut] = useState(false)
   const envBase = project && environment ? `/projects/${project}/environments/${environment}` : ''
-  const currentPage = environmentNav.find(([path]) => location.pathname.endsWith(`/${path}`) || (envBase && location.pathname.startsWith(`${envBase}/${path}/`)))?.[1] ?? 'Workspace'
+  const section = envBase ? allNav.find(([path]) => location.pathname === `${envBase}/${path}` || location.pathname.startsWith(`${envBase}/${path}/`)) : undefined
+  const envName = environments.data.find(e => e.id === environment)?.name
+  const palettePages = useMemo<PaletteItem[]>(() => [
+    ...(envBase ? [{ to: envBase, label: 'Environment home', group: 'Pages' }, ...environmentNav.flatMap(([group, items]) => items.map(([path, label]) => ({ to: `${envBase}/${path}`, label, group: 'Pages', hint: group }))), { to: `${envBase}/role-assignments`, label: 'Role assignments', group: 'Pages', hint: 'Users & access' }] : []),
+    { to: '/', label: 'Workspace overview', group: 'Pages', hint: 'Workspace' },
+    ...workspacePages.map(([to, label]) => ({ to, label, group: 'Pages', hint: 'Workspace' })),
+    ...projects.data.map(p => ({ to: `/projects/${p.id}`, label: p.name, group: 'Projects' })),
+    ...(project ? environments.data.map(e => ({ to: `/projects/${project}/environments/${e.id}`, label: e.name, group: 'Environments' })) : []),
+  ], [envBase, project, projects.data, environments.data])
+  // Pages reached from a section rather than the sidebar: path → [parent path, label].
+  const subpage = envBase ? Object.entries(subpages).find(([path]) => location.pathname === `${envBase}/${path}`)?.[1] : undefined
+  const parent = subpage && allNav.find(([path]) => path === subpage[0])
+  const crumbs: [string, string | null][] = subpage && parent
+    ? [[envName ?? 'Environment', envBase], [parent[1], `${envBase}/${parent[0]}`], [subpage[1], null]]
+    : envBase
+    ? [[envName ?? 'Environment', section || location.pathname !== envBase ? envBase : null], ...(section ? [[section[1], location.pathname === `${envBase}/${section[0]}` ? null : `${envBase}/${section[0]}`] as [string, string | null]] : []), ...(section && location.pathname !== `${envBase}/${section[0]}` ? [['Details', null] as [string, string | null]] : [])]
+    : [[workspacePage(location.pathname), null]]
   function link(to: string, label: string, Icon: typeof Shield) {
-    const active = location.pathname === to || (!!envBase && to.startsWith(envBase) && location.pathname.startsWith(`${to}/`))
+    const active = location.pathname.replace(/(.)\/$/, '$1') === to || (!!envBase && to !== envBase && to.startsWith(envBase) && location.pathname.startsWith(`${to}/`))
     return <SidebarMenuItem key={to}><SidebarMenuButton isActive={active} render={<Link to={to} aria-current={active ? 'page' : undefined} />} onClick={() => setOpenMobile(false)}><Icon /><span>{label}</span></SidebarMenuButton></SidebarMenuItem>
   }
   return <>
@@ -55,7 +76,10 @@ function Shell() {
       <SidebarContent>
         <nav aria-label="Main navigation">
           <SidebarGroup><SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-wider">Workspace</SidebarGroupLabel><SidebarGroupContent><SidebarMenu>{link('/', 'Overview', LayoutDashboard)}{link('/projects', 'Projects', FolderKanban)}</SidebarMenu></SidebarGroupContent></SidebarGroup>
-          <SidebarGroup><SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-wider">Environment</SidebarGroupLabel><SidebarGroupContent>{envBase ? <SidebarMenu>{environmentNav.map(([path, label, icon]) => link(`${envBase}/${path}`, label, icon))}</SidebarMenu> : <p className="px-2 text-xs leading-relaxed text-muted-foreground">Select a project and environment to manage identities and access.</p>}</SidebarGroupContent></SidebarGroup>
+          {envBase ? <>
+            <SidebarGroup><SidebarGroupContent><SidebarMenu>{link(envBase, 'Environment home', Home)}</SidebarMenu></SidebarGroupContent></SidebarGroup>
+            {environmentNav.map(([group, items]) => <SidebarGroup key={group}><SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-wider">{group}</SidebarGroupLabel><SidebarGroupContent><SidebarMenu>{items.map(([path, label, icon]) => link(`${envBase}/${path}`, label, icon))}</SidebarMenu></SidebarGroupContent></SidebarGroup>)}
+          </> : <SidebarGroup><SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-wider">Environment</SidebarGroupLabel><SidebarGroupContent><p className="px-2 text-xs leading-relaxed text-muted-foreground">Select a project and environment to manage identities and access.</p></SidebarGroupContent></SidebarGroup>}
           <SidebarGroup><SidebarGroupLabel className="font-mono text-[10px] uppercase tracking-wider">Administration</SidebarGroupLabel><SidebarGroupContent><SidebarMenu>{link('/operators', 'Operators', UserCog)}{link('/keys', 'API keys', KeyRound)}{link('/settings', 'Settings', Settings)}</SidebarMenu></SidebarGroupContent></SidebarGroup>
         </nav>
       </SidebarContent>
@@ -74,12 +98,16 @@ function Shell() {
         <Separator orientation="vertical" className="mr-2 !h-4 self-center" />
         <span className="hidden font-mono text-xs text-muted-foreground lg:inline">iamkit</span>
         <select aria-label="Project" className="h-7 min-w-0 max-w-40 rounded-md border border-input bg-background px-2 text-xs" value={project ?? ''} disabled={projects.loading || !!projects.error} onChange={e => navigate(e.target.value ? `/projects/${e.target.value}` : '/projects')}><option value="">Select project</option>{projects.data.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-        {project && <><span className="text-xs text-muted-foreground">/</span><select aria-label="Environment" className="h-7 min-w-0 max-w-40 rounded-md border border-input bg-background px-2 text-xs" value={environment ?? ''} disabled={environments.loading || !!environments.error} onChange={e => navigate(e.target.value ? `/projects/${project}/environments/${e.target.value}/users` : `/projects/${project}`)}><option value="">Select environment</option>{environments.data.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></>}
-        <Button className="ml-auto" size="icon-sm" variant="ghost" aria-label="Toggle color theme" onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>{resolvedTheme === 'dark' ? <Sun /> : <Moon />}</Button>
+        {project && <><span className="text-xs text-muted-foreground">/</span><select aria-label="Environment" className="h-7 min-w-0 max-w-40 rounded-md border border-input bg-background px-2 text-xs" value={environment ?? ''} disabled={environments.loading || !!environments.error} onChange={e => navigate(e.target.value ? `/projects/${project}/environments/${e.target.value}` : `/projects/${project}`)}><option value="">Select environment</option>{environments.data.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}</select></>}
+        <div className="ml-auto" />
+        <CommandPalette pages={palettePages} envBase={envBase} environment={envBase ? environment : undefined} />
+        <Button size="icon-sm" variant="ghost" aria-label="Toggle color theme" onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}>{resolvedTheme === 'dark' ? <Sun /> : <Moon />}</Button>
       </header>
       <div id="content" className="min-w-0 flex-1 space-y-6 overflow-auto p-4 md:p-6">
         {(projects.error || environments.error) && <ErrorState error={projects.error || environments.error} retry={() => { projects.reload(); environments.reload() }} />}
-        <p className="font-mono text-xs text-muted-foreground">Console <span className="px-2">/</span> {currentPage}</p>
+        <nav aria-label="Breadcrumb"><ol className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          {crumbs.map(([label, to], i) => <li key={i} className="flex items-center gap-1.5">{i > 0 && <ChevronRight className="size-3" aria-hidden />}{to ? <Link to={to} className="hover:text-foreground hover:underline">{label}</Link> : <span aria-current={i === crumbs.length - 1 ? 'page' : undefined} className={i === crumbs.length - 1 ? 'text-foreground' : undefined}>{label}</span>}</li>)}
+        </ol></nav>
         {principal?.role === 'viewer' && <p className="rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">Read-only access. An owner or admin can modify environment configuration.</p>}
         {project && (projects.loading || environments.loading) ? <p role="status">Loading environment context…</p> :
           project && (projects.error || environments.error) ? null :

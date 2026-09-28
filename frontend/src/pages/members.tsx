@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Globe, KeyRound, MailPlus, ShieldCheck, UserMinus, Users, UsersRound, X } from 'lucide-react'
+import { KeyRound, MailPlus, ShieldCheck, UserMinus, UserPlus, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -10,8 +10,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
-import { ConfirmDialog, DataTable, ErrorState, ID, PageHeader, Status } from '@/components/library/patterns'
+import { ConfirmDialog, DataTable, EmptyState, EntityRef, ErrorState, FormDialog, Status } from '@/components/library/patterns'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { RowActions } from '@/components/ui/menu'
+import { useOrganization } from './organization-layout'
 
 interface Member {
   user_id: string; user_name: string; user_email: string; active: boolean
@@ -25,6 +27,8 @@ const memberOption = (item: Record<string, unknown>) => ({
   inactive: item.active === false,
 })
 
+const userOption = (item: Record<string, unknown>) => ({ id: String(item.id), label: item.email ? `${item.name} (${item.email})` : String(item.name ?? item.id), inactive: item.active === false })
+
 export default function MembersPage() {
   const { project, environment, orgId } = useParams()
   const base = `/environments/${environment}`
@@ -36,7 +40,9 @@ export default function MembersPage() {
   const [inspecting, setInspecting] = useState<Member | null>(null)
   const [settingManager, setSettingManager] = useState<Member | null>(null)
   const [bypassing, setBypassing] = useState<Member | null>(null)
-  const [orgName, setOrgName] = useState('')
+  const [adding, setAdding] = useState(false)
+  const { org } = useOrganization()
+  const orgName = org.name
   const [managerFilter, setManagerFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
 
@@ -49,32 +55,22 @@ export default function MembersPage() {
 
   const list = usePaginatedList<Member>(path, { extraParams })
 
-  useEffect(() => {
-    if (!environment || !orgId) return
-    api.get<{ id: string; name: string }>(`${base}/organizations/${orgId}`)
-      .then(org => setOrgName(org.name))
-      .catch(() => {})
-  }, [environment, orgId, base])
-
-  const orgsPath = `/projects/${project}/environments/${environment}/organizations`
+  const envBase = `/projects/${project}/environments/${environment}`
+  const orgsPath = `${envBase}/organizations`
   const hasFilters = !!managerFilter || !!statusFilter
 
   function clearFilters() { setManagerFilter(''); setStatusFilter('') }
 
-  return <div className="space-y-6">
-    <div className="space-y-3">
-      <Link to={orgsPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="size-3.5" />Back to organizations
-      </Link>
-      <PageHeader
-        title={orgName ? `Members of ${orgName}` : 'Members'}
-        description={orgId}
-        actions={<div className="flex gap-2">
-          <Link to={`${orgsPath}/${orgId}/groups`} className={buttonVariants({ variant: 'outline' })}><UsersRound className="size-4" /> Groups</Link>
-          <Link to={`${orgsPath}/${orgId}/domains`} className={buttonVariants({ variant: 'outline' })}><Globe className="size-4" /> Domains</Link>
-          <Link to={`${orgsPath}/${orgId}/invitations`} className={buttonVariants({ variant: 'outline' })}><MailPlus className="size-4" /> Invitations</Link>
-        </div>}
-      />
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="text-lg font-semibold">Members of {org.name}</h2>
+        <p className="text-sm text-muted-foreground">People who can sign in to this organization.</p>
+      </div>
+      {canWrite && <div className="flex flex-wrap gap-2">
+        <Link to={`${orgsPath}/${orgId}/invitations`} className={buttonVariants({ variant: 'outline' })}><MailPlus className="size-4" /> Invite by email</Link>
+        <Button onClick={() => setAdding(true)}><UserPlus /> Add existing user</Button>
+      </div>}
     </div>
 
     <PaginationBar state={list} noun="members" />
@@ -105,39 +101,34 @@ export default function MembersPage() {
     </div>
 
     <DataTable
-      columns={['User', 'Email', 'Manager', 'Status', 'Actions']}
+      columns={['User', { header: 'Manager', hideBelow: 'md' }, 'Status', 'Actions']}
       loading={list.loading}
       error={list.error}
       retry={list.reload}
+      empty={<EmptyState icon={<Users />} title={hasFilters ? 'No members match these filters' : 'No members yet'} description={hasFilters ? undefined : `Invite people by email, add an existing user, or connect ${orgName}'s directory with SCIM.`} />}
       rows={list.data.map(m => [
-        <div className="space-y-1">
-          <p className="font-medium">{m.user_name}</p>
-          <ID value={m.user_id} />
-        </div>,
-        <span className="text-sm">{m.user_email}</span>,
+        <EntityRef name={m.user_name} id={m.user_id} to={`${envBase}/users/${m.user_id}`} secondary={m.user_email} />,
         m.manager_name
-          ? <button type="button" className="text-left text-sm text-primary hover:underline" onClick={() => setManagerFilter(m.manager_id!)}>{m.manager_name}</button>
+          ? <button type="button" className="text-left text-sm text-primary hover:underline" title="Show this manager's reports" onClick={() => setManagerFilter(m.manager_id!)}>{m.manager_name}</button>
           : <span className="text-xs text-muted-foreground">—</span>,
         <div className="flex flex-wrap items-center gap-1">
           <Status active={m.active} />
           {m.sso_bypass && <Badge variant="outline" title="May sign in with a password even when SSO is enforced">SSO bypass</Badge>}
         </div>,
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" aria-label={`Access of ${m.user_name}`} onClick={() => setInspecting(m)}>
-            <ShieldCheck className="size-4" />
-          </Button>
-          {canWrite && m.active && <Button variant="ghost" size="icon" aria-label={`Set manager for ${m.user_name}`} onClick={() => setSettingManager(m)}>
-            <Users className="size-4" />
-          </Button>}
-          {canWrite && m.active && <Button variant="ghost" size="icon" aria-label={`${m.sso_bypass ? 'Revoke' : 'Grant'} SSO bypass for ${m.user_name}`} onClick={() => setBypassing(m)}>
-            <KeyRound className="size-4" />
-          </Button>}
-          {canWrite && m.active && <Button variant="ghost" size="icon" aria-label={`Remove ${m.user_name}`} onClick={() => setRemoving(m)}>
-            <UserMinus className="size-4" />
-          </Button>}
-        </div>,
+        <RowActions label={`Actions for ${m.user_name}`} actions={[
+          { label: 'View access', icon: <ShieldCheck />, onSelect: () => setInspecting(m) },
+          ...(canWrite && m.active ? [
+            { label: 'Set manager', icon: <Users />, onSelect: () => setSettingManager(m) },
+            { label: m.sso_bypass ? 'Revoke SSO bypass' : 'Allow password sign-in (SSO bypass)', icon: <KeyRound />, onSelect: () => setBypassing(m) },
+            { label: 'Remove from organization', icon: <UserMinus />, destructive: true, onSelect: () => setRemoving(m) },
+          ] : []),
+        ]} />,
       ])}
     />
+
+    {adding && <FormDialog title={`Add a user to ${orgName}`} description="The user can sign in to this organization right away. Give them roles or grants afterwards." submitLabel="Add member" success="Member added" fields={[
+      { name: 'user_id', label: 'User', type: 'select', selectPath: `${base}/users`, selectMap: userOption },
+    ]} onClose={() => setAdding(false)} submit={async values => { await api.post(`${base}/memberships`, { organization_id: orgId, user_id: values.user_id }); list.reload() }} />}
 
     {inspecting && <MemberAccessDialog
       member={inspecting}
@@ -149,11 +140,13 @@ export default function MembersPage() {
 
     {removing && (
       <ConfirmDialog
-        title="Remove member?"
-        description={`${removing.user_name || removing.user_id} will be deactivated in ${orgName || 'this organization'}.`}
+        title={`Remove ${removing.user_name || 'member'} from ${orgName}?`}
+        description={`${removing.user_name || removing.user_id} can no longer sign in to ${orgName}. Their user account is kept.`}
+        confirmLabel="Remove member"
         onClose={() => setRemoving(null)}
         confirm={async () => {
           await api.delete(`${base}/organizations/${orgId}/members/${removing.user_id}`)
+          toast.success('Member removed')
           list.reload()
         }}
       />
@@ -161,13 +154,15 @@ export default function MembersPage() {
 
     {bypassing && (
       <ConfirmDialog
-        title={bypassing.sso_bypass ? 'Revoke SSO bypass?' : 'Grant SSO bypass?'}
+        title={`${bypassing.sso_bypass ? 'Revoke' : 'Grant'} SSO bypass for ${bypassing.user_name || 'this member'}?`}
+        confirmLabel={bypassing.sso_bypass ? 'Revoke bypass' : 'Grant bypass'}
         description={bypassing.sso_bypass
           ? `${bypassing.user_name || bypassing.user_id} will have to sign in through SSO when it is enforced.`
           : `${bypassing.user_name || bypassing.user_id} will be able to sign in with a password even when SSO is enforced. Use for break-glass administrators only.`}
         onClose={() => setBypassing(null)}
         confirm={async () => {
           await api.patch(`${base}/organizations/${orgId}/members/${bypassing.user_id}`, { sso_bypass: !bypassing.sso_bypass })
+          toast.success(bypassing.sso_bypass ? 'SSO bypass revoked' : 'SSO bypass granted')
           list.reload()
         }}
       />

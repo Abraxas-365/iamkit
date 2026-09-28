@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, Copy, Plus, RotateCw, Trash2, X } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { Check, Copy, MailPlus, Plus, RotateCw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -12,7 +12,9 @@ import { Input } from '@/components/ui/input'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import { ConfirmDialog, DataTable, ErrorState, ID, PageHeader } from '@/components/library/patterns'
+import { useOrganization } from './organization-layout'
+import { ConfirmDialog, DataTable, EmptyState, ErrorState, Time } from '@/components/library/patterns'
+import { RowActions } from '@/components/ui/menu'
 
 export type InvitationStatus = 'pending' | 'accepted' | 'revoked' | 'expired'
 
@@ -113,14 +115,15 @@ const deliveryText: Record<Issued['delivery'], string> = {
   skipped: 'No delivery webhook is configured. Share the link or token below with the invitee yourself.',
 }
 
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+
 export function InvitationsPage() {
-  const { project, environment, orgId } = useParams()
+  const { environment, orgId } = useParams()
   const base = `/environments/${environment}`
   const path = `${base}/organizations/${orgId}/invitations`
-  const envBase = `/projects/${project}/environments/${environment}`
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [orgName, setOrgName] = useState('')
+  const orgName = useOrganization().org.name
   const [status, setStatus] = useState('')
   const extraParams = useMemo(() => (status ? { status } : undefined), [status])
   const list = usePaginatedList<Invitation>(path, { extraParams })
@@ -128,10 +131,6 @@ export function InvitationsPage() {
   const [issued, setIssued] = useState<Issued | null>(null)
   const [revoking, setRevoking] = useState<Invitation | null>(null)
   const [resending, setResending] = useState('')
-
-  useEffect(() => {
-    api.get<{ name: string }>(`${base}/organizations/${orgId}`).then(o => setOrgName(o.name)).catch(() => {})
-  }, [base, orgId])
 
   async function resend(inv: Invitation) {
     setResending(inv.id)
@@ -141,16 +140,13 @@ export function InvitationsPage() {
     } catch (e) { toast.error(message(e)) } finally { setResending('') }
   }
 
-  return <div className="space-y-6">
-    <div className="space-y-3">
-      <Link to={`${envBase}/organizations/${orgId}/members`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
-        <ArrowLeft className="size-3.5" />Back to members
-      </Link>
-      <PageHeader
-        title={orgName ? `Invitations to ${orgName}` : 'Invitations'}
-        description="Invite people by email. New accounts set a password when accepting, unless the organization enforces SSO for their domain."
-        actions={canWrite && <Button onClick={() => setInviting(true)}><Plus />Invite member</Button>}
-      />
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 className="text-lg font-semibold">Invitations to {orgName}</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">Invite people by email. New accounts set a password when accepting, unless the organization enforces SSO for their domain.</p>
+      </div>
+      {canWrite && <Button onClick={() => setInviting(true)}><Plus />Invite member</Button>}
     </div>
 
     <PaginationBar state={list} noun="invitations" placeholder="Search by email…" />
@@ -164,21 +160,20 @@ export function InvitationsPage() {
     </select>
 
     <DataTable
-      columns={['Email / ID', 'Status', 'Access', 'Expires', 'Actions']}
+      columns={['Email', 'Status', { header: 'Access', hideBelow: 'md' }, { header: 'Expires', hideBelow: 'sm', nowrap: true }, ...(canWrite ? ['Actions'] : [])]}
       loading={list.loading}
       error={list.error}
       retry={list.reload}
+      empty={<EmptyState icon={<MailPlus />} title="No invitations" description="Invite people by email; they join the organization when they accept." />}
       rows={list.data.map(inv => [
-        <div className="space-y-1"><div className="font-medium">{inv.email}</div><ID value={inv.id} /></div>,
+        <span className="font-medium">{inv.email}</span>,
         <StatusBadge status={inv.status} />,
-        <span className="text-sm text-muted-foreground">{inv.role_ids.length} roles · {inv.group_ids.length} groups</span>,
-        <span className="text-sm text-muted-foreground">{inv.status === 'accepted' && inv.accepted_at ? `Accepted ${new Date(inv.accepted_at).toLocaleDateString()}` : new Date(inv.expires_at).toLocaleDateString()}</span>,
-        <div className="flex gap-1">
-          {canWrite && (inv.status === 'pending' || inv.status === 'expired') && <>
-            <Button variant="ghost" size="icon" aria-label={`Resend to ${inv.email}`} disabled={resending === inv.id} onClick={() => resend(inv)}><RotateCw className={resending === inv.id ? 'size-4 animate-spin' : 'size-4'} /></Button>
-            <Button variant="ghost" size="icon" aria-label={`Revoke invitation for ${inv.email}`} onClick={() => setRevoking(inv)}><Trash2 /></Button>
-          </>}
-        </div>,
+        <span className="text-sm text-muted-foreground">{plural(inv.role_ids.length, 'role')} · {plural(inv.group_ids.length, 'group')}</span>,
+        inv.status === 'accepted' && inv.accepted_at ? <Time value={inv.accepted_at} prefix="Accepted" /> : <Time value={inv.expires_at} prefix={Date.parse(inv.expires_at) < Date.now() ? 'Expired' : 'Expires'} />,
+        ...(canWrite ? [(inv.status === 'pending' || inv.status === 'expired') && <RowActions label={`Actions for ${inv.email}`} actions={[
+          { label: resending === inv.id ? 'Resending…' : 'Resend invitation', icon: <RotateCw />, disabled: resending === inv.id, onSelect: () => resend(inv) },
+          { label: 'Revoke invitation', icon: <Trash2 />, destructive: true, onSelect: () => setRevoking(inv) },
+        ]} />] : []),
       ])}
     />
 
@@ -197,9 +192,9 @@ export function InvitationsPage() {
     </Dialog>}
 
     {revoking && <ConfirmDialog
-      title="Revoke invitation?"
-      description={`The invitation for ${revoking.email} stops working immediately. You can invite them again later.`}
-      confirmLabel="Revoke"
+      title={`Revoke the invitation for ${revoking.email}?`}
+      description="The link stops working immediately. You can invite them again later."
+      confirmLabel="Revoke invitation"
       onClose={() => setRevoking(null)}
       confirm={async () => { await api.delete(`${path}/${revoking.id}`); toast.success('Invitation revoked'); list.reload() }}
     />}
