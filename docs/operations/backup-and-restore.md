@@ -2,8 +2,9 @@
 
 Back up **both database state and trust material**: PostgreSQL, RSA signing key,
 issuer/configuration, OAuth HMAC, `IAMKIT_ENCRYPTION_KEY` (and any old keys still
-listed), provider/webhook credentials and recovery access. Without the encryption
-key, restored organization SSO client secrets cannot be decrypted.
+listed), provider/webhook/SMTP/Resend credentials and recovery access. Without the
+encryption key, restored organization SSO client secrets and stored SMTP passwords /
+Resend API keys cannot be decrypted (delivery fails until they are re-entered).
 Use encrypted storage with access controls, retention, integrity checks and an
 owner. Database backups contain personal data and credential hashes; treat them
 as sensitive even when raw passwords are absent.

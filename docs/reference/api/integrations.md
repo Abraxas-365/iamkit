@@ -7,7 +7,7 @@ requires owner. Credential responses are secrets and must be captured once.
 | Method/path | JSON body | Success |
 | --- | --- | --- |
 | `POST /federation-connections` | `name,client_id`, `provider` (`oidc` default \| `google` \| `microsoft` \| `github` \| `apple`), `issuer` (`oidc` only), `options` (see below) and exactly one of `client_secret` (stored encrypted; Apple: the `.p8` PEM) or `secret_env` (not Apple); optional `organization_id,jit_provisioning,jit_group_id,enforcement`, or without `organization_id`: `signup,signup_organization_id,signup_group_id,link_email` | 201 `{id}` |
-| `GET /federation-connections` | Optional `organization_id` filter | 200 page with `provider,organization_id,organization_name,jit_provisioning,enforcement,signup,link_email` and linked counts |
+| `GET /federation-connections` | Optional `organization_id` filter; optional `scope` (`environment`: social login connections \| `organization`: organization SSO connections) | 200 page with `provider,organization_id,organization_name,jit_provisioning,enforcement,signup,link_email` and linked counts |
 | `GET /federation-connections/:id` | — | 200 detail with `provider,organization_name,options,callback_url`, sign-up settings, `secret_source` (`sealed`\|`env`), secret variable name for `env`; never the secret |
 | `PATCH /federation-connections/:id` | Any of `name,client_secret,jit_provisioning,jit_group_id` (`""` clears),`enforcement,options,signup,link_email,signup_organization_id,signup_group_id` (`""` clears) | 204 |
 | `GET /federation-connections/:id/identities` | — | 200 page of subject/user links with `origin` (`linked`\|`jit`\|`email`\|`signup`) and `created_at` |
@@ -29,8 +29,8 @@ requires owner. Credential responses are secrets and must be captured once.
 | `GET /login-settings/clients/:client/sign-in` | — | 200 `{client_id,password,email_code,organization_sso,all_connections,connection_ids,custom,updated_at}`; every method with `custom:false` when unset |
 | `PUT /login-settings/clients/:client/sign-in` | `password,email_code,organization_sso,all_connections,connection_ids` (≤50 active environment connections); at least one method | 200 normalized options; 404 unknown client |
 | `DELETE /login-settings/clients/:client/sign-in` | — | 204; the client offers every method again |
-| `GET /login-settings/preview` | `?page=`, `?scheme=light\|dark`, optional `?client=` | 200 `{html}` with the saved style |
-| `POST /login-settings/preview` | `{page,scheme,settings}` | 200 `{html}` with the unsaved style (write access) |
+| `GET /login-settings/preview` | `?page=`, `?scheme=light\|dark`, optional `?client=`, optional `?sign_in=` (JSON, see [previews](../../guides/hosted-login.md#previews)) | 200 `{html}` with the saved style |
+| `POST /login-settings/preview` | `{page,scheme,settings,sign_in?}` | 200 `{html}` with the unsaved style (write access) |
 | `POST /service-accounts` | `name,application_id,resource_id,permissions`, optional `expires_in` | 201 `{id,secret,expires_at}` |
 | `GET /service-accounts` | — | 200 page |
 | `DELETE /service-accounts/:id` | — | 204 |
@@ -48,7 +48,9 @@ a verified domain (422) and at most one enforced connection per organization
 
 `options`: Microsoft requires `tenant` (`common`\|`organizations`\|`consumers`\|tenant
 ID, fixed after creation) and takes `tenants` (tenant IDs allowed under
-`common`/`organizations`); Apple requires `team_id` and `key_id` (a new `key_id`
+`common`/`organizations`); Google takes `domains` (only Google Workspace
+accounts of these domains, by the ID token's `hd` claim); Apple requires
+`team_id` and `key_id` (a new `key_id`
 needs a new `client_secret`). Other providers take none. `signup` requires
 `signup_organization_id`; `signup_group_id` requires `signup`; `signup: false`
 clears both. Organization connections reject `signup` and `link_email`. See

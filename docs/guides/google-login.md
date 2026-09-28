@@ -7,9 +7,11 @@ Two ways to use Google:
   which covers registration, sign-up and email linking.
 - **One organization's Google Workspace** as its enterprise SSO: an
   [organization connection](federation.md#organization-sso) with
-  `"provider":"google"` and the organization's `organization_id`. JIT
-  provisioning then admits only emails of the organization's verified
-  domains, so other Google accounts are refused.
+  `"provider":"google"`, the organization's `organization_id` and
+  `"options":{"domains":["acme.com"]}`. IAMKit then refuses personal Google
+  accounts and other Workspaces before any user is looked up (the ID token's
+  `hd` claim must be one of the domains), and JIT provisioning still admits
+  only emails of the organization's verified domains.
 
 Either way, register a *Web application* OAuth client in Google Cloud with the
 exact redirect URI `${JWT_ISSUER}/identity/v1/federation/callback`. IAMKit

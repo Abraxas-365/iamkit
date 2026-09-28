@@ -2,7 +2,8 @@
 
 Inventory owners, storage location, consumers, expiry and rotation procedure for:
 PostgreSQL credentials, RSA signing key, OAuth HMAC secret, operator/management
-credentials, service/SCIM credentials, provider secrets and email webhook token.
+credentials, service/SCIM credentials, provider secrets, email webhook token and
+SMTP passwords / Resend API keys (global variables and per-environment settings).
 Do not keep secrets in examples, browser builds, logs or screenshots.
 
 ## Management/service/SCIM credential rotation
@@ -29,6 +30,18 @@ issuer/audience checks and failure behavior in staging first.
 Restoring an old key can re-enable verification of old signatures; evaluate
 revocation and compromise implications before rollback. A stolen signing key
 requires incident containment, not merely routine restart.
+
+## Encryption key rotation
+
+`IAMKIT_ENCRYPTION_KEY` seals SSO client secrets, TOTP secrets and environment
+SMTP passwords / Resend API keys. To rotate: set the new key, move the old one to
+`IAMKIT_ENCRYPTION_KEYS_OLD`, restart, re-save every SSO client secret and email
+secret (for email: `PUT …/delivery` with the password or API key, or
+`iam delivery set`), and only then drop the old key. TOTP secrets cannot be
+re-saved: keep the old key in `IAMKIT_ENCRYPTION_KEYS_OLD` while factors sealed
+with it are in use. An email secret sealed with a dropped key fails delivery with
+`stored credential could not be decrypted`. See the
+[configuration reference](../reference/configuration.md#encryption-key).
 
 ## Deployment details
 

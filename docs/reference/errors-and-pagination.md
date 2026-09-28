@@ -12,6 +12,7 @@ errors must not be surfaced as stack traces or secret payloads.
 | 403 | Correct authority/permission/tenant policy |
 | 404 | Check entity ID and environment visibility |
 | 409 | Inspect conflicting state and reconcile |
+| 422 | Domain rule; `ENCRYPTION_KEY_REQUIRED` means a secret (SSO client secret, SMTP password, Resend API key) cannot be stored until `IAMKIT_ENCRYPTION_KEY` is set |
 | 429 | Back off; avoid parallel login/resend storms |
 | 5xx | Check service/dependency health; reconcile ambiguous writes before retry |
 

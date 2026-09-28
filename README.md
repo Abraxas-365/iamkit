@@ -1,5 +1,10 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/iamkit-logo-light.svg" />
+  <img src="docs/assets/iamkit-logo-dark.svg" alt="IAMKit" height="56" />
+</picture>
+
 <img src="docs/assets/iamkit-banner.svg" alt="IAMKit — identity and access management with explicit boundaries" width="1200" />
 
 # IAMKit
@@ -186,17 +191,19 @@ override) as well as your private environment file.
 | `JWT_ISSUER` | Stable public issuer URL; HTTPS outside loopback development |
 | `SERVER_PORT` | API port inside the container; keep 8080 to match the example healthcheck |
 | `OIDC_HMAC_SECRET` | Stable OAuth secret, at least 32 random bytes |
-| `EMAIL_WEBHOOK_URL`, `EMAIL_WEBHOOK_TOKEN` | Default HTTPS mail-delivery webhook and its bearer token (can be overridden per environment from the console) |
+| `EMAIL_PROVIDER` and `EMAIL_*`/`SMTP_*`/`RESEND_API_KEY` | Default mail delivery: a webhook (`EMAIL_WEBHOOK_URL`, `EMAIL_WEBHOOK_TOKEN`), SMTP or Resend (can be overridden per environment from the console) |
 | `FEDERATION_CREDENTIAL_BINDINGS` | Approved environment/issuer/client/secret-reference combinations |
 | `IAMKIT_PROVIDER_*` | Provider client secrets referenced by federation bindings |
 
-Email OTP, email verification and password reset use the webhook. IAMKit sends
-`{email, purpose, code}`; **your service sends the email**. The global
-`EMAIL_WEBHOOK_URL` applies to all environments by default; you can override it
-per environment from the operator console (**Notifications** tab) or the
-management API (`PUT /environments/:id/delivery`). Per-environment config takes
-priority; if not set, the global env var is used. Do not log codes or webhook
-payloads.
+Email OTP, email verification, password reset and invitations need email
+delivery. With a **webhook**, IAMKit sends `{email, purpose, code}` and **your
+service sends the email**; with **SMTP** or **Resend**, IAMKit writes the email
+in your branding and language (wording customizable per email) and sends it.
+The global configuration applies to all environments by default; you can
+override it per environment from the operator console (**Notifications** tab)
+or the management API (`PUT /environments/:id/delivery`). Per-environment config
+takes priority. Do not log codes or webhook payloads. See
+[email delivery](docs/guides/email-delivery.md).
 
 Federation supports OIDC providers, not every OAuth-only provider. Create an
 approved connection and explicitly link its provider subject to a local user;
@@ -295,7 +302,7 @@ online introspection when you need current session/access status.
 | Method | App flow | Prerequisites |
 | :--- | :--- | :--- |
 | Password | `POST /identity/v1/login` with the full boundary | Active user with a password, membership, app/resource binding and grant |
-| Email OTP | `POST /identity/v1/challenges` with environment, email and `purpose: "login"`; then `/challenges/verify` with challenge ID, 8-character code, purpose and full boundary | User has OTP enabled; email webhook configured; same access prerequisites |
+| Email OTP | `POST /identity/v1/challenges` with environment, email and `purpose: "login"`; then `/challenges/verify` with challenge ID, 8-character code, purpose and full boundary | User has OTP enabled; email delivery configured; same access prerequisites |
 | Google/Microsoft or another OIDC provider | `POST /identity/v1/federation/start` with connection ID and full boundary; follow provider redirect/callback | Approved connection, explicit external-identity link and appropriate local access |
 | OAuth/OIDC client flow | Register an OAuth client bound to an app/resource, then use authorization code + S256 PKCE | Your login/consent UI and HTTPS; see the [OAuth guide](docs/guides/oauth-oidc.md) |
 

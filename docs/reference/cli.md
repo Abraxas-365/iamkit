@@ -24,7 +24,8 @@ credentials are unaffected.
 
 The explicit CLI does not set an operator password; set it through management
 `POST /password` after authenticating. Automatic bootstrap instead optionally
-uses `IAMKIT_BOOTSTRAP_PASSWORD` and currently logs its management key. Omit
+uses `IAMKIT_BOOTSTRAP_PASSWORD` as a temporary password (replaced at the
+first console sign-in) and currently logs its management key. Omit
 automatic bootstrap when credential logging is unacceptable.
 
 Normal shutdown handles SIGINT/SIGTERM and allows 10 seconds for HTTP shutdown.

@@ -86,7 +86,7 @@ people. Prefix these paths with `/organizations/:organization`:
 | Method/path | Input | Success |
 | --- | --- | --- |
 | `POST /groups` | `name`, optional `description` | 201 `{id}` |
-| `GET /groups` | List parameters; optional `user_id`, `connection_id` filters | 200 page |
+| `GET /groups` | List parameters; optional `user_id`, `connection_id`, `source` (`manual` or `directory`) filters | 200 page |
 | `GET /groups/:group` | — | 200 group |
 | `PATCH /groups/:group` | Optional `name`, `description` | 204 |
 | `DELETE /groups/:group` | — | 204; also removes its members and role bindings |

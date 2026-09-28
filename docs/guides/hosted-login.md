@@ -61,7 +61,8 @@ for the choice is bound to the ticket and single-use.
 
 The **Hosted login** console page lists the environment's *default style* and
 the OAuth clients with hosted login. Each style opens in an editor with a live
-preview of the real pages (any page, light or dark, desktop or phone width).
+preview of the real pages (any page, light or dark, desktop or phone width,
+any language).
 
 Per environment, `PUT /management/v1/environments/$ENV/login-settings`:
 
@@ -78,8 +79,10 @@ Per environment, `PUT /management/v1/environments/$ENV/login-settings`:
     "logo_dark_url": "https://cdn.acme.example/logo-dark.png",
     "favicon_url": "https://cdn.acme.example/favicon.ico",
     "header": {"show": true}, "logo_position": "header",
-    "footer": {"text": "© Acme Inc.", "links": [{"label": "Privacy", "url": "https://acme.example/privacy"}]}
-  }
+    "footer": {"text": "© Acme Inc.", "links": [{"label": "Privacy", "url": "https://acme.example/privacy"}]},
+    "background_image_url": "https://cdn.acme.example/background.jpg", "background_overlay": 40
+  },
+  "locale": "es"
 }
 ```
 
@@ -94,9 +97,26 @@ Per environment, `PUT /management/v1/environments/$ENV/login-settings`:
 | `theme.spacing` / `theme.align` | `compact`\|`normal`\|`roomy` / `center`\|`left`\|`right` |
 | `theme.header.show`, `theme.logo_position` | optional header bar; `header` moves the logo and name into it |
 | `theme.footer` | `text` ≤200 chars, up to 5 `links` (`label` ≤40, HTTPS or `mailto:`), opened in a new tab |
+| `theme.background_image_url`, `theme.background_overlay` | optional HTTPS image covering the page behind the form (no quotes, parentheses, backslashes or spaces); tinted by 0–90 % of the scheme's background color |
+| `locale` | Default style only: the environment's [language](#language), for the hosted pages and the [emails](email-delivery.md#emails-iamkit-writes-smtp-resend) (`en`, `es`; `""` = automatic; `GET .../login-settings/locales` lists them). Omitted on `PUT`: unchanged |
+
+The default style also brands the emails IAMKit writes (SMTP, Resend): its
+display name, logo and primary color.
 
 Button text is black or white, whichever reads better on the primary color;
 the console warns about text and link colors below WCAG contrast.
+
+### Language
+
+Hosted pages (titles, labels, buttons, and the errors people can act on) are
+in, first match wins:
+
+1. the application's `ui_locales` on `/oauth/authorize` (e.g. `es-MX en`);
+2. the environment's `locale` (the **Language** setting of the default style;
+   client styles have none);
+3. the visitor's browser (`Accept-Language`), then English.
+
+Invitation pages use steps 2–3. Available languages: `en`, `es`.
 
 ### Per-client styles
 
@@ -114,7 +134,17 @@ returns `{"html": "…"}`: a page rendered with the saved style and sample data.
 `POST .../login-settings/preview` `{"page","scheme","settings"}` renders an
 unsaved style (validated like a save, stored nowhere; operators with write
 access). Pages: `identify`, `password`, `code`, `reset`, `organization`, `mfa`,
-`enroll`, `recovery`, `invite`, `message`.
+`enroll`, `recovery`, `invite`, `message`. `scheme` may be either one whatever
+the mode; `locale` (`?locale=` on `GET`) picks the language, by default the
+environment's.
+
+An optional `sign_in` (a body field, or `?sign_in=` as JSON on `GET`) shows
+only some methods on the `identify` and `password` pages, e.g. social login
+only: `{"password":false,"email_code":false,"organization_sso":false,
+"connections":[{"name":"GitHub","provider":"github"}]}`. Providers: `google`,
+`microsoft`, `github`, `apple`, `oidc`; at most 50 buttons, and at least one
+method. It changes the preview only; a client's real methods are set under
+[sign-in methods](#sign-in-methods).
 
 Every change is recorded in the environment's audit events. Free-form CSS is
 deliberately not supported: every value is a closed format placed in the

@@ -131,7 +131,15 @@ provisioning has the same trio for SCIM groups. Federation's `fedoidc` adapter
 dials providers through `GuardedTransport` (public addresses only, via
 `netx.GuardedDialer`) for
 sealed-secret connections; tests replace it via
-`bootstrap.WithFederationTransport`. Management has
+`bootstrap.WithFederationTransport`. Authentication has
+`DeliveryConfigCommands`/`DeliveryConfigQueries`/`DeliveryConfigRepository`
+(per-environment email delivery; secrets sealed with `Cipher`, never returned)
+and `TemplateCommands`/`TemplateQueries`/`TemplateRepository` (email wording
+overrides per purpose × language, text only — `Copy` with `{{placeholders}}`,
+no HTML). Its `authmail` SMTP/Resend adapters dial environment providers
+through `netx.GuardedDialer`; the deployment-wide provider (`EMAIL_PROVIDER`,
+read in `bootstrap/mail.go`) may reach private hosts; tests override both via
+`bootstrap.WithMail`. Management has
 `ControlCommands`/`ControlQueries` and `ActivityCommands`/`ActivityQueries`.
 Method names still use standard verbs (`Create`, `List`, `Find`). When a
 single Queries/Repository interface manages multiple entity types, prefix the
@@ -611,6 +619,16 @@ second as the first token and kept across refreshes); the self-service
 `/identity/v1/me/factors*` routes (`mfahttp.RegisterSelf`) refuse
 impersonated tokens and require a sign-in within `config.MFAFreshAuth` for
 changes (`mfa.Fresh`, 403 `REAUTHENTICATION_REQUIRED`).
+
+Operator console sessions store their sign-in `method` (`password`/`sso`)
+and `authenticated_at` on `operator_sessions`; `management.Principal`
+carries them (`Method` = `key` for management keys). `SetPassword` needs
+the current password, a key, or a sign-in within `config.OperatorFreshAuth`
+when no password is set (or from an SSO session), and revokes every other
+session of the operator in the same transaction. A password someone else
+chose (`SetTemporaryPassword`, used for `IAMKIT_BOOTSTRAP_PASSWORD`) sets
+`operators.password_must_change`: `Login` answers `PASSWORD_CHANGE_REQUIRED`
+until it receives `new_password`.
 
 ---
 

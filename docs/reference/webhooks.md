@@ -1,5 +1,8 @@
 # Email webhook contract
 
+This applies to the `webhook` provider (the default). With `smtp` or `resend`,
+IAMKit writes and sends the email itself; see [email delivery](../guides/email-delivery.md).
+
 IAMKit sends an HTTPS POST to the configured URL:
 
 ```http
@@ -25,8 +28,8 @@ Invitations use purpose `invitation` and carry no code:
 `link` is present only when the environment's delivery config sets
 `invitation_url`; otherwise build it from `token` yourself. The token is a
 secret valid for seven days. `inviter` is the inviting operator's email (or
-name) when known. Absent fields are omitted, so challenge payloads are unchanged. No environment/app/resource or challenge
-ID is included. The webhook is a delivery adapter, not a general notification bus.
+name) when known. Absent fields are omitted, so challenge payloads are unchanged. No environment/app/resource,
+challenge ID or language is included (a requested `locale` is not forwarded). The webhook is a delivery adapter, not a general notification bus.
 
 Any 2xx status is accepted; response bodies are not used. Other statuses fail.
 Redirects are refused; timeout is 10 seconds. There is no asynchronous retry or

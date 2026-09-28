@@ -23,13 +23,13 @@ Owner/admin writes; viewers read. Entity lists use the
 | `GET /roles/:id` | — | 200 role |
 | `PUT /roles/:id` | `name`, `resource_id`, `permissions` | 204 |
 | `DELETE /roles/:id` | — | 204 |
-| `POST /role-assignments` | `organization_id`, `user_id`, `role_id` | 204 |
+| `POST /role-assignments` | `organization_id`, `user_id`, `role_id` | 204; 409 if already held or the user is not a member |
 | `GET /role-assignments` | Filters below | 200 page |
 | `DELETE /role-assignments/:role/:organization/:user` | — | 204 |
 | `POST /group-role-assignments` | `organization_id`, `group_id`, `role_id` | 204; 409 if already bound |
 | `GET /group-role-assignments` | `organization_id`, `group_id`, `role_id`, `resource_id`, list parameters | 200 page |
 | `DELETE /group-role-assignments/:role/:organization/:group` | — | 204 |
-| `GET /effective-roles` | Required `organization_id`, `user_id` | 200 `{items}` (not paginated) |
+| `GET /effective-roles` | Required `user_id`; optional `organization_id` | 200 `{items}` (not paginated) |
 | `PUT /grants` | `organization_id`, `user_id`, `resource_id`, `permissions` | 200 `{id}` |
 | `GET /grants` | — | 200 page |
 | `GET /grants/:id` | — | 200 grant |
@@ -51,12 +51,13 @@ through a group survives losing either one. The group must belong to
 any other group.
 
 `GET /effective-roles?organization_id=…&user_id=…` explains a member's roles:
-one item per reason the role is held.
+one item per reason the role is held. Omit `organization_id` to get the user's
+roles in every organization at once; each item names its `organization_id`.
 
 ```json
 {"items":[
-  {"role_id":"…","role_name":"reader","resource_id":"…","resource_name":"Invoices API","source":"group","group_id":"…","group_name":"Finance"},
-  {"role_id":"…","role_name":"admin","resource_id":"…","resource_name":"Invoices API","source":"direct"}
+  {"organization_id":"…","role_id":"…","role_name":"reader","resource_id":"…","resource_name":"Invoices API","source":"group","group_id":"…","group_name":"Finance"},
+  {"organization_id":"…","role_id":"…","role_name":"admin","resource_id":"…","resource_name":"Invoices API","source":"direct"}
 ]}
 ```
 

@@ -24,7 +24,8 @@ direct grants, directly assigned roles, and roles bound to groups the member
 belongs to in that organization. Group roles are resolved when a token is
 issued, never copied onto the user, so removing someone from a group revokes
 only what the group supplied. `GET /effective-roles` shows which path supplies
-each role.
+each role; the console shows the same on each user's page. To set groups up,
+see [groups and group roles](../guides/organizations.md#groups-and-group-roles).
 
 Permissions are exact strings, not wildcard patterns. Use the resource's catalog;
 `iam:users:write` belongs to the built-in IAM resource, not the invoice catalog.

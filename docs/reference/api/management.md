@@ -14,9 +14,10 @@ workspace. Owner/admin can mutate environment data; viewer cannot.
 
 | Method/path | Request | Success |
 | --- | --- | --- |
-| `POST /login` | `email`, `password`; console header, no existing credential | 200 principal + operator cookie |
-| `GET /me` | Authenticated | 200 `{operator_id,workspace_id,role}` |
-| `POST /password` | `password` (12–72 bytes) | 204; updates own operator password |
+| `POST /login` | `email`, `password`, optional `new_password`; console header, no existing credential | 200 principal + operator cookie. 403 `PASSWORD_CHANGE_REQUIRED` (only after the password matched) when the password was set for the operator (bootstrap); resend with `new_password` to replace it and sign in |
+| `GET /me` | Authenticated | 200 `{operator_id,workspace_id,role,method,authenticated_at}`; `method` is `password`, `sso` or `key` |
+| `GET /password` | Authenticated | 200 `{set,usable,fresh,mode}`: has a password; may use one here; may set one without `current_password` |
+| `POST /password` | `password` (12–72 bytes), `current_password` | 204; updates own operator password. Proof: `current_password`, or a management key, or (no password set, or a single sign-on session) a sign-in within 5 minutes; else 403 `REAUTHENTICATION_REQUIRED`. Ends the operator's other console sessions; the calling one stays |
 | `DELETE /sessions/current` | Authenticated | 204; invalidates/clears operator cookie |
 | `POST /keys` | Optional `expires_in` | 201 credential result; capture secret once |
 | `GET /keys` | Authenticated | 200 array |
@@ -52,13 +53,19 @@ responses. See [users/organizations](users-and-organizations.md),
 [integrations](integrations.md).
 
 Delivery configuration uses `GET /delivery` (200 configuration or 404),
-`PUT /delivery` (required `webhook_url`, `webhook_token`; 204) and `DELETE /delivery`
-(204, or 404 if absent). Reads redact the token. `PUT`/`DELETE` are audited as
+`PUT /delivery` (`provider` `webhook`|`smtp`|`resend` with that provider's fields;
+204) and `DELETE /delivery` (204, or 404 if absent). Reads never return the webhook
+token, SMTP password or Resend API key (`has_token`, `has_secret`); storing the latter
+two requires `IAMKIT_ENCRYPTION_KEY` (422 without). `PUT`/`DELETE` are audited as
 `delivery.update`/`delivery.delete`. Deletion restores global fallback.
 `GET /delivery/status` reports the effective source (`environment`, `global`,
-`none`) and the latest attempt and failure; `POST /delivery/test` (`{"email"}`,
+`none`), its `provider` and the latest attempt and failure; `POST /delivery/test` (`{"email"}`,
 owner/admin, audited `delivery.test`, 5/min) sends a `test` message and returns
-the attempt. See [email delivery](../../guides/email-delivery.md) for precedence, rotation and field details.
+the attempt. `GET /delivery/preview?purpose=&locale=` renders a sample email
+(`{subject,html,text}`), `POST /delivery/preview` the same with unsaved `template`
+wording. Email wording: `GET /delivery/templates`, `GET|PUT|DELETE
+/delivery/templates/:purpose/:locale` (audited `email_template.updated`/`.reset`).
+See [email delivery](../../guides/email-delivery.md) for precedence, fields, wording and rotation.
 
 Administrative inventories include `GET /sessions` (optional `user_id` filter), `DELETE /sessions/:id` and
 `GET /audit-events` under this prefix. Sessions carry display labels
