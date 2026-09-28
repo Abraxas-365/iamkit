@@ -106,6 +106,7 @@ func (h *Handler) list(c *fiber.Ctx) error {
 		}
 		filter.Organization = org
 	}
+	filter.Scope = c.Query("scope")
 	out, err := h.queries.List(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err

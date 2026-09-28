@@ -20,7 +20,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/application/appmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authmail"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/authzmodule"
@@ -67,6 +66,8 @@ type options struct {
 	resolver  organization.Resolver
 	sealer    *cryptox.Sealer
 	transport http.RoundTripper
+	mail      authmodule.Mail
+	sso       *OperatorSSO
 }
 
 // WithResolver replaces the system DNS resolver used for domain verification.
@@ -91,8 +92,12 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	if o.sealer == nil {
 		o.sealer = &cryptox.Sealer{}
 	}
-	managementModule := mgmtmodule.New(mgmtmodule.Deps{DB: db})
-	s := &server.Server{Control: managementModule.HTTP, Health: db.PingContext}
+	managementDeps := mgmtmodule.Deps{DB: db}
+	if o.sso != nil {
+		managementDeps.SSO = &mgmtmodule.SSO{Settings: o.sso.Settings, Provider: newOperatorIdP(issuer, *o.sso)}
+	}
+	managementModule := mgmtmodule.New(managementDeps)
+	s := &server.Server{Control: managementModule.HTTP, OperatorSSO: managementModule.SSOHTTP, Health: db.PingContext}
 	userModule := usermodule.New(usermodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Users = userModule.HTTP
 	// Built before authentication (its second factor); tokens are bound late.
@@ -100,10 +105,11 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		return s.Tokens.Validate(c, environment, audience)
 	}})
 	s.Factors = mfaModule.HTTP
-	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor, Cipher: o.sealer})
+	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor, Cipher: o.sealer, Mail: o.mail})
 	s.Tokens = authenticationModule.Tokens
 	s.Auth = authenticationModule.HTTP
-	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, server.OperatorID)
+	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, server.OperatorID).
+		Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService)
 	organizationModule := orgmodule.New(orgmodule.Deps{DB: db, ActorID: server.OperatorID, Resolver: o.resolver})
 	s.Structure = organizationModule.Structure
 	s.Groups = organizationModule.Groups
@@ -126,6 +132,8 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: oauthModule.Flows, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, Finish: oauthModule.HTTP.Finish, ActorID: server.OperatorID})
 	s.Hosted = hostedModule.HTTP
 	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
+	// Rendered emails wear the environment's hosted login branding.
+	authenticationModule.Brand(branding{hostedModule.Queries})
 	serviceAccountModule := sacctmodule.New(sacctmodule.Deps{DB: db})
 	s.ServiceAccounts = serviceAccountModule.HTTP
 	s.Activity = managementModule.Activity
@@ -147,7 +155,8 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Grants:          authzhttp.NewGrants(authorizationModule.GrantCommands, authorizationModule.GrantQueries, actor),
 		ServiceAccounts: saccthttp.New(serviceAccountModule.Commands, serviceAccountModule.Queries),
 		Factors:         mfaModule.HTTP.WithActor(actor),
-		Delivery:        authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, actor),
+		Delivery: authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, actor).
+			Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService),
 	}
 	return s
 }
@@ -203,19 +212,23 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 	if key.N.BitLen() < 2048 {
 		return nil, errx.Validation("RSA key must be at least 2048 bits")
 	}
-	var delivery authentication.Delivery
-	if os.Getenv("EMAIL_WEBHOOK_URL") != "" {
-		mail := authmail.WebhookDelivery{URL: os.Getenv("EMAIL_WEBHOOK_URL"), Token: os.Getenv("EMAIL_WEBHOOK_TOKEN")}
-		if err := mail.Validate(); err != nil {
-			return nil, err
-		}
-		delivery = mail
+	delivery, mail, err := mailFromEnv()
+	if err != nil {
+		return nil, err
 	}
 	sealer, err := cryptox.Parse(os.Getenv("IAMKIT_ENCRYPTION_KEY"), os.Getenv("IAMKIT_ENCRYPTION_KEYS_OLD"))
 	if err != nil {
 		return nil, err
 	}
-	s := New(db, key, strings.TrimSuffix(issuer, "/"), delivery, WithSealer(sealer))
+	sso, err := operatorSSOFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	if len(sso.Settings.Providers) > 0 && u.Scheme != "https" {
+		// Identity providers only redirect to HTTPS callbacks.
+		return nil, errx.Validation("operator SSO requires an HTTPS JWT_ISSUER")
+	}
+	s := New(db, key, strings.TrimSuffix(issuer, "/"), delivery, WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso))
 	s.AllowedOrigins = os.Getenv("CORS_ALLOWED_ORIGINS")
 	if v := os.Getenv("RATE_LIMIT_PER_MINUTE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {

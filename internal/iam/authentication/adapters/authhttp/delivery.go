@@ -15,10 +15,22 @@ import (
 const TestSendsPerMinute = 5
 
 type DeliveryHandler struct {
-	commands authentication.DeliveryConfigCommands
-	queries  authentication.DeliveryConfigQueries
-	actor    func(*fiber.Ctx) string
-	limit    fiber.Handler
+	commands  authentication.DeliveryConfigCommands
+	queries   authentication.DeliveryConfigQueries
+	templates templatePorts
+	actor     func(*fiber.Ctx) string
+	limit     fiber.Handler
+}
+
+type templatePorts struct {
+	commands authentication.TemplateCommands
+	queries  authentication.TemplateQueries
+}
+
+// Templates serves email wording routes (/delivery/templates) too.
+func (h *DeliveryHandler) Templates(commands authentication.TemplateCommands, queries authentication.TemplateQueries) *DeliveryHandler {
+	h.templates = templatePorts{commands, queries}
+	return h
 }
 
 func NewDeliveryHandler(commands authentication.DeliveryConfigCommands, queries authentication.DeliveryConfigQueries, actor func(*fiber.Ctx) string) *DeliveryHandler {
@@ -37,6 +49,102 @@ func (h *DeliveryHandler) Register(e fiber.Router) {
 	e.Delete("/delivery", h.Delete)
 	e.Get("/delivery/status", h.Status)
 	e.Post("/delivery/test", h.Limit, h.Test)
+	e.Get("/delivery/preview", h.SavedPreview)
+	// A draft preview changes nothing; POST only carries the draft wording.
+	e.Post("/delivery/preview", h.DraftPreview)
+	if h.templates.queries != nil {
+		e.Get("/delivery/templates", h.ListTemplates)
+		e.Get("/delivery/templates/:purpose/:locale", h.GetTemplate)
+		e.Put("/delivery/templates/:purpose/:locale", h.SetTemplate)
+		e.Delete("/delivery/templates/:purpose/:locale", h.ResetTemplate)
+	}
+}
+
+// HasTemplates reports whether the template routes are served.
+func (h *DeliveryHandler) HasTemplates() bool { return h.templates.queries != nil }
+
+func templateKey(c *fiber.Ctx) authentication.TemplateKey {
+	return authentication.TemplateKey{Purpose: c.Params("purpose"), Locale: c.Params("locale")}
+}
+
+func (h *DeliveryHandler) ListTemplates(c *fiber.Ctx) error {
+	out, err := h.templates.queries.ListTemplates(c.Context(), envParam(c))
+	if err != nil {
+		return err
+	}
+	return c.JSON(fiber.Map{"items": out})
+}
+
+func (h *DeliveryHandler) GetTemplate(c *fiber.Ctx) error {
+	out, err := h.templates.queries.Template(c.Context(), envParam(c), templateKey(c))
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+
+// SetTemplate saves the wording and returns the template as GET does.
+func (h *DeliveryHandler) SetTemplate(c *fiber.Ctx) error {
+	var input authentication.Copy
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	if err := h.templates.commands.SetTemplate(c.Context(), h.mutation(c), templateKey(c), input); err != nil {
+		return err
+	}
+	return h.GetTemplate(c)
+}
+
+func (h *DeliveryHandler) ResetTemplate(c *fiber.Ctx) error {
+	if err := h.templates.commands.ResetTemplate(c.Context(), h.mutation(c), templateKey(c)); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
+}
+
+// SavedPreview renders a sample email with the saved branding and wording.
+func (h *DeliveryHandler) SavedPreview(c *fiber.Ctx) error {
+	out, err := h.queries.Preview(c.Context(), envParam(c), authentication.PreviewInput{Purpose: c.Query("purpose"), Locale: c.Query("locale")})
+	if err != nil {
+		return err
+	}
+	return previewFormat(c, out)
+}
+
+// DraftPreview renders a sample email with unsaved wording.
+func (h *DeliveryHandler) DraftPreview(c *fiber.Ctx) error {
+	var input authentication.PreviewInput
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	out, err := h.queries.Preview(c.Context(), envParam(c), input)
+	if err != nil {
+		return err
+	}
+	return previewFormat(c, out)
+}
+
+// previewCSP lets a preview document show its inline styles and https
+// images, nothing else; it is meant for a sandboxed iframe.
+const previewCSP = "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; frame-ancestors 'self'"
+
+// previewFormat writes the preview as JSON (default), the HTML document,
+// or the plain-text part (?format=).
+func previewFormat(c *fiber.Ctx, p authentication.Preview) error {
+	switch c.Query("format") {
+	case "", "json":
+		return c.JSON(p)
+	case "html":
+		c.Set(fiber.HeaderContentSecurityPolicy, previewCSP)
+		c.Set(fiber.HeaderXContentTypeOptions, "nosniff")
+		c.Type("html", "utf-8")
+		return c.SendString(p.HTML)
+	case "text":
+		c.Set(fiber.HeaderXContentTypeOptions, "nosniff")
+		c.Type("txt", "utf-8")
+		return c.SendString(p.Text)
+	}
+	return errx.Validation("format must be one of json, html, text")
 }
 
 func envParam(c *fiber.Ctx) identity.EnvironmentID {

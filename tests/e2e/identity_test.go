@@ -235,11 +235,19 @@ func TestIdentityIsolationJourney(t *testing.T) {
 		t.Fatal(err)
 	}
 	call("GET", "/management/v1/me", owner, nil, 401)
+	if _, err = db.Exec(`UPDATE workspace_members SET password_allowed=false WHERE operator_id=$1`, ownerPrincipal.OperatorID); err != nil {
+		t.Fatal(err)
+	}
 	recovered, err := bootstrap.Management(db).RecoverOwner(ctx, ownerPrincipal.WorkspaceID, "owner@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 	call("GET", "/management/v1/me", recovered, nil, 200)
+	// Recovery restores emergency password access (break-glass mode).
+	var allowed bool
+	if err = db.Get(&allowed, `SELECT password_allowed FROM workspace_members WHERE workspace_id=$1 AND operator_id=$2`, ownerPrincipal.WorkspaceID, ownerPrincipal.OperatorID); err != nil || !allowed {
+		t.Fatalf("recovered owner emergency access: %v %v", allowed, err)
+	}
 	if _, err = bootstrap.Management(db).RecoverOwner(ctx, ownerPrincipal.WorkspaceID, "viewer@example.com"); err == nil {
 		t.Fatal("recovery promoted viewer")
 	}

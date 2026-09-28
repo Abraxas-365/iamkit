@@ -30,6 +30,24 @@ func conflict(err error) error {
 	}
 	return failure(err)
 }
+
+// assignment maps the violations of a role assignment insert: a unique
+// violation means the role is already held, a foreign-key violation that the
+// subject is outside the organization. Both stay 409 Conflict.
+func assignment(duplicate, outside string) func(error) error {
+	return func(err error) error {
+		var pg *pq.Error
+		if errors.As(err, &pg) {
+			switch pg.Code {
+			case "23505":
+				return errx.Conflict(duplicate)
+			case "23503":
+				return errx.Conflict(outside)
+			}
+		}
+		return conflict(err)
+	}
+}
 func array(v []string) any {
 	if v == nil {
 		v = []string{}

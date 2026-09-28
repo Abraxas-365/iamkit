@@ -122,6 +122,13 @@ func TestOrgSSOJourney(t *testing.T) {
 	if l := items(e.Must("GET", connections+"?organization_id="+e.Org, e.Owner, nil, 200)); len(l) != 1 {
 		t.Fatalf("filtered list = %v", l)
 	}
+	if l := items(e.Must("GET", connections+"?scope=organization", e.Owner, nil, 200)); len(l) != 1 {
+		t.Fatalf("organization scope = %v", l)
+	}
+	if l := items(e.Must("GET", connections+"?scope=environment", e.Owner, nil, 200)); len(l) != 0 {
+		t.Fatalf("environment scope = %v", l)
+	}
+	e.Must("GET", connections+"?scope=everyone", e.Owner, nil, 400)
 
 	// Discovery before and after verifying the domain.
 	discover := func(email string) map[string]any {

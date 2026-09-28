@@ -173,17 +173,130 @@ func TestLayoutThemeParts(t *testing.T) {
 
 func TestPreviewSamples(t *testing.T) {
 	for _, page := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "invite", "message"} {
-		v, ok := sample(page)
-		if !ok {
-			t.Fatalf("no sample for %s", page)
-		}
-		v.Brand = brandOf(hosted.Settings{}, hosted.ModeDark)
-		if _, err := document(page, &v); err != nil {
-			t.Fatalf("%s: %v", page, err)
+		for _, lang := range []string{"en", "es"} {
+			v, ok := sample(page, lang)
+			if !ok {
+				t.Fatalf("no sample for %s", page)
+			}
+			v.Brand = brandOf(hosted.Settings{}, hosted.ModeDark)
+			out, err := document(page, &v)
+			if err != nil {
+				t.Fatalf("%s: %v", page, err)
+			}
+			// Every page text comes from the catalog: none is left as a key.
+			if html := string(out); strings.Contains(html, "hosted.") || !strings.Contains(html, `<html lang="`+lang+`">`) {
+				t.Fatalf("%s/%s: untranslated\n%s", page, lang, html)
+			}
 		}
 	}
-	if _, ok := sample("admin"); ok {
+	if _, ok := sample("admin", "en"); ok {
 		t.Fatal("unknown page previewed")
+	}
+}
+
+// Pages speak the page language: titles, labels, buttons and the errors
+// people can fix; the browser language applies when nothing else does.
+func TestLocalizedPages(t *testing.T) {
+	v, _ := sample("identify", "es")
+	out, _ := document("identify", &v)
+	html := string(out)
+	for _, want := range []string{"<title>Iniciar sesión", ">Correo electrónico<", ">Continuar<", `class="divider">o<`, "Continuar con Google"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("missing %q in\n%s", want, html)
+		}
+	}
+	v, _ = sample("password", "es")
+	out, _ = document("password", &v)
+	if html = string(out); !strings.Contains(html, "¿Olvidaste tu contraseña?") || !strings.Contains(html, "Envíame un código") {
+		t.Fatalf("password page\n%s", html)
+	}
+
+	app := fiber.New()
+	app.Get("/", func(c *fiber.Ctx) error {
+		lang := language(c, c.Query("preferred"))
+		_, text := failed(c, lang, errx.Unauthorized("invalid credentials or access token"))
+		return c.SendString(lang + "|" + text)
+	})
+	for _, tc := range []struct{ preferred, accept, want string }{
+		{"", "es-MX,es;q=0.9,en;q=0.8", "es|Correo o contraseña incorrectos."},
+		{"", "fr-FR", "en|Incorrect email or password."},
+		{"en", "es", "en|Incorrect email or password."},
+		{"es", "", "es|Correo o contraseña incorrectos."},
+	} {
+		req := httptest.NewRequest("GET", "/?preferred="+tc.preferred, nil)
+		req.Header.Set("Accept-Language", tc.accept)
+		res, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, _ := io.ReadAll(res.Body)
+		if string(body) != tc.want {
+			t.Fatalf("preferred %q accept %q: got %q, want %q", tc.preferred, tc.accept, body, tc.want)
+		}
+	}
+}
+
+func TestBackgroundImage(t *testing.T) {
+	s := hosted.Settings{Theme: hosted.Theme{Mode: hosted.ModeAdaptive, BackgroundImageURL: "https://cdn.example/bg.jpg?v=2", BackgroundOverlay: 40}}
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	css := string(brandOf(s, "").Vars)
+	if !strings.Contains(css, `html>body{background:linear-gradient(color-mix(in srgb,var(--bg) 40%,transparent),color-mix(in srgb,var(--bg) 40%,transparent)),url("https://cdn.example/bg.jpg?v=2") center/cover no-repeat fixed,var(--bg)}`) {
+		t.Fatalf("background css %s", css)
+	}
+	if css = string(brandOf(hosted.Settings{}, "").Vars); strings.Contains(css, "url(") {
+		t.Fatalf("no image, still a background: %s", css)
+	}
+	for name, theme := range map[string]hosted.Theme{
+		"http":     {BackgroundImageURL: "http://cdn.example/bg.jpg"},
+		"quote":    {BackgroundImageURL: `https://cdn.example/a");}body{color:red`},
+		"paren":    {BackgroundImageURL: "https://cdn.example/a)b.jpg"},
+		"backlash": {BackgroundImageURL: `https://cdn.example/a\b.jpg`},
+		"overlay":  {BackgroundImageURL: "https://cdn.example/bg.jpg", BackgroundOverlay: 91},
+		"negative": {BackgroundOverlay: -1},
+	} {
+		s := hosted.Settings{Theme: theme}
+		if err := s.Validate(); err == nil {
+			t.Fatalf("%s accepted", name)
+		}
+	}
+}
+
+func TestPreviewMethods(t *testing.T) {
+	render := func(page string, m Methods) (string, error) {
+		v, _ := sample(page, "en")
+		if err := m.apply(&v); err != nil {
+			return "", err
+		}
+		v.Brand = brandOf(hosted.Settings{}, "")
+		out, err := document(page, &v)
+		return string(out), err
+	}
+	// Social only: no email form, no "or" divider, the listed buttons.
+	html, err := render("identify", Methods{Connections: []Button{{Name: "GitHub", Provider: "github"}, {Name: "Okta <Corp>", Provider: "oidc"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(html, `name="email"`) || strings.Contains(html, `class="divider"`) || !strings.Contains(html, "Continue with GitHub") || !strings.Contains(html, "Continue with Okta &lt;Corp&gt;") || strings.Contains(html, "Google") {
+		t.Fatalf("social only\n%s", html)
+	}
+	// Email only: the form without buttons.
+	if html, _ = render("identify", Methods{EmailCode: true}); !strings.Contains(html, `name="email"`) || strings.Contains(html, "Continue with") {
+		t.Fatalf("email only\n%s", html)
+	}
+	// Code only: the password step offers just the code.
+	if html, _ = render("password", Methods{EmailCode: true}); strings.Contains(html, `type="password"`) || !strings.Contains(html, "Email me a code") {
+		t.Fatalf("code only\n%s", html)
+	}
+	for name, m := range map[string]Methods{
+		"nothing":  {},
+		"provider": {Connections: []Button{{Name: "X", Provider: "facebook"}}},
+		"name":     {Password: true, Connections: []Button{{Name: " ", Provider: "google"}}},
+	} {
+		if _, err := render("identify", m); err == nil {
+			t.Fatalf("%s accepted", name)
+		}
 	}
 }
 
@@ -203,7 +316,7 @@ func TestFailedMessages(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			app := fiber.New()
 			app.Get("/", func(c *fiber.Ctx) error {
-				status, text := failed(c, tc.err)
+				status, text := failed(c, "en", tc.err)
 				return c.Status(status).SendString(text)
 			})
 			res, err := app.Test(httptest.NewRequest("GET", "/", nil))

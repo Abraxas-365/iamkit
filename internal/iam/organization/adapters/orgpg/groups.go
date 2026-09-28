@@ -128,6 +128,12 @@ func (r *Repository) ListGroups(ctx context.Context, b organization.Boundary, fi
 		args = append(args, filter.Connection)
 		where += fmt.Sprintf(" AND g.connection_id=$%d", len(args))
 	}
+	switch filter.Source {
+	case organization.GroupSourceManual:
+		where += " AND g.connection_id IS NULL"
+	case organization.GroupSourceDirectory:
+		where += " AND g.connection_id IS NOT NULL"
+	}
 	if like := query.EscapeLike(page.Search); like != "" {
 		args = append(args, like)
 		where += fmt.Sprintf(" AND (g.name ILIKE $%d OR g.description ILIKE $%d)", len(args), len(args))

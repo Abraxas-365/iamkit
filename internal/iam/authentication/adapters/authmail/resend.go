@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/mail"
+	"sync"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
@@ -32,16 +33,21 @@ var _ authentication.Mailer = Resend{}
 
 // GuardedResendTransport dials only public addresses, for API endpoints an
 // environment operator could influence. Environment proxies are ignored
-// because they would hide the destination from the check.
-func GuardedResendTransport() http.RoundTripper {
+// because they would hide the destination from the check. The transport is
+// shared by every environment so idle connections are reused, not leaked
+// per send.
+func GuardedResendTransport() http.RoundTripper { return guardedResend() }
+
+var guardedResend = sync.OnceValue(func() http.RoundTripper {
 	return &http.Transport{
 		DialContext:           netx.GuardedDialer().DialContext,
 		TLSHandshakeTimeout:   config.ExternalHTTPTimeout,
 		ResponseHeaderTimeout: config.ExternalHTTPTimeout,
 		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConnsPerHost:   8,
 		ForceAttemptHTTP2:     true,
 	}
-}
+})
 
 type resendRequest struct {
 	From    string   `json:"from"`

@@ -121,7 +121,7 @@ func TestDeliveryFailureDoesNotRevealEligibility(t *testing.T) {
 		}
 		tx := &testTransaction{user: user}
 		s := New(testRepository{tx}, testPasswords{}, testSecrets{}, failedDelivery{})
-		id, err := s.InitiateChallenge(context.Background(), testBoundary().EnvironmentID, "user@example.com", "login")
+		id, err := s.InitiateChallenge(context.Background(), testBoundary().EnvironmentID, "user@example.com", "login", "")
 		if err != nil || id.IsZero() {
 			t.Fatalf("eligibility leaked: %q %v", raw, err)
 		}

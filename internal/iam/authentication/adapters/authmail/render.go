@@ -63,7 +63,7 @@ type viewBrand struct{ Name, Logo, Accent, OnAccent string }
 
 // Render never fails for a missing brand or saved wording (it logs and uses
 // the defaults): a broken template setting must not stop a sign-in code.
-func (r Renderer) Render(ctx context.Context, m authentication.Message, draft *authentication.Copy) (authentication.Email, error) {
+func (r Renderer) Render(ctx context.Context, m authentication.Message, draft authentication.Draft) (authentication.Email, error) {
 	if authentication.Placeholders(m.Purpose) == nil {
 		return authentication.Email{}, errx.Internal("unknown email purpose " + m.Purpose)
 	}
@@ -76,11 +76,14 @@ func (r Renderer) Render(ctx context.Context, m authentication.Message, draft *a
 			brand = b
 		}
 	}
+	if draft.AppName != nil {
+		brand.Name = *draft.AppName
+	}
 	locale := i18n.Resolve(m.Locale, brand.Locale, r.Locale)
 	wording := authentication.DefaultCopy(m.Purpose, locale)
 	switch {
-	case draft != nil:
-		wording = wording.Overlay(*draft)
+	case draft.Copy != nil:
+		wording = wording.Overlay(*draft.Copy)
 	case r.Templates != nil && !m.Environment.IsZero():
 		saved, ok, err := r.Templates.Copy(ctx, m.Environment, m.Purpose, locale)
 		if err != nil {
@@ -225,7 +228,7 @@ type Rendered struct {
 var _ authentication.Delivery = Rendered{}
 
 func (d Rendered) Send(ctx context.Context, m authentication.Message) error {
-	email, err := d.Renderer.Render(ctx, m, nil)
+	email, err := d.Renderer.Render(ctx, m, authentication.Draft{})
 	if err != nil {
 		return err
 	}

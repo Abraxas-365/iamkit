@@ -76,18 +76,27 @@ func Supported(code string) bool {
 // Accept-Language header without weights); the primary subtag is matched.
 func Resolve(candidates ...string) string {
 	for _, candidate := range candidates {
-		for _, tag := range strings.FieldsFunc(candidate, func(r rune) bool { return r == ' ' || r == ',' }) {
-			tag, _, _ = strings.Cut(tag, ";") // drop an Accept-Language weight
-			tag = strings.ToLower(strings.TrimSpace(tag))
-			if Supported(tag) {
-				return tag
-			}
-			if primary, _, found := strings.Cut(strings.ReplaceAll(tag, "_", "-"), "-"); found && Supported(primary) {
-				return primary
-			}
+		if code := Match(candidate); code != "" {
+			return code
 		}
 	}
 	return Default
+}
+
+// Match returns the first available language in candidate (a tag or a
+// list of them, as in Resolve), or "" when none is available.
+func Match(candidate string) string {
+	for _, tag := range strings.FieldsFunc(candidate, func(r rune) bool { return r == ' ' || r == ',' }) {
+		tag, _, _ = strings.Cut(tag, ";") // drop an Accept-Language weight
+		tag = strings.ToLower(strings.TrimSpace(tag))
+		if Supported(tag) {
+			return tag
+		}
+		if primary, _, found := strings.Cut(strings.ReplaceAll(tag, "_", "-"), "-"); found && Supported(primary) {
+			return primary
+		}
+	}
+	return ""
 }
 
 // T formats the message key in locale with args, falling back to English

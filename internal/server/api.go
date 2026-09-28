@@ -9,6 +9,11 @@ import (
 // apiRoutes registers the /api/v1/* route group, which accepts JWT tokens
 // (from machine-token or user login) and enforces scoped IAM permissions.
 // Handlers are the same as management but wired with JWT-based auth.
+//
+// Groups whose routes share no path prefix use guarded, never
+// e.Group("", check): Fiber runs a prefix-less group's middleware for every
+// later route under the environment, so its permission check would also
+// guard unrelated routes (e.g. delivery would demand iam:members:read).
 func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	if s.API == nil {
 		return
@@ -37,7 +42,7 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	orgs.Patch("/:id", s.APIHandlers.Organizations.Update)
 
 	// Members
-	members := e.Group("", apiauth.ReadWrite(authorization.PermMembersRead, authorization.PermMembersWrite))
+	members := guarded(e, apiauth.ReadWrite(authorization.PermMembersRead, authorization.PermMembersWrite))
 	members.Post("/memberships", s.APIHandlers.Organizations.AddMember)
 	members.Get("/organizations/:organization/members", s.APIHandlers.Organizations.Members)
 	members.Patch("/organizations/:organization/members/:user", s.APIHandlers.Organizations.UpdateMember)
@@ -68,7 +73,7 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	apps.Patch("/:id", s.APIHandlers.Applications.Update)
 
 	// Resources
-	res := e.Group("", apiauth.ReadWrite(authorization.PermResourcesRead, authorization.PermResourcesWrite))
+	res := guarded(e, apiauth.ReadWrite(authorization.PermResourcesRead, authorization.PermResourcesWrite))
 	res.Post("/resources", s.APIHandlers.Authorization.Create)
 	res.Get("/resources", s.APIHandlers.Authorization.List)
 	res.Get("/resources/:id", s.APIHandlers.Authorization.Find)
@@ -78,7 +83,7 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	res.Get("/applications/:application/resources", s.APIHandlers.Authorization.ListByApplication)
 
 	// Roles
-	roles := e.Group("", apiauth.ReadWrite(authorization.PermRolesRead, authorization.PermRolesWrite))
+	roles := guarded(e, apiauth.ReadWrite(authorization.PermRolesRead, authorization.PermRolesWrite))
 	roles.Get("/roles", s.APIHandlers.Grants.ListRoles)
 	roles.Get("/roles/:id", s.APIHandlers.Grants.ListRoles)
 	roles.Post("/roles", s.APIHandlers.Grants.SaveRole)
@@ -93,7 +98,7 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	roles.Get("/effective-roles", s.APIHandlers.Grants.EffectiveRoles)
 
 	// Grants
-	grants := e.Group("", apiauth.ReadWrite(authorization.PermGrantsRead, authorization.PermGrantsWrite))
+	grants := guarded(e, apiauth.ReadWrite(authorization.PermGrantsRead, authorization.PermGrantsWrite))
 	grants.Get("/grants", s.APIHandlers.Grants.ListGrants)
 	grants.Get("/grants/:id", s.APIHandlers.Grants.ListGrants)
 	grants.Put("/grants", s.APIHandlers.Grants.PutGrant)
@@ -113,5 +118,28 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 		delivery.Delete("/", d.Delete)
 		delivery.Get("/status", d.Status)
 		delivery.Post("/test", d.Limit, d.Test)
+		delivery.Get("/preview", d.SavedPreview)
+		delivery.Post("/preview", d.DraftPreview)
+		if d.HasTemplates() {
+			delivery.Get("/templates", d.ListTemplates)
+			delivery.Get("/templates/:purpose/:locale", d.GetTemplate)
+			delivery.Put("/templates/:purpose/:locale", d.SetTemplate)
+			delivery.Delete("/templates/:purpose/:locale", d.ResetTemplate)
+		}
 	}
 }
+
+// checkedRoutes registers routes on a router with a check that runs for
+// those routes only.
+type checkedRoutes struct {
+	r     fiber.Router
+	check fiber.Handler
+}
+
+func guarded(r fiber.Router, check fiber.Handler) checkedRoutes { return checkedRoutes{r, check} }
+
+func (g checkedRoutes) Get(path string, h fiber.Handler)    { g.r.Get(path, g.check, h) }
+func (g checkedRoutes) Post(path string, h fiber.Handler)   { g.r.Post(path, g.check, h) }
+func (g checkedRoutes) Put(path string, h fiber.Handler)    { g.r.Put(path, g.check, h) }
+func (g checkedRoutes) Patch(path string, h fiber.Handler)  { g.r.Patch(path, g.check, h) }
+func (g checkedRoutes) Delete(path string, h fiber.Handler) { g.r.Delete(path, g.check, h) }

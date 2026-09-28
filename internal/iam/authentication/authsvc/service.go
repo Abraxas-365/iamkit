@@ -9,6 +9,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -248,11 +249,13 @@ func (s *Service) Refresh(ctx context.Context, boundary authentication.Context, 
 	return out, tx.Commit()
 }
 
-func (s *Service) InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose string) (identity.ChallengeID, error) {
+func (s *Service) InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose, locale string) (identity.ChallengeID, error) {
 	email, err := identity.Email(email)
 	if err != nil || environment.IsZero() || (purpose != "login" && purpose != "password_reset" && purpose != "email_verification") {
 		return identity.ChallengeID{}, errx.Validation("invalid challenge request")
 	}
+	// An unavailable language is ignored: the environment default applies.
+	locale = i18n.Match(locale)
 	if s.deliverySvc == nil && s.delivery == nil {
 		return identity.ChallengeID{}, errx.External("email delivery is not configured")
 	}
@@ -283,11 +286,12 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 	if err = tx.CreateChallenge(ctx, id, user, purpose, environment, s.secrets.Hash(id.String()+":"+code)); err != nil {
 		return identity.ChallengeID{}, err
 	}
+	message := authentication.Message{Email: email, Purpose: purpose, Code: code, Locale: locale}
 	var sendErr error
 	if s.deliverySvc != nil {
-		sendErr = s.deliverySvc.Send(ctx, environment, authentication.Message{Email: email, Purpose: purpose, Code: code})
+		sendErr = s.deliverySvc.Send(ctx, environment, message)
 	} else {
-		sendErr = s.delivery.Send(ctx, authentication.Message{Email: email, Purpose: purpose, Code: code})
+		sendErr = s.delivery.Send(ctx, message)
 	}
 	if sendErr != nil {
 		slog.ErrorContext(ctx, "challenge delivery failed",

@@ -32,7 +32,8 @@ type GrantQueries interface {
 	ListGrants(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, page query.Pagination) (query.Paginated[GrantView], error)
 	RoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter RoleAssignmentFilter, page query.Pagination) (query.Paginated[RoleAssignmentView], error)
 	GroupRoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter GroupRoleAssignmentFilter, page query.Pagination) (query.Paginated[GroupRoleAssignmentView], error)
-	// EffectiveRoles lists every role user holds in organization with its source.
+	// EffectiveRoles lists every role user holds with its source, in
+	// organization or, when organization is zero, in all of the user's.
 	EffectiveRoles(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) ([]EffectiveRoleView, error)
 }
 

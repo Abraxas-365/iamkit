@@ -121,6 +121,14 @@ func TestSCIMGroupsJourney(t *testing.T) {
 	if n := s.must("GET", "/Groups", "", 200).JSON["totalResults"]; n.(float64) != 1 {
 		t.Fatalf("list isolation: %v", n)
 	}
+	// The console filters groups by source (invitations offer only manual ones).
+	if l := items(e.Must("GET", groups+"?source=manual", e.Owner, nil, 200)); len(l) != 1 || l[0]["id"] != manual {
+		t.Fatalf("manual groups = %v", l)
+	}
+	if l := items(e.Must("GET", groups+"?source=directory", e.Owner, nil, 200)); len(l) != 1 || l[0]["id"] != group {
+		t.Fatalf("directory groups = %v", l)
+	}
+	e.Must("GET", groups+"?source=other", e.Owner, nil, 400)
 
 	// DELETE cascades role bindings; the group answers 404 afterwards.
 	s.must("DELETE", "/Groups/"+group, "", 204)

@@ -88,6 +88,36 @@ func TestSetDeliveryConfigSecrets(t *testing.T) {
 	if err := s.SetDeliveryConfig(ctx, m, smtp); err != nil || repo.secret.Sealed != "sealed:pw1" {
 		t.Fatalf("keep: %v %q", err, repo.secret.Sealed)
 	}
+	// Sender fields may change without re-entering the password…
+	smtp.FromName = "Acme"
+	if err := s.SetDeliveryConfig(ctx, m, smtp); err != nil || repo.secret.Sealed != "sealed:pw1" {
+		t.Fatalf("keep on sender change: %v %q", err, repo.secret.Sealed)
+	}
+	// …but the stored password never follows a different server or account.
+	for name, change := range map[string]func(*authentication.DeliveryConfigInput){
+		"host":     func(in *authentication.DeliveryConfigInput) { in.SMTPHost = "smtp.evil.example" },
+		"port":     func(in *authentication.DeliveryConfigInput) { in.SMTPPort = 2525 },
+		"tls":      func(in *authentication.DeliveryConfigInput) { in.SMTPPort, in.SMTPTLS = 587, "tls" },
+		"username": func(in *authentication.DeliveryConfigInput) { in.SMTPUsername = "other" },
+	} {
+		moved := smtp
+		change(&moved)
+		if err := s.SetDeliveryConfig(ctx, m, moved); err == nil || !strings.Contains(err.Error(), "smtp_password is required when changing") {
+			t.Fatalf("%s change kept the password: %v", name, err)
+		}
+		if repo.cfg.SMTPHost != "smtp.acme.io" || repo.secret.Sealed != "sealed:pw1" {
+			t.Fatalf("%s change stored: %+v %q", name, repo.cfg, repo.secret.Sealed)
+		}
+		moved.SMTPPassword = "pw2"
+		if err := s.SetDeliveryConfig(ctx, m, moved); err != nil || repo.secret.Sealed != "sealed:pw2" {
+			t.Fatalf("%s change with password: %v %q", name, err, repo.secret.Sealed)
+		}
+		smtp.SMTPPassword = "pw1"
+		if err := s.SetDeliveryConfig(ctx, m, smtp); err != nil {
+			t.Fatal(err)
+		}
+		smtp.SMTPPassword = ""
+	}
 	// Dropping authentication drops the secret.
 	smtp.SMTPUsername = ""
 	if err := s.SetDeliveryConfig(ctx, m, smtp); err != nil || repo.secret.Sealed != "" {
@@ -182,5 +212,104 @@ func TestDeliveryStatusProvider(t *testing.T) {
 	s = NewDeliveryService(&memDelivery{cfg: &authentication.DeliveryConfig{Provider: "resend"}}, &recordingDelivery{}, nil, nil, "")
 	if st, _ := s.DeliveryStatus(ctx, env); st.Source != authentication.SourceEnvironment || st.Provider != "resend" {
 		t.Fatalf("environment: %+v", st)
+	}
+}
+
+// Without an invitation page, rendered providers link to the hosted one;
+// the webhook still gets none.
+func TestInvitationURL(t *testing.T) {
+	ctx, env := context.Background(), identity.NewEnvironmentID()
+	const issuer = "https://id.acme.io"
+	for _, tc := range []struct {
+		name   string
+		cfg    *authentication.DeliveryConfig
+		global string // "" = no global delivery
+		want   string
+	}{
+		{"none", nil, "", ""},
+		{"global webhook", nil, "webhook", ""},
+		{"global smtp", nil, "smtp", issuer + "/hosted/invite"},
+		{"webhook", &authentication.DeliveryConfig{Provider: "webhook"}, "", ""},
+		{"resend", &authentication.DeliveryConfig{Provider: "resend"}, "", issuer + "/hosted/invite"},
+		{"own page", &authentication.DeliveryConfig{Provider: "smtp", InvitationURL: "https://app.acme.io/join"}, "", "https://app.acme.io/join"},
+		{"env webhook over global smtp", &authentication.DeliveryConfig{Provider: "webhook"}, "smtp", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var global authentication.Delivery
+			if tc.global != "" {
+				global = &recordingDelivery{}
+			}
+			s := NewDeliveryService(&memDelivery{cfg: tc.cfg}, global, nil, nil, issuer+"/")
+			if tc.global != "" {
+				s.SetGlobalProvider(tc.global)
+			}
+			got, err := s.InvitationURL(ctx, env)
+			if err != nil || got != tc.want {
+				t.Fatalf("got %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+type recordingRenderer struct {
+	m     authentication.Message
+	draft authentication.Draft
+}
+
+func (r *recordingRenderer) Render(_ context.Context, m authentication.Message, draft authentication.Draft) (authentication.Email, error) {
+	r.m, r.draft = m, draft
+	return authentication.Email{Subject: "s:" + m.Purpose, HTML: "<p>h</p>", Text: "t"}, nil
+}
+
+func TestPreview(t *testing.T) {
+	ctx, env := context.Background(), identity.NewEnvironmentID()
+	repo := &memDelivery{}
+	s := NewDeliveryService(repo, nil, nil, nil, "https://id.acme.io")
+	if _, err := s.Preview(ctx, env, authentication.PreviewInput{Purpose: "login"}); err == nil {
+		t.Fatal("previewed without a renderer")
+	}
+	r := &recordingRenderer{}
+	s.SetRenderer(r)
+
+	out, err := s.Preview(ctx, env, authentication.PreviewInput{Purpose: "login", Locale: "es-MX"})
+	if err != nil || out.Subject != "s:login" || out.HTML != "<p>h</p>" || out.Text != "t" {
+		t.Fatalf("got %+v, %v", out, err)
+	}
+	if r.m.Environment != env || r.m.Code == "" || r.m.Locale != "es" || r.draft != (authentication.Draft{}) {
+		t.Fatalf("message %+v", r.m)
+	}
+	if _, err = s.Preview(ctx, env, authentication.PreviewInput{Purpose: "login", Locale: "fr"}); err != nil || r.m.Locale != "" {
+		t.Fatalf("unsupported locale: %q, %v", r.m.Locale, err)
+	}
+
+	// Invitations link to the hosted page unless the environment has its own.
+	if _, err = s.Preview(ctx, env, authentication.PreviewInput{Purpose: "invitation"}); err != nil {
+		t.Fatal(err)
+	}
+	if r.m.Code != "" || r.m.Organization == "" || r.m.Inviter == "" || r.m.ExpiresAt == nil || !strings.HasPrefix(r.m.Link, "https://id.acme.io/hosted/invite?token=") {
+		t.Fatalf("invitation %+v", r.m)
+	}
+	repo.cfg = &authentication.DeliveryConfig{Provider: "webhook", InvitationURL: "https://app.acme.io/join"}
+	if _, err = s.Preview(ctx, env, authentication.PreviewInput{Purpose: "invitation"}); err != nil || !strings.HasPrefix(r.m.Link, "https://app.acme.io/join?token=") {
+		t.Fatalf("own page %q, %v", r.m.Link, err)
+	}
+
+	draft, name := &authentication.Copy{Subject: "Hola {{code}}"}, "Globex"
+	if _, err = s.Preview(ctx, env, authentication.PreviewInput{Purpose: "login", Template: draft, AppName: &name}); err != nil || r.draft.Copy != draft || r.draft.AppName != &name {
+		t.Fatalf("draft %+v, %v", r.draft, err)
+	}
+	long := strings.Repeat("é", authentication.MaxAppName+1)
+	for _, bad := range []authentication.PreviewInput{
+		{Purpose: "nope"},
+		{Purpose: "login", Template: &authentication.Copy{Subject: "{{link}}"}},
+		{Purpose: "login", Template: &authentication.Copy{Action: "Go"}},
+		{Purpose: "login", AppName: &long},
+	} {
+		if _, err = s.Preview(ctx, env, bad); err == nil {
+			t.Fatalf("accepted %+v", bad)
+		}
+	}
+	if len(repo.attempts) != 0 {
+		t.Fatal("a preview recorded an attempt")
 	}
 }

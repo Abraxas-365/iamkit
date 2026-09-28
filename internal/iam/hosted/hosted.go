@@ -32,6 +32,9 @@ type Page struct {
 	Settings    Settings
 	SignIn      SignIn
 	Connections []federation.ConnectionSummary
+	// Language is the page language: the application's ui_locales, else
+	// the environment language; "" leaves it to the browser.
+	Language string
 }
 
 // Route is where an identified email signs in: single sign-on (the browser

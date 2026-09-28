@@ -57,6 +57,9 @@ const (
 	// MFAFreshAuth is how recently a session must have signed in to add,
 	// remove or regenerate second factors.
 	MFAFreshAuth = 10 * time.Minute
+	// OperatorFreshAuth is how recently a console session must have signed
+	// in to set a password without typing the current one (none is set).
+	OperatorFreshAuth = 5 * time.Minute
 	// MFAEnrollTTL is how long an unconfirmed authenticator is shown again
 	// before a login enrollment starts a new one.
 	MFAEnrollTTL = 15 * time.Minute

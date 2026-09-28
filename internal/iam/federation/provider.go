@@ -33,6 +33,8 @@ const (
 	ConsumerTenant = "9188040d-6c67-4c5b-b112-36a304b66dad"
 	// MaxTenants bounds the allow-list of a multi-tenant connection.
 	MaxTenants = 100
+	// MaxDomains bounds the Workspace domains of a Google connection.
+	MaxDomains = 100
 )
 
 var (
@@ -47,6 +49,9 @@ type Options struct {
 	// organizations to these tenant IDs.
 	Tenant  string   `json:"tenant,omitempty"`
 	Tenants []string `json:"tenants,omitempty"`
+	// Domains restricts a Google connection to Google Workspace accounts of
+	// these domains (the ID token's hd claim); empty accepts any account.
+	Domains []string `json:"domains,omitempty"`
 	// Team and Key identify the Sign in with Apple private key.
 	Team string `json:"team_id,omitempty"`
 	Key  string `json:"key_id,omitempty"`
@@ -80,6 +85,19 @@ func (o Options) Normalized() Options {
 	if len(o.Tenants) == 0 {
 		o.Tenants = nil
 	}
+	domains := make([]string, 0, len(o.Domains))
+	for _, d := range o.Domains {
+		d = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(d)), ".")
+		if ascii, err := identity.Domain(d); err == nil {
+			d = ascii
+		}
+		domains = append(domains, d)
+	}
+	slices.Sort(domains)
+	o.Domains = slices.Compact(domains)
+	if len(o.Domains) == 0 {
+		o.Domains = nil
+	}
 	o.Team, o.Key = strings.ToUpper(strings.TrimSpace(o.Team)), strings.ToUpper(strings.TrimSpace(o.Key))
 	return o
 }
@@ -89,15 +107,25 @@ func (o Options) Normalized() Options {
 func validOptions(provider string, o Options) error {
 	microsoft := o.Tenant != "" || len(o.Tenants) > 0
 	apple := o.Team != "" || o.Key != ""
+	google := len(o.Domains) > 0
 	switch provider {
 	case ProviderOIDC, ProviderGoogle, ProviderMicrosoft, ProviderGitHub, ProviderApple:
 	default:
 		return errx.Validation("provider must be oidc, google, microsoft, github or apple")
 	}
-	if microsoft && provider != ProviderMicrosoft || apple && provider != ProviderApple {
+	if microsoft && provider != ProviderMicrosoft || apple && provider != ProviderApple || google && provider != ProviderGoogle {
 		return errx.Validation("options do not apply to this provider")
 	}
 	switch provider {
+	case ProviderGoogle:
+		if len(o.Domains) > MaxDomains {
+			return errx.Validation("options.domains has at most 100 domains")
+		}
+		for _, d := range o.Domains {
+			if valid, err := identity.Domain(d); err != nil || valid != d {
+				return errx.Validation("options.domains must be domains such as example.com")
+			}
+		}
 	case ProviderMicrosoft:
 		switch {
 		case o.Tenant == TenantCommon || o.Tenant == TenantOrganizations:
@@ -148,6 +176,12 @@ func (o Options) AcceptsTenant(tenant string) bool {
 		return tenant == o.Tenant
 	}
 	return len(o.Tenants) == 0 || slices.Contains(o.Tenants, tenant)
+}
+
+// AcceptsHostedDomain reports whether a Google connection accepts an
+// account of the Workspace domain hd (empty for personal accounts).
+func (o Options) AcceptsHostedDomain(hd string) bool {
+	return len(o.Domains) == 0 || hd != "" && slices.Contains(o.Domains, strings.ToLower(hd))
 }
 
 // ParseAppleKey reads a Sign in with Apple private key: the PKCS #8 P-256

@@ -319,3 +319,38 @@ func TestSMTPMessageHeaderInjection(t *testing.T) {
 		}
 	}
 }
+
+// Long non-ASCII headers are folded, never beyond RFC 5322 line limits, and
+// unfold back to the same value.
+func TestSMTPMessageFoldsLongHeaders(t *testing.T) {
+	e := testEmail()
+	e.Subject = string([]rune(strings.Repeat("認証コードのお知らせ ", 20))[:200])
+	e.FromName = strings.TrimSpace(strings.Repeat("Ñandú ", 16)[:95])
+	raw, err := message(e, time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, _, _ := strings.Cut(string(raw), "\r\n\r\n")
+	for _, line := range strings.Split(head, "\r\n") {
+		// 998 is the hard limit; past 78 only a single unbreakable encoded
+		// word ("Name: " prefix + ≤75) may remain.
+		if len(line) > 998 || (len(line) > 78 && strings.Count(strings.TrimSpace(line[strings.Index(line, ":")+1:]), " ") > 0) {
+			t.Fatalf("header line of %d chars: %q", len(line), line)
+		}
+	}
+	if strings.Count(head, "\r\n ") < 3 {
+		t.Fatalf("long headers were not folded:\n%s", head)
+	}
+	msg, err := mail.ReadMessage(strings.NewReader(string(raw)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	subject, err := new(mime.WordDecoder).DecodeHeader(msg.Header.Get("Subject"))
+	if err != nil || subject != singleLine(e.Subject) {
+		t.Fatalf("subject round trip: %q %v", subject, err)
+	}
+	from, err := msg.Header.AddressList("From")
+	if err != nil || len(from) != 1 || from[0].Name != e.FromName {
+		t.Fatalf("from round trip: %+v %v", from, err)
+	}
+}

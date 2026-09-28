@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -36,6 +37,9 @@ type fakeIdP struct {
 	issuer string
 	// form is the last token request.
 	form url.Values
+	// secret is the client secret of the last token request (basic auth or
+	// form).
+	secret string
 	// apple verifies Apple client secrets.
 	apple *ecdsa.PublicKey
 	// emails is GitHub's /user/emails answer.
@@ -98,8 +102,10 @@ func (f *fakeIdP) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		out := map[string]any{"access_token": "at", "token_type": "bearer"}
 		client := r.PostForm.Get("client_id")
-		if user, _, ok := r.BasicAuth(); ok {
+		f.secret = r.PostForm.Get("client_secret")
+		if user, password, ok := r.BasicAuth(); ok {
 			client, _ = url.QueryUnescape(user)
+			f.secret, _ = url.QueryUnescape(password)
 		}
 		if host != "github.com" {
 			out["id_token"] = f.idToken(client)
@@ -177,6 +183,106 @@ func TestGoogle(t *testing.T) {
 	if _, err = idp.provider().Verify(context.Background(), c, "code", "nonce-1", "v"); err == nil {
 		t.Fatal("wrong issuer accepted")
 	}
+}
+
+func TestGoogleHostedDomain(t *testing.T) {
+	idp := newIdP(t)
+	c := connection(federation.ProviderGoogle, federation.Options{}, "secret")
+	idp.issuer = "https://accounts.google.com"
+	idp.claims = jwt.MapClaims{"sub": "g-1", "nonce": "nonce-1", "email": "ann@acme.com", "email_verified": true, "hd": "acme.com"}
+	claims, err := idp.provider().Verify(context.Background(), c, "code", "nonce-1", "v")
+	if err != nil || claims.HostedDomain != "acme.com" {
+		t.Fatalf("workspace account: %+v %v", claims, err)
+	}
+	delete(idp.claims, "hd")
+	if claims, err = idp.provider().Verify(context.Background(), c, "code", "nonce-1", "v"); err != nil || claims.HostedDomain != "" {
+		t.Fatalf("personal account: %+v %v", claims, err)
+	}
+	// A connection restricted to Workspace domains refuses personal accounts
+	// and other domains.
+	restricted := connection(federation.ProviderGoogle, federation.Options{Domains: []string{"acme.com"}}, "secret")
+	if _, err = idp.provider().Verify(context.Background(), restricted, "code", "nonce-1", "v"); err == nil {
+		t.Fatal("personal account accepted by a Workspace connection")
+	}
+	idp.claims["hd"] = "other.com"
+	if _, err = idp.provider().Verify(context.Background(), restricted, "code", "nonce-1", "v"); err == nil {
+		t.Fatal("other Workspace domain accepted")
+	}
+	idp.claims["hd"] = "acme.com"
+	if claims, err = idp.provider().Verify(context.Background(), restricted, "code", "nonce-1", "v"); err != nil || claims.HostedDomain != "acme.com" {
+		t.Fatalf("allowed Workspace domain: %+v %v", claims, err)
+	}
+	// Google may send its issuer without the scheme; the identity keeps the
+	// configured issuer, so it is one account either way.
+	idp.issuer = "accounts.google.com"
+	if claims, err = idp.provider().Verify(context.Background(), restricted, "code", "nonce-1", "v"); err != nil || claims.Issuer != "https://accounts.google.com" {
+		t.Fatalf("scheme-less issuer: %+v %v", claims, err)
+	}
+	idp.issuer = "https://accounts.google.com"
+	// Only Google's hd is meaningful; another issuer's claim is ignored.
+	o := connection(federation.ProviderOIDC, federation.Options{}, "secret")
+	o.Issuer = "https://idp.example"
+	idp.issuer, idp.claims["hd"] = o.Issuer, "acme.com"
+	if claims, err = idp.provider().Verify(context.Background(), o, "code", "nonce-1", "v"); err != nil || claims.HostedDomain != "" {
+		t.Fatalf("generic oidc: %+v %v", claims, err)
+	}
+}
+
+// A deployment-configured provider (operator single sign-on) takes its
+// secret and redirect URI from the Provider rather than the connection, and
+// reaches the IdP through Transport rather than the guarded transport.
+func TestDeploymentProvider(t *testing.T) {
+	idp := newIdP(t)
+	target, _ := url.Parse(idp.server.URL)
+	p := Provider{
+		Issuer:    "https://iam.example",
+		Redirect:  "https://iam.example/management/v1/sso/callback",
+		Secret:    "deployment-secret",
+		Transport: rewrite{target: target, base: idp.server.Client().Transport},
+		Guarded:   failing{},
+	}
+	// Sealed is set to prove Secret wins over it and over the guarded path.
+	c := federation.Connection{Provider: federation.ProviderGoogle, Issuer: federation.Preset(federation.ProviderGoogle, federation.Options{}), Client: "client-1", Sealed: "ignored"}
+	if p.Callback() != p.Redirect {
+		t.Fatalf("callback: %s", p.Callback())
+	}
+	if q := authorizeURL(t, p, c); q.Get("redirect_uri") != p.Redirect {
+		t.Fatalf("redirect_uri: %v", q)
+	}
+	idp.issuer = "https://accounts.google.com"
+	idp.claims = jwt.MapClaims{"sub": "g-1", "nonce": "nonce-1", "email": "ann@acme.com", "email_verified": true}
+	if claims, err := p.Verify(context.Background(), c, "code", "nonce-1", "v"); err != nil || claims.Issuer != "https://accounts.google.com" {
+		t.Fatalf("verify: %+v %v", claims, err)
+	}
+	if idp.secret != "deployment-secret" || idp.form.Get("redirect_uri") != p.Redirect {
+		t.Fatalf("token request: secret %q form %v", idp.secret, idp.form)
+	}
+	if got := (Provider{Issuer: "https://iam.example"}).Callback(); got != "https://iam.example/identity/v1/federation/callback" {
+		t.Fatalf("default callback changed: %s", got)
+	}
+
+	// Microsoft as operator SSO builds it: "organizations" restricted to a
+	// tenant list. The identity's issuer is the verified per-tenant one;
+	// other tenants are refused and a work email is not proof of ownership.
+	const work, other = "11111111-2222-3333-4444-555555555555", "99999999-2222-3333-4444-555555555555"
+	mo := federation.Options{Tenant: federation.TenantOrganizations, Tenants: []string{work}}.Normalized()
+	m := federation.Connection{Provider: federation.ProviderMicrosoft, Issuer: federation.Preset(federation.ProviderMicrosoft, mo), Client: "client-1", Options: mo}
+	idp.issuer = MicrosoftIssuer(work)
+	idp.claims = jwt.MapClaims{"sub": "m-1", "nonce": "nonce-1", "tid": work, "email": "ann@acme.com"}
+	claims, err := p.Verify(context.Background(), m, "code", "nonce-1", "v")
+	if err != nil || claims.Issuer != MicrosoftIssuer(work) || claims.EmailVerified == nil || *claims.EmailVerified {
+		t.Fatalf("microsoft: %+v %v", claims, err)
+	}
+	idp.issuer, idp.claims["tid"] = MicrosoftIssuer(other), other
+	if _, err = p.Verify(context.Background(), m, "code", "nonce-1", "v"); err == nil {
+		t.Fatal("tenant outside the list accepted")
+	}
+}
+
+type failing struct{}
+
+func (failing) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("guarded transport used")
 }
 
 func TestMicrosoftMultiTenant(t *testing.T) {

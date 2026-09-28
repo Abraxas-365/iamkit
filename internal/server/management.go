@@ -8,6 +8,9 @@ import (
 func OperatorID(c *fiber.Ctx) string { return mgmthttp.Principal(c).OperatorID.String() }
 func (s *Server) managementRoutes(r fiber.Router) {
 	s.Control.Register(r)
+	if s.OperatorSSO != nil {
+		s.OperatorSSO.Register(r)
+	}
 	e := r.Group("/environments/:environment", s.Control.Environment)
 	s.Users.Register(e)
 	if s.Factors != nil {

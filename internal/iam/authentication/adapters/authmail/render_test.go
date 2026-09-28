@@ -64,7 +64,7 @@ func TestRenderGolden(t *testing.T) {
 		for _, purpose := range authentication.PreviewPurposes {
 			m := sample(purpose)
 			m.Locale = locale.Code
-			email, err := r.Render(context.Background(), m, nil)
+			email, err := r.Render(context.Background(), m, authentication.Draft{})
 			if err != nil {
 				t.Fatalf("%s/%s: %v", purpose, locale.Code, err)
 			}
@@ -102,7 +102,7 @@ func golden(t *testing.T, name, got string) {
 func TestRenderContent(t *testing.T) {
 	ctx := context.Background()
 	r := Renderer{Branding: fixedBrand{brand: acme}}
-	email, err := r.Render(ctx, sample(authentication.PurposeLogin), nil)
+	email, err := r.Render(ctx, sample(authentication.PurposeLogin), authentication.Draft{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestRenderContent(t *testing.T) {
 		t.Error("text lacks the code")
 	}
 
-	invite, _ := r.Render(ctx, sample(authentication.PurposeInvitation), nil)
+	invite, _ := r.Render(ctx, sample(authentication.PurposeInvitation), authentication.Draft{})
 	for _, want := range []string{`href="https://app.acme.io/invite?token=ik_inv_token"`, "background:#0f766e", "color:#ffffff", "Bob invited you to join Acme Corp on Acme.", "October 4, 2026", "Accept invitation"} {
 		if !strings.Contains(invite.HTML, want) {
 			t.Errorf("invitation html lacks %q", want)
@@ -131,7 +131,7 @@ func TestRenderInvitationWithoutLink(t *testing.T) {
 	for _, link := range []string{"", "javascript:alert(1)", "/relative", "ftp://x.io/a"} {
 		m := sample(authentication.PurposeInvitation)
 		m.Link, m.Inviter = link, ""
-		email, err := Renderer{}.Render(context.Background(), m, nil)
+		email, err := Renderer{}.Render(context.Background(), m, authentication.Draft{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -151,7 +151,7 @@ func TestRenderEscapingAndInjection(t *testing.T) {
 	m.Organization = "<script>alert(1)</script>\r\nBcc: evil@x.io"
 	m.Inviter = `"><img src=x onerror=alert(1)>`
 	r := Renderer{Branding: fixedBrand{brand: authentication.Brand{Name: "A<b>c\nme", LogoURL: "http://insecure.io/l.png", Accent: "red;background:url(x)"}}}
-	email, err := r.Render(context.Background(), m, nil)
+	email, err := r.Render(context.Background(), m, authentication.Draft{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +182,7 @@ func TestRenderLocale(t *testing.T) {
 		r := Renderer{Branding: fixedBrand{brand: authentication.Brand{Locale: tc.brand}}, Templates: templates, Locale: tc.deployment}
 		m := sample(authentication.PurposeLogin)
 		m.Locale = tc.request
-		email, err := r.Render(ctx, m, nil)
+		email, err := r.Render(ctx, m, authentication.Draft{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -199,7 +199,7 @@ func TestRenderOverrides(t *testing.T) {
 		Body:    "Hi {{email}},\nuse the code below.\n\n<b>Thanks</b> {{nope}}",
 	}}
 	r := Renderer{Branding: fixedBrand{brand: acme}, Templates: saved}
-	email, err := r.Render(ctx, sample(authentication.PurposeLogin), nil)
+	email, err := r.Render(ctx, sample(authentication.PurposeLogin), authentication.Draft{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,27 +214,39 @@ func TestRenderOverrides(t *testing.T) {
 
 	// A draft replaces saved wording and is not looked up.
 	saved.got = nil
-	email, _ = r.Render(ctx, sample(authentication.PurposeLogin), &authentication.Copy{Heading: "Draft heading"})
+	email, _ = r.Render(ctx, sample(authentication.PurposeLogin), authentication.Draft{Copy: &authentication.Copy{Heading: "Draft heading"}})
 	if len(saved.got) != 0 || !strings.Contains(email.HTML, "Draft heading</h1>") || email.Subject != "Your sign-in code for Acme" {
 		t.Errorf("draft: asked %v, subject %q", saved.got, email.Subject)
 	}
 
 	// An action override on a purpose without a button is ignored.
 	saved.copy = authentication.Copy{Action: "Click"}
-	email, _ = r.Render(ctx, sample(authentication.PurposeLogin), nil)
+	email, _ = r.Render(ctx, sample(authentication.PurposeLogin), authentication.Draft{})
 	if strings.Contains(email.HTML, "Click") {
 		t.Error("login must not render an action")
+	}
+
+	// A draft brand name replaces the saved one; blank previews the default.
+	saved.copy = authentication.Copy{}
+	name, blank := "Globex", "  "
+	email, _ = r.Render(ctx, sample(authentication.PurposeLogin), authentication.Draft{AppName: &name})
+	if email.Subject != "Your sign-in code for Globex" || !strings.Contains(email.HTML, "Globex") {
+		t.Errorf("draft name: %q", email.Subject)
+	}
+	email, _ = r.Render(ctx, sample(authentication.PurposeLogin), authentication.Draft{AppName: &blank})
+	if email.Subject != "Your sign-in code for IAMKit" {
+		t.Errorf("blank draft name: %q", email.Subject)
 	}
 }
 
 // Missing branding or wording never fails a send.
 func TestRenderDegradesToDefaults(t *testing.T) {
 	r := Renderer{Branding: fixedBrand{err: errors.New("db down")}, Templates: &fixedTemplates{err: errors.New("db down")}}
-	email, err := r.Render(context.Background(), sample(authentication.PurposeLogin), nil)
+	email, err := r.Render(context.Background(), sample(authentication.PurposeLogin), authentication.Draft{})
 	if err != nil || email.Subject != "Your sign-in code for IAMKit" {
 		t.Fatalf("got %q %v", email.Subject, err)
 	}
-	if _, err := r.Render(context.Background(), authentication.Message{Purpose: "nope"}, nil); err == nil {
+	if _, err := r.Render(context.Background(), authentication.Message{Purpose: "nope"}, authentication.Draft{}); err == nil {
 		t.Fatal("unknown purpose must fail")
 	}
 }

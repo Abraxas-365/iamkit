@@ -187,12 +187,22 @@ type DeliveryStatus struct {
 type PreviewInput struct {
 	Purpose string `json:"purpose"`
 	Locale  string `json:"locale"`
+	// Template is unsaved wording to preview instead of the saved one.
+	Template *Copy `json:"template,omitempty"`
+	// AppName is an unsaved brand name ({{app_name}}, the email header) to
+	// preview instead of the saved one; "" previews the default.
+	AppName *string `json:"app_name,omitempty"`
 }
+
+// MaxAppName is the longest brand name, in characters (the hosted
+// branding's display_name, where it is saved).
+const MaxAppName = 100
 
 // PreviewPurposes are the emails IAMKit renders.
 var PreviewPurposes = []string{PurposeLogin, PurposePasswordReset, PurposeEmailVerification, PurposeInvitation, PurposeTest}
 
-// Validate checks the purpose; an unknown locale falls back like any other.
+// Validate checks the purpose and draft wording; an unknown locale falls
+// back like any other.
 func (p PreviewInput) Validate() error {
 	if !slices.Contains(PreviewPurposes, p.Purpose) {
 		return errx.Validation("purpose must be one of " + strings.Join(PreviewPurposes, ", "))
@@ -200,7 +210,20 @@ func (p PreviewInput) Validate() error {
 	if len(p.Locale) > 35 {
 		return errx.Validation("locale is too long")
 	}
+	if p.AppName != nil && utf8.RuneCountInString(strings.TrimSpace(*p.AppName)) > MaxAppName {
+		return errx.Validation("app_name must be at most 100 characters")
+	}
+	if p.Template != nil {
+		return p.Template.Validate(p.Purpose)
+	}
 	return nil
+}
+
+// Draft is unsaved wording and brand name a preview renders instead of the
+// saved ones; nil fields use the saved values.
+type Draft struct {
+	Copy    *Copy
+	AppName *string
 }
 
 // Preview is a rendered sample email; nothing is sent.
@@ -392,6 +415,9 @@ func (d DeliveryConfigInput) validateSMTP() error {
 	}
 	if len(d.SMTPPassword) > 1024 || hasControl(d.SMTPPassword) {
 		return errx.Validation("smtp_password must be at most 1024 characters on one line")
+	}
+	if d.SMTPPassword != "" && d.SMTPUsername == "" {
+		return errx.Validation("smtp_password requires smtp_username")
 	}
 	return d.unused(ProviderSMTP, map[string]bool{
 		"webhook_url": d.WebhookURL != "", "webhook_token": d.WebhookToken != "", "api_key": d.APIKey != "",

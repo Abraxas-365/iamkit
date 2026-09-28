@@ -32,6 +32,13 @@ type Provider struct {
 	Transport http.RoundTripper
 	// Guarded serves sealed-secret connections; nil uses GuardedTransport().
 	Guarded http.RoundTripper
+	// Redirect, when set, replaces the federation callback as the redirect
+	// URI (operator single sign-on has its own callback).
+	Redirect string
+	// Secret, when set, is the client secret of every connection: the
+	// deployment configured it, like its issuer, so it needs no approval
+	// and uses Transport (the deployment's own IdP may be internal).
+	Secret string
 }
 
 func (Provider) Approved(c federation.Connection) bool {
@@ -56,6 +63,9 @@ func (Provider) Approved(c federation.Connection) bool {
 }
 
 func (p Provider) secret(c federation.Connection) (string, error) {
+	if p.Secret != "" {
+		return p.Secret, nil
+	}
 	if c.Sealed != "" {
 		if p.Cipher == nil {
 			return "", errx.Internal("encryption key not configured")
@@ -78,7 +88,7 @@ func (p Provider) secret(c federation.Connection) (string, error) {
 
 func (p Provider) context(ctx context.Context, c federation.Connection) context.Context {
 	transport := p.Transport
-	if c.Sealed != "" {
+	if c.Sealed != "" && p.Secret == "" {
 		transport = p.Guarded
 		if transport == nil {
 			transport = GuardedTransport()
@@ -138,8 +148,14 @@ func (p Provider) session(ctx context.Context, c federation.Connection) (session
 
 func (Provider) Verifier() string { return oauth2.GenerateVerifier() }
 
-// Callback is IAMKit's federation redirect URI.
-func (p Provider) Callback() string { return p.Issuer + "/identity/v1/federation/callback" }
+// Callback is the redirect URI: Redirect when set, else IAMKit's
+// federation callback.
+func (p Provider) Callback() string {
+	if p.Redirect != "" {
+		return p.Redirect
+	}
+	return p.Issuer + "/identity/v1/federation/callback"
+}
 
 func (p Provider) Authorize(ctx context.Context, c federation.Connection, state, nonce, verifier string) (string, error) {
 	s, err := p.session(p.context(ctx, c), c)
@@ -192,16 +208,24 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, code, non
 		Name          string `json:"name"`
 		Tenant        string `json:"tid"`
 		DomainOwner   any    `json:"xms_edov"`
+		HostedDomain  string `json:"hd"`
 	}
 	if err = verified.Claims(&claims); err != nil {
 		return federation.Claims{}, errx.Unauthorized("invalid provider identity")
 	}
-	out := federation.Claims{Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name}
+	out := federation.Claims{Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name, Issuer: c.Issuer}
+	if c.Provider == federation.ProviderGoogle {
+		out.HostedDomain = claims.HostedDomain
+		if !c.Options.AcceptsHostedDomain(claims.HostedDomain) {
+			return federation.Claims{}, errx.Unauthorized("this Google account is not accepted here")
+		}
+	}
 	if microsoft {
 		if verified.Issuer != MicrosoftIssuer(claims.Tenant) || !c.Options.AcceptsTenant(claims.Tenant) {
 			return federation.Claims{}, errx.Unauthorized("this Microsoft account is not accepted here")
 		}
 		out.EmailVerified = microsoftVerified(c.Options, claims.Tenant, claims.Email, claims.DomainOwner)
+		out.Issuer = verified.Issuer // checked against the tenant above
 	}
 	return out, nil
 }

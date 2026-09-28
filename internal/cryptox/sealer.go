@@ -100,11 +100,22 @@ func (s *Sealer) Enabled() bool { return s != nil && s.current != "" }
 
 func disabled() error { return errx.Internal("encryption key not configured") }
 
+// CodeKeyRequired marks the 422 returned when a secret must be stored but no
+// encryption key is configured, so clients can explain the fix.
+const CodeKeyRequired = "ENCRYPTION_KEY_REQUIRED"
+
+// KeyRequired is the error for storing a secret without a configured key.
+func KeyRequired() error {
+	e := errx.Business("storing secrets requires IAMKIT_ENCRYPTION_KEY to be configured")
+	e.Code = CodeKeyRequired
+	return e
+}
+
 // Seal encrypts plain with the current key. Without a configured key it
 // returns a business error so an operator storing a secret learns why.
 func (s *Sealer) Seal(plain []byte) (string, error) {
 	if !s.Enabled() {
-		return "", errx.Business("storing secrets requires IAMKIT_ENCRYPTION_KEY to be configured")
+		return "", KeyRequired()
 	}
 	aead := s.keys[s.current]
 	nonce := make([]byte, aead.NonceSize())

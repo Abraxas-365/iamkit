@@ -170,7 +170,7 @@ func (s *switchTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 // testEncryptionKey is the harness IAMKIT_ENCRYPTION_KEY.
 var testEncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 
-func newHarness(t *testing.T) *Harness {
+func newHarness(t *testing.T, opts ...bootstrap.Option) *Harness {
 	t.Helper()
 	db := freshDB(t)
 	owner, err := bootstrap.Management(db).Bootstrap(context.Background(), "owner@example.com", "Workspace")
@@ -188,7 +188,8 @@ func newHarness(t *testing.T) *Harness {
 		t.Fatal(err)
 	}
 	idp := &switchTransport{}
-	app := bootstrap.New(db, key, "https://iam.example", mail, bootstrap.WithResolver(dns), bootstrap.WithSealer(sealer), bootstrap.WithFederationTransport(idp)).App()
+	opts = append([]bootstrap.Option{bootstrap.WithResolver(dns), bootstrap.WithSealer(sealer), bootstrap.WithFederationTransport(idp)}, opts...)
+	app := bootstrap.New(db, key, "https://iam.example", mail, opts...).App()
 	t.Cleanup(func() { app.Shutdown() })
 	return &Harness{t: t, DB: db, App: app, Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp}
 }
@@ -293,9 +294,9 @@ type Env struct {
 	Audience         string
 }
 
-func newEnv(t *testing.T) *Env {
+func newEnv(t *testing.T, opts ...bootstrap.Option) *Env {
 	t.Helper()
-	h := newHarness(t)
+	h := newHarness(t, opts...)
 	project := h.ID("POST", "/management/v1/projects", fiber.Map{"name": "Product"})
 	id := h.ID("POST", "/management/v1/projects/"+project+"/environments", fiber.Map{"name": "production"})
 	e := &Env{Harness: h, EnvID: id, Base: "/management/v1/environments/" + id,

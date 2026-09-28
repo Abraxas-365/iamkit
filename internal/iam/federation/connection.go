@@ -262,6 +262,15 @@ type Claims struct {
 	Email         string
 	EmailVerified *bool
 	Name          string
+	// HostedDomain is Google's hd claim: the Workspace domain of the
+	// account, empty for personal Google accounts.
+	HostedDomain string
+	// Issuer identifies the account's issuer stably: the connection's
+	// configured issuer (go-oidc also accepts Google's scheme-less
+	// "accounts.google.com", which must not become a second identity), or
+	// for Microsoft the verified per-tenant issuer. Empty for GitHub, which
+	// has no ID token.
+	Issuer string
 }
 
 // Admit decides whether an unlinked provider identity may be provisioned just
@@ -370,9 +379,25 @@ type Mutation struct {
 	Target      string
 }
 
-// ConnectionFilter narrows the connection list to one organization.
+// Connection scopes: environment connections (social login) or
+// organization connections (organization SSO).
+const (
+	ScopeEnvironment  = "environment"
+	ScopeOrganization = "organization"
+)
+
+// ConnectionFilter narrows the connection list to one organization, or to
+// one Scope (empty for both).
 type ConnectionFilter struct {
 	Organization identity.OrganizationID
+	Scope        string
+}
+
+func (f ConnectionFilter) Validate() error {
+	if f.Scope != "" && f.Scope != ScopeEnvironment && f.Scope != ScopeOrganization {
+		return errx.Validation("scope must be environment or organization")
+	}
+	return nil
 }
 
 type ConnectionView struct {

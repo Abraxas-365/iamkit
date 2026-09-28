@@ -62,6 +62,12 @@ func (h *Groups) List(c *fiber.Ctx) error {
 		}
 		filter.Connection = id
 	}
+	switch source := c.Query("source"); source {
+	case "", organization.GroupSourceManual, organization.GroupSourceDirectory:
+		filter.Source = source
+	default:
+		return errx.Validation("source must be manual or directory")
+	}
 	out, err := h.queries.ListGroups(c.Context(), boundary(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err

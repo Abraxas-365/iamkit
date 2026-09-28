@@ -10,7 +10,9 @@ import (
 type Commands interface {
 	Login(ctx context.Context, boundary Context, email, password string) (Result, error)
 	Refresh(ctx context.Context, boundary Context, token string) (Issued, error)
-	InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose string) (identity.ChallengeID, error)
+	// InitiateChallenge emails a code when the address is eligible; locale
+	// is the requested email language ("" = the environment default).
+	InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose, locale string) (identity.ChallengeID, error)
 	VerifyChallenge(ctx context.Context, boundary Context, challenge identity.ChallengeID, code, purpose, password string) (Result, error)
 }
 
@@ -66,10 +68,11 @@ type Mailer interface {
 
 // Renderer writes the email for a message: the environment's brand
 // (Branding), language (message.Locale, else the brand's, else the
-// deployment default) and wording (Templates over DefaultCopy; draft, when
-// set, replaces the saved wording, for previews). The sender is left empty.
+// deployment default) and wording (Templates over DefaultCopy). A draft's
+// set fields replace the saved wording and brand name, for previews. The
+// sender is left empty.
 type Renderer interface {
-	Render(ctx context.Context, message Message, draft *Copy) (Email, error)
+	Render(ctx context.Context, message Message, draft Draft) (Email, error)
 }
 
 // Branding reads how an environment's emails look (hosted login branding).
@@ -105,6 +108,9 @@ type DeliveryConfigQueries interface {
 	DeliveryConfig(ctx context.Context, environment identity.EnvironmentID) (DeliveryConfig, error)
 	// DeliveryStatus reports the effective source and recent activity.
 	DeliveryStatus(ctx context.Context, environment identity.EnvironmentID) (DeliveryStatus, error)
+	// Preview renders a sample email as IAMKit would send it for the
+	// environment (brand, language, wording); nothing is sent or recorded.
+	Preview(ctx context.Context, environment identity.EnvironmentID, input PreviewInput) (Preview, error)
 }
 
 // DeliveryConfigRepository is the storage interface for delivery configs.
@@ -121,6 +127,35 @@ type DeliveryConfigRepository interface {
 	Activity(ctx context.Context, environment identity.EnvironmentID) (Activity, error)
 	// Audit writes an audit event for a console action.
 	Audit(ctx context.Context, m Mutation) error
+}
+
+// TemplateCommands changes an environment's email wording; audited as
+// email_template.updated / email_template.reset.
+type TemplateCommands interface {
+	// SetTemplate saves wording for one email in one language; empty
+	// wording resets it.
+	SetTemplate(ctx context.Context, m Mutation, key TemplateKey, input Copy) error
+	// ResetTemplate returns one email in one language to IAMKit's wording
+	// (idempotent).
+	ResetTemplate(ctx context.Context, m Mutation, key TemplateKey) error
+}
+
+// TemplateQueries reads an environment's email wording.
+type TemplateQueries interface {
+	// ListTemplates lists every email in every language, customized or not.
+	ListTemplates(ctx context.Context, environment identity.EnvironmentID) ([]TemplateSummary, error)
+	Template(ctx context.Context, environment identity.EnvironmentID, key TemplateKey) (TemplateView, error)
+}
+
+// TemplateRepository stores email wording; writes audit m in the same
+// transaction.
+type TemplateRepository interface {
+	// ListTemplates returns the environment's saved templates.
+	ListTemplates(ctx context.Context, environment identity.EnvironmentID) ([]EmailTemplate, error)
+	// GetTemplate returns a saved template; NotFound when there is none.
+	GetTemplate(ctx context.Context, environment identity.EnvironmentID, key TemplateKey) (EmailTemplate, error)
+	SetTemplate(ctx context.Context, m Mutation, key TemplateKey, input Copy) error
+	DeleteTemplate(ctx context.Context, m Mutation, key TemplateKey) error
 }
 type Passwords interface {
 	Hash(password string) (string, error)

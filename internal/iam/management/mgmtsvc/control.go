@@ -68,6 +68,15 @@ func (s *Control) DisableOperator(ctx context.Context, p management.Principal, i
 	}
 	return s.repository.DisableOperator(ctx, p, id)
 }
+func (s *Control) SetPasswordAccess(ctx context.Context, p management.Principal, id identity.OperatorID, allowed bool) error {
+	if p.Role != "owner" {
+		return errx.Forbidden("insufficient permissions")
+	}
+	if id.IsZero() {
+		return errx.NotFound("resource not found")
+	}
+	return s.repository.SetPasswordAccess(ctx, p.WorkspaceID, id, allowed)
+}
 func (s *Control) CreateProject(ctx context.Context, p management.Principal, name string) (identity.ProjectID, error) {
 	if strings.TrimSpace(name) == "" {
 		return identity.ProjectID{}, errx.Validation("invalid request")

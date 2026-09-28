@@ -39,7 +39,7 @@ func (r *Repository) Bootstrap(ctx context.Context, email, name string, hash []b
 	}{
 		{`INSERT INTO workspaces(id,name) VALUES($1,$2)`, []any{workspace, name}},
 		{`INSERT INTO operators(id,email) VALUES($1,$2)`, []any{operator, email}},
-		{`INSERT INTO workspace_members(workspace_id,operator_id,role) VALUES($1,$2,'owner')`, []any{workspace, operator}},
+		{`INSERT INTO workspace_members(workspace_id,operator_id,role,password_allowed) VALUES($1,$2,'owner',true)`, []any{workspace, operator}},
 		{`INSERT INTO management_keys(id,workspace_id,operator_id,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5)`, []any{uuid.NewString(), workspace, operator, hash, expires}},
 	} {
 		if _, err = tx.ExecContext(ctx, q.sql, q.args...); err != nil {
@@ -71,7 +71,12 @@ func (r *Repository) RecoverOwner(ctx context.Context, workspace identity.Worksp
 	if _, err = tx.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE workspace_id=$1 AND operator_id=$2 AND revoked_at IS NULL`, workspace, operator); err != nil {
 		return errx.Wrap(err, "owner recovery failed", errx.TypeInternal)
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE operators SET password_hash='' WHERE id=$1`, operator); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE operators SET password_hash='', password_must_change=false WHERE id=$1`, operator); err != nil {
+		return errx.Wrap(err, "owner recovery failed", errx.TypeInternal)
+	}
+	// Recovery is how an owner gets back in when single sign-on fails, so
+	// the recovered owner may set a password in break-glass mode.
+	if _, err = tx.ExecContext(ctx, `UPDATE workspace_members SET password_allowed=true WHERE workspace_id=$1 AND operator_id=$2`, workspace, operator); err != nil {
 		return errx.Wrap(err, "owner recovery failed", errx.TypeInternal)
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO management_keys(id,workspace_id,operator_id,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5)`, uuid.NewString(), workspace, operator, hash, expires); err != nil {
@@ -109,54 +114,90 @@ func (r *Repository) EnvironmentAllowed(ctx context.Context, workspace identity.
 var _ management.Repository = (*Repository)(nil)
 var _ management.SessionRepository = (*Repository)(nil)
 
-func (r *Repository) PasswordByEmail(ctx context.Context, email string) (management.Principal, string, error) {
+func (r *Repository) PasswordByEmail(ctx context.Context, email string) (management.PasswordAccount, error) {
 	var row struct {
 		Workspace    identity.WorkspaceID `db:"workspace_id"`
 		Operator     identity.OperatorID  `db:"operator_id"`
 		Role         string               `db:"role"`
 		PasswordHash string               `db:"password_hash"`
+		Allowed      bool                 `db:"password_allowed"`
+		MustChange   bool                 `db:"password_must_change"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT m.workspace_id, m.operator_id, m.role, o.password_hash FROM operators o JOIN workspace_members m ON m.operator_id=o.id WHERE o.email=$1 AND m.active`, email)
+	err := r.db.GetContext(ctx, &row, `SELECT m.workspace_id, m.operator_id, m.role, o.password_hash, m.password_allowed, o.password_must_change FROM operators o JOIN workspace_members m ON m.operator_id=o.id JOIN workspaces w ON w.id=m.workspace_id WHERE o.email=$1 AND m.active ORDER BY `+memberOrder+` LIMIT 1`, email)
 	if errors.Is(err, sql.ErrNoRows) {
-		return management.Principal{}, "", errx.Unauthorized("invalid credentials")
+		return management.PasswordAccount{}, errx.Unauthorized("invalid credentials")
 	}
 	if err != nil {
-		return management.Principal{}, "", failure(err)
+		return management.PasswordAccount{}, failure(err)
 	}
-	return management.Principal{WorkspaceID: row.Workspace, OperatorID: row.Operator, Role: row.Role}, row.PasswordHash, nil
+	p := management.Principal{WorkspaceID: row.Workspace, OperatorID: row.Operator, Role: row.Role}
+	return management.PasswordAccount{Principal: p, Hash: row.PasswordHash, Allowed: row.Allowed, MustChange: row.MustChange}, nil
+}
+func (r *Repository) OperatorPassword(ctx context.Context, workspace identity.WorkspaceID, operator identity.OperatorID) (management.PasswordAccount, error) {
+	var row struct {
+		PasswordHash string `db:"password_hash"`
+		Allowed      bool   `db:"password_allowed"`
+		MustChange   bool   `db:"password_must_change"`
+	}
+	err := r.db.GetContext(ctx, &row, `SELECT o.password_hash, m.password_allowed, o.password_must_change FROM operators o JOIN workspace_members m ON m.operator_id=o.id WHERE m.workspace_id=$1 AND o.id=$2 AND m.active`, workspace, operator)
+	if errors.Is(err, sql.ErrNoRows) {
+		return management.PasswordAccount{}, errx.Unauthorized("management credential required")
+	}
+	if err != nil {
+		return management.PasswordAccount{}, failure(err)
+	}
+	return management.PasswordAccount{Hash: row.PasswordHash, Allowed: row.Allowed, MustChange: row.MustChange}, nil
 }
 func (r *Repository) CreateSession(ctx context.Context, id identity.SessionID, p management.Principal, hash []byte, expires time.Time) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO operator_sessions(id,workspace_id,operator_id,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5)`, id, p.WorkspaceID, p.OperatorID, hash, expires)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO operator_sessions(id,workspace_id,operator_id,secret_hash,expires_at,method,authenticated_at) VALUES($1,$2,$3,$4,$5,$6,now())`, id, p.WorkspaceID, p.OperatorID, hash, expires, p.Method)
 	return failure(err)
 }
 func (r *Repository) AuthenticateSession(ctx context.Context, hash []byte) (management.Principal, error) {
 	var row struct {
+		Session   identity.SessionID   `db:"id"`
 		Workspace identity.WorkspaceID `db:"workspace_id"`
 		Operator  identity.OperatorID  `db:"operator_id"`
 		Role      string               `db:"role"`
+		Method    string               `db:"method"`
+		AuthTime  time.Time            `db:"authenticated_at"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT s.workspace_id, s.operator_id, m.role FROM operator_sessions s JOIN workspace_members m USING(workspace_id,operator_id) WHERE s.secret_hash=$1 AND m.active AND s.revoked_at IS NULL AND s.expires_at>now()`, hash)
+	err := r.db.GetContext(ctx, &row, `SELECT s.id, s.workspace_id, s.operator_id, m.role, s.method, s.authenticated_at FROM operator_sessions s JOIN workspace_members m USING(workspace_id,operator_id) WHERE s.secret_hash=$1 AND m.active AND s.revoked_at IS NULL AND s.expires_at>now()`, hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return management.Principal{}, errx.Unauthorized("invalid session")
 	}
 	if err != nil {
 		return management.Principal{}, failure(err)
 	}
-	return management.Principal{WorkspaceID: row.Workspace, OperatorID: row.Operator, Role: row.Role}, nil
+	return management.Principal{WorkspaceID: row.Workspace, OperatorID: row.Operator, Role: row.Role, Method: row.Method, Session: row.Session, AuthTime: &row.AuthTime}, nil
 }
 func (r *Repository) RevokeSessionByHash(ctx context.Context, hash []byte) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE secret_hash=$1 AND revoked_at IS NULL`, hash)
 	return failure(err)
 }
-func (r *Repository) SetPassword(ctx context.Context, operatorID identity.OperatorID, hash string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE operators SET password_hash=$1 WHERE id=$2`, hash, operatorID)
-	return failure(err)
+func (r *Repository) SetPassword(ctx context.Context, operatorID identity.OperatorID, hash string, mustChange bool, keep identity.SessionID) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err)
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE operators SET password_hash=$1, password_must_change=$2 WHERE id=$3`, hash, mustChange, operatorID); err != nil {
+		return failure(err)
+	}
+	// keep is zero for a login or a key: then every session ends.
+	if _, err = tx.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE operator_id=$1 AND revoked_at IS NULL AND id IS DISTINCT FROM $2`, operatorID, nullable(keep)); err != nil {
+		return failure(err)
+	}
+	return failure(tx.Commit())
+}
+
+// nullable maps a zero session ID to NULL.
+func nullable(id identity.SessionID) any {
+	if id.IsZero() {
+		return nil
+	}
+	return id
 }
 func (r *Repository) ResetPassword(ctx context.Context, operatorID identity.OperatorID) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE operators SET password_hash='' WHERE id=$1`, operatorID)
-	return failure(err)
-}
-func (r *Repository) RevokeOperatorSessions(ctx context.Context, operatorID identity.OperatorID) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE operator_id=$1 AND revoked_at IS NULL`, operatorID)
+	_, err := r.db.ExecContext(ctx, `UPDATE operators SET password_hash='', password_must_change=false WHERE id=$1`, operatorID)
 	return failure(err)
 }

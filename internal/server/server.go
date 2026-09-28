@@ -63,6 +63,7 @@ type Server struct {
 	Authorization       *authzhttp.Handler
 	Organizations       *orghttp.Handler
 	Control             *mgmthttp.Handler
+	OperatorSSO         *mgmthttp.SSO // console login options, operator SSO, linked identities
 	Health              func(context.Context) error
 	Impersonation       *imphttp.Handler
 	Auth                *authhttp.Handler
@@ -145,6 +146,12 @@ func (s *Server) App() *fiber.App {
 	// Operator login is unauthenticated — registered outside the auth middleware.
 	mgmt := app.Group("/management/v1")
 	mgmt.Post("/login", limiter.New(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Control.Login)
+	if s.OperatorSSO != nil {
+		// Single sign-on is browser navigation: plain limiter responses.
+		mgmt.Get("/login-options", limiter.New(limiter.Config{Max: 60}), s.OperatorSSO.Options)
+		mgmt.Get("/sso/callback", limiter.New(limiter.Config{Max: 30}), s.OperatorSSO.Callback)
+		mgmt.Get("/sso/:provider/start", limiter.New(limiter.Config{Max: 20}), s.OperatorSSO.Start)
+	}
 	control := mgmt.Group("", s.Control.Authenticate, rateLimiter(rateLimit))
 	s.managementRoutes(control)
 	auth := app.Group("/identity/v1")

@@ -197,6 +197,12 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		base += fmt.Sprintf(" AND c.organization_id=$%d", n)
 		args = append(args, filter.Organization)
 	}
+	switch filter.Scope {
+	case federation.ScopeEnvironment:
+		base += " AND c.organization_id IS NULL"
+	case federation.ScopeOrganization:
+		base += " AND c.organization_id IS NOT NULL"
+	}
 	if like := query.EscapeLike(page.Search); like != "" {
 		n++
 		base += fmt.Sprintf(" AND (c.name ILIKE $%d OR c.issuer ILIKE $%d)", n, n)

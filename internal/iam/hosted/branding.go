@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
@@ -22,7 +23,11 @@ type Settings struct {
 	LogoURL     string                 `json:"logo_url"`
 	AccentColor string                 `json:"accent_color"`
 	Theme       Theme                  `json:"theme"`
-	UpdatedAt   *time.Time             `json:"updated_at,omitempty"`
+	// Locale is the default language of the environment's emails ("" = the
+	// deployment default). Omitted on save keeps the stored one, so clients
+	// that predate it don't reset it; client styles have none (nil).
+	Locale    *string    `json:"locale,omitempty"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
 // Theme is the look of the hosted pages beyond name, logo and accent.
@@ -42,6 +47,10 @@ type Theme struct {
 	LogoPosition string `json:"logo_position"`
 	Header       Header `json:"header"`
 	Footer       Footer `json:"footer"`
+	// BackgroundImageURL covers the page behind the card; BackgroundOverlay
+	// (0-90 %) tints it with the background color so text stays readable.
+	BackgroundImageURL string `json:"background_image_url"`
+	BackgroundOverlay  int    `json:"background_overlay"`
 }
 
 // Palette colors one scheme; empty colors use the defaults.
@@ -83,6 +92,7 @@ const (
 	DefaultRadius  = 12
 	MaxRadius      = 24
 	MaxFooterLinks = 5
+	MaxOverlay     = 90
 	maxURL         = 2048
 	maxDisplayName = 100
 	maxFooterText  = 200
@@ -109,6 +119,13 @@ func (s *Settings) Validate() error {
 	}
 	if err := s.Theme.validate(); err != nil {
 		return err
+	}
+	if s.Locale != nil {
+		locale := strings.ToLower(strings.TrimSpace(*s.Locale))
+		if locale != "" && !i18n.Supported(locale) {
+			return errx.Validation("locale must be one of " + strings.Join(localeCodes(), ", "))
+		}
+		s.Locale = &locale
 	}
 	// accent_color and theme.light.primary are the same color.
 	if s.Theme.Light.Primary == "" {
@@ -156,6 +173,18 @@ func (t *Theme) validate() error {
 	if err = image(t.FaviconURL, "theme.favicon_url"); err != nil {
 		return err
 	}
+	// The background image is written into a CSS url(""): on top of being
+	// an https URL it must not carry characters that could leave it.
+	t.BackgroundImageURL = strings.TrimSpace(t.BackgroundImageURL)
+	if err = image(t.BackgroundImageURL, "theme.background_image_url"); err != nil {
+		return err
+	}
+	if strings.ContainsAny(t.BackgroundImageURL, "\"'()\\<>{};` \t\r\n") {
+		return errx.Validation("theme.background_image_url must not contain quotes, parentheses, backslashes or spaces")
+	}
+	if t.BackgroundOverlay < 0 || t.BackgroundOverlay > MaxOverlay {
+		return errx.Validation("theme.background_overlay must be between 0 and 90")
+	}
 	return t.Footer.validate()
 }
 
@@ -196,6 +225,15 @@ func (f *Footer) validate() error {
 		}
 	}
 	return nil
+}
+
+// localeCodes lists the available email languages.
+func localeCodes() []string {
+	var out []string
+	for _, l := range i18n.Locales() {
+		out = append(out, l.Code)
+	}
+	return out
 }
 
 // choice normalizes an enumerated value; empty takes the default.

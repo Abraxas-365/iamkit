@@ -190,6 +190,44 @@ func TestJoining(t *testing.T) {
 	}
 }
 
+func TestGoogleDomains(t *testing.T) {
+	in := ConnectionInput{Name: "x", Provider: ProviderGoogle, Options: Options{Domains: []string{" Acme.com. ", "acme.com", "BÜCHER.example"}}, Client: "c", ClientSecret: "s"}
+	if err := in.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	o := in.Connection(identity.NewEnvironmentID()).Options
+	if strings.Join(o.Domains, ",") != "acme.com,xn--bcher-kva.example" {
+		t.Fatalf("domains not normalized: %v", o.Domains)
+	}
+	cases := []struct {
+		hd   string
+		want bool
+	}{{"acme.com", true}, {"ACME.com", true}, {"other.com", false}, {"", false}}
+	for _, c := range cases {
+		if got := o.AcceptsHostedDomain(c.hd); got != c.want {
+			t.Errorf("accepts %q = %v", c.hd, got)
+		}
+	}
+	if !(Options{}).AcceptsHostedDomain("") {
+		t.Fatal("without domains every Google account is accepted")
+	}
+	for _, bad := range []Options{{Domains: []string{"com"}}, {Domains: []string{"*.acme.com"}}, {Domains: []string{"not a domain"}}} {
+		in.Options = bad
+		if in.Validate() == nil {
+			t.Errorf("accepted %v", bad.Domains)
+		}
+	}
+	in.Provider, in.Options = ProviderMicrosoft, Options{Tenant: TenantCommon, Domains: []string{"acme.com"}}
+	if in.Validate() == nil {
+		t.Fatal("domains only apply to Google")
+	}
+	c := Connection{Provider: ProviderGoogle, Enforcement: EnforcementOptional}
+	update := Options{Domains: []string{"acme.com"}}
+	if got, err := (ConnectionUpdate{Options: &update}).Apply(c); err != nil || len(got.Options.Domains) != 1 || got.Validate() != nil {
+		t.Fatalf("update domains: %+v %v", got.Options, err)
+	}
+}
+
 func TestUpdateOptions(t *testing.T) {
 	c := Connection{Provider: ProviderMicrosoft, Options: Options{Tenant: TenantCommon}, Enforcement: EnforcementOptional}
 	o := Options{Tenant: TenantCommon, Tenants: []string{tenantA}}

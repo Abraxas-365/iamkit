@@ -2,6 +2,7 @@ package e2e_test
 
 import (
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -88,7 +89,9 @@ func TestGroupRolesJourney(t *testing.T) {
 	// Group role → token.
 	bind := fiber.Map{"role_id": reader, "organization_id": e.Org, "group_id": finance}
 	e.Must("POST", e.Base+"/group-role-assignments", e.Owner, bind, 204)
-	e.Must("POST", e.Base+"/group-role-assignments", e.Owner, bind, 409)
+	if dup := e.Must("POST", e.Base+"/group-role-assignments", e.Owner, bind, 409); dup.Body == "" || !strings.Contains(dup.Body, "already holds this role") {
+		t.Fatalf("duplicate group role = %s", dup.Body)
+	}
 	if got := e.permissions(e.Login(e.AliceEmail)); !equal(got, []string{"invoices:read"}) {
 		t.Fatalf("group role permissions = %v", got)
 	}
@@ -103,6 +106,12 @@ func TestGroupRolesJourney(t *testing.T) {
 	// Direct role composes with group role; effective-roles explains both.
 	e.Must("POST", e.Base+"/role-assignments", e.Owner, fiber.Map{"role_id": writer, "organization_id": e.Org, "user_id": e.Alice}, 204)
 	e.Must("POST", e.Base+"/role-assignments", e.Owner, fiber.Map{"role_id": reader, "organization_id": e.Org, "user_id": e.Alice}, 204)
+	if dup := e.Must("POST", e.Base+"/role-assignments", e.Owner, fiber.Map{"role_id": reader, "organization_id": e.Org, "user_id": e.Alice}, 409); !strings.Contains(dup.Body, "already holds this role") {
+		t.Fatalf("duplicate role = %s", dup.Body)
+	}
+	if out := e.Must("POST", e.Base+"/role-assignments", e.Owner, fiber.Map{"role_id": reader, "organization_id": e.Org, "user_id": outsider}, 409); !strings.Contains(out.Body, "not a member") {
+		t.Fatalf("outsider role = %s", out.Body)
+	}
 	if got := e.permissions(e.Login(e.AliceEmail)); !equal(got, []string{"invoices:read", "invoices:write"}) {
 		t.Fatalf("composed permissions = %v", got)
 	}
@@ -114,6 +123,14 @@ func TestGroupRolesJourney(t *testing.T) {
 	if sources["reader/direct"] != 1 || sources["reader/group"] != 1 || sources["writer/direct"] != 1 || len(sources) != 3 {
 		t.Fatalf("effective roles = %s", eff.Body)
 	}
+	// Without organization_id the same roles come back for every organization,
+	// each row naming its organization.
+	all := items(e.Must("GET", e.Base+"/effective-roles?user_id="+e.Alice, e.Owner, nil, 200))
+	if len(all) != 3 || all[0]["organization_id"] != e.Org {
+		t.Fatalf("effective roles across organizations = %v", all)
+	}
+	e.Must("GET", e.Base+"/effective-roles?organization_id=nope&user_id="+e.Alice, e.Owner, nil, 400)
+	e.Must("GET", e.Base+"/effective-roles", e.Owner, nil, 400)
 
 	// Leaving the group keeps the direct reader assignment.
 	e.Must("POST", groups+"/"+finance+"/members", e.Owner, fiber.Map{"remove": []string{e.Alice}}, 204)

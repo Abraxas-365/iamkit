@@ -97,6 +97,9 @@ func run() error {
 			if errors.As(err, &ex) && ex.Type == errx.TypeConflict {
 				// Already bootstrapped — skip silently.
 				slog.Info("workspace already exists, skipping bootstrap")
+				if os.Getenv("IAMKIT_BOOTSTRAP_PASSWORD") != "" {
+					slog.Warn("IAMKIT_BOOTSTRAP_PASSWORD is still set after bootstrap and is ignored: remove it from the environment")
+				}
 			} else {
 				return err
 			}
@@ -105,15 +108,17 @@ func run() error {
 			fmt.Printf("iamkit: management API key (expires in 24h): %s\n", raw)
 
 			// If a password was provided, set it immediately so Login works.
+			// It sits in plaintext in the deployment, so the first sign-in
+			// must replace it.
 			if password := os.Getenv("IAMKIT_BOOTSTRAP_PASSWORD"); password != "" {
 				p, err := mgmt.Authenticate(context.Background(), raw)
 				if err != nil {
 					return fmt.Errorf("auto-bootstrap: authenticate to set password: %w", err)
 				}
-				if err = mgmt.SetPassword(context.Background(), p, password); err != nil {
+				if err = mgmt.SetTemporaryPassword(context.Background(), p, password); err != nil {
 					return fmt.Errorf("auto-bootstrap: set password: %w", err)
 				}
-				slog.Info("operator password set from IAMKIT_BOOTSTRAP_PASSWORD")
+				slog.Info("operator password set from IAMKIT_BOOTSTRAP_PASSWORD; it must be changed at the first sign-in")
 			}
 		}
 	}

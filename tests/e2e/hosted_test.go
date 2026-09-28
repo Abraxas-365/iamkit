@@ -207,7 +207,7 @@ func TestHostedLoginJourney(t *testing.T) {
 	if pw.Status != 200 || !strings.Contains(pw.Body, `name="password"`) || pw.field("email") != e.AliceEmail {
 		t.Fatalf("identify: %d %s", pw.Status, pw.Body)
 	}
-	if r := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {"wrong password!!"}}); r.Status != 401 || !strings.Contains(r.Body, "invalid credentials") {
+	if r := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {"wrong password!!"}}); r.Status != 401 || !strings.Contains(r.Body, "Incorrect email or password.") {
 		t.Fatalf("wrong password: %d %s", r.Status, r.Body)
 	}
 	tokens := b.exchange(client, b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}}))

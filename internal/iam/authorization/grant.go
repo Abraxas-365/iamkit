@@ -148,11 +148,12 @@ const (
 // or membership in a group bound to the role. A role held both ways appears
 // once per source.
 type EffectiveRoleView struct {
-	Role         identity.RoleID     `json:"role_id" db:"role_id"`
-	RoleName     string              `json:"role_name" db:"role_name"`
-	Resource     identity.ResourceID `json:"resource_id" db:"resource_id"`
-	ResourceName string              `json:"resource_name" db:"resource_name"`
-	Source       string              `json:"source" db:"source"`
-	Group        *identity.GroupID   `json:"group_id,omitempty" db:"group_id"`
-	GroupName    *string             `json:"group_name,omitempty" db:"group_name"`
+	Organization identity.OrganizationID `json:"organization_id" db:"organization_id"`
+	Role         identity.RoleID         `json:"role_id" db:"role_id"`
+	RoleName     string                  `json:"role_name" db:"role_name"`
+	Resource     identity.ResourceID     `json:"resource_id" db:"resource_id"`
+	ResourceName string                  `json:"resource_name" db:"resource_name"`
+	Source       string                  `json:"source" db:"source"`
+	Group        *identity.GroupID       `json:"group_id,omitempty" db:"group_id"`
+	GroupName    *string                 `json:"group_name,omitempty" db:"group_name"`
 }

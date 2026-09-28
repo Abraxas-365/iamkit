@@ -94,6 +94,9 @@ func TestResolve(t *testing.T) {
 			t.Errorf("Resolve(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
+	if Match("fr de") != "" || Match("fr es-AR") != "es" {
+		t.Error("Match")
+	}
 }
 
 func TestT(t *testing.T) {

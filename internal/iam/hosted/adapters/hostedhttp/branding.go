@@ -2,10 +2,15 @@ package hostedhttp
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"html/template"
+	"slices"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
+	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
@@ -83,13 +88,66 @@ type Preview struct {
 	HTML string `json:"html"`
 }
 
+// Methods is which sign-in methods a preview shows: the email steps and
+// the "Continue with" buttons. Without it the preview shows every method
+// with sample Google and Microsoft buttons. Only the sign-in and password
+// pages depend on it.
+type Methods struct {
+	Password        bool     `json:"password"`
+	EmailCode       bool     `json:"email_code"`
+	OrganizationSSO bool     `json:"organization_sso"`
+	Connections     []Button `json:"connections"`
+}
+
+// Button is a "Continue with" button of a preview.
+type Button struct {
+	Name     string `json:"name"`
+	Provider string `json:"provider"`
+}
+
+const maxButtonName = 100
+
+var previewProviders = []string{federation.ProviderGoogle, federation.ProviderMicrosoft, federation.ProviderGitHub, federation.ProviderApple, federation.ProviderOIDC}
+
+// apply shows the methods on a sample page.
+func (m Methods) apply(v *view) error {
+	if len(m.Connections) > hosted.MaxSignInConnections {
+		return errx.Validation("sign_in.connections has at most 50 buttons")
+	}
+	buttons := make([]federation.ConnectionSummary, 0, len(m.Connections))
+	for _, b := range m.Connections {
+		name := strings.TrimSpace(b.Name)
+		if name == "" || utf8.RuneCountInString(name) > maxButtonName {
+			return errx.Validation("sign_in.connections name is required (up to 100 characters)")
+		}
+		if !slices.Contains(previewProviders, b.Provider) {
+			return errx.Validation("sign_in.connections provider must be one of " + strings.Join(previewProviders, ", "))
+		}
+		buttons = append(buttons, federation.ConnectionSummary{Name: name, Provider: b.Provider})
+	}
+	signIn := hosted.SignIn{Password: m.Password, EmailCode: m.EmailCode, OrganizationSSO: m.OrganizationSSO}
+	if !signIn.EmailForm() && len(buttons) == 0 {
+		return errx.Validation("sign_in must show at least one method")
+	}
+	v.SignIn = signIn
+	if v.Connections != nil {
+		v.Connections = buttons
+	}
+	return nil
+}
+
 // savedPreview renders a page with the saved style of ?client= (or the
-// environment default).
+// environment default). ?sign_in= is optional Methods as JSON; ?locale=
+// the page language.
 func (h *Handler) savedPreview(c *fiber.Ctx) error {
 	env, _ := identity.ParseEnvironmentID(c.Params("environment"))
 	settings, err := h.queries.Settings(c.Context(), env)
 	if err != nil {
 		return err
+	}
+	locale := ""
+	if settings.Locale != nil {
+		locale = *settings.Locale
 	}
 	if raw := c.Query("client"); raw != "" {
 		id, err := identity.ParseClientID(raw)
@@ -105,15 +163,21 @@ func (h *Handler) savedPreview(c *fiber.Ctx) error {
 			return err
 		}
 	}
-	return preview(c, settings, c.Query("page"), c.Query("scheme"))
+	var methods *Methods
+	if raw := c.Query("sign_in"); raw != "" {
+		methods = &Methods{}
+		if err := json.Unmarshal([]byte(raw), methods); err != nil {
+			return errx.Validation("sign_in must be a JSON object")
+		}
+	}
+	return preview(c, settings, previewInput{Page: c.Query("page"), Scheme: c.Query("scheme"), Locale: c.Query("locale"), Fallback: locale, SignIn: methods})
 }
 
 // draftPreview renders a page with an unsaved style.
 func (h *Handler) draftPreview(c *fiber.Ctx) error {
 	env, _ := identity.ParseEnvironmentID(c.Params("environment"))
 	var input struct {
-		Page     string          `json:"page"`
-		Scheme   string          `json:"scheme"`
+		previewInput
 		Settings hosted.Settings `json:"settings"`
 	}
 	if err := c.BodyParser(&input); err != nil {
@@ -123,21 +187,51 @@ func (h *Handler) draftPreview(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return preview(c, settings, input.Page, input.Scheme)
+	if settings.Locale != nil {
+		input.Fallback = *settings.Locale
+	} else if saved, err := h.queries.Settings(c.Context(), env); err == nil && saved.Locale != nil {
+		// A client style has no language: it is the environment's.
+		input.Fallback = *saved.Locale
+	}
+	return preview(c, settings, input.previewInput)
 }
 
-func preview(c *fiber.Ctx, settings hosted.Settings, page, scheme string) error {
+// previewInput is what to preview: the page, its color scheme, its
+// language (Locale, else Fallback, the environment language, else
+// English) and, for the sign-in pages, the methods.
+type previewInput struct {
+	Page     string   `json:"page"`
+	Scheme   string   `json:"scheme"`
+	Locale   string   `json:"locale"`
+	Fallback string   `json:"-"`
+	SignIn   *Methods `json:"sign_in"`
+}
+
+func preview(c *fiber.Ctx, settings hosted.Settings, in previewInput) error {
+	page := in.Page
 	if page == "" {
 		page = "identify"
 	}
-	v, ok := sample(page)
+	if in.Locale != "" && !i18n.Supported(in.Locale) {
+		return errx.Validation("locale must be an available language")
+	}
+	lang := in.Locale
+	if lang == "" {
+		lang = i18n.Resolve(in.Fallback)
+	}
+	v, ok := sample(page, lang)
 	if !ok {
 		return errx.Validation("page must be one of identify, password, code, reset, organization, mfa, enroll, recovery, invite, message")
 	}
-	if scheme != "" && scheme != hosted.ModeLight && scheme != hosted.ModeDark {
+	if in.Scheme != "" && in.Scheme != hosted.ModeLight && in.Scheme != hosted.ModeDark {
 		return errx.Validation("scheme must be light or dark")
 	}
-	v.Brand = brandOf(settings, scheme)
+	if in.SignIn != nil && (page == "identify" || page == "password") {
+		if err := in.SignIn.apply(&v); err != nil {
+			return err
+		}
+	}
+	v.Brand = brandOf(settings, in.Scheme)
 	out, err := document(page, &v)
 	if err != nil {
 		return err
@@ -146,41 +240,46 @@ func preview(c *fiber.Ctx, settings hosted.Settings, page, scheme string) error 
 	return c.JSON(Preview{HTML: string(out)})
 }
 
-// sample is example data for each previewable page.
-func sample(page string) (view, bool) {
+// sample is example data for each previewable page, in lang.
+func sample(page, lang string) (view, bool) {
 	const email = "jane@example.com"
 	connection := identity.ConnectionID{}
 	all := hosted.DefaultSignIn(identity.EnvironmentID{}, identity.ClientID{})
+	t := func(key string, args ...any) string { return i18n.T(lang, key, args...) }
+	v := view{Lang: lang}
 	switch page {
 	case "identify":
-		return view{Title: "Sign in", SignIn: all, Connections: []federation.ConnectionSummary{{ID: connection, Name: "Google", Provider: federation.ProviderGoogle}, {ID: connection, Name: "Microsoft", Provider: federation.ProviderMicrosoft}}}, true
+		v.Title, v.SignIn = t("hosted.title.sign_in"), all
+		v.Connections = []federation.ConnectionSummary{{ID: connection, Name: "Google", Provider: federation.ProviderGoogle}, {ID: connection, Name: "Microsoft", Provider: federation.ProviderMicrosoft}}
 	case "password":
-		return view{Title: "Sign in", Email: email, SignIn: all}, true
+		v.Title, v.Email, v.SignIn = t("hosted.title.sign_in"), email, all
 	case "code":
-		return view{Title: "Check your email", Email: email, Notice: "If the account can sign in with a code, we sent an 8-digit code to " + email + "."}, true
+		v.Title, v.Email, v.Notice = t("hosted.title.check_email"), email, t("hosted.notice.code_sent", email)
 	case "reset":
-		return view{Title: "Reset your password", Email: email, Notice: "If the account exists, we sent an 8-digit code to " + email + "."}, true
+		v.Title, v.Email, v.Notice = t("hosted.title.reset"), email, t("hosted.notice.reset_sent", email)
 	case "organization":
-		return view{Title: "Choose an organization", Subtitle: "Your account belongs to several organizations.",
-			Organizations: []authentication.Organization{{Name: "Acme Inc."}, {Name: "Globex"}}}, true
+		v.Title, v.Subtitle = t("hosted.title.organization"), t("hosted.subtitle.organization")
+		v.Organizations = []authentication.Organization{{Name: "Acme Inc."}, {Name: "Globex"}}
 	case "mfa":
-		return view{Title: "Two-step verification", Subtitle: "Enter the 6-digit code from your authenticator app, or a recovery code.", Error: "That code is not valid. Try again."}, true
+		v.Title, v.Subtitle, v.Error = t("hosted.title.mfa"), t("hosted.subtitle.mfa"), t("hosted.error.mfa_code")
 	case "enroll":
-		v := view{Title: "Set up two-step verification", Subtitle: "Your organization requires an authenticator app. Scan the code, then enter the 6-digit code it shows.", Secret: "JBSWY3DPEHPK3PXP"}
+		v.Title, v.Subtitle, v.Secret = t("hosted.title.enroll"), t("hosted.subtitle.enroll"), "JBSWY3DPEHPK3PXP"
 		if code, err := qr.Encode("otpauth://totp/Example:jane@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example", qr.M); err == nil {
 			code.Scale = 4
 			v.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(code.PNG()))
 		}
-		return v, true
 	case "recovery":
-		return view{Title: "Save your recovery codes", Subtitle: "Each code signs you in once if you lose your authenticator. They will not be shown again.",
-			RecoveryCodes: []string{"k7d2-9xqa", "m3p8-2rtn", "c5w1-7hve", "q9z4-6bly", "t2f6-4ngs", "x8j3-1kdm"}}, true
+		v.Title, v.Subtitle = t("hosted.title.recovery"), t("hosted.subtitle.recovery")
+		v.RecoveryCodes = []string{"k7d2-9xqa", "m3p8-2rtn", "c5w1-7hve", "q9z4-6bly", "t2f6-4ngs", "x8j3-1kdm"}
 	case "invite":
-		return view{Title: "Join Acme Inc.", Subtitle: "You were invited to join Acme Inc.", Invite: &invitation.Preview{Email: "j***@example.com", OrganizationName: "Acme Inc.", PasswordRequired: true}}, true
+		v.Title, v.Subtitle = t("hosted.invitation.join", "Acme Inc."), t("hosted.invitation.invited", "Acme Inc.")
+		v.Invite = &invitation.Preview{Email: "j***@example.com", OrganizationName: "Acme Inc.", PasswordRequired: true}
 	case "message":
-		return view{Title: "Invitation accepted", Notice: "You joined Acme Inc. You can now sign in to the application."}, true
+		v.Title, v.Notice = t("hosted.invitation.accepted"), t("hosted.invitation.joined", "Acme Inc.")
+	default:
+		return view{}, false
 	}
-	return view{}, false
+	return v, true
 }
 
 func (h *Handler) signIn(c *fiber.Ctx) error {

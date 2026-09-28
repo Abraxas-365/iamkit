@@ -28,10 +28,11 @@ var (
 type fakeAuthorizations struct {
 	hosted bool
 	err    error
+	form   string
 }
 
 func (f fakeAuthorizations) Pending(context.Context, string, string) (oauth.Pending, error) {
-	return oauth.Pending{Client: &oauth.Client{ID: client, Environment: env, Application: app, Resource: res, HostedLogin: f.hosted}}, f.err
+	return oauth.Pending{Client: &oauth.Client{ID: client, Environment: env, Application: app, Resource: res, HostedLogin: f.hosted}, Form: f.form}, f.err
 }
 
 type fakeAuthenticator struct {
@@ -408,6 +409,23 @@ func TestSettingsValidate(t *testing.T) {
 	}
 }
 
+// TestFilledKeepsRetiredLocale: a stored email language that is no longer
+// available does not break reading the branding (hosted pages, console).
+func TestFilledKeepsRetiredLocale(t *testing.T) {
+	retired, bad := "xx", "red"
+	stored := hosted.Settings{DisplayName: "Acme", Locale: &retired}
+	if err := filled(&stored); err != nil || stored.Locale == nil || *stored.Locale != "xx" || stored.Theme.Mode != hosted.ModeLight {
+		t.Fatalf("filled: %+v %v", stored, err)
+	}
+	fresh := hosted.Settings{Locale: &retired}
+	if err := fresh.Validate(); err == nil {
+		t.Fatal("saving an unavailable locale was accepted")
+	}
+	if err := filled(&hosted.Settings{AccentColor: bad, Locale: &retired}); err == nil {
+		t.Fatal("invalid stored branding was accepted")
+	}
+}
+
 func TestThemeValidate(t *testing.T) {
 	big, negative := 25, -1
 	links := make([]hosted.Link, 6)
@@ -453,6 +471,29 @@ func TestPageUsesClientStyleOrDefault(t *testing.T) {
 	page, err = s.Page(context.Background(), request)
 	if err != nil || page.Settings.DisplayName != "Billing" || page.Settings.Theme.Mode != hosted.ModeDark {
 		t.Fatalf("client: %+v %v", page.Settings, err)
+	}
+}
+
+// The page language is the application's ui_locales, else the environment
+// language (a client style has none), else left to the browser.
+func TestPageLanguage(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeRepository{saved: map[string]hosted.Login{}}
+	for _, tc := range []struct{ form, environment, want string }{
+		{"", "", ""},
+		{"", "es", "es"},
+		{"ui_locales=es-MX+en", "", "es"},
+		{"ui_locales=en", "es", "en"},
+		{"ui_locales=fr", "es", "es"},
+	} {
+		locale := tc.environment
+		repo.branding = hosted.Settings{Locale: &locale}
+		repo.styles = map[identity.ClientID]hosted.Settings{client: {DisplayName: "Billing"}}
+		s := New(repo, hashSecrets{}, fakeAuthorizations{hosted: true, form: tc.form}, &fakeAuthenticator{}, nil, &fakeFederation{}, nil)
+		page, err := s.Page(ctx, request)
+		if err != nil || page.Language != tc.want {
+			t.Fatalf("form %q environment %q: got %q (%v), want %q", tc.form, tc.environment, page.Language, err, tc.want)
+		}
 	}
 }
 
@@ -543,5 +584,20 @@ func TestSaveSignInValidates(t *testing.T) {
 	}
 	if def, err := (&Service{repository: &fakeRepository{}}).SignIn(context.Background(), m.Environment, client); err != nil || !def.Password || !def.AllConnections || def.Custom {
 		t.Fatalf("default offers everything: %+v %v", def, err)
+	}
+}
+
+// Emails follow the languages the application asked for.
+func TestUILocales(t *testing.T) {
+	for form, want := range map[string]string{
+		"":                                "",
+		"client_id=x&ui_locales=es-MX+en": "es-MX en",
+		"client_id=x&ui_locales=es%2DAR":  "es-AR",
+		"client_id=x":                     "",
+		"%zz":                             "",
+	} {
+		if got := uiLocales(oauth.Pending{Form: form}); got != want {
+			t.Fatalf("%q: got %q, want %q", form, got, want)
+		}
 	}
 }

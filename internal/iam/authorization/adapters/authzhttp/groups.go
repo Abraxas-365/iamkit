@@ -43,11 +43,16 @@ func (h *Grants) GroupRoleAssignments(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-// EffectiveRoles serves GET /effective-roles?organization_id=&user_id=.
+// EffectiveRoles serves GET /effective-roles?user_id=[&organization_id=]:
+// without organization_id it covers every organization of the user.
 func (h *Grants) EffectiveRoles(c *fiber.Ctx) error {
-	org, err := identity.ParseOrganizationID(c.Query("organization_id"))
-	if err != nil {
-		return errx.Validation("organization_id must be a valid UUID")
+	var org identity.OrganizationID
+	if raw := c.Query("organization_id"); raw != "" {
+		parsed, err := identity.ParseOrganizationID(raw)
+		if err != nil {
+			return errx.Validation("organization_id must be a valid UUID")
+		}
+		org = parsed
 	}
 	user, err := identity.ParseUserID(c.Query("user_id"))
 	if err != nil {

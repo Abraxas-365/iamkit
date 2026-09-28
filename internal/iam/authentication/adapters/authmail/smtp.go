@@ -194,7 +194,7 @@ func message(email authentication.Email, now time.Time) ([]byte, error) {
 	}
 
 	var out bytes.Buffer
-	header := func(name, value string) { fmt.Fprintf(&out, "%s: %s\r\n", name, value) }
+	header := func(name, value string) { fmt.Fprintf(&out, "%s: %s\r\n", name, fold(len(name)+2, value)) }
 	header("From", sender(email))
 	header("To", (&mail.Address{Address: email.To}).String())
 	if email.ReplyTo != "" {
@@ -208,4 +208,26 @@ func message(email authentication.Email, now time.Time) ([]byte, error) {
 	out.WriteString("\r\n")
 	out.Write(body.Bytes())
 	return out.Bytes(), nil
+}
+
+// fold keeps header lines within 78 characters (RFC 5322 §2.2.3) by breaking
+// at spaces, which in encoded headers only ever separate encoded words
+// (mime.QEncoding keeps each ≤75 characters). used is the length of the
+// "Name: " prefix already on the first line.
+func fold(used int, value string) string {
+	var b strings.Builder
+	width := used
+	for i, word := range strings.Split(value, " ") {
+		if i > 0 {
+			if width+1+len(word) > 78 {
+				b.WriteString("\r\n")
+				width = 0
+			}
+			b.WriteByte(' ')
+			width++
+		}
+		b.WriteString(word)
+		width += len(word)
+	}
+	return b.String()
 }

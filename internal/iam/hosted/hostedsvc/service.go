@@ -3,11 +3,13 @@ package hostedsvc
 
 import (
 	"context"
+	"net/url"
 	"slices"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
@@ -49,23 +51,40 @@ func (s *Service) pending(ctx context.Context, r hosted.Request) (authentication
 }
 
 func (s *Service) client(ctx context.Context, r hosted.Request) (*oauth.Client, error) {
+	p, err := s.pendingHosted(ctx, r)
+	return p.Client, err
+}
+
+// pendingHosted is the pending authorization of a hosted login client.
+func (s *Service) pendingHosted(ctx context.Context, r hosted.Request) (oauth.Pending, error) {
 	p, err := s.authorizations.Pending(ctx, r.Ticket, r.Binding)
 	if err != nil {
-		return nil, err
+		return oauth.Pending{}, err
 	}
 	if !p.Client.HostedLogin {
-		return nil, errx.Forbidden("client does not use hosted login")
+		return oauth.Pending{}, errx.Forbidden("client does not use hosted login")
 	}
-	return p.Client, nil
+	return p, nil
+}
+
+// uiLocales is the ui_locales parameter of the authorization request, the
+// languages the application asked for ("" when none).
+func uiLocales(p oauth.Pending) string {
+	form, err := url.ParseQuery(p.Form)
+	if err != nil {
+		return ""
+	}
+	return form.Get("ui_locales")
 }
 
 // Page brands the journey with the client's own style, or the
 // environment default when it has none.
 func (s *Service) Page(ctx context.Context, r hosted.Request) (hosted.Page, error) {
-	client, err := s.client(ctx, r)
+	p, err := s.pendingHosted(ctx, r)
 	if err != nil {
 		return hosted.Page{}, err
 	}
+	client := p.Client
 	settings, err := s.style(ctx, client.Environment, client.ID)
 	if err != nil {
 		return hosted.Page{}, err
@@ -78,24 +97,54 @@ func (s *Service) Page(ctx context.Context, r hosted.Request) (hosted.Page, erro
 	if err != nil {
 		return hosted.Page{}, err
 	}
-	return hosted.Page{Settings: settings, SignIn: options, Connections: options.Offered(connections)}, nil
+	language, err := s.language(ctx, p, settings)
+	if err != nil {
+		return hosted.Page{}, err
+	}
+	return hosted.Page{Settings: settings, SignIn: options, Connections: options.Offered(connections), Language: language}, nil
+}
+
+// language is the page language: the application's ui_locales, else the
+// environment language (client styles have none: it is the default's).
+func (s *Service) language(ctx context.Context, p oauth.Pending, settings hosted.Settings) (string, error) {
+	if code := i18n.Match(uiLocales(p)); code != "" {
+		return code, nil
+	}
+	if settings.Locale == nil {
+		environment, err := s.repository.Settings(ctx, p.Client.Environment)
+		if err != nil {
+			return "", err
+		}
+		settings.Locale = environment.Locale
+	}
+	if settings.Locale == nil {
+		return "", nil
+	}
+	return i18n.Match(*settings.Locale), nil
 }
 
 // offered checks the pending authorization and that its client offers the
 // method.
 func (s *Service) offered(ctx context.Context, r hosted.Request, method func(hosted.SignIn) bool) (authentication.Target, hosted.SignIn, error) {
-	client, err := s.client(ctx, r)
+	target, options, _, err := s.offering(ctx, r, method)
+	return target, options, err
+}
+
+// offering is offered with the pending authorization.
+func (s *Service) offering(ctx context.Context, r hosted.Request, method func(hosted.SignIn) bool) (authentication.Target, hosted.SignIn, oauth.Pending, error) {
+	p, err := s.pendingHosted(ctx, r)
 	if err != nil {
-		return authentication.Target{}, hosted.SignIn{}, err
+		return authentication.Target{}, hosted.SignIn{}, oauth.Pending{}, err
 	}
+	client := p.Client
 	options, err := s.SignIn(ctx, client.Environment, client.ID)
 	if err != nil {
-		return authentication.Target{}, hosted.SignIn{}, err
+		return authentication.Target{}, hosted.SignIn{}, oauth.Pending{}, err
 	}
 	if !method(options) {
-		return authentication.Target{}, hosted.SignIn{}, hosted.ErrMethodUnavailable()
+		return authentication.Target{}, hosted.SignIn{}, oauth.Pending{}, hosted.ErrMethodUnavailable()
 	}
-	return authentication.Target{Environment: client.Environment, Application: client.Application, Resource: client.Resource}, options, nil
+	return authentication.Target{Environment: client.Environment, Application: client.Application, Resource: client.Resource}, options, p, nil
 }
 
 func password(o hosted.SignIn) bool  { return o.Password }
@@ -151,11 +200,11 @@ func (s *Service) Password(ctx context.Context, r hosted.Request, email, secret 
 }
 
 func (s *Service) SendCode(ctx context.Context, r hosted.Request, email string) (identity.ChallengeID, error) {
-	target, _, err := s.offered(ctx, r, emailCode)
+	target, _, p, err := s.offering(ctx, r, emailCode)
 	if err != nil {
 		return identity.ChallengeID{}, err
 	}
-	return s.challenges.InitiateChallenge(ctx, target.Environment, email, "login")
+	return s.challenges.InitiateChallenge(ctx, target.Environment, email, "login", uiLocales(p))
 }
 
 func (s *Service) VerifyCode(ctx context.Context, r hosted.Request, challenge identity.ChallengeID, code string) (hosted.Result, error) {
@@ -171,11 +220,11 @@ func (s *Service) VerifyCode(ctx context.Context, r hosted.Request, challenge id
 }
 
 func (s *Service) SendReset(ctx context.Context, r hosted.Request, email string) (identity.ChallengeID, error) {
-	target, _, err := s.offered(ctx, r, password)
+	target, _, p, err := s.offering(ctx, r, password)
 	if err != nil {
 		return identity.ChallengeID{}, err
 	}
-	return s.challenges.InitiateChallenge(ctx, target.Environment, email, "password_reset")
+	return s.challenges.InitiateChallenge(ctx, target.Environment, email, "password_reset", uiLocales(p))
 }
 
 func (s *Service) Reset(ctx context.Context, r hosted.Request, challenge identity.ChallengeID, code, secret string) error {
@@ -461,7 +510,8 @@ func (s *Service) SaveClientSettings(ctx context.Context, m hosted.Mutation, cli
 	if err := input.Validate(); err != nil {
 		return hosted.Settings{}, err
 	}
-	input.Environment, input.Client = m.Environment, &client
+	// Email language is the environment's; a client style has none.
+	input.Environment, input.Client, input.Locale = m.Environment, &client, nil
 	out, err := s.repository.SaveClientSettings(ctx, m, client, input)
 	if err != nil {
 		return hosted.Settings{}, err
@@ -550,9 +600,15 @@ func (s *Service) style(ctx context.Context, environment identity.EnvironmentID,
 }
 
 // filled completes stored branding with the defaults of unset values
-// (rows saved before the theme existed have an empty one).
+// (rows saved before the theme existed have an empty one). A stored email
+// language no longer available is kept as is: readers resolve it with
+// i18n.Match (the default applies) and the console asks for another.
 func filled(s *hosted.Settings) error {
-	if err := s.Validate(); err != nil {
+	locale := s.Locale
+	s.Locale = nil
+	err := s.Validate()
+	s.Locale = locale
+	if err != nil {
 		return errx.Wrap(err, "stored hosted branding is invalid", errx.TypeInternal)
 	}
 	return nil

@@ -29,7 +29,7 @@ type consoleSessions struct {
 	loggedOut string
 }
 
-func (*consoleSessions) Login(context.Context, string, string) (string, management.Principal, error) {
+func (*consoleSessions) Login(context.Context, string, string, string) (string, management.Principal, error) {
 	return "ik_sess_test", management.Principal{Role: "owner"}, nil
 }
 func (s *consoleSessions) Logout(_ context.Context, raw string) error {
@@ -38,7 +38,7 @@ func (s *consoleSessions) Logout(_ context.Context, raw string) error {
 }
 
 func consoleApp(s *consoleSessions) *fiber.App {
-	h := New(consoleAuth{}, s, nil, nil)
+	h := New(consoleAuth{}, s, nil, nil, nil)
 	app := fiber.New()
 	app.Post("/login", h.Login)
 	app.Post("/mutate", h.Authenticate, func(c *fiber.Ctx) error { return c.SendStatus(204) })
@@ -69,7 +69,7 @@ func TestConsoleCookieAndCSRF(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name, path, header, site, apiKey string
-		allowed                         bool
+		allowed                          bool
 	}{
 		{"login no header", "/login", "", "", "", false},
 		{"login cross site", "/login", "1", "cross-site", "", false},

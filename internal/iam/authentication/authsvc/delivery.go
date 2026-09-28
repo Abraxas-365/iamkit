@@ -6,7 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -16,12 +18,15 @@ import (
 type DeliveryFactory func(cfg authentication.DeliveryConfig, secret authentication.DeliverySecret) (authentication.Delivery, error)
 
 type DeliveryService struct {
-	repo    authentication.DeliveryConfigRepository
-	global  authentication.Delivery
-	factory DeliveryFactory
-	cipher  authentication.Cipher
-	issuer  string
-	now     func() time.Time
+	repo     authentication.DeliveryConfigRepository
+	global   authentication.Delivery
+	factory  DeliveryFactory
+	cipher   authentication.Cipher
+	renderer authentication.Renderer
+	// templates stores customized email wording (nil: defaults only).
+	templates authentication.TemplateRepository
+	issuer    string
+	now       func() time.Time
 	// globalProvider names the global delivery's provider for status.
 	globalProvider string
 }
@@ -39,6 +44,9 @@ func NewDeliveryService(repo authentication.DeliveryConfigRepository, global aut
 // SetGlobalProvider names the provider of the global delivery (webhook by
 // default) for DeliveryStatus.
 func (s *DeliveryService) SetGlobalProvider(provider string) { s.globalProvider = provider }
+
+// SetRenderer sets the renderer of previews; without one, Preview fails.
+func (s *DeliveryService) SetRenderer(r authentication.Renderer) { s.renderer = r }
 
 // Audited delivery actions; the target is the environment's delivery path
 // (or, for tests, the source used), never the URL or secret.
@@ -76,7 +84,9 @@ func (s *DeliveryService) SetDeliveryConfig(ctx context.Context, m authenticatio
 func (s *DeliveryService) secret(ctx context.Context, environment identity.EnvironmentID, input authentication.DeliveryConfigInput) (string, error) {
 	if plain := input.Secret(); plain != "" {
 		if s.cipher == nil {
-			return "", errx.Business("storing secrets requires IAMKIT_ENCRYPTION_KEY to be configured")
+			e := errx.Business("storing secrets requires IAMKIT_ENCRYPTION_KEY to be configured")
+			e.Code = "ENCRYPTION_KEY_REQUIRED" // = cryptox.CodeKeyRequired, as the sealer reports it
+			return "", e
 		}
 		return s.cipher.Seal([]byte(plain))
 	}
@@ -91,12 +101,24 @@ func (s *DeliveryService) secret(ctx context.Context, environment identity.Envir
 	switch {
 	case input.Provider == authentication.ProviderResend && kept == "":
 		return "", errx.Validation("api_key is required")
-	case input.Provider == authentication.ProviderSMTP && input.SMTPUsername != "" && kept == "":
-		return "", errx.Validation("smtp_password is required")
 	case input.Provider == authentication.ProviderSMTP && input.SMTPUsername == "":
 		return "", nil // no authentication: nothing to keep
+	case input.Provider == authentication.ProviderSMTP && kept != "" && !sameServer(stored, input):
+		// A kept password only ever goes to the server it was entered for:
+		// otherwise anyone who may edit the configuration could point it at
+		// their own host and receive the stored credential.
+		return "", errx.Validation("smtp_password is required when changing smtp_host, smtp_port, smtp_tls or smtp_username")
+	case input.Provider == authentication.ProviderSMTP && kept == "":
+		return "", errx.Validation("smtp_password is required")
 	}
 	return kept, nil
+}
+
+// sameServer reports whether an SMTP input targets the stored server and
+// account (input is normalized).
+func sameServer(stored authentication.DeliveryConfig, input authentication.DeliveryConfigInput) bool {
+	return stored.SMTPHost == input.SMTPHost && stored.SMTPPort == input.SMTPPort &&
+		stored.SMTPTLS == input.SMTPTLS && stored.SMTPUsername == input.SMTPUsername
 }
 
 func (s *DeliveryService) DeleteDeliveryConfig(ctx context.Context, m authentication.Mutation) error {
@@ -144,14 +166,69 @@ func (s *DeliveryService) DeliveryStatus(ctx context.Context, environmentID iden
 	return out, nil
 }
 
-// InvitationURL returns the environment's invitation page, or "" when it
-// has none (the global webhook has no invitation page).
+// InvitationURL returns the environment's invitation page. Without one,
+// emails IAMKit renders itself (SMTP, Resend) link to the hosted page, so
+// the link in the email and the one returned to the inviter agree; the
+// webhook gets none, as before.
 func (s *DeliveryService) InvitationURL(ctx context.Context, environmentID identity.EnvironmentID) (string, error) {
+	provider := ""
 	cfg, _, err := s.repo.GetDeliveryConfig(ctx, environmentID)
-	if notFound(err) {
-		return "", nil
+	switch {
+	case err == nil:
+		if cfg.InvitationURL != "" {
+			return cfg.InvitationURL, nil
+		}
+		provider = cfg.Provider
+	case !notFound(err):
+		return "", err
+	case s.global != nil:
+		provider = s.globalProvider
 	}
-	return cfg.InvitationURL, err
+	if s.issuer != "" && (provider == authentication.ProviderSMTP || provider == authentication.ProviderResend) {
+		return s.issuer + "/hosted/invite", nil
+	}
+	return "", nil
+}
+
+// Sample values of previews.
+const (
+	sampleCode         = "123456"
+	sampleOrganization = "Acme"
+	sampleInviter      = "Jane Doe"
+	sampleEmail        = "jane@example.com"
+)
+
+// Preview renders a sample email of input.Purpose for the environment;
+// nothing is sent, recorded or audited.
+func (s *DeliveryService) Preview(ctx context.Context, environmentID identity.EnvironmentID, input authentication.PreviewInput) (authentication.Preview, error) {
+	if environmentID.IsZero() {
+		return authentication.Preview{}, errx.Validation("environment_id must be a valid UUID")
+	}
+	if err := input.Validate(); err != nil {
+		return authentication.Preview{}, err
+	}
+	if s.renderer == nil {
+		return authentication.Preview{}, errx.Internal("email preview is not available")
+	}
+	m := authentication.Message{Email: sampleEmail, Purpose: input.Purpose, Environment: environmentID, Locale: i18n.Match(input.Locale)}
+	switch input.Purpose {
+	case authentication.PurposeInvitation:
+		expires := s.now().Add(config.InvitationTTL)
+		m.Organization, m.Inviter, m.ExpiresAt, m.Token = sampleOrganization, sampleInviter, &expires, "sample"
+		base := s.issuer + "/hosted/invite"
+		if url, err := s.InvitationURL(ctx, environmentID); err == nil && url != "" {
+			base = url
+		}
+		m.Link = authentication.InvitationLink(base, "sample")
+	case authentication.PurposeTest:
+	default:
+		m.Code = sampleCode
+	}
+	email, err := s.renderer.Render(ctx, m, authentication.Draft{Copy: input.Template, AppName: input.AppName})
+	if err != nil {
+		return authentication.Preview{}, err
+	}
+	return authentication.Preview{Subject: email.Subject, HTML: email.HTML, Text: email.Text}, nil
 }
 
 // Send delivers through the environment's webhook, falling back to the

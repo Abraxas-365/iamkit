@@ -96,6 +96,12 @@ func (r *Repository) ListGrants(ctx context.Context, environment identity.Enviro
 	return query.NewPaginated(rows, total, page), nil
 }
 func (r *Repository) mutate(ctx context.Context, m authorization.Mutation, query string, args ...any) error {
+	return r.mutateAs(ctx, m, conflict, query, args...)
+}
+
+// mutateAs is mutate with its own mapping of constraint violations, for
+// statements whose conflicts deserve a specific message.
+func (r *Repository) mutateAs(ctx context.Context, m authorization.Mutation, onConflict func(error) error, query string, args ...any) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)
@@ -103,7 +109,7 @@ func (r *Repository) mutate(ctx context.Context, m authorization.Mutation, query
 	defer tx.Rollback()
 	res, err := tx.ExecContext(ctx, query, args...)
 	if err != nil {
-		return conflict(err)
+		return onConflict(err)
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
@@ -128,7 +134,8 @@ func (r *Repository) DeleteRole(ctx context.Context, m authorization.Mutation, i
 	return r.mutate(ctx, m, `DELETE FROM roles WHERE environment_id=$1 AND id=$2`, m.Environment, id)
 }
 func (r *Repository) AssignRole(ctx context.Context, m authorization.Mutation, input authorization.RoleAssignment) error {
-	return r.mutate(ctx, m, `INSERT INTO role_assignments(environment_id,organization_id,user_id,resource_id,role_id) SELECT environment_id,$2,$3,resource_id,id FROM roles WHERE environment_id=$1 AND id=$4`, m.Environment, input.Organization, input.User, input.Role)
+	return r.mutateAs(ctx, m, assignment("the user already holds this role in the organization", "the user is not a member of the organization"),
+		`INSERT INTO role_assignments(environment_id,organization_id,user_id,resource_id,role_id) SELECT environment_id,$2,$3,resource_id,id FROM roles WHERE environment_id=$1 AND id=$4`, m.Environment, input.Organization, input.User, input.Role)
 }
 func (r *Repository) UnassignRole(ctx context.Context, m authorization.Mutation, input authorization.RoleAssignment) error {
 	return r.mutate(ctx, m, `DELETE FROM role_assignments WHERE environment_id=$1 AND role_id=$2 AND organization_id=$3 AND user_id=$4`, m.Environment, input.Role, input.Organization, input.User)

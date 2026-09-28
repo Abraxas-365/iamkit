@@ -2,18 +2,18 @@
 {{if .SignIn.EmailForm}}
 <form method="post" action="/hosted/login/identify">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<label for="email">Email</label>
+<label for="email">{{.T "hosted.form.email"}}</label>
 <input id="email" type="email" name="email" value="{{.Email}}" autocomplete="username" required autofocus>
-<button type="submit">Continue</button>
+<button type="submit">{{.T "hosted.form.continue"}}</button>
 </form>
 {{end}}
 {{if .Connections}}
-{{if .SignIn.EmailForm}}<div class="divider">or</div>{{end}}
+{{if .SignIn.EmailForm}}<div class="divider">{{.T "hosted.form.or"}}</div>{{end}}
 {{range .Connections}}
 <form method="post" action="/hosted/login/sso">
 <input type="hidden" name="ticket" value="{{$.Ticket}}">
 <input type="hidden" name="connection_id" value="{{.ID}}">
-<button type="submit" class="secondary provider">{{template "provider-logo" .Provider}}<span>Continue with {{.Name}}</span></button>
+<button type="submit" class="secondary provider">{{template "provider-logo" .Provider}}<span>{{$.T "hosted.form.continue_with" .Name}}</span></button>
 </form>
 {{end}}
 {{end}}
@@ -27,9 +27,9 @@
 <form method="post" action="/hosted/login/password">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <input type="hidden" name="email" value="{{.Email}}">
-<label for="password">Password</label>
+<label for="password">{{.T "hosted.form.password"}}</label>
 <input id="password" type="password" name="password" autocomplete="current-password" required autofocus>
-<button type="submit">Sign in</button>
+<button type="submit">{{.T "hosted.form.sign_in"}}</button>
 </form>
 {{end}}
 {{if .SignIn.EmailCode}}
@@ -37,7 +37,7 @@
 <form method="post" action="/hosted/login/code">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <input type="hidden" name="email" value="{{.Email}}">
-<button type="submit" class="{{if .SignIn.Password}}link{{end}}">Email me a code</button>
+<button type="submit" class="{{if .SignIn.Password}}link{{end}}">{{.T "hosted.form.email_code"}}</button>
 </form>
 {{end}}
 {{if .SignIn.Password}}
@@ -45,21 +45,21 @@
 <form method="post" action="/hosted/login/reset">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <input type="hidden" name="email" value="{{.Email}}">
-<button type="submit" class="link">Forgot password?</button>
+<button type="submit" class="link">{{.T "hosted.form.forgot_password"}}</button>
 </form>
 </div>
 {{end}}
 {{if .Connection}}
-<div class="divider">or</div>
+<div class="divider">{{.T "hosted.form.or"}}</div>
 <form method="post" action="/hosted/login/sso">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <input type="hidden" name="connection_id" value="{{.Connection}}">
-<button type="submit" class="secondary">Sign in with single sign-on</button>
+<button type="submit" class="secondary">{{.T "hosted.form.sso"}}</button>
 </form>
 {{end}}
 <form method="get" action="/hosted/login">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<button type="submit" class="link">Use another email</button>
+<button type="submit" class="link">{{.T "hosted.form.other_email"}}</button>
 </form>
 {{end}}
 
@@ -67,13 +67,13 @@
 <form method="post" action="/hosted/login/code/verify">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <input type="hidden" name="challenge_id" value="{{.Challenge}}">
-<label for="code">Code</label>
+<label for="code">{{.T "hosted.form.code"}}</label>
 <input id="code" type="text" name="code" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="one-time-code" required autofocus>
-<button type="submit">Verify</button>
+<button type="submit">{{.T "hosted.form.verify"}}</button>
 </form>
 <form method="get" action="/hosted/login">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<button type="submit" class="link">Start over</button>
+<button type="submit" class="link">{{.T "hosted.form.start_over"}}</button>
 </form>
 {{end}}
 
@@ -82,15 +82,15 @@
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <input type="hidden" name="challenge_id" value="{{.Challenge}}">
 <input type="hidden" name="email" value="{{.Email}}">
-<label for="code">Code</label>
+<label for="code">{{.T "hosted.form.code"}}</label>
 <input id="code" type="text" name="code" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="one-time-code" required autofocus>
-<label for="password">New password</label>
+<label for="password">{{.T "hosted.form.new_password"}}</label>
 <input id="password" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" required>
-<button type="submit">Set password</button>
+<button type="submit">{{.T "hosted.form.set_password"}}</button>
 </form>
 <form method="get" action="/hosted/login">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<button type="submit" class="link">Start over</button>
+<button type="submit" class="link">{{.T "hosted.form.start_over"}}</button>
 </form>
 {{end}}
 
@@ -107,30 +107,30 @@
 {{define "mfa/content"}}
 <form method="post" action="/hosted/login/mfa">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<label for="code">Code</label>
+<label for="code">{{.T "hosted.form.code"}}</label>
 <input id="code" type="text" name="code" maxlength="20" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" required autofocus>
-<button type="submit">Verify</button>
+<button type="submit">{{.T "hosted.form.verify"}}</button>
 </form>
 <form method="get" action="/hosted/login">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<button type="submit" class="link">Start over</button>
+<button type="submit" class="link">{{.T "hosted.form.start_over"}}</button>
 </form>
 {{end}}
 
 {{define "enroll/content"}}
-{{if .QR}}<img class="qr" src="{{.QR}}" alt="QR code for your authenticator app" width="232" height="232">{{end}}
-<p class="muted">Can't scan? Enter this key in the app:</p>
+{{if .QR}}<img class="qr" src="{{.QR}}" alt="{{.T "hosted.form.qr_alt"}}" width="232" height="232">{{end}}
+<p class="muted">{{.T "hosted.form.cant_scan"}}</p>
 <p><code>{{.Secret}}</code></p>
 <form method="post" action="/hosted/login/mfa">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <input type="hidden" name="enrolling" value="true">
-<label for="code">6-digit code</label>
+<label for="code">{{.T "hosted.form.six_digit_code"}}</label>
 <input id="code" type="text" name="code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7" autocomplete="one-time-code" required autofocus>
-<button type="submit">Verify and continue</button>
+<button type="submit">{{.T "hosted.form.verify_continue"}}</button>
 </form>
 <form method="get" action="/hosted/login">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<button type="submit" class="link">Start over</button>
+<button type="submit" class="link">{{.T "hosted.form.start_over"}}</button>
 </form>
 {{end}}
 
@@ -138,7 +138,7 @@
 <ul class="codes">{{range .RecoveryCodes}}<li><code>{{.}}</code></li>{{end}}</ul>
 <form method="post" action="/hosted/login/mfa/continue">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<button type="submit">I saved my codes — continue</button>
+<button type="submit">{{.T "hosted.form.codes_saved"}}</button>
 </form>
 {{end}}
 
@@ -147,13 +147,13 @@
 <form method="post" action="/hosted/invite">
 <input type="hidden" name="token" value="{{.Token}}">
 <p class="muted">{{.Invite.Email}}</p>
-<label for="name">Name</label>
+<label for="name">{{.T "hosted.form.name"}}</label>
 <input id="name" type="text" name="name" maxlength="200" autocomplete="name" autofocus>
 {{if .Invite.PasswordRequired}}
-<label for="password">Password</label>
+<label for="password">{{.T "hosted.form.password"}}</label>
 <input id="password" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" required>
 {{end}}
-<button type="submit">Accept invitation</button>
+<button type="submit">{{.T "hosted.form.accept"}}</button>
 </form>
 {{end}}
 {{end}}

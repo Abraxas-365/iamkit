@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/migrations"
@@ -333,4 +334,25 @@ func TestSchemaDeliveryProviders(t *testing.T) {
 	}
 	expectSQL(t, db, "locale", okSQL, `UPDATE login_settings SET locale='es' WHERE environment_id=$1`, f.envA)
 	expectSQL(t, db, "long locale", checkSQL, `UPDATE login_settings SET locale=repeat('x',17) WHERE environment_id=$1`, f.envA)
+}
+
+// TestSchemaEmailTemplates covers 013: one row per environment, purpose and
+// language; known purposes; lengths; a button label only on invitations;
+// no empty rows.
+func TestSchemaEmailTemplates(t *testing.T) {
+	db := freshDB(t)
+	f := newSchemaFixture(t, db)
+	insert := `INSERT INTO email_templates(environment_id,purpose,locale,subject,body,action) VALUES($1,$2,$3,$4,$5,$6)`
+	expectSQL(t, db, "template", okSQL, insert, f.envA, "login", "es", "Tu código", "", "")
+	expectSQL(t, db, "duplicate", uniqueSQL, insert, f.envA, "login", "es", "Otro", "", "")
+	expectSQL(t, db, "other environment", okSQL, insert, f.envB, "login", "es", "Tu código", "", "")
+	expectSQL(t, db, "unknown purpose", checkSQL, insert, f.envA, "welcome", "es", "x", "", "")
+	expectSQL(t, db, "short locale", checkSQL, insert, f.envA, "login", "e", "x", "", "")
+	expectSQL(t, db, "empty row", checkSQL, insert, f.envA, "password_reset", "en", "", "", "")
+	expectSQL(t, db, "action on login", checkSQL, insert, f.envA, "password_reset", "en", "", "", "Go")
+	expectSQL(t, db, "action on invitation", okSQL, insert, f.envA, "invitation", "en", "", "", "Join")
+	expectSQL(t, db, "long subject", checkSQL, insert, f.envA, "test", "en", strings.Repeat("é", 201), "", "")
+	expectSQL(t, db, "long body", checkSQL, insert, f.envA, "test", "en", "", strings.Repeat("x", 2001), "")
+	expectSQL(t, db, "max body in characters", okSQL, insert, f.envA, "test", "en", "", strings.Repeat("é", 2000), "")
+	expectSQL(t, db, "unknown environment", foreignSQL, insert, "00000000-0000-4000-8000-000000000000", "login", "en", "x", "", "")
 }

@@ -86,9 +86,6 @@ func (s *Grants) GroupRoleAssignments(ctx context.Context, environment identity.
 	return s.repository.GroupRoleAssignments(ctx, environment, filter, page)
 }
 func (s *Grants) EffectiveRoles(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) ([]authorization.EffectiveRoleView, error) {
-	if organization.IsZero() {
-		return nil, errx.Validation("organization_id must be a valid UUID")
-	}
 	if user.IsZero() {
 		return nil, errx.Validation("user_id must be a valid UUID")
 	}

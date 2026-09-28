@@ -95,11 +95,13 @@ func (h *Handler) InitiateChallenge(c *fiber.Ctx) error {
 		Environment identity.EnvironmentID `json:"environment_id"`
 		Email       string                 `json:"email"`
 		Purpose     string                 `json:"purpose"`
+		// Locale is the email language (a tag or list); optional.
+		Locale string `json:"locale"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.InitiateChallenge(c.Context(), input.Environment, input.Email, input.Purpose)
+	id, err := h.commands.InitiateChallenge(c.Context(), input.Environment, input.Email, input.Purpose, input.Locale)
 	if err != nil {
 		return err
 	}

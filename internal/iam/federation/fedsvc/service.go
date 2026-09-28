@@ -145,6 +145,9 @@ func (s *Service) Unlink(ctx context.Context, m federation.Mutation, connectionI
 	return s.repository.Unlink(ctx, m, connectionID, userID)
 }
 func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, filter federation.ConnectionFilter, page query.Pagination) (query.Paginated[federation.ConnectionView], error) {
+	if err := filter.Validate(); err != nil {
+		return query.Paginated[federation.ConnectionView]{}, err
+	}
 	return s.repository.List(ctx, environment, filter, page)
 }
 func (s *Service) Connection(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID) (federation.ConnectionDetail, error) {

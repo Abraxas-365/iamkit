@@ -64,3 +64,38 @@ func TestFill(t *testing.T) {
 		}
 	}
 }
+
+func TestCopyValidate(t *testing.T) {
+	ok := []struct {
+		purpose string
+		c       Copy
+	}{
+		{PurposeLogin, Copy{}},
+		{PurposeLogin, Copy{Subject: "Your {{ code }} for {{app_name}}", Body: "Hi {{email}},\n\nCode:\t{{code}}\r\n", Footer: "Bye"}},
+		{PurposeInvitation, Copy{Action: "Join {{organization}}", Body: "{{inviter}} until {{expires_at}}"}},
+	}
+	for _, tc := range ok {
+		if err := tc.c.Validate(tc.purpose); err != nil {
+			t.Fatalf("%s %+v: %v", tc.purpose, tc.c, err)
+		}
+	}
+	long := string(make([]rune, 201))
+	bad := []struct {
+		purpose string
+		c       Copy
+	}{
+		{PurposeLogin, Copy{Subject: "a\nb"}},
+		{PurposeLogin, Copy{Heading: "a\tb"}},
+		{PurposeLogin, Copy{Body: "a\x00b"}},
+		{PurposeLogin, Copy{Subject: long}},
+		{PurposeLogin, Copy{Action: "Go"}},
+		{PurposeLogin, Copy{Body: "{{organization}}"}},
+		{PurposeTest, Copy{Subject: "{{code}}"}},
+		{PurposeInvitation, Copy{Footer: "{{code}}"}},
+	}
+	for _, tc := range bad {
+		if err := tc.c.Validate(tc.purpose); err == nil {
+			t.Fatalf("%s %+v accepted", tc.purpose, tc.c)
+		}
+	}
+}

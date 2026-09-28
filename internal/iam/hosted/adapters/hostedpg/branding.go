@@ -22,11 +22,12 @@ type style struct {
 	LogoURL     string                 `db:"logo_url"`
 	AccentColor string                 `db:"accent_color"`
 	Theme       []byte                 `db:"theme"`
+	Locale      *string                `db:"locale"`
 	UpdatedAt   *time.Time             `db:"updated_at"`
 }
 
 func (s style) settings() (hosted.Settings, error) {
-	out := hosted.Settings{Environment: s.Environment, Client: s.Client, DisplayName: s.DisplayName, LogoURL: s.LogoURL, AccentColor: s.AccentColor, UpdatedAt: s.UpdatedAt}
+	out := hosted.Settings{Environment: s.Environment, Client: s.Client, DisplayName: s.DisplayName, LogoURL: s.LogoURL, AccentColor: s.AccentColor, Locale: s.Locale, UpdatedAt: s.UpdatedAt}
 	if len(s.Theme) > 0 {
 		if err := json.Unmarshal(s.Theme, &out.Theme); err != nil {
 			return hosted.Settings{}, errx.Wrap(err, "decode hosted theme", errx.TypeInternal)
@@ -44,15 +45,16 @@ func theme(s hosted.Settings) ([]byte, error) {
 }
 
 const (
-	defaultColumns = `environment_id,NULL::uuid AS client_id,display_name,logo_url,accent_color,theme,updated_at`
-	clientColumns  = `environment_id,client_id,display_name,logo_url,accent_color,theme,updated_at`
+	defaultColumns = `environment_id,NULL::uuid AS client_id,display_name,logo_url,accent_color,theme,locale,updated_at`
+	clientColumns  = `environment_id,client_id,display_name,logo_url,accent_color,theme,NULL::text AS locale,updated_at`
 )
 
 func (r *Repository) Settings(ctx context.Context, environment identity.EnvironmentID) (hosted.Settings, error) {
 	var row style
 	err := r.db.GetContext(ctx, &row, `SELECT `+defaultColumns+` FROM login_settings WHERE environment_id=$1`, environment)
 	if errors.Is(err, sql.ErrNoRows) {
-		return hosted.Settings{Environment: environment}, nil
+		unset := ""
+		return hosted.Settings{Environment: environment, Locale: &unset}, nil
 	}
 	if err != nil {
 		return hosted.Settings{}, failure(err)
@@ -71,9 +73,9 @@ func (r *Repository) SaveSettings(ctx context.Context, m hosted.Mutation, input 
 	}
 	defer tx.Rollback()
 	var row style
-	err = tx.GetContext(ctx, &row, `INSERT INTO login_settings(environment_id,display_name,logo_url,accent_color,theme) VALUES($1,$2,$3,$4,$5)
-		ON CONFLICT (environment_id) DO UPDATE SET display_name=EXCLUDED.display_name, logo_url=EXCLUDED.logo_url, accent_color=EXCLUDED.accent_color, theme=EXCLUDED.theme, updated_at=now()
-		RETURNING `+defaultColumns, m.Environment, input.DisplayName, input.LogoURL, input.AccentColor, encoded)
+	err = tx.GetContext(ctx, &row, `INSERT INTO login_settings(environment_id,display_name,logo_url,accent_color,theme,locale) VALUES($1,$2,$3,$4,$5,COALESCE($6,''))
+		ON CONFLICT (environment_id) DO UPDATE SET display_name=EXCLUDED.display_name, logo_url=EXCLUDED.logo_url, accent_color=EXCLUDED.accent_color, theme=EXCLUDED.theme, locale=COALESCE($6,login_settings.locale), updated_at=now()
+		RETURNING `+defaultColumns, m.Environment, input.DisplayName, input.LogoURL, input.AccentColor, encoded, input.Locale)
 	if err != nil {
 		return hosted.Settings{}, failure(err)
 	}

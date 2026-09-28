@@ -76,8 +76,21 @@ func brandOf(s hosted.Settings, force string) brand {
 	default:
 		css.WriteString(":root{" + schemeVars(lightScheme) + "}")
 	}
+	css.WriteString(backdrop(t))
 	b.Vars = template.CSS(css.String())
 	return b
+}
+
+// backdrop is the rule of the background image: the image, tinted by the
+// background color of the scheme in use. The URL is a validated https URL
+// without quotes, parentheses, backslashes or spaces, so it cannot leave
+// url(""). html>body outranks the pages' own body rule.
+func backdrop(t hosted.Theme) string {
+	if t.BackgroundImageURL == "" {
+		return ""
+	}
+	tint := fmt.Sprintf("color-mix(in srgb,var(--bg) %d%%,transparent)", t.BackgroundOverlay)
+	return `html>body{background:linear-gradient(` + tint + `,` + tint + `),url("` + t.BackgroundImageURL + `") center/cover no-repeat fixed,var(--bg)}`
 }
 
 func merge(p, defaults hosted.Palette) hosted.Palette {

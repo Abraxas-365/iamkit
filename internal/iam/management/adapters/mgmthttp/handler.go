@@ -15,12 +15,13 @@ const sessionCookie = "__Host-iamkit-operator"
 type Handler struct {
 	auth     management.ManagementAuthenticator
 	sessions management.SessionCommands
+	status   management.SessionQueries
 	commands management.ControlCommands
 	queries  management.ControlQueries
 }
 
-func New(auth management.ManagementAuthenticator, sessions management.SessionCommands, commands management.ControlCommands, queries management.ControlQueries) *Handler {
-	return &Handler{auth, sessions, commands, queries}
+func New(auth management.ManagementAuthenticator, sessions management.SessionCommands, status management.SessionQueries, commands management.ControlCommands, queries management.ControlQueries) *Handler {
+	return &Handler{auth, sessions, status, commands, queries}
 }
 func Principal(c *fiber.Ctx) management.Principal { return c.Locals("operator").(management.Principal) }
 func OperatorID(c *fiber.Ctx) string              { return Principal(c).OperatorID.String() }
@@ -77,10 +78,12 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Post("/operators", h.delegate)
 	r.Get("/operators", h.operators)
 	r.Delete("/operators/:id", h.disable)
+	r.Put("/operators/:id/password-access", h.passwordAccess)
 	r.Post("/projects", requireWrite, h.createProject)
 	r.Get("/projects", h.projects)
 	r.Post("/projects/:project/environments", requireWrite, h.createEnvironment)
 	r.Get("/projects/:project/environments", h.environments)
+	r.Get("/password", h.passwordStatus)
 	r.Post("/password", h.setPassword)
 	r.Delete("/sessions/current", h.logout)
 }
@@ -98,11 +101,13 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	var input struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		// NewPassword replaces a password that must change (set by someone else).
+		NewPassword string `json:"new_password"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	raw, p, err := h.sessions.Login(c.Context(), input.Email, input.Password)
+	raw, p, err := h.sessions.Login(c.Context(), input.Email, input.Password, input.NewPassword)
 	if err != nil {
 		return err
 	}
@@ -121,17 +126,29 @@ func (h *Handler) logout(c *fiber.Ctx) error {
 	return c.SendStatus(204)
 }
 func (h *Handler) setPassword(c *fiber.Ctx) error {
-	var input struct{ Password string `json:"password"` }
+	var input struct {
+		Current  string `json:"current_password"`
+		Password string `json:"password"`
+	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.sessions.SetPassword(c.Context(), Principal(c), input.Password); err != nil {
+	if err := h.sessions.SetPassword(c.Context(), Principal(c), input.Current, input.Password); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
+func (h *Handler) passwordStatus(c *fiber.Ctx) error {
+	out, err := h.status.PasswordStatus(c.Context(), Principal(c))
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
 func (h *Handler) createKey(c *fiber.Ctx) error {
-	var input struct{ ExpiresIn *string `json:"expires_in"` }
+	var input struct {
+		ExpiresIn *string `json:"expires_in"`
+	}
 	c.BodyParser(&input)
 	out, err := h.commands.CreateKey(c.Context(), Principal(c), input.ExpiresIn)
 	if err != nil {
@@ -181,6 +198,22 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(204)
 }
+func (h *Handler) passwordAccess(c *fiber.Ctx) error {
+	id, err := identity.ParseOperatorID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	var input struct {
+		Allowed *bool `json:"allowed"`
+	}
+	if err = c.BodyParser(&input); err != nil || input.Allowed == nil {
+		return errx.Validation("allowed is required")
+	}
+	if err = h.commands.SetPasswordAccess(c.Context(), Principal(c), id, *input.Allowed); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
+}
 func (h *Handler) operators(c *fiber.Ctx) error {
 	out, err := h.queries.Operators(c.Context(), Principal(c))
 	if err != nil {
@@ -189,7 +222,9 @@ func (h *Handler) operators(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 func (h *Handler) createProject(c *fiber.Ctx) error {
-	var input struct{ Name string `json:"name"` }
+	var input struct {
+		Name string `json:"name"`
+	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
@@ -207,7 +242,9 @@ func (h *Handler) projects(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 func (h *Handler) createEnvironment(c *fiber.Ctx) error {
-	var input struct{ Name string `json:"name"` }
+	var input struct {
+		Name string `json:"name"`
+	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}

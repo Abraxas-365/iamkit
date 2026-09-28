@@ -99,4 +99,11 @@ type GroupMemberView struct {
 type GroupFilter struct {
 	User       identity.UserID       // groups the user belongs to
 	Connection identity.ConnectionID // groups owned by this directory
+	Source     string                // GroupSourceManual or GroupSourceDirectory
 }
+
+// Group sources: operator-managed groups, or groups owned by a SCIM directory.
+const (
+	GroupSourceManual    = "manual"
+	GroupSourceDirectory = "directory"
+)

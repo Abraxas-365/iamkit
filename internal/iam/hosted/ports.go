@@ -90,7 +90,7 @@ type Authorizations interface {
 
 // Challenges is the part of the authentication commands the hosted pages use.
 type Challenges interface {
-	InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose string) (identity.ChallengeID, error)
+	InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose, locale string) (identity.ChallengeID, error)
 	VerifyChallenge(ctx context.Context, boundary authentication.Context, challenge identity.ChallengeID, code, purpose, password string) (authentication.Result, error)
 }
 

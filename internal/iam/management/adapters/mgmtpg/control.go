@@ -103,6 +103,30 @@ func (r *Repository) DisableOperator(ctx context.Context, p management.Principal
 	}
 	return failure(tx.Commit())
 }
+func (r *Repository) SetPasswordAccess(ctx context.Context, workspace identity.WorkspaceID, operator identity.OperatorID, allowed bool) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE workspace_members SET password_allowed=$3 WHERE workspace_id=$1 AND operator_id=$2`, workspace, operator, allowed)
+	if err != nil {
+		return failure(err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return failure(err)
+	} else if n == 0 {
+		return errx.NotFound("resource not found")
+	}
+	// Removing access ends the sessions opened with the emergency password;
+	// single sign-on sessions stay.
+	if !allowed {
+		if _, err = tx.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE workspace_id=$1 AND operator_id=$2 AND method='password' AND revoked_at IS NULL`, workspace, operator); err != nil {
+			return failure(err)
+		}
+	}
+	return failure(tx.Commit())
+}
 func (r *Repository) CreateProject(ctx context.Context, workspace identity.WorkspaceID, id identity.ProjectID, name string) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO projects(id,workspace_id,name) VALUES($1,$2,$3)`, id, workspace, name)
 	return failure(err)
@@ -151,18 +175,24 @@ func (r *Repository) Environments(ctx context.Context, workspace identity.Worksp
 }
 func (r *Repository) Operators(ctx context.Context, workspace identity.WorkspaceID) ([]management.Operator, error) {
 	var rows []struct {
-		ID     identity.OperatorID `db:"id"`
-		Email  string              `db:"email"`
-		Role   string              `db:"role"`
-		Active bool                `db:"active"`
+		ID        identity.OperatorID `db:"id"`
+		Email     string              `db:"email"`
+		Role      string              `db:"role"`
+		Active    bool                `db:"active"`
+		Allowed   bool                `db:"password_allowed"`
+		Providers pq.StringArray      `db:"providers"`
+		LastSSO   *time.Time          `db:"last_sso"`
 	}
-	err := r.db.SelectContext(ctx, &rows, `SELECT o.id, o.email, m.role, m.active FROM workspace_members m JOIN operators o ON o.id=m.operator_id WHERE m.workspace_id=$1 ORDER BY o.email`, workspace)
+	err := r.db.SelectContext(ctx, &rows, `SELECT o.id, o.email, m.role, m.active, m.password_allowed,
+		  COALESCE((SELECT array_agg(i.provider ORDER BY i.created_at) FROM operator_identities i WHERE i.operator_id=o.id), '{}') AS providers,
+		  (SELECT max(i.last_login_at) FROM operator_identities i WHERE i.operator_id=o.id) AS last_sso
+		FROM workspace_members m JOIN operators o ON o.id=m.operator_id WHERE m.workspace_id=$1 ORDER BY o.email`, workspace)
 	if err != nil {
 		return nil, failure(err)
 	}
 	out := make([]management.Operator, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, management.Operator{ID: row.ID, Email: row.Email, Role: row.Role, Active: row.Active})
+		out = append(out, management.Operator{ID: row.ID, Email: row.Email, Role: row.Role, Active: row.Active, PasswordAllowed: row.Allowed, Providers: []string(row.Providers), LastSSO: row.LastSSO})
 	}
 	return out, nil
 }
