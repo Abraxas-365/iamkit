@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Ban, KeyRound, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -64,11 +64,30 @@ export function KeysPage() {
     {target && <ConfirmDialog title="Revoke this API key?" description="Servers and scripts using it lose access immediately. This cannot be undone." confirmLabel="Revoke key" onClose={() => setTarget(null)} confirm={async () => { await api.delete(`/keys/${target.id}`); toast.success('API key revoked'); list.reload() }} />}
   </div>
 }
+/** GET /password: the caller's own password state (management.PasswordStatus). */
+interface PasswordStatus { set: boolean; usable: boolean; fresh: boolean; mode: 'enabled' | 'break_glass' | 'disabled' }
 export function SettingsPage() {
+  const { options, logout } = useAuth()
+  const [status, setStatus] = useState<PasswordStatus | null>(null)
+  const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const pending = useRef(false)
-  return <div className="space-y-6"><PageHeader title="Account settings" description="Manage your operator console password." /><Card className="max-w-lg p-6"><form className="space-y-4" onSubmit={async event => {
+  const load = useCallback(async () => {
+    setLoadError('')
+    try { setStatus(await api.get<PasswordStatus>('/password')) } catch (e) { setLoadError(message(e)) }
+  }, [])
+  useEffect(() => { if (options?.password) void load() }, [options?.password, load])
+  const header = <PageHeader title="Account settings" description="Manage your operator console password." />
+  if (options && !options.password) return <div className="space-y-6">{header}<Card className="max-w-lg space-y-2 p-6"><h2 className="font-mono font-medium">Password sign-in is disabled</h2><p className="text-sm text-muted-foreground">This deployment signs operators in with single sign-on{options.providers.length > 0 && <> ({options.providers.map(p => p.name).join(', ')})</>}. Your password is managed by your identity provider.</p></Card></div>
+  if (loadError) return <div className="space-y-6">{header}<ErrorState error={loadError} retry={load} /></div>
+  if (!status) return <div className="space-y-6">{header}<p role="status" className="text-sm text-muted-foreground">Loading…</p></div>
+  if (!status.usable) return <div className="space-y-6">{header}<Card className="max-w-lg space-y-2 p-6"><h2 className="font-mono font-medium">You sign in with single sign-on</h2><p className="text-sm text-muted-foreground">Passwords are emergency access in this deployment. A workspace owner can grant it to you from the Operators page.</p></Card></div>
+  // Proof for the change: the current password, or a recent sign-in when
+  // none is set (or after single sign-on, to replace a forgotten one).
+  const needsCurrent = status.set && !status.fresh
+  if (!status.set && !status.fresh) return <div className="space-y-6">{header}<Card className="max-w-lg space-y-3 p-6"><h2 className="font-mono font-medium">Set a password</h2><p className="text-sm text-muted-foreground">To set a password, sign in again first. For your security this is only possible within a few minutes of signing in.</p><Button onClick={() => void logout()}>Sign in again</Button></Card></div>
+  return <div className="space-y-6">{header}<Card className="max-w-lg p-6"><form className="space-y-4" onSubmit={async event => {
     event.preventDefault(); if (pending.current) return
     const form = event.currentTarget
     const data = new FormData(form)
@@ -76,7 +95,14 @@ export function SettingsPage() {
     if (password !== data.get('confirm')) { setError('Passwords do not match.'); return }
     const bytes = new TextEncoder().encode(password).length
     if (bytes < 12 || bytes > 72) { setError('Password must be 12–72 characters long.'); return }
+    const current = needsCurrent ? String(data.get('current_password')) : ''
     pending.current = true; setBusy(true); setError('')
-    try { await api.post('/password', { password }); form.reset(); toast.success('Password updated') } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
-  }}><h2 className="font-mono font-medium">Change password</h2><p className="text-sm text-muted-foreground">Use a unique password between 12 and 72 characters long.</p><div className="space-y-1.5"><label htmlFor="new-password">New password</label><Input id="new-password" name="password" type="password" autoComplete="new-password" required disabled={busy} /></div><div className="space-y-1.5"><label htmlFor="confirm-password">Confirm password</label><Input id="confirm-password" name="confirm" type="password" autoComplete="new-password" required disabled={busy} /></div>{error && <ErrorState error={error} />}<Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Update password'}</Button></form></Card></div>
+    try {
+      await api.post('/password', current ? { current_password: current, password } : { password })
+      form.reset(); toast.success(status.set ? 'Password updated. Your other sessions were signed out.' : 'Password set')
+      void load()
+    } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
+  }}><h2 className="font-mono font-medium">{status.set ? 'Change password' : 'Set a password'}</h2><p className="text-sm text-muted-foreground">Use a unique password between 12 and 72 characters long.{status.set && ' Your other console sessions will be signed out.'}</p>
+    {needsCurrent && <div className="space-y-1.5"><label htmlFor="current-password">Current password</label><Input id="current-password" name="current_password" type="password" autoComplete="current-password" required disabled={busy} /></div>}
+    <div className="space-y-1.5"><label htmlFor="new-password">New password</label><Input id="new-password" name="password" type="password" autoComplete="new-password" required disabled={busy} /></div><div className="space-y-1.5"><label htmlFor="confirm-password">Confirm password</label><Input id="confirm-password" name="confirm" type="password" autoComplete="new-password" required disabled={busy} /></div>{error && <ErrorState error={error} />}<Button type="submit" disabled={busy}>{busy ? 'Saving…' : status.set ? 'Update password' : 'Set password'}</Button></form></Card></div>
 }

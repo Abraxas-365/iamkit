@@ -8,11 +8,15 @@ export interface Theme {
   light: Palette; dark: Palette
   logo_dark_url: string; favicon_url: string; logo_position: 'card' | 'header'
   header: { show: boolean }; footer: { text: string; links: FooterLink[] }
+  /** HTTPS image behind the form, tinted by background_overlay % (0-90) of the background color. */
+  background_image_url: string; background_overlay: number
 }
 export interface Branding {
   environment_id?: string; client_id?: string
   display_name: string; logo_url: string; accent_color: string
   theme: Theme; updated_at?: string
+  /** Language of the environment's hosted pages and emails ('' = automatic); client styles have none. */
+  locale?: string
 }
 
 export const pages = [
@@ -21,6 +25,18 @@ export const pages = [
   ['recovery', 'Recovery codes'], ['invite', 'Invitation'], ['message', 'Message'],
 ] as const
 export type Page = typeof pages[number][0]
+
+// PreviewMethods is which sign-in methods a preview shows (sign-in and
+// password pages only); the server checks it like real client options.
+export interface PreviewButton { name: string; provider: string }
+export interface PreviewMethods { password: boolean; email_code: boolean; organization_sso: boolean; connections: PreviewButton[] }
+// sampleButtons stand in when the environment has no social login yet.
+export const sampleButtons: PreviewButton[] = [
+  { name: 'Google', provider: 'google' }, { name: 'Microsoft', provider: 'microsoft' },
+  { name: 'GitHub', provider: 'github' }, { name: 'Apple', provider: 'apple' },
+]
+export const methodPages: readonly Page[] = ['identify', 'password']
+export const emailForm = (m: PreviewMethods) => m.password || m.email_code || m.organization_sso
 
 // Defaults the hosted pages use for empty colors (see hostedhttp/brand.go).
 export const defaults: Record<Scheme, Palette> = {
@@ -31,7 +47,7 @@ const emptyPalette = (): Palette => ({ primary: '', background: '', card: '', te
 export function emptyBranding(): Branding {
   return {
     display_name: '', logo_url: '', accent_color: '',
-    theme: { mode: 'light', radius: 12, spacing: 'normal', align: 'center', light: emptyPalette(), dark: emptyPalette(), logo_dark_url: '', favicon_url: '', logo_position: 'card', header: { show: false }, footer: { text: '', links: [] } },
+    theme: { mode: 'light', radius: 12, spacing: 'normal', align: 'center', light: emptyPalette(), dark: emptyPalette(), logo_dark_url: '', favicon_url: '', logo_position: 'card', header: { show: false }, footer: { text: '', links: [] }, background_image_url: '', background_overlay: 0 },
   }
 }
 
@@ -51,9 +67,10 @@ export function normalize(b: Partial<Branding>): Branding {
 }
 
 // body is what the API stores: the style only (no ids or timestamps).
-// accent_color follows theme.light.primary on the server.
+// accent_color follows theme.light.primary on the server. The email
+// language belongs to the environment default only.
 export function body(b: Branding) {
-  return { display_name: b.display_name, logo_url: b.logo_url, accent_color: b.theme.light.primary, theme: b.theme }
+  return { display_name: b.display_name, logo_url: b.logo_url, accent_color: b.theme.light.primary, theme: b.theme, ...(b.locale !== undefined && !b.client_id && { locale: b.locale }) }
 }
 
 export function same(a: Branding, b: Branding) { return JSON.stringify(body(a)) === JSON.stringify(body(b)) }

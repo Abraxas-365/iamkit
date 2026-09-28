@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { KeyRound } from 'lucide-react'
+import { Logo } from '@/components/brand/logo'
 import { useAuth } from '@/lib/auth'
 import { message } from '@/lib/utils'
 import { request } from '@/lib/api'
@@ -18,11 +18,13 @@ export default function SetupPage() {
   const [success, setSuccess] = useState('')
   const pending = useRef(false)
 
-  if (auth.loading) return <p role="status" className="p-8">Loading session…</p>
+  if (auth.loading || !auth.options) return <p role="status" className="p-8">Loading session…</p>
   if (auth.principal) return <Navigate to="/" replace />
+  // Without password sign-in a console password is useless: operators use single sign-on.
+  if (!auth.options.password) return <Navigate to="/login" replace />
 
   return <main className="flex min-h-dvh items-center justify-center bg-sidebar p-6"><Card className="w-full max-w-sm space-y-6 p-8">
-    <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground"><KeyRound /></div>
+    <Logo className="h-9 self-start" />
     <div>
       <h1 className="font-mono text-xl font-bold tracking-tight">Set up your account</h1>
       <p className="mt-2 text-sm text-muted-foreground">

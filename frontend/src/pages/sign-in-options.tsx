@@ -75,7 +75,7 @@ export function SignInDialog({ base, client, name, readOnly, onClose, onSaved }:
             <span><span className="font-medium">Every environment connection</span><span className="block text-xs text-muted-foreground">Connections added later appear automatically.</span></span>
           </label>
           {!value.all_connections && <div className="space-y-2 rounded-md border p-3">
-            {connections.length === 0 && <p className="text-xs text-muted-foreground">No active environment connections. Add Google, Microsoft, GitHub or Apple under Federation.</p>}
+            {connections.length === 0 && <p className="text-xs text-muted-foreground">No active environment connections. Add Google, Microsoft, GitHub or Apple under Sign-in providers.</p>}
             {connections.map(c => <label key={c.id} className="flex items-center gap-2 text-sm">
               <input type="checkbox" className="accent-primary" checked={value.connection_ids.includes(c.id)} onChange={() => toggle(c.id)} />
               <span className="font-medium">{c.name}</span>{c.name !== providerLabel(c.provider) && <span className="text-xs text-muted-foreground">{providerLabel(c.provider)}</span>}

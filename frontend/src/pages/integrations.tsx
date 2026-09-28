@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, Ban, Bot, Globe, KeyRound, Link2, LogIn, Plus, Server } from 'lucide-react'
+import { ArrowRight, Ban, Bot, Building2, Globe, KeyRound, Link2, LogIn, Plus, Server } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -16,9 +16,9 @@ import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { RowActions } from '@/components/ui/menu'
-import { ConfirmDialog, CopyField, CopyText, DataTable, EmptyState, EntityRef, FormDialog, PageHeader, RadioCards, Status, SwitchField, ErrorState, Time, selectClass, shortId, splitList } from '@/components/library/patterns'
+import { ConfirmDialog, CopyField, CopyText, DataTable, DetailSection, EmptyState, EntityRef, FormDialog, PageHeader, RadioCards, Status, SwitchField, ErrorState, Time, selectClass, shortId, splitList } from '@/components/library/patterns'
 import type { Field } from '@/components/library/patterns'
-import { CreateConnectionDialog, providerLabel } from './federation-connection-form'
+import { CreateConnectionDialog, providerLabel, type ConnectionKind } from './federation-connection-form'
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id) })
 
@@ -150,46 +150,82 @@ function SecretDialog({ title, description, confirm, onClose, children }: { titl
   </Dialog>
 }
 
-// --- Federation Connections ---
+// --- Sign-in providers (federation connections) ---
 interface FederationConnection { id: string; organization_id: string | null; organization_name: string; name: string; provider: string; issuer: string; client_id: string; active: boolean; linked: number; jit_provisioning: boolean; enforcement: string; signup: boolean; link_email: boolean }
 
+const socialScope = { scope: 'environment' }
+const ssoScope = { scope: 'organization' }
+
+/** FederationPage lists every outside sign-in provider, split into the two
+ * kinds operators need to tell apart: social login for everyone, and
+ * organization SSO for one company's employees. */
 export function FederationPage() {
   const { project, environment } = useParams()
   const base = `/environments/${environment}`
   const console = `/projects/${project}/environments/${environment}`
   const path = `${base}/federation-connections`
-  const list = usePaginatedList<FederationConnection>(path)
+  const social = usePaginatedList<FederationConnection>(path, { extraParams: socialScope })
+  const sso = usePaginatedList<FederationConnection>(path, { extraParams: ssoScope })
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const [add, setAdd] = useState(false)
+  const [add, setAdd] = useState<ConnectionKind | null>(null)
   const [disable, setDisable] = useState<FederationConnection | null>(null)
   const navigate = useNavigate()
   const detailPath = (id: string) => `${console}/federation/${id}`
-  const create = canWrite && <Button onClick={() => setAdd(true)}><Plus /> Add connection</Button>
+  const addSocial = canWrite && <Button variant="outline" onClick={() => setAdd('social')}><Plus /> Add social login</Button>
+  const addSSO = canWrite && <Button variant="outline" onClick={() => setAdd('sso')}><Plus /> Add organization SSO</Button>
+  const columns = (who: string) => ['Provider', { header: who, hideBelow: 'md' as const }, { header: 'Users', hideBelow: 'sm' as const, nowrap: true, align: 'right' as const }, 'Status', ...(canWrite ? ['Actions'] : [])]
+  const row = (c: FederationConnection, who: ReactNode) => {
+    const cells: ReactNode[] = [
+      <div className="flex items-center gap-3"><ProviderMark provider={c.provider} /><EntityRef name={c.name} to={detailPath(c.id)} secondary={c.provider === 'oidc' ? <span className="break-all">{c.issuer}</span> : providerLabel(c.provider)} /></div>,
+      who,
+      <span className="tabular-nums">{c.linked}</span>,
+      <Status active={c.active} label={c.active ? 'Active' : 'Disabled'} />,
+    ]
+    if (canWrite) cells.push(<RowActions label={`Actions for ${c.name}`} actions={[
+      { label: 'Open', icon: <ArrowRight />, onSelect: () => navigate(detailPath(c.id)) },
+      ...(c.active ? [{ label: 'Disable', icon: <Ban />, destructive: true, onSelect: () => setDisable(c) }] : []),
+    ]} />)
+    return cells
+  }
 
-  return <div className="space-y-6">
-    <PageHeader title="Social & SSO" description="Let users sign in with Google, Microsoft, GitHub or Apple, or with an organization's own identity provider (enterprise SSO)." actions={create} />
-    <PaginationBar state={list} noun="connections" />
-    <DataTable columns={['Connection', { header: 'Available to', hideBelow: 'md' }, { header: 'Linked users', hideBelow: 'sm', nowrap: true }, 'Status', ...(canWrite ? ['Actions'] : [])]}
-      loading={list.loading} error={list.error} retry={list.reload} rowHref={i => detailPath(list.data[i].id)}
-      empty={<EmptyState icon={<Globe />} title="No sign-in connections yet" description="Add Google, Microsoft, GitHub or Apple for social login, or an organization's OIDC provider for enterprise SSO." action={create} />}
-      rows={list.data.map(c => {
-        const cells: ReactNode[] = [
-          <div className="flex items-center gap-3"><ProviderMark provider={c.provider} /><EntityRef name={c.name} to={detailPath(c.id)} secondary={c.provider === 'oidc' ? <span className="break-all">{c.issuer}</span> : providerLabel(c.provider)} /></div>,
-          c.organization_id
-            ? <EntityRef name={c.organization_name} id={c.organization_id} secondary={c.enforcement === 'enforced' ? <span className="font-medium text-primary">SSO required</span> : 'Enterprise SSO'} />
-            : <EntityRef name="Everyone" secondary={[c.signup && 'New users can sign up', c.link_email && 'Links by email'].filter(Boolean).join(' · ') || 'Existing users only'} />,
-          <span className="tabular-nums">{c.linked}</span>,
-          <Status active={c.active} label={c.active ? 'Active' : 'Disabled'} />,
-        ]
-        if (canWrite) cells.push(<RowActions label={`Actions for ${c.name}`} actions={[
-          { label: 'Open', icon: <ArrowRight />, onSelect: () => navigate(detailPath(c.id)) },
-          ...(c.active ? [{ label: 'Disable', icon: <Ban />, destructive: true, onSelect: () => setDisable(c) }] : []),
-        ]} />)
-        return cells
-      })} />
-    {add && <CreateConnectionDialog base={base} onClose={() => setAdd(false)} onCreated={list.reload} />}
-    {disable && <ConfirmDialog title={`Disable ${disable.name}?`} description="Users can no longer sign in with this connection. Linked accounts are kept." confirmLabel="Disable" onClose={() => setDisable(null)} confirm={async () => { await api.delete(`${path}/${disable.id}`); toast.success('Connection disabled'); list.reload() }} />}
+  return <div className="space-y-8">
+    <PageHeader title="Sign-in providers" description="Let users sign in with an account they already have, instead of a new password. There are two kinds: social login for everyone, and organization SSO for one company's employees." />
+    <div className="grid gap-3 sm:grid-cols-2">
+      <Explainer icon={<Globe />} title="Social login" example={'"Continue with Google" on the sign-in page'}
+        points={['For anyone: customers, the public', 'Personal accounts: Google, Microsoft, GitHub, Apple', 'Users click the button to use it']} />
+      <Explainer icon={<Building2 />} title="Organization SSO (single sign-on)" example="Globex employees sign in with their Globex work account"
+        points={["For one organization's employees", "The company's own login: Entra ID, Google Workspace, Okta…", 'Work emails are sent to it automatically; it can be made mandatory']} />
+    </div>
+
+    <DetailSection title="Social login" description={'Buttons like "Continue with Google" on the sign-in page. Anyone with an account at the provider can use them.'} actions={social.data.length > 0 && addSocial}>
+      <div className="space-y-3">
+        {(social.total > 10 || social.rawSearch) && <PaginationBar state={social} noun="providers" />}
+        <DataTable columns={columns('New users')} loading={social.loading} error={social.error} retry={social.reload} rowHref={i => detailPath(social.data[i].id)}
+          empty={<EmptyState icon={<Globe />} title="No social login yet" description="Add Google, Microsoft, GitHub or Apple so users can sign in with their personal account." action={addSocial} />}
+          rows={social.data.map(c => row(c, <span className="text-sm text-muted-foreground">{c.signup ? 'Can sign up' : 'Existing users only'}{c.link_email ? ' · links by email' : ''}</span>))} />
+      </div>
+    </DetailSection>
+
+    <DetailSection title="Organization SSO" description="Each organization's own company login. Employees whose email is on the organization's verified domains are sent to it. You can also add these from the organization's SSO tab." actions={sso.data.length > 0 && addSSO}>
+      <div className="space-y-3">
+        {(sso.total > 10 || sso.rawSearch) && <PaginationBar state={sso} noun="connections" />}
+        <DataTable columns={columns('Organization')} loading={sso.loading} error={sso.error} retry={sso.reload} rowHref={i => detailPath(sso.data[i].id)}
+          empty={<EmptyState icon={<Building2 />} title="No organization SSO yet" description="Connect a company's Entra ID, Google Workspace or Okta so its employees sign in with their work account." action={addSSO} />}
+          rows={sso.data.map(c => row(c, <EntityRef name={c.organization_name} id={c.organization_id ?? undefined} secondary={c.enforcement === 'enforced' ? <span className="font-medium text-primary">SSO required</span> : 'SSO optional'} />))} />
+      </div>
+    </DetailSection>
+
+    {add && <CreateConnectionDialog base={base} kind={add} onClose={() => setAdd(null)} onCreated={() => (add === 'sso' ? sso : social).reload()} />}
+    {disable && <ConfirmDialog title={`Disable ${disable.name}?`} description="Users can no longer sign in with it. Their accounts and links are kept." confirmLabel="Disable" onClose={() => setDisable(null)} confirm={async () => { await api.delete(`${path}/${disable.id}`); toast.success(`${disable.name} disabled`); social.reload(); sso.reload() }} />}
+  </div>
+}
+
+function Explainer({ icon, title, example, points }: { icon: ReactNode; title: string; example: string; points: string[] }) {
+  return <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+    <p className="flex items-center gap-2 font-medium [&_svg]:size-4 [&_svg]:text-muted-foreground">{icon}{title}</p>
+    <p className="mt-1 text-xs text-muted-foreground">Example: {example}</p>
+    <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">{points.map(p => <li key={p}>{p}</li>)}</ul>
   </div>
 }
 

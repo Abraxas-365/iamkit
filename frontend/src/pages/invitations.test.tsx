@@ -63,6 +63,15 @@ it('invites and shows the token once', async () => {
   expect(calls('POST')[0].body).toEqual({ email: 'dave@example.com', role_ids: [], group_ids: [] })
 })
 
+it('offers only operator-managed groups to invite into', async () => {
+  open()
+  await screen.findByText('bob@example.com')
+  await userEvent.click(screen.getByRole('button', { name: /Invite member/ }))
+  const urls = () => fetchMock.mock.calls.map(([url]) => String(url)).filter(url => url.includes(`${org}/groups?`))
+  await waitFor(() => expect(urls().length).toBeGreaterThan(0))
+  expect(urls().every(url => url.includes('source=manual'))).toBe(true)
+})
+
 it('resends with a new link and filters by status', async () => {
   open()
   await screen.findByText('bob@example.com')

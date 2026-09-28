@@ -35,7 +35,7 @@ beforeEach(() => {
             path === `${env}/login-settings/sign-in` ? page(signIns) :
               path === `${env}/login-settings/clients/c1/sign-in` ? { client_id: 'c1', password: true, email_code: true, organization_sso: true, all_connections: true, connection_ids: [], custom: false } :
                 path === `${env}/oauth-clients` ? page([client]) :
-                  path === `${env}/federation-connections` ? page([google, github]) :
+                  path === `${env}/federation-connections` ? page(url.includes('scope=organization') ? [] : [google, github]) :
                     path === `${env}/organizations` ? page([{ id: 'o1', name: 'Customers' }]) : page([])
     return Response.json(data)
   })
@@ -50,7 +50,7 @@ function calls(method: string) {
 
 const values: ConnectionValues = {
   provider: 'google', scope: 'environment', organization_id: '', name: 'Google', issuer: 'ignored', client_id: ' gid ', client_secret: 's', secret_env: '',
-  tenant: 'common', tenant_id: '', tenants: [], team_id: '', key_id: '', signup: false, signup_organization_id: '', signup_group_id: '', link_email: true,
+  tenant: 'common', tenant_id: '', tenants: [], domains: [], team_id: '', key_id: '', signup: false, signup_organization_id: '', signup_group_id: '', link_email: true,
 }
 
 it('builds the create request of each provider', () => {
@@ -58,6 +58,8 @@ it('builds the create request of each provider', () => {
   expect(connectionBody({ ...values, provider: 'oidc', issuer: 'https://idp.example ', scope: 'organization', organization_id: 'o1', link_email: true })).toEqual({ provider: 'oidc', name: 'Google', client_id: 'gid', client_secret: 's', issuer: 'https://idp.example', organization_id: 'o1' })
   expect(connectionBody({ ...values, provider: 'microsoft', tenants: ['t1'] }).options).toEqual({ tenant: 'common', tenants: ['t1'] })
   expect(connectionBody({ ...values, provider: 'microsoft', tenant: 'tenant', tenant_id: 't9', tenants: ['t1'] }).options).toEqual({ tenant: 't9' })
+  expect(connectionBody({ ...values, domains: ['acme.com'] }).options).toEqual({ domains: ['acme.com'] })
+  expect(connectionBody({ ...values, provider: 'microsoft', domains: ['acme.com'] }).options).toEqual({ tenant: 'common' })
   expect(connectionBody({ ...values, provider: 'apple', team_id: 'TEAM', key_id: 'KEY', secret_env: 'X' })).toMatchObject({ options: { team_id: 'TEAM', key_id: 'KEY' }, client_secret: 's' })
   expect(connectionBody({ ...values, signup: true, signup_organization_id: 'o1', signup_group_id: 'g1', link_email: false })).toMatchObject({ signup: true, signup_organization_id: 'o1', signup_group_id: 'g1' })
 })
@@ -76,7 +78,7 @@ it('patches social settings of an environment connection', () => {
 it('creates a Google connection from the preset form', async () => {
   open('federation')
   await screen.findByRole('link', { name: 'GitHub' })
-  await userEvent.click(screen.getAllByRole('button', { name: 'Add connection' })[0])
+  await userEvent.click(screen.getByRole('button', { name: 'Add social login' }))
   const dialog = await screen.findByRole('dialog')
   expect(within(dialog).queryByLabelText('Issuer URL')).toBeNull()
   expect(within(dialog).getByText(/\/identity\/v1\/federation\/callback$/)).toBeTruthy()
@@ -86,17 +88,52 @@ it('creates a Google connection from the preset form', async () => {
   await waitFor(() => expect(calls('POST')).toEqual([{ url: `/management/v1${env}/federation-connections`, body: { provider: 'google', name: 'Google', client_id: 'gid', client_secret: 'secret', link_email: true } }]))
 })
 
+it('keeps the server-variable secret under Advanced', async () => {
+  open('federation')
+  await screen.findByRole('link', { name: 'GitHub' })
+  await userEvent.click(screen.getByRole('button', { name: 'Add social login' }))
+  const dialog = await screen.findByRole('dialog')
+  const toggle = within(dialog).getByRole('button', { name: 'Advanced' })
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
+  expect(within(dialog).queryByLabelText(/Server environment variable/)).toBeNull()
+  await userEvent.click(toggle)
+  await userEvent.type(within(dialog).getByLabelText('Client ID'), 'gid')
+  await userEvent.type(within(dialog).getByLabelText(/Server environment variable/), 'IAMKIT_PROVIDER_GOOGLE')
+  // The pasted secret is no longer required, and cannot be combined with the variable.
+  expect(within(dialog).getByLabelText('Client secret').matches(':disabled')).toBe(true)
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Create' }))
+  await waitFor(() => expect(calls('POST')).toEqual([{ url: `/management/v1${env}/federation-connections`, body: { provider: 'google', name: 'Google', client_id: 'gid', secret_env: 'IAMKIT_PROVIDER_GOOGLE', link_email: true } }]))
+})
+
 it('asks for the Apple key, team and key ID', async () => {
   open('federation')
   await screen.findByRole('link', { name: 'GitHub' })
-  await userEvent.click(screen.getAllByRole('button', { name: 'Add connection' })[0])
+  await userEvent.click(screen.getByRole('button', { name: 'Add social login' }))
   const dialog = await screen.findByRole('dialog')
   await userEvent.click(within(dialog).getByRole('button', { name: 'Apple' }))
   expect(within(dialog).getByLabelText('Services ID')).toBeTruthy()
   expect(within(dialog).getByLabelText('Private key (.p8)')).toBeTruthy()
   expect(within(dialog).getByLabelText('Team ID')).toBeTruthy()
-  expect(within(dialog).queryByLabelText('Or: secret env variable')).toBeNull()
+  expect(within(dialog).queryByRole('button', { name: 'Advanced' })).toBeNull()
   expect((within(dialog).getByLabelText('Name') as HTMLInputElement).value).toBe('Apple')
+})
+
+it('separates social login from organization SSO', async () => {
+  open('federation')
+  expect(await screen.findByRole('heading', { name: 'Sign-in providers' })).toBeTruthy()
+  const social = (await screen.findByRole('heading', { name: 'Social login', level: 2 })).closest('section')!
+  expect(await within(social).findByRole('link', { name: 'GitHub' })).toBeTruthy()
+  expect(within(social).getByText('Can sign up · links by email')).toBeTruthy()
+  const sso = screen.getByRole('heading', { name: 'Organization SSO', level: 2 }).closest('section')!
+  expect(await within(sso).findByText('No organization SSO yet')).toBeTruthy()
+  expect(fetchMock.mock.calls.some(([url]) => String(url).includes('federation-connections?') && String(url).includes('scope=organization'))).toBe(true)
+
+  await userEvent.click(within(sso).getByRole('button', { name: 'Add organization SSO' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Add organization SSO' })
+  // Personal-account providers are not offered for company SSO.
+  expect(within(dialog).getAllByRole('button').filter(b => b.hasAttribute('aria-pressed')).map(b => b.textContent)).toEqual(['Microsoft Entra ID', 'Google Workspace', 'Other (OIDC)'])
+  expect(within(dialog).getByLabelText('Organization')).toBeTruthy()
+  expect(within(dialog).queryByLabelText('Used by')).toBeNull()
 })
 
 it('chooses the sign-in methods of a client', async () => {

@@ -79,7 +79,7 @@ export function OrganizationConnections() {
   const add = canWrite && <Button onClick={() => setAdding(true)}><Plus /> Add SSO connection</Button>
   return <div className="space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <p className="max-w-2xl text-sm text-muted-foreground">Enterprise identity providers (Entra ID, Okta, Google Workspace…) that members of {org.name} sign in with. Social providers shared by every organization are under Social & SSO.</p>
+      <p className="max-w-2xl text-sm text-muted-foreground">Enterprise identity providers (Entra ID, Okta, Google Workspace…) that members of {org.name} sign in with. Social login buttons shared by every organization are under Sign-in providers.</p>
       {list.data.length > 0 && add}
     </div>
     <DataTable
@@ -93,6 +93,6 @@ export function OrganizationConnections() {
         <span className="tabular-nums">{c.linked}</span>,
         <Badge variant="secondary" className={c.active ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}>{c.active ? 'Active' : 'Disabled'}</Badge>,
       ])} />
-    {adding && <CreateConnectionDialog base={`/environments/${environment}`} organization={org} onClose={() => setAdding(false)} onCreated={list.reload} />}
+    {adding && <CreateConnectionDialog base={`/environments/${environment}`} kind="sso" organization={org} onClose={() => setAdding(false)} onCreated={list.reload} />}
   </div>
 }

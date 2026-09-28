@@ -11,12 +11,13 @@ import { Separator } from '@/components/ui/separator'
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarSeparator, SidebarTrigger, useSidebar } from '@/components/ui/sidebar'
 import { ErrorState } from '@/components/library/patterns'
 import { CommandPalette, type PaletteItem } from './command-palette'
+import { LogoMark } from '@/components/brand/logo'
 export interface Named { id: string; name: string }
 type NavItem = readonly [path: string, label: string, icon: typeof Shield]
 const environmentNav: readonly (readonly [group: string, items: readonly NavItem[]])[] = [
   ['Users & access', [['users', 'Users', Users], ['organizations', 'Organizations', Building2], ['roles', 'Roles', Tags], ['grants', 'Grants', ShieldCheck]]],
   ['Applications', [['applications', 'Applications', Blocks], ['resources', 'Resources & scopes', Shield], ['oauth-clients', 'OAuth clients', Link2], ['service-accounts', 'Service accounts', Bot]]],
-  ['Sign-in', [['hosted-login', 'Hosted login', LogIn], ['federation', 'Social & SSO', Globe], ['provisioning', 'SCIM provisioning', Server], ['notifications', 'Notifications', Bell]]],
+  ['Sign-in', [['hosted-login', 'Hosted login', LogIn], ['federation', 'Sign-in providers', Globe], ['provisioning', 'SCIM provisioning', Server], ['notifications', 'Notifications', Bell]]],
   ['Monitoring', [['sessions', 'Sessions', KeyRound], ['audit-events', 'Audit events', Activity]]],
 ]
 const allNav = environmentNav.flatMap(([, items]) => items)
@@ -68,7 +69,7 @@ function Shell() {
     <Sidebar>
       <SidebarHeader>
         <Link to="/" onClick={() => setOpenMobile(false)} className="flex h-12 items-center gap-2 rounded-md p-2 focus-visible:outline-ring">
-          <div className="flex h-7 w-7 items-center justify-center rounded-sm bg-primary font-mono text-xs font-bold text-primary-foreground">IK</div>
+          <LogoMark className="size-7" />
           <div className="flex flex-col"><span className="font-mono text-sm font-semibold text-foreground">IAMKit</span><span className="text-[10px] text-muted-foreground">Identity & access management</span></div>
         </Link>
       </SidebarHeader>

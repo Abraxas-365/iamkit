@@ -8,6 +8,7 @@ it('describes management calls from their method and path', () => {
   expect(describeAction('POST', `${env}/oauth-clients/${id}`)).toBe('Created OAuth client')
   expect(describeAction('PATCH', `${env}/oauth-clients/${id}`)).toBe('Updated OAuth client')
   expect(describeAction('DELETE', `${env}/role-assignments/${id}`)).toBe('Deleted role assignment')
+  expect(describeAction('POST', `${env}/group-role-assignments`)).toBe('Created group role assignment')
   expect(describeAction('PUT', `${env}/login-settings/clients/${id}/sign-in`)).toBe('Set sign-in methods')
   expect(describeAction('PATCH', env)).toBe('Updated environment')
 })

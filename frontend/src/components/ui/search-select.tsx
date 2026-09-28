@@ -3,11 +3,13 @@ import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { api, type ListResult } from '@/lib/api'
 
-interface Option { id: string; label: string; inactive?: boolean }
+interface Option { id: string; label: string; inactive?: boolean; hint?: string }
 
 interface SearchSelectProps {
   path: string
-  /** Map API response items to { id, label } */
+  /** Extra query parameters sent with every search (e.g. a filter). */
+  params?: Record<string, string>
+  /** Map API response items to { id, label }; `hint` (e.g. "Assigned") is shown beside the label. */
   mapItem: (item: Record<string, unknown>) => Option
   name: string
   id?: string
@@ -23,8 +25,11 @@ interface SearchSelectProps {
 const DEBOUNCE_MS = 250
 const LIMIT = 25
 
-export function SearchSelect({ path, mapItem, name, id, defaultValue = '', required, disabled, placeholder, className, onChange }: SearchSelectProps) {
-  const [options, setOptions] = useState<Option[]>([])
+export function SearchSelect({ path, params: extra, mapItem, name, id, defaultValue = '', required, disabled, placeholder, className, onChange }: SearchSelectProps) {
+  // Raw items are kept and mapped on render, so a mapItem that depends on
+  // later-loaded state (e.g. an "Assigned" hint) stays current.
+  const [items, setItems] = useState<Record<string, unknown>[]>([])
+  const options = items.map(mapItem)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -42,10 +47,11 @@ export function SearchSelect({ path, mapItem, name, id, defaultValue = '', requi
   }, [query])
 
   // Fetch options from server with search + limit
+  const extraKey = extra ? new URLSearchParams(extra).toString() : ''
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
-    const params = new URLSearchParams()
+    const params = new URLSearchParams(extraKey)
     if (debouncedQuery) params.set('search', debouncedQuery)
     params.set('limit', String(LIMIT))
     const url = `${path}?${params.toString()}`
@@ -53,13 +59,13 @@ export function SearchSelect({ path, mapItem, name, id, defaultValue = '', requi
     api.list<Record<string, unknown>>(url, controller.signal)
       .then((result: ListResult<Record<string, unknown>>) => {
         if (!controller.signal.aborted) {
-          setOptions(result.data.map(mapItem))
+          setItems(result.data)
           setLoading(false)
         }
       })
       .catch(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [path, debouncedQuery])
+  }, [path, extraKey, debouncedQuery])
 
   // Close on click outside (check both the input container and the portalled dropdown)
   useEffect(() => {
@@ -95,6 +101,7 @@ export function SearchSelect({ path, mapItem, name, id, defaultValue = '', requi
             {options.map(o => <li key={o.id} className={cn('cursor-pointer px-3 py-1.5 hover:bg-accent', o.id === selected && 'bg-accent font-medium')} onMouseDown={e => { e.preventDefault(); setSelected(o.id); setOpen(false); onChange?.(o.id) }}>
               <span>{o.label}</span>
               {o.inactive && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Inactive</span>}
+              {o.hint && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{o.hint}</span>}
               <span className="ml-2 font-mono text-xs text-muted-foreground">{o.id.slice(0, 8)}…</span>
             </li>)}
           </ul>
@@ -120,6 +127,7 @@ export function SearchSelect({ path, mapItem, name, id, defaultValue = '', requi
       className={cn('h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30', className)}
       value={open ? query : (selectedLabel ? `${selectedLabel}${selectedOption?.inactive ? ' (inactive)' : ''} (${selected.slice(0, 8)}…)` : selected)}
       onFocus={() => { setOpen(true); setQuery('') }}
+      onClick={() => { if (!open) { setOpen(true); setQuery('') } }}
       onChange={e => { setQuery(e.target.value); setOpen(true) }}
     />
     {dropdownContent && createPortal(dropdownContent, document.body)}

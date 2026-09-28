@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { Pencil, Plus, Tags, Trash2, UserMinus, Users } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Pencil, Plus, ShieldCheck, Tags, Trash2, UserMinus, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -13,6 +13,7 @@ import { SearchSelect } from '@/components/ui/search-select'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { useOrganization } from './organization-layout'
 import { BackLink, ConfirmDialog, DataTable, EmptyState, EntityRef, ErrorState, FormDialog, Status } from '@/components/library/patterns'
+import { AssignRoleDialog } from '@/components/library/assign-role'
 import { RowActions } from '@/components/ui/menu'
 
 export interface Group {
@@ -37,18 +38,31 @@ export function GroupsPage() {
   const base = `/environments/${environment}`
   const path = `${base}/organizations/${orgId}/groups`
   const envBase = `/projects/${project}/environments/${environment}`
+  const navigate = useNavigate()
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
-  const orgName = useOrganization().org.name
+  const { org } = useOrganization()
   const list = usePaginatedList<Group>(path)
+  // Every role binding of the organization in one request (the API caps a page
+  // at 100); groups beyond that page show "—" rather than a wrong "No roles".
+  const roleParams = useMemo(() => ({ organization_id: orgId ?? '' }), [orgId])
+  const bindings = usePaginatedList<GroupRole>(`${base}/group-role-assignments`, { extraParams: roleParams, limit: 100 })
+  const rolesOf = useMemo(() => {
+    const out = new Map<string, GroupRole[]>()
+    for (const r of bindings.data) out.set(r.group_id, [...(out.get(r.group_id) ?? []), r])
+    return out
+  }, [bindings.data])
+  const complete = !bindings.loading && !bindings.error && bindings.total <= bindings.data.length
   const [editing, setEditing] = useState<Group | 'new' | null>(null)
   const [removing, setRemoving] = useState<Group | null>(null)
+  const [assigning, setAssigning] = useState<Group | null>(null)
+  const detail = (g: Pick<Group, 'id'>) => `${envBase}/organizations/${orgId}/groups/${g.id}`
 
   return <div className="space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 className="text-lg font-semibold">Groups of {orgName}</h2>
-        <p className="max-w-2xl text-sm text-muted-foreground">Roles bound to a group apply to every member. Directory groups are managed by SCIM; you can still bind roles to them.</p>
+        <h2 className="text-lg font-semibold">Groups of {org.name}</h2>
+        <p className="max-w-2xl text-sm text-muted-foreground">Every member of a group holds the group's roles in {org.name}, in addition to their own. Directory groups are synced by SCIM; you still assign their roles here.</p>
       </div>
       {canWrite && <Button onClick={() => setEditing('new')}><Plus />Create group</Button>}
     </div>
@@ -56,38 +70,56 @@ export function GroupsPage() {
     <PaginationBar state={list} noun="groups" placeholder="Search groups…" />
 
     <DataTable
-      columns={['Group', { header: 'Members', nowrap: true }, { header: 'Source', hideBelow: 'sm' }, ...(canWrite ? ['Actions'] : [])]}
+      columns={['Group', { header: 'Roles', hideBelow: 'md' }, { header: 'Members', nowrap: true }, { header: 'Source', hideBelow: 'sm' }, ...(canWrite ? ['Actions'] : [])]}
       loading={list.loading}
       error={list.error}
       retry={list.reload}
-      rowHref={i => `${envBase}/organizations/${orgId}/groups/${list.data[i].id}`}
-      empty={<EmptyState icon={<Users />} title="No groups yet" description="Group members to give them the same roles at once." action={canWrite && <Button variant="outline" onClick={() => setEditing('new')}><Plus />Create group</Button>} />}
+      rowHref={i => detail(list.data[i])}
+      empty={<EmptyState icon={<Users />} title="No groups yet" description="Create a group, assign it roles, then add members: every member holds the group's roles." action={canWrite && <Button variant="outline" onClick={() => setEditing('new')}><Plus />Create group</Button>} />}
       rows={list.data.map(g => [
-        <EntityRef name={g.name} id={g.id} to={`${envBase}/organizations/${orgId}/groups/${g.id}`} secondary={g.description || undefined} />,
+        <EntityRef name={g.name} id={g.id} to={detail(g)} secondary={g.description || undefined} />,
+        <GroupRoles roles={rolesOf.get(g.id) ?? []} known={complete || rolesOf.has(g.id)} />,
         <span className="text-sm">{g.member_count}</span>,
         g.connection_id ? <DirectoryBadge group={g} /> : <span className="text-xs text-muted-foreground">Manual</span>,
-        ...(canWrite ? [!g.connection_id && <RowActions label={`Actions for ${g.name}`} actions={[
-          { label: 'Edit', icon: <Pencil />, onSelect: () => setEditing(g) },
-          { label: 'Delete group', icon: <Trash2 />, destructive: true, onSelect: () => setRemoving(g) },
+        ...(canWrite ? [<RowActions label={`Actions for ${g.name}`} actions={[
+          { label: 'Assign role', icon: <ShieldCheck />, onSelect: () => setAssigning(g) },
+          ...(g.connection_id ? [] : [
+            { label: 'Edit', icon: <Pencil />, onSelect: () => setEditing(g) },
+            { label: 'Delete group', icon: <Trash2 />, destructive: true, onSelect: () => setRemoving(g) },
+          ]),
         ]} />] : []),
       ])}
     />
 
-    {editing && <GroupForm path={path} group={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={list.reload} />}
+    {editing && <GroupForm path={path} group={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={id => { list.reload(); if (id) navigate(detail({ id })) }} />}
+    {assigning && <AssignRoleDialog base={base} organization={org} group={assigning} onClose={() => setAssigning(null)} onAssigned={bindings.reload} />}
     {removing && <ConfirmDialog
       title={`Delete ${removing.name}?`}
       description={`Its role bindings are deleted too, and its ${removing.member_count === 1 ? 'member loses' : `${removing.member_count} members lose`} the roles granted through it. Direct roles are not affected.`}
       confirmLabel="Delete group"
       onClose={() => setRemoving(null)}
-      confirm={async () => { await api.delete(`${path}/${removing.id}`); toast.success('Group deleted'); list.reload() }}
+      confirm={async () => { await api.delete(`${path}/${removing.id}`); toast.success('Group deleted'); list.reload(); bindings.reload() }}
     />}
   </div>
 }
 
-function GroupForm({ path, group, onClose, onSaved }: { path: string; group: Group | null; onClose: () => void; onSaved: () => void }) {
+/** GroupRoles shows a group's first roles as badges, the rest as "+N". */
+function GroupRoles({ roles, known }: { roles: GroupRole[]; known: boolean }) {
+  if (!known) return <span className="text-sm text-muted-foreground">—</span>
+  if (roles.length === 0) return <span className="text-xs text-muted-foreground">No roles</span>
+  const shown = roles.slice(0, 3)
+  return <span className="flex flex-wrap gap-1">
+    {shown.map(r => <Badge key={r.role_id} variant="secondary" title={`${r.role_name} · ${r.resource_name}`}>{r.role_name}</Badge>)}
+    {roles.length > shown.length && <Badge variant="outline" title={roles.slice(3).map(r => r.role_name).join(', ')}>+{roles.length - shown.length}</Badge>}
+  </span>
+}
+
+function GroupForm({ path, group, onClose, onSaved }: { path: string; group: Group | null; onClose: () => void; onSaved: (created?: string) => void }) {
   return <FormDialog
     title={group ? `Edit ${group.name}` : 'Create group'}
-    description="Group names are unique within the organization."
+    description={group ? 'Group names are unique within the organization.' : 'Group names are unique within the organization. Next, assign the group roles and add members.'}
+    submitLabel={group ? 'Save' : 'Create group'}
+    success={group ? 'Group updated' : 'Group created'}
     fields={[
       { name: 'name', label: 'Name', value: group?.name ?? '' },
       { name: 'description', label: 'Description', optional: true, value: group?.description ?? '' },
@@ -95,9 +127,9 @@ function GroupForm({ path, group, onClose, onSaved }: { path: string; group: Gro
     onClose={onClose}
     submit={async data => {
       const body = { name: data.name, description: data.description }
-      if (group) await api.patch(`${path}/${group.id}`, body)
-      else await api.post(path, body)
-      onSaved()
+      if (group) { await api.patch(`${path}/${group.id}`, body); onSaved(); return }
+      const created = await api.post<{ id?: string }>(path, body)
+      onSaved(created?.id)
     }}
   />
 }
@@ -110,6 +142,7 @@ export function GroupDetailPage() {
   const envBase = `/projects/${project}/environments/${environment}`
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
+  const { org } = useOrganization()
 
   const [group, setGroup] = useState<Group | null>(null)
   const [loadError, setLoadError] = useState('')
@@ -149,12 +182,13 @@ export function GroupDetailPage() {
         </div>
         {canWrite && <Button variant="outline" onClick={() => setBinding(true)}><Plus className="size-4" /> Assign role</Button>}
       </div>
+      {(roles.hasPrev || roles.hasNext || roles.rawSearch !== '') && <PaginationBar state={roles} noun="roles" placeholder="Search roles…" />}
       <DataTable
         columns={['Role', 'Resource', ...(canWrite ? ['Actions'] : [])]}
         loading={roles.loading}
         error={roles.error}
         retry={roles.reload}
-        empty={<EmptyState icon={<Tags />} title="No roles" description="Assign a role and every member of this group holds it." />}
+        empty={roles.rawSearch ? <EmptyState title="No roles match this search" /> : <EmptyState icon={<Tags />} title="No roles" description="Assign a role and every member of this group holds it." />}
         rows={roles.data.map(r => [
           <span className="font-medium">{r.role_name}</span>,
           <span className="text-sm">{r.resource_name}</span>,
@@ -195,15 +229,7 @@ export function GroupDetailPage() {
       onClose={() => setAdding(false)}
       submit={async user => { await api.post(`${path}/members`, { add: [user] }); toast.success('Member added'); refresh() }}
     />}
-    {binding && <PickDialog
-      title="Assign role"
-      description={`Members of ${group.name} will receive this role.`}
-      label="Role"
-      path={`${base}/roles`}
-      mapItem={item => ({ id: String(item.id), label: item.resource_name ? `${item.name} (${item.resource_name})` : String(item.name) })}
-      onClose={() => setBinding(false)}
-      submit={async role => { await api.post(`${base}/group-role-assignments`, { role_id: role, organization_id: orgId, group_id: groupId }); toast.success('Role assigned'); roles.reload() }}
-    />}
+    {binding && <AssignRoleDialog base={base} organization={org} group={group} onClose={() => setBinding(false)} onAssigned={roles.reload} />}
     {removingMember && <ConfirmDialog
       title={`Remove ${removingMember.user_name} from ${group.name}?`}
       description={`${removingMember.user_name} loses the roles granted through ${group.name}. Direct roles are not affected.`}

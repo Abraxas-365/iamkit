@@ -18,6 +18,7 @@ import { PermissionPicker } from '@/components/ui/permission-picker'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ConfirmDialog, CopyText, DataTable, EmptyState, EntityRef, FormDialog, PageHeader, Status, splitList } from '@/components/library/patterns'
 import type { Column, Field } from '@/components/library/patterns'
+import { AssignRoleDialog } from '@/components/library/assign-role'
 import { RedirectList } from './integrations'
 
 type Kind = 'users' | 'organizations' | 'applications' | 'resources' | 'roles' | 'grants'
@@ -289,10 +290,6 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
       ? <ConfirmDialog title={`Suspend ${label(remove)}?`} description="They can no longer sign in and their sessions stop refreshing. You can reactivate them from their page." confirmLabel="Suspend" onClose={() => setRemove(null)} confirm={async () => { await api.delete(`${path}/${remove.id}`); toast.success('User suspended'); list.reload() }} />
       : <ConfirmDialog title={kind === 'roles' ? `Delete role ${label(remove)}?` : `Revoke ${remove.user_name ?? 'this user'}'s grant?`} description={kind === 'roles' ? 'Everyone holding this role, directly or through a group, loses its permissions at their next token. This cannot be undone.' : `${remove.user_name ?? 'The user'} loses these ${remove.resource_name ?? ''} permissions in ${remove.organization_name ?? 'the organization'} at their next token.`} confirmLabel={kind === 'roles' ? 'Delete role' : 'Revoke grant'} onClose={() => setRemove(null)} confirm={async () => { await api.delete(`${path}/${remove.id}`); toast.success(kind === 'roles' ? 'Role deleted' : 'Grant revoked'); list.reload() }} />)}
     {purge && <ConfirmDialog title={`Permanently delete ${label(purge)}?`} description={`This erases ${label(purge)} and every session, membership, grant, role assignment, and linked identity for them in this environment. This cannot be undone.`} confirmLabel="Delete permanently" confirmationText={label(purge)} onClose={() => setPurge(null)} confirm={async () => { await api.delete(`${path}/${purge.id}/permanent`); toast.success('User deleted'); list.reload() }} />}
-    {assign && <FormDialog title="Assign a role" description="Give a user a role within one organization." submitLabel="Assign role" success="Role assigned" fields={[
-      { name: 'user_id', label: 'User', type: 'select', selectPath: `${base}/users`, selectMap: named },
-      { name: 'organization_id', label: 'Organization', type: 'select', selectPath: `${base}/organizations`, selectMap: named },
-      { name: 'role_id', label: 'Role', type: 'select', selectPath: `${base}/roles`, selectMap: named },
-    ]} onClose={() => setAssign(false)} submit={async values => { await api.post(`${base}/role-assignments`, values) }} />}
+    {assign && <AssignRoleDialog base={base} onClose={() => setAssign(false)} />}
   </div>
 }

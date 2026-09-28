@@ -28,6 +28,7 @@ beforeEach(() => {
         path === '/projects/project1/environments' ? [{ id: 'env1', name: 'Production' }] :
           path === `${env}/organizations/org1` ? { id: 'org1', name: 'Acme' } :
             path === `${env}/organizations/org1/members` ? page(members) :
+              path === `${env}/organizations/org1/domains` ? page([{ id: 'd1', domain: 'acme.com', verified: true }, { id: 'd2', domain: 'pending.example', verified: false }]) :
               path === `${env}/federation-connections/c1` ? conn :
                 path === `${env}/federation-connections/c1/identities` ? page([{ connection_id: 'c1', subject: 'sub-1', user_id: 'u2', user_name: 'Bob', user_email: 'bob@acme.com', origin: 'jit', created_at: '2026-01-01T00:00:00Z' }]) : []
     return Response.json(data)
@@ -55,6 +56,23 @@ it('patches only changed connection fields', () => {
   expect(connectionPatch(conn, { name: 'Acme', client_secret: 's', jit_provisioning: true, jit_group_id: 'g1', enforcement: 'optional' })).toEqual({ name: 'Acme', client_secret: 's', jit_group_id: 'g1', enforcement: 'optional' })
   expect(connectionPatch({ ...conn, jit_group_id: 'g1' }, { name: 'Acme Entra', client_secret: '', jit_provisioning: true, jit_group_id: '', enforcement: 'enforced' })).toEqual({ jit_group_id: '' })
   expect(connectionPatch({ ...conn, organization_id: null }, { name: 'Acme Entra', client_secret: '' })).toEqual({})
+})
+
+it('offers Google Workspace for organization SSO, limited to verified domains', async () => {
+  open('/projects/project1/environments/env1/organizations/org1/connections')
+  await userEvent.click(await screen.findByRole('button', { name: 'Add SSO connection' }))
+  const dialog = await screen.findByRole('dialog', { name: 'Add SSO for Acme' })
+  const options = [...dialog.querySelectorAll('button[aria-pressed]')].map(b => b.textContent)
+  expect(options).toEqual(['Microsoft Entra ID', 'Google Workspace', 'Other (OIDC)'])
+  expect(screen.getByText(/GitHub and Apple accounts are personal/)).toBeTruthy()
+  await userEvent.click(screen.getByRole('button', { name: 'Google Workspace' }))
+  // Pre-filled with the organization's verified domains only.
+  expect(await screen.findByText('acme.com')).toBeTruthy()
+  expect(screen.queryByText('pending.example')).toBeNull()
+  await userEvent.type(screen.getByLabelText('Client ID'), 'gid')
+  await userEvent.type(screen.getByLabelText(/Client secret/), 's')
+  await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+  await waitFor(() => expect(calls('POST')).toEqual([{ url: `/management/v1${env}/federation-connections`, body: expect.objectContaining({ provider: 'google', organization_id: 'org1', options: { domains: ['acme.com'] } }) }]))
 })
 
 it('toggles the SSO bypass of a member', async () => {

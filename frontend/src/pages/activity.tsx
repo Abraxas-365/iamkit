@@ -16,7 +16,7 @@ interface AuditEvent { id: string; actor_id: string; actor_label: string; action
 const verbs: Record<string, string> = { POST: 'Created', PUT: 'Set', PATCH: 'Updated', DELETE: 'Deleted' }
 const nouns: Record<string, string> = {
   users: 'user', organizations: 'organization', applications: 'application', resources: 'resource', roles: 'role', grants: 'grant',
-  'role-assignments': 'role assignment', 'service-accounts': 'service account', 'federation-connections': 'federation connection',
+  'role-assignments': 'role assignment', 'group-role-assignments': 'group role assignment', 'service-accounts': 'service account', 'federation-connections': 'federation connection',
   'oauth-clients': 'OAuth client', 'provisioning-credentials': 'SCIM credential', memberships: 'membership', members: 'member',
   groups: 'group', domains: 'domain', invitations: 'invitation', sessions: 'session', 'login-settings': 'hosted login settings',
   clients: 'client style', 'sign-in': 'sign-in methods', factors: 'second factors', identities: 'linked identity', 'mfa-policy': 'MFA policy',

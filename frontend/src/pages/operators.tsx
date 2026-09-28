@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Ban, Plus, UserCog } from 'lucide-react'
+import { Ban, Link2Off, Plus, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -9,11 +9,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { ConfirmDialog, CopyField, DataTable, EmptyState, EntityRef, ErrorState, PageHeader, Status } from '@/components/library/patterns'
+import { ConfirmDialog, CopyField, DataTable, EmptyState, EntityRef, ErrorState, PageHeader, Status, Time } from '@/components/library/patterns'
 import { Badge } from '@/components/ui/badge'
 import { RowActions } from '@/components/ui/menu'
 
-interface Operator { id: string; email: string; role: string; active: boolean }
+interface Operator { id: string; email: string; role: string; active: boolean; sso_providers?: string[] | null; last_sso_login_at?: string | null }
 interface Delegated { operator_id: string; key_id: string; secret: string; expires_at: string }
 
 const roles = [
@@ -33,32 +33,49 @@ const ttlOptions = [
 
 export default function OperatorsPage() {
   const list = usePaginatedList<Operator>('/operators')
-  const { principal } = useAuth()
+  const { principal, options } = useAuth()
   const isOwner = principal?.role === 'owner'
+  const providers = options?.providers ?? []
+  const sso = providers.length > 0
+  const password = options?.password !== false
+  const names = new Map(providers.map(p => [p.id, p.name]))
   const [add, setAdd] = useState(false)
   const [disable, setDisable] = useState<Operator | null>(null)
+  const [reset, setReset] = useState<Operator | null>(null)
   const [secret, setSecret] = useState<Delegated | null>(null)
   const [role, setRole] = useState('admin')
   const [ttl, setTtl] = useState('24h')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const pending = useRef(false)
+  const ssoHint = sso && `They can sign in with ${providers.map(p => p.name).join(' or ')} using this email.`
+  const inviteHint = [ssoHint, password && <>They receive an API key to set a console password at <code className="text-xs">/setup</code>.</>, !password && 'Password sign-in is disabled; the API key is for the management API only.'].filter(Boolean)
 
   return <div className="space-y-6">
     <PageHeader title="Operators" description="Console operators and their workspace roles. Only owners can invite or disable operators." actions={isOwner && <Button onClick={() => { setAdd(true); setRole('admin'); setTtl('24h'); setError('') }}><Plus className="size-4" /> Invite operator</Button>} />
     <PaginationBar state={list} noun="operators" />
-    <DataTable columns={['Operator', 'Role', 'Status', ...(isOwner ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload}
+    <DataTable columns={['Operator', 'Role', ...(sso ? ['Single sign-on'] : []), 'Status', ...(isOwner ? ['Actions'] : [])]} loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState icon={<UserCog />} title="No operators yet" description="Invite teammates to help manage projects and environments." />}
-      rows={list.data.map(op => [
-        <EntityRef name={op.email} id={op.id} secondary={op.id === principal?.operator_id ? 'You' : undefined} />,
-        <Badge variant="secondary" className="capitalize">{op.role}</Badge>,
-        <Status active={op.active} label={op.active ? 'Active' : 'Disabled'} />,
-        ...(isOwner ? [op.active && op.role !== 'owner' && <RowActions label={`Actions for ${op.email}`} actions={[{ label: 'Disable operator', icon: <Ban />, destructive: true, onSelect: () => setDisable(op) }]} />] : []),
-      ])} />
+      rows={list.data.map(op => {
+        const linked = op.sso_providers ?? []
+        const actions = [
+          ...(linked.length > 0 ? [{ label: 'Reset SSO link', icon: <Link2Off />, destructive: true, onSelect: () => setReset(op) }] : []),
+          ...(op.active && op.role !== 'owner' ? [{ label: 'Disable operator', icon: <Ban />, destructive: true, onSelect: () => setDisable(op) }] : []),
+        ]
+        return [
+          <EntityRef name={op.email} id={op.id} secondary={op.id === principal?.operator_id ? 'You' : undefined} />,
+          <Badge variant="secondary" className="capitalize">{op.role}</Badge>,
+          ...(sso ? [linked.length > 0
+            ? <span>{linked.map(id => names.get(id) ?? id).join(', ')}<span className="block text-xs text-muted-foreground">{op.last_sso_login_at ? <Time value={op.last_sso_login_at} prefix="Last sign-in" /> : 'Linked'}</span></span>
+            : <span className="text-muted-foreground">Not linked</span>] : []),
+          <Status active={op.active} label={op.active ? 'Active' : 'Disabled'} />,
+          ...(isOwner ? [actions.length > 0 && <RowActions label={`Actions for ${op.email}`} actions={actions} />] : []),
+        ]
+      })} />
 
     {add && <Dialog open onOpenChange={open => { if (!open && !pending.current) setAdd(false) }}><DialogContent>
       <DialogTitle className="pr-6 text-base font-semibold">Invite operator</DialogTitle>
-      <DialogDescription className="text-muted-foreground">The new operator will receive an API key. They can use it at <code className="text-xs">/setup</code> to set a console password.</DialogDescription>
+      <DialogDescription className="text-muted-foreground">{inviteHint.map((h, i) => <span key={i}>{i > 0 && ' '}{h}</span>)}</DialogDescription>
       <form className="space-y-4" onSubmit={async event => {
         event.preventDefault(); if (pending.current) return
         const email = String(new FormData(event.currentTarget).get('email') ?? '').trim()
@@ -100,10 +117,12 @@ export default function OperatorsPage() {
 
     {disable && <ConfirmDialog title={`Disable ${disable.email}?`} description="They are signed out of the console immediately and all their management API keys are revoked." confirmLabel="Disable operator" onClose={() => setDisable(null)} confirm={async () => { await api.delete(`/operators/${disable.id}`); toast.success('Operator disabled'); list.reload() }} />}
 
+    {reset && <ConfirmDialog title={`Reset single sign-on for ${reset.email}?`} description="Their linked provider identities are removed and they are signed out of the console. Their next single sign-on links again by verified email." confirmLabel="Reset SSO link" onClose={() => setReset(null)} confirm={async () => { await api.delete(`/operators/${reset.id}/identities`); toast.success('Single sign-on link reset'); list.reload() }} />}
+
     {secret && <Dialog open onOpenChange={open => { if (!open) setSecret(null) }}>
       <DialogContent>
         <DialogTitle className="font-semibold">Operator invited</DialogTitle>
-        <DialogDescription className="text-muted-foreground">Share this API key with the operator. They can set their console password at <code className="text-xs">/setup</code>.</DialogDescription>
+        <DialogDescription className="text-muted-foreground">{ssoHint && <>{ssoHint} </>}{password ? <>Share this API key with the operator. They can set their console password at <code className="text-xs">/setup</code>.</> : 'This API key works with the management API only; share it only if they need API access.'}</DialogDescription>
         <div className="space-y-2">
           <CopyField label="API key (shown once)" value={secret.secret} />
           <p className="text-xs text-muted-foreground">Expires {new Date(secret.expires_at).toLocaleString()}</p>

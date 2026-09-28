@@ -52,8 +52,10 @@ function CopyValue({ label, value }: { label: string; value: string }) {
   </div>
 }
 
+const manualGroups = { source: 'manual' }
+
 /** Picks several ids with SearchSelect, remembering labels for the chips. */
-function MultiPick({ label, path, values, onChange, disabled }: { label: string; path: string; values: string[]; onChange: (v: string[]) => void; disabled: boolean }) {
+function MultiPick({ label, path, params, values, onChange, disabled }: { label: string; path: string; params?: Record<string, string>; values: string[]; onChange: (v: string[]) => void; disabled: boolean }) {
   const labels = useRef(new Map<string, string>())
   const [reset, setReset] = useState(0)
   const map = (item: Record<string, unknown>) => {
@@ -64,7 +66,7 @@ function MultiPick({ label, path, values, onChange, disabled }: { label: string;
   const id = `invite-${label.toLowerCase()}`
   return <div className="space-y-1.5">
     <label className="text-sm font-medium" htmlFor={id}>{label}</label>
-    <SearchSelect key={reset} id={id} name={id} path={path} mapItem={map} disabled={disabled} placeholder={`Add ${label.toLowerCase()}…`}
+    <SearchSelect key={reset} id={id} name={id} path={path} params={params} mapItem={map} disabled={disabled} placeholder={`Add ${label.toLowerCase()}…`}
       onChange={v => { if (v && !values.includes(v)) onChange([...values, v]); setReset(r => r + 1) }} />
     {values.length > 0 && <div className="flex flex-wrap gap-1.5">
       {values.map(v => <Badge key={v} variant="secondary" className="gap-1">
@@ -97,8 +99,8 @@ function InviteDialog({ base, path, onClose, onIssued }: { base: string; path: s
           <Input id="invite-email" type="email" required disabled={busy} value={email} onChange={e => setEmail(e.target.value)} autoComplete="off" />
         </div>
         <MultiPick label="Roles" path={`${base}/roles`} values={roles} onChange={setRoles} disabled={busy} />
-        <MultiPick label="Groups" path={`${path.replace(/\/invitations$/, '')}/groups`} values={groups} onChange={setGroups} disabled={busy} />
-        <p className="text-xs text-muted-foreground">Only operator-managed groups can be granted; directory groups are rejected.</p>
+        <MultiPick label="Groups" path={`${path.replace(/\/invitations$/, '')}/groups`} params={manualGroups} values={groups} onChange={setGroups} disabled={busy} />
+        <p className="text-xs text-muted-foreground">Only operator-managed groups are listed: a directory controls its own groups' members.</p>
         {error && <ErrorState error={error} />}
         <div className="flex justify-end gap-2 border-t pt-4">
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>

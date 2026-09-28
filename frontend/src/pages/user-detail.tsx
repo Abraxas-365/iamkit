@@ -11,16 +11,15 @@ import { Button } from '@/components/ui/button'
 import { RowActions } from '@/components/ui/menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, FormDialog, Properties, Status, Time } from '@/components/library/patterns'
+import { AssignRoleDialog } from '@/components/library/assign-role'
 
 interface User { id: string; name: string; email: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; metadata?: Record<string, unknown> | null }
 interface Org { id: string; name: string; active: boolean }
-interface Assignment { organization_id: string; organization_name: string; resource_id: string; resource_name: string; role_id: string; role_name: string }
 interface Factor { id: string; kind: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
 interface Session { id: string; organization_name: string; application_id: string; application_name: string; resource_name: string; expires_at: string; revoked_at: string | null }
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id), inactive: item.active === false })
-const roleOption = (item: Record<string, unknown>) => ({ id: String(item.id), label: item.resource_name ? `${item.name} · ${item.resource_name}` : String(item.name ?? item.id) })
 
 /** UserDetailPage gathers everything about one end user: profile,
  * organizations, roles, second factors, sessions and account actions. */
@@ -102,21 +101,24 @@ export default function UserDetailPage() {
 function Organizations({ base, console, user, canWrite }: { base: string; console: string; user: User; canWrite: boolean }) {
   const params = useMemo(() => ({ user_id: user.id }), [user.id])
   const orgs = usePaginatedList<Org>(`${base}/organizations`, { extraParams: params, limit: 100 })
-  const roles = usePaginatedList<Assignment>(`${base}/role-assignments`, { extraParams: params, limit: 200 })
+  const roles = useEffectiveRoles(base, user.id)
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<Org | null>(null)
   const [assigning, setAssigning] = useState<Org | null>(null)
-  const [unassigning, setUnassigning] = useState<Assignment | null>(null)
+  const [unassigning, setUnassigning] = useState<{ role: EffectiveRole; org: Org } | null>(null)
   const byOrg = (org: string) => roles.data.filter(r => r.organization_id === org)
   const add = canWrite && <Button variant="outline" size="sm" onClick={() => setAdding(true)}><Plus /> Add to organization</Button>
-  return <DetailSection title="Organizations & roles" description="Where this user can sign in, and the roles they hold directly. Group roles and grants are listed on each organization." actions={orgs.data.length > 0 && add}>
+  return <DetailSection title="Organizations & roles" description="Where this user can sign in, and the roles they hold there: directly, or through a group. Grants are listed on each organization." actions={orgs.data.length > 0 && add}>
+    {roles.error && <ErrorState error={`Roles could not be loaded: ${roles.error}`} retry={roles.reload} />}
     <DataTable
       columns={['Organization', 'Roles', ...(canWrite ? ['Actions'] : [])]}
       loading={orgs.loading} error={orgs.error} retry={orgs.reload}
       empty={<EmptyState icon={<Building2 />} title="Not a member of any organization" description="Users need a membership to sign in to an organization." action={add} />}
       rows={orgs.data.map(o => [
         <EntityRef name={o.name} id={o.id} to={`${console}/organizations/${o.id}/members`} secondary={!o.active ? 'Organization inactive' : undefined} />,
-        byOrg(o.id).length ? <span className="flex flex-wrap gap-1">{byOrg(o.id).map(r => <Badge key={r.role_id} variant="secondary" title={r.resource_name} className="gap-1">{r.role_name}{canWrite && <button type="button" className="-mr-1 rounded-sm px-0.5 text-muted-foreground hover:text-destructive" aria-label={`Remove role ${r.role_name} in ${o.name}`} onClick={() => setUnassigning(r)}>×</button>}</Badge>)}</span> : <span className="text-sm text-muted-foreground">No direct roles</span>,
+        roles.loading ? <span className="text-sm text-muted-foreground">Loading…</span>
+          : roles.error ? <span className="text-sm text-muted-foreground">Unavailable</span>
+            : <OrgRoles console={console} org={o} roles={byOrg(o.id)} onRemove={canWrite ? role => setUnassigning({ role, org: o }) : undefined} />,
         ...(canWrite ? [<RowActions label={`Actions for ${o.name}`} actions={[
           { label: 'Assign role', icon: <ShieldCheck />, onSelect: () => setAssigning(o) },
           { label: 'Remove from organization', icon: <Ban />, destructive: true, onSelect: () => setRemoving(o) },
@@ -125,12 +127,40 @@ function Organizations({ base, console, user, canWrite }: { base: string; consol
     {adding && <FormDialog title={`Add ${user.name || user.email} to an organization`} description="The user can sign in to it right away. Assign roles afterwards." submitLabel="Add" success="Added to organization" fields={[
       { name: 'organization_id', label: 'Organization', type: 'select', selectPath: `${base}/organizations`, selectMap: named },
     ]} onClose={() => setAdding(false)} submit={async values => { await api.post(`${base}/memberships`, { organization_id: values.organization_id, user_id: user.id }); orgs.reload() }} />}
-    {assigning && <FormDialog title={`Assign a role in ${assigning.name}`} description={`${user.name || user.email} gets the role's permissions when signing in to ${assigning.name}.`} submitLabel="Assign role" success="Role assigned" fields={[
-      { name: 'role_id', label: 'Role', type: 'select', selectPath: `${base}/roles`, selectMap: roleOption },
-    ]} onClose={() => setAssigning(null)} submit={async values => { await api.post(`${base}/role-assignments`, { organization_id: assigning.id, user_id: user.id, role_id: values.role_id }); roles.reload() }} />}
-    {unassigning && <ConfirmDialog title={`Remove role ${unassigning.role_name}?`} description={`${user.name || user.email} loses this role in ${unassigning.organization_name}. Roles from groups are not affected.`} confirmLabel="Remove role" onClose={() => setUnassigning(null)} confirm={async () => { await api.delete(`${base}/role-assignments/${unassigning.role_id}/${unassigning.organization_id}/${user.id}`); toast.success('Role removed'); roles.reload() }} />}
-    {removing && <ConfirmDialog title={`Remove from ${removing.name}?`} description={`${user.name || user.email} can no longer sign in to ${removing.name}. Their account is kept.`} confirmLabel="Remove" onClose={() => setRemoving(null)} confirm={async () => { await api.delete(`${base}/organizations/${removing.id}/members/${user.id}`); toast.success('Removed from organization'); orgs.reload() }} />}
+    {assigning && <AssignRoleDialog base={base} organization={assigning} user={{ id: user.id, name: user.name || user.email }} onClose={() => setAssigning(null)} onAssigned={roles.reload} />}
+    {unassigning && <ConfirmDialog title={`Remove role ${unassigning.role.role_name}?`} description={`${user.name || user.email} loses this role in ${unassigning.org.name}. Roles from groups are not affected.`} confirmLabel="Remove role" onClose={() => setUnassigning(null)} confirm={async () => { await api.delete(`${base}/role-assignments/${unassigning.role.role_id}/${unassigning.org.id}/${user.id}`); toast.success('Role removed'); roles.reload() }} />}
+    {removing && <ConfirmDialog title={`Remove from ${removing.name}?`} description={`${user.name || user.email} can no longer sign in to ${removing.name}. Their account is kept.`} confirmLabel="Remove" onClose={() => setRemoving(null)} confirm={async () => { await api.delete(`${base}/organizations/${removing.id}/members/${user.id}`); toast.success('Removed from organization'); orgs.reload(); roles.reload() }} />}
   </DetailSection>
+}
+
+interface EffectiveRole { organization_id: string; role_id: string; role_name: string; resource_name: string; source: 'direct' | 'group'; group_id?: string; group_name?: string }
+
+/** useEffectiveRoles loads every role the user holds, in all organizations,
+ * with its source (direct or a group), in one request. */
+function useEffectiveRoles(base: string, user: string) {
+  const [state, setState] = useState<{ data: EffectiveRole[]; loading: boolean; error: string }>({ data: [], loading: true, error: '' })
+  const [version, setVersion] = useState(0)
+  useEffect(() => {
+    const controller = new AbortController()
+    setState(s => ({ ...s, loading: true, error: '' }))
+    api.list<EffectiveRole>(`${base}/effective-roles?user_id=${user}`, controller.signal)
+      .then(r => setState({ data: r.data, loading: false, error: '' }))
+      .catch(e => { if (!controller.signal.aborted) setState({ data: [], loading: false, error: message(e) }) })
+    return () => controller.abort()
+  }, [base, user, version])
+  return { ...state, reload: () => setVersion(v => v + 1) }
+}
+
+/** OrgRoles lists a user's roles in one organization: direct ones (removable
+ * here) and those inherited from groups (managed on the group). */
+function OrgRoles({ console, org, roles, onRemove }: { console: string; org: Org; roles: EffectiveRole[]; onRemove?: (role: EffectiveRole) => void }) {
+  if (!roles.length) return <span className="text-sm text-muted-foreground">No roles</span>
+  return <span className="flex flex-wrap gap-1">
+    {roles.filter(r => r.source === 'direct').map(r => <Badge key={r.role_id} variant="secondary" title={r.resource_name} className="gap-1">{r.role_name}{onRemove && <button type="button" className="-mr-1 rounded-sm px-0.5 text-muted-foreground hover:text-destructive" aria-label={`Remove role ${r.role_name} in ${org.name}`} onClick={() => onRemove(r)}>×</button>}</Badge>)}
+    {roles.filter(r => r.source === 'group').map(r => <Link key={`${r.group_id}:${r.role_id}`} to={`${console}/organizations/${org.id}/groups/${r.group_id}`} title={`${r.resource_name}: inherited from the group ${r.group_name}; manage it on the group`}>
+      <Badge variant="outline" className="gap-1 hover:border-primary">{r.role_name}<span className="text-muted-foreground">via {r.group_name}</span></Badge>
+    </Link>)}
+  </span>
 }
 
 function SecondFactors({ path, user, canWrite }: { path: string; user: User; canWrite: boolean }) {

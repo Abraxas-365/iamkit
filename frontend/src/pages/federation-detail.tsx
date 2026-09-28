@@ -16,7 +16,7 @@ import { providerLabel } from './federation-connection-form'
 
 export interface ConnectionDetail {
   id: string; organization_id: string | null; name: string; issuer: string; client_id: string
-  provider?: string; options?: { tenant?: string; tenants?: string[]; team_id?: string; key_id?: string }
+  provider?: string; options?: { tenant?: string; tenants?: string[]; domains?: string[]; team_id?: string; key_id?: string }
   secret_env: string; secret_source: 'env' | 'sealed'; active: boolean; linked: number
   jit_provisioning: boolean; jit_group_id: string | null; enforcement: 'optional' | 'enforced'
   signup?: boolean; link_email?: boolean; signup_organization_id?: string | null; signup_group_id?: string | null
@@ -62,14 +62,14 @@ export default function FederationDetailPage() {
 
   if (loading) return <div className="space-y-6">
     <Link to={backPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-      <ArrowLeft className="size-3.5" />Back to federation
+      <ArrowLeft className="size-3.5" />Back to sign-in providers
     </Link>
     <p className="text-sm text-muted-foreground">Loading connection…</p>
   </div>
 
   if (error || !conn) return <div className="space-y-6">
     <Link to={backPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-      <ArrowLeft className="size-3.5" />Back to federation
+      <ArrowLeft className="size-3.5" />Back to sign-in providers
     </Link>
     <p className="text-sm text-destructive">{error || 'Connection not found'}</p>
   </div>
@@ -77,7 +77,7 @@ export default function FederationDetailPage() {
   return <div className="space-y-8">
     <div className="space-y-3">
       <Link to={backPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="size-3.5" />Back to federation
+        <ArrowLeft className="size-3.5" />Back to sign-in providers
       </Link>
       <PageHeader title={conn.name} description={conn.id} actions={<div className="flex items-center gap-2">
         <Status active={conn.active} />
@@ -93,6 +93,7 @@ export default function FederationDetailPage() {
       <InfoCard label={conn.provider === 'apple' ? 'Services ID' : 'Client ID'} value={conn.client_id} mono />
       {conn.provider === 'microsoft' && conn.options?.tenant && <InfoCard label="Accounts" value={(tenants[conn.options.tenant] ?? `Tenant ${conn.options.tenant}`) + (conn.options.tenants?.length ? ` · only ${conn.options.tenants.length} allowed tenant${conn.options.tenants.length > 1 ? 's' : ''}` : '')} />}
       {conn.provider === 'apple' && <InfoCard label="Apple team / key" value={`${conn.options?.team_id ?? ''} / ${conn.options?.key_id ?? ''}`} mono />}
+      {conn.provider === 'google' && <InfoCard label="Accounts" value={conn.options?.domains?.length ? `Google Workspace: ${conn.options.domains.join(', ')}` : 'Any Google account'} />}
       {!conn.organization_id && <>
         <InfoCard label="Sign-up" value={conn.signup ? (conn.signup_group_id ? `On, joins organization ${conn.signup_organization_id} and group ${conn.signup_group_id}` : `On, joins organization ${conn.signup_organization_id}`) : 'Off: only existing or linked users'} />
         <InfoCard label="Email linking" value={conn.link_email ? 'On: verified email signs in to the matching account' : 'Off'} />
@@ -189,6 +190,9 @@ export function editFields(conn: ConnectionDetail, base: string): Field[] {
   if (conn.provider === 'microsoft' && (conn.options?.tenant === 'common' || conn.options?.tenant === 'organizations')) {
     fields.push({ name: 'tenants', label: 'Allowed tenants', type: 'tags', optional: true, tags: conn.options?.tenants ?? [], hint: 'Only these tenant IDs may sign in; empty accepts any tenant.' })
   }
+  if (conn.provider === 'google') {
+    fields.push({ name: 'domains', label: 'Workspace domains', type: 'tags', optional: true, tags: conn.options?.domains ?? [], hint: conn.organization_id ? "Only Google accounts of these Workspace domains can sign in. Keep the organization's domains here." : 'Only Google Workspace accounts of these domains can sign in; empty accepts any Google account.' })
+  }
   if (!conn.organization_id) return [...fields,
     { name: 'link_email', label: 'Link existing accounts by verified email', type: 'checkbox', value: !!conn.link_email },
     { name: 'signup', label: 'Create accounts for new users', type: 'checkbox', value: !!conn.signup },
@@ -212,6 +216,10 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
   if (typeof values.tenants === 'string') {
     const next = values.tenants.split(',').map(t => t.trim()).filter(Boolean)
     if (next.join(',') !== (conn.options?.tenants ?? []).join(',')) patch.options = { ...conn.options, tenants: next }
+  }
+  if (typeof values.domains === 'string') {
+    const next = values.domains.split(',').map(d => d.trim()).filter(Boolean)
+    if (next.join(',') !== (conn.options?.domains ?? []).join(',')) patch.options = { ...conn.options, domains: next }
   }
   if (!conn.organization_id) {
     if (values.link_email !== undefined && values.link_email !== !!conn.link_email) patch.link_email = values.link_email

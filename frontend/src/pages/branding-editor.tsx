@@ -7,8 +7,9 @@ import { toast } from 'sonner'
 import { api, ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { cn, message } from '@/lib/utils'
-import { body, defaults, emptyBranding, hex, normalize, pages, resolved, same, warnings } from '@/lib/branding'
-import type { Branding, Page, Palette, Scheme, Theme } from '@/lib/branding'
+import { body, defaults, emailForm, emptyBranding, hex, methodPages, normalize, pages, resolved, same, sampleButtons, warnings } from '@/lib/branding'
+import type { Branding, Page, Palette, PreviewButton, PreviewMethods, Scheme, Theme } from '@/lib/branding'
+import { everyMethod, type SignIn } from './sign-in-options'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +24,7 @@ function Field({ label, hint, children, id }: { label: string; hint?: string; ch
   return <div className="space-y-1.5">
     <label className="text-sm font-medium" htmlFor={id}>{label}</label>
     {children}
-    {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    {hint && <p id={`${id}-hint`} className="text-xs text-muted-foreground">{hint}</p>}
   </div>
 }
 
@@ -34,6 +35,40 @@ function Section({ title, open, children }: { title: string; open?: boolean; chi
     </summary>
     <div className="space-y-4 border-t px-4 py-4">{children}</div>
   </details>
+}
+
+// useLocales lists the languages of the hosted pages and emails (null
+// while loading; failed when the list could not be loaded).
+function useLocales(environment?: string) {
+  const [locales, setLocales] = useState<{ code: string; name: string }[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    api.get<{ items: { code: string; name: string }[] }>(`/environments/${environment}/login-settings/locales`)
+      .then(r => { setLocales(r?.items ?? []); setFailed(false) }).catch(() => setFailed(true))
+  }, [environment])
+  return { locales, failed }
+}
+
+// LanguageSettings: the environment's language, used by the hosted pages
+// and the emails IAMKit writes (SMTP, Resend), which also use this name,
+// logo and primary color.
+function LanguageSettings({ draft, set }: { draft: Branding; set: (patch: Partial<Branding>) => void }) {
+  const { environment } = useParams()
+  const { locales, failed } = useLocales(environment)
+  // The saved language stays selectable (and visible) even when the list
+  // failed to load or no longer offers it, so saving never changes it silently.
+  const current = draft.locale ?? ''
+  const unlisted = current && !locales?.some(l => l.code === current)
+  const hint = 'Sign-in pages and emails use this language unless the application asks for another (ui_locales). Automatic: pages follow the visitor’s browser, emails the server default.'
+  return <Section title="Language" open>
+    <Field id="locale" label="Language" hint={failed ? `${hint} The list of languages could not be loaded.` : unlisted && locales ? `${hint} “${current}” is no longer available; the automatic language applies until you choose another.` : hint}>
+      <select id="locale" aria-describedby="locale-hint" className={selectClass} value={current} onChange={e => set({ locale: e.target.value })}>
+        <option value="">Automatic</option>
+        {unlisted && <option value={current}>{locales ? `${current} (not available)` : current}</option>}
+        {locales?.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+      </select>
+    </Field>
+  </Section>
 }
 
 function ColorInput({ label, value, fallback, onChange }: { label: string; value: string; fallback: string; onChange: (v: string) => void }) {
@@ -79,7 +114,7 @@ export default function BrandingEditorPage() {
     Promise.all([fallback, clientId ? api.get<Branding>(base).then(normalize) : Promise.resolve(null)]).then(([style, environmentDefault]) => {
       setSaved(style)
       // A new client style starts as a copy of the environment default.
-      setDraft(style ?? { ...(environmentDefault ?? emptyBranding()), client_id: clientId, updated_at: undefined })
+      setDraft(style ?? { ...(environmentDefault ?? emptyBranding()), client_id: clientId, updated_at: undefined, locale: undefined })
     }).catch(e => setLoadError(message(e)))
     if (clientId) api.get<{ items: Client[] }>(`/environments/${environment}/oauth-clients?limit=100`).then(r => setClient(r.items.find(c => c.id === clientId))).catch(() => {})
   }
@@ -110,8 +145,9 @@ export default function BrandingEditorPage() {
       This client uses the default style. The editor starts from a copy of it; saving gives the client its own style.
     </div>}
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(340px,420px)_1fr]">
-      <Settings draft={draft} setDraft={setDraft} canWrite={canWrite} />
-      <Preview environment={environment!} clientId={clientId} draft={draft} live={canWrite} savedStyle={!!saved} />
+      <Settings draft={draft} setDraft={setDraft} canWrite={canWrite} environmentDefault={!clientId} />
+      <Preview environment={environment!} clientId={clientId} draft={draft} live={canWrite} savedStyle={!!saved}
+        onAdaptive={canWrite ? () => setDraft({ ...draft, theme: { ...draft.theme, mode: 'adaptive' } }) : undefined} />
     </div>
     {saveError && <ErrorState error={saveError} />}
     {clientId && saved && canWrite && <div className="flex justify-start">
@@ -131,7 +167,7 @@ export default function BrandingEditorPage() {
   </div>
 }
 
-function Settings({ draft, setDraft, canWrite }: { draft: Branding; setDraft: (b: Branding) => void; canWrite: boolean }) {
+function Settings({ draft, setDraft, canWrite, environmentDefault }: { draft: Branding; setDraft: (b: Branding) => void; canWrite: boolean; environmentDefault: boolean }) {
   const id = useId()
   const t = draft.theme
   const set = (patch: Partial<Branding>) => setDraft({ ...draft, ...patch })
@@ -159,6 +195,7 @@ function Settings({ draft, setDraft, canWrite }: { draft: Branding; setDraft: (b
         <Input id={`${id}-favicon`} type="url" value={t.favicon_url} placeholder="https://cdn.example.com/favicon.ico" onChange={e => theme({ favicon_url: e.target.value.trim() })} />
       </Field>
     </Section>
+    {environmentDefault && <LanguageSettings draft={draft} set={set} />}
 
     <Section title="Theme" open>
       <Field id={`${id}-mode`} label="Mode" hint={t.mode === 'adaptive' ? 'Follows the light or dark setting of the visitor’s device.' : undefined}>
@@ -181,6 +218,13 @@ function Settings({ draft, setDraft, canWrite }: { draft: Branding; setDraft: (b
       <Field id={`${id}-radius`} label={`Corner radius: ${t.radius}px`}>
         <input id={`${id}-radius`} type="range" min={0} max={24} step={1} value={t.radius} className="w-full accent-primary" onChange={e => theme({ radius: Number(e.target.value) })} />
       </Field>
+      <Field id={`${id}-background`} label="Background image URL" hint="Optional. HTTPS only; covers the page behind the form. Use a wide image (1920 px or more).">
+        <Input id={`${id}-background`} type="url" value={t.background_image_url} placeholder="https://cdn.example.com/background.jpg"
+          onChange={e => theme({ background_image_url: e.target.value.trim() })} />
+      </Field>
+      {t.background_image_url && <Field id={`${id}-overlay`} label={`Background tint: ${t.background_overlay}%`} hint="Covers the image with the page background color (light or dark), so the header and footer stay readable.">
+        <input id={`${id}-overlay`} type="range" min={0} max={90} step={5} value={t.background_overlay} className="w-full accent-primary" onChange={e => theme({ background_overlay: Number(e.target.value) })} />
+      </Field>}
     </Section>
 
     <Section title="Colors" open>
@@ -229,29 +273,58 @@ function Settings({ draft, setDraft, canWrite }: { draft: Branding; setDraft: (b
 
 // Preview renders the draft with the real page templates. Viewers see the
 // saved style (they cannot change it, and drafts are a write operation).
-function Preview({ environment, clientId, draft, live, savedStyle }: { environment: string; clientId?: string; draft: Branding; live: boolean; savedStyle: boolean }) {
+function Preview({ environment, clientId, draft, live, savedStyle, onAdaptive }: { environment: string; clientId?: string; draft: Branding; live: boolean; savedStyle: boolean; onAdaptive?: () => void }) {
   const [page, setPage] = useState<Page>('identify')
   const [scheme, setScheme] = useState<Scheme>(draft.theme.mode === 'dark' ? 'dark' : 'light')
   const [phone, setPhone] = useState(false)
   const [html, setHtml] = useState('')
   const [error, setError] = useState('')
+  const [methods, setMethods] = useState<PreviewMethods | null>(null)
+  const [buttons, setButtons] = useState<PreviewButton[]>([])
+  const [sample, setSample] = useState(false)
+  const [initial, setInitial] = useState<PreviewMethods | null>(null)
+  // '' previews the environment language (as visitors without ui_locales see it).
+  const [locale, setLocale] = useState('')
+  const { locales } = useLocales(environment)
   const mode = draft.theme.mode
   useEffect(() => { if (mode !== 'adaptive') setScheme(mode) }, [mode])
+  // Previewing a scheme the mode never shows: say so, and offer Adaptive.
+  const unseen = mode !== 'adaptive' && scheme !== mode
   const request = useMemo(() => JSON.stringify(body(draft)), [draft])
+  const signIn = useMemo(() => methods && methodPages.includes(page) ? JSON.stringify(methods) : '', [methods, page])
+
+  // Start from what the page really offers: the client's methods (or every
+  // method) with the environment's social logins, or sample buttons.
+  useEffect(() => {
+    const base = `/environments/${environment}`
+    Promise.all([
+      clientId ? api.get<SignIn>(`${base}/login-settings/clients/${clientId}/sign-in`).catch(() => everyMethod(clientId)) : Promise.resolve(null),
+      api.get<{ items: { id: string; name: string; provider: string; active: boolean }[] }>(`${base}/federation-connections?scope=environment&limit=100`).then(r => r.items.filter(c => c.active)).catch(() => []),
+    ]).then(([options, connections]) => {
+      const real = connections.map(c => ({ name: c.name, provider: c.provider }))
+      const list = real.length ? real : sampleButtons.slice(0, 2)
+      const shown = options && !options.all_connections ? connections.filter(c => options.connection_ids.includes(c.id)).map(c => ({ name: c.name, provider: c.provider })) : list
+      const start = { password: options?.password ?? true, email_code: options?.email_code ?? true, organization_sso: options?.organization_sso ?? true, connections: shown }
+      setSample(!real.length); setButtons(real.length ? real : sampleButtons); setMethods(start); setInitial(start)
+    })
+  }, [environment, clientId])
 
   useEffect(() => {
+    if (!methods) return
     const base = `/environments/${environment}/login-settings/preview`
     let stale = false
     const timer = window.setTimeout(() => {
       const q = new URLSearchParams({ page, scheme })
       if (clientId && savedStyle) q.set('client', clientId)
+      if (signIn) q.set('sign_in', signIn)
+      if (locale) q.set('locale', locale)
       const call = live
-        ? api.post<{ html: string }>(base, { page, scheme, settings: JSON.parse(request) })
+        ? api.post<{ html: string }>(base, { page, scheme, settings: JSON.parse(request), ...(locale && { locale }), ...(signIn && { sign_in: JSON.parse(signIn) }) })
         : api.get<{ html: string }>(`${base}?${q}`)
       call.then(r => { if (!stale) { setHtml(r.html); setError('') } }).catch(e => { if (!stale) setError(message(e)) })
     }, 300)
     return () => { stale = true; window.clearTimeout(timer) }
-  }, [environment, clientId, savedStyle, live, page, scheme, request])
+  }, [environment, clientId, savedStyle, live, page, scheme, locale, request, signIn, methods])
 
   const toggle = (active: boolean) => cn('gap-1.5', active && 'bg-muted')
   return <section aria-label="Preview" className="min-w-0 space-y-3 xl:sticky xl:top-4">
@@ -260,15 +333,25 @@ function Preview({ environment, clientId, draft, live, savedStyle }: { environme
         {pages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
       <div className="flex rounded-lg border p-0.5" role="group" aria-label="Color scheme">
-        <Button size="sm" variant="ghost" className={toggle(scheme === 'light')} aria-pressed={scheme === 'light'} disabled={mode === 'dark'} onClick={() => setScheme('light')}><Sun className="size-3.5" />Light</Button>
-        <Button size="sm" variant="ghost" className={toggle(scheme === 'dark')} aria-pressed={scheme === 'dark'} disabled={mode === 'light'} onClick={() => setScheme('dark')}><Moon className="size-3.5" />Dark</Button>
+        <Button size="sm" variant="ghost" className={toggle(scheme === 'light')} aria-pressed={scheme === 'light'} onClick={() => setScheme('light')}><Sun className="size-3.5" />Light</Button>
+        <Button size="sm" variant="ghost" className={toggle(scheme === 'dark')} aria-pressed={scheme === 'dark'} onClick={() => setScheme('dark')}><Moon className="size-3.5" />Dark</Button>
       </div>
       <div className="flex rounded-lg border p-0.5" role="group" aria-label="Viewport">
         <Button size="sm" variant="ghost" className={toggle(!phone)} aria-pressed={!phone} onClick={() => setPhone(false)}><Monitor className="size-3.5" />Desktop</Button>
         <Button size="sm" variant="ghost" className={toggle(phone)} aria-pressed={phone} onClick={() => setPhone(true)}><Smartphone className="size-3.5" />Phone</Button>
       </div>
+      {locales && locales.length > 1 && <select aria-label="Preview language" className={cn(selectClass, 'w-auto')} value={locale} onChange={e => setLocale(e.target.value)}>
+        <option value="">Page language</option>
+        {locales.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+      </select>}
       {!live && <Badge variant="secondary">Saved style</Badge>}
     </div>
+    {unseen && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+      <span>Visitors never see this {scheme} version: the mode is {mode}.{onAdaptive ? ' Adaptive follows each visitor’s device.' : ''}</span>
+      {onAdaptive && <Button type="button" size="xs" variant="outline" onClick={onAdaptive}>Use adaptive</Button>}
+    </div>}
+    {methods && methodPages.includes(page) && <MethodPicker methods={methods} buttons={buttons} sample={sample} changed={!!initial && JSON.stringify(initial) !== JSON.stringify(methods)} client={!!clientId}
+      onChange={setMethods} onReset={() => initial && setMethods(initial)} />}
     {error && <p role="alert" className="rounded-lg border border-destructive/30 px-3 py-2 text-sm text-destructive">{error}</p>}
     <div className="overflow-hidden rounded-lg border bg-muted/40 p-3">
       <div className={cn('mx-auto overflow-hidden rounded-md border shadow-sm transition-[max-width]', phone ? 'max-w-[390px]' : 'max-w-full')}>
@@ -277,4 +360,45 @@ function Preview({ environment, clientId, draft, live, savedStyle }: { environme
     </div>
     <p className="text-xs text-muted-foreground">Rendered by the hosted page templates with sample data. Buttons and links are inactive.</p>
   </section>
+}
+
+// MethodPicker chooses which sign-in methods the preview shows, e.g. only
+// social login buttons. It only changes the preview.
+function MethodPicker({ methods, buttons, sample, changed, client, onChange, onReset }: {
+  methods: PreviewMethods; buttons: PreviewButton[]; sample: boolean; changed: boolean; client: boolean
+  onChange: (m: PreviewMethods) => void; onReset: () => void
+}) {
+  const shown = (b: PreviewButton) => methods.connections.some(c => c.name === b.name && c.provider === b.provider)
+  const count = (m: PreviewMethods) => Number(m.password) + Number(m.email_code) + Number(m.organization_sso) + m.connections.length
+  // The last method cannot be turned off: a page needs one.
+  const set = (next: PreviewMethods) => { if (count(next) > 0) onChange(next) }
+  const flip = (b: PreviewButton) => set({ ...methods, connections: shown(b) ? methods.connections.filter(c => !(c.name === b.name && c.provider === b.provider)) : buttons.filter(x => x === b || shown(x)) })
+  const chip = (on: boolean, label: string, onClick: () => void) => <button key={label} type="button" aria-pressed={on} onClick={onClick}
+    className={cn('inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors', on ? 'border-primary/40 bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-muted')}>
+    <span aria-hidden className={cn('size-1.5 rounded-full', on ? 'bg-primary' : 'bg-muted-foreground/40')} />{label}
+  </button>
+  const preset = (label: string, next: PreviewMethods) => <Button key={label} type="button" size="xs" variant="ghost" onClick={() => set(next)}>{label}</Button>
+  const none = { password: false, email_code: false, organization_sso: false, connections: [] as PreviewButton[] }
+  return <div role="group" aria-label="Sign-in methods in the preview" className="space-y-2 rounded-lg border px-3 py-2.5">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-xs font-medium">Show in preview</p>
+      <div className="flex flex-wrap items-center gap-0.5">
+        {preset('Everything', { password: true, email_code: true, organization_sso: true, connections: buttons })}
+        {preset('Social only', { ...none, connections: buttons })}
+        {preset('Email only', { ...none, password: true, email_code: true, organization_sso: true })}
+        {changed && <Button type="button" size="xs" variant="ghost" onClick={onReset}>Reset</Button>}
+      </div>
+    </div>
+    <div className="flex flex-wrap gap-1.5">
+      {chip(methods.password, 'Password', () => set({ ...methods, password: !methods.password }))}
+      {chip(methods.email_code, 'Email code', () => set({ ...methods, email_code: !methods.email_code }))}
+      {chip(methods.organization_sso, 'Organization SSO', () => set({ ...methods, organization_sso: !methods.organization_sso }))}
+      {buttons.map(b => chip(shown(b), b.name, () => flip(b)))}
+    </div>
+    <p className="text-xs text-muted-foreground">
+      {!emailForm(methods) ? 'No email field: people only see the social login buttons. ' : ''}
+      {sample ? 'Sample buttons: add social login under Sign-in providers. ' : ''}
+      Only changes this preview. {client ? 'Set what this client really offers with “Sign-in methods” on the Hosted login page.' : 'Choose what each client really offers with “Sign-in methods” on the Hosted login page.'}
+    </p>
+  </div>
 }

@@ -69,7 +69,7 @@ export default function EnvironmentHomePage() {
       </DetailSection>
     </div>
     <div className="grid gap-3 sm:grid-cols-3">
-      {([['OAuth clients', 'oauth-clients', Link2, 'Connect applications to sign-in.'], ['Social & SSO', 'federation', Shield, 'Google, Microsoft, GitHub, Apple or your IdP.'], ['Hosted login', 'hosted-login', LogIn, 'The sign-in pages your users see.']] as const).map(([title, path, Icon, text]) =>
+      {([['OAuth clients', 'oauth-clients', Link2, 'Connect applications to sign-in.'], ['Sign-in providers', 'federation', Shield, 'Social login (Google, GitHub…) and organization SSO.'], ['Hosted login', 'hosted-login', LogIn, 'The sign-in pages your users see.']] as const).map(([title, path, Icon, text]) =>
         <Link key={path} to={`${base}/${path}`} className="flex items-start gap-3 rounded-lg border p-4 hover:border-primary/50">
           <Icon className="mt-0.5 size-4 text-muted-foreground" /><span><span className="block text-sm font-medium">{title}</span><span className="block text-xs text-muted-foreground">{text}</span></span>
         </Link>)}

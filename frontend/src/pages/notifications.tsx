@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Mail, Globe, Shield, Clock, Pencil, Trash2, Plus, MailPlus, Send, Check, Copy, CircleCheck, CircleX, CircleDashed, Activity } from 'lucide-react'
+import { Mail, Globe, Shield, Clock, Pencil, Trash2, Plus, MailPlus, Send, Check, Copy, CircleCheck, CircleX, CircleDashed, Activity, Eye, Server, AtSign } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { message } from '@/lib/utils'
+import { effectiveProvider, PROVIDERS, rendered, sender } from '@/lib/delivery'
+import type { Attempt, DeliveryConfig, DeliveryStatus, Locale, Provider, Source } from '@/lib/delivery'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -12,37 +14,13 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardAction }
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConfirmDialog, ErrorState, PageHeader } from '@/components/library/patterns'
+import { DeliveryForm } from '@/components/delivery/delivery-form'
+import { PreviewDialog } from '@/components/delivery/preview-dialog'
+import { TemplatesCard } from '@/components/delivery/templates'
 
-interface DeliveryConfig {
-  environment_id: string
-  webhook_url: string
-  has_token: boolean
-  invitation_url: string
-  created_at: string
-  updated_at: string
-}
+export type { Attempt } from '@/lib/delivery'
 
-type Source = 'environment' | 'global' | 'none'
-
-export interface Attempt {
-  source: Source
-  purpose: string
-  delivered: boolean
-  status?: number
-  reason?: string
-  latency_ms: number
-  at: string
-}
-
-interface DeliveryStatus {
-  source: Source
-  global_configured: boolean
-  hosted_invitation_url: string
-  last_attempt: Attempt | null
-  last_failure: Attempt | null
-}
-
-const DESCRIPTION = 'Configure the webhook that delivers login codes, password resets, email verification and invitations.'
+const DESCRIPTION = 'Configure how login codes, password resets, email verification and invitations are delivered.'
 
 // The webhook contract (docs/reference/webhooks.md).
 const PURPOSES = [
@@ -56,10 +34,15 @@ const PURPOSES = [
   { purpose: 'test', label: 'Test (console)', fields: ['email', 'purpose'], validity: 'No code', example: { email: 'ops@example.com', purpose: 'test' } },
 ]
 
-const SOURCE_TEXT: Record<Source, { badge: string; className: string; detail: string }> = {
-  environment: { badge: 'This environment', className: 'bg-success/10 text-success', detail: 'Mail goes to this environment’s webhook.' },
-  global: { badge: 'Global fallback', className: 'bg-primary/10 text-primary', detail: 'No webhook here: mail goes to the server-wide EMAIL_WEBHOOK_URL.' },
-  none: { badge: 'Not configured', className: 'bg-destructive/10 text-destructive', detail: 'No webhook here and no EMAIL_WEBHOOK_URL: codes and invitations are not delivered.' },
+const GLOBAL_ENV: Record<Provider, string> = { webhook: 'EMAIL_WEBHOOK_URL', smtp: 'SMTP_HOST', resend: 'RESEND_API_KEY' }
+
+function sourceText(source: Source, provider: Provider | '') {
+  const via = provider ? PROVIDERS[provider].label : 'Webhook'
+  switch (source) {
+    case 'environment': return { badge: 'This environment', className: 'bg-success/10 text-success', detail: provider === 'webhook' ? 'Mail goes to this environment’s webhook.' : `This environment sends email through ${via}.` }
+    case 'global': return { badge: 'Global fallback', className: 'bg-primary/10 text-primary', detail: provider && provider !== 'webhook' ? `No settings here: mail is sent by the server-wide ${via} sender.` : 'No settings here: mail goes to the server-wide EMAIL_WEBHOOK_URL.' }
+    default: return { badge: 'Not configured', className: 'bg-destructive/10 text-destructive', detail: 'No delivery settings here and none on the server: codes and invitations are not delivered.' }
+  }
 }
 
 export function outcome(a: Attempt) {
@@ -74,11 +57,13 @@ export default function NotificationsPage() {
   const path = `/environments/${environment}/delivery`
   const [config, setConfig] = useState<DeliveryConfig | null>(null)
   const [status, setStatus] = useState<DeliveryStatus | null>(null)
+  const [locales, setLocales] = useState<Locale[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [removing, setRemoving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [previewing, setPreviewing] = useState(false)
 
   const load = () => {
     setError('')
@@ -91,6 +76,9 @@ export default function NotificationsPage() {
       .finally(() => setLoading(false))
   }
   useEffect(() => { setLoading(true); load() }, [path])
+  useEffect(() => {
+    api.get<{ items: Locale[] }>(`/environments/${environment}/login-settings/locales`).then(r => setLocales(r?.items ?? [])).catch(() => {})
+  }, [environment])
 
   if (loading) return <div className="space-y-6">
     <PageHeader title="Notifications" description={DESCRIPTION} />
@@ -104,11 +92,14 @@ export default function NotificationsPage() {
     <ErrorState error={error || 'Delivery status unavailable'} retry={load} />
   </div>
 
-  const source = SOURCE_TEXT[status.source]
+  const provider = effectiveProvider(config, status)
+  const source = sourceText(status.source, provider)
+  const own = config?.provider || 'webhook'
   return <div className="space-y-6">
-    <PageHeader title="Notifications" description={DESCRIPTION} actions={canWrite && status.source !== 'none' && (
-      <Button variant="outline" onClick={() => setTesting(true)}><Send className="size-4" /> Send test email</Button>
-    )} />
+    <PageHeader title="Notifications" description={DESCRIPTION} actions={<div className="flex flex-wrap gap-2">
+      {rendered(provider) && <Button variant="outline" onClick={() => setPreviewing(true)}><Eye className="size-4" /> Preview</Button>}
+      {canWrite && status.source !== 'none' && <Button variant="outline" onClick={() => setTesting(true)}><Send className="size-4" /> Send test email</Button>}
+    </div>} />
 
     <div className="grid gap-4 lg:grid-cols-2">
       {/* ── Delivery ── */}
@@ -116,25 +107,40 @@ export default function NotificationsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base"><Mail className="size-4" /> Delivery</CardTitle>
           <CardDescription>{source.detail}</CardDescription>
-          <CardAction><Badge variant="secondary" className={source.className}>{source.badge}</Badge></CardAction>
+          <CardAction className="flex gap-1.5">
+            {provider && <Badge variant="outline">{PROVIDERS[provider].label}</Badge>}
+            <Badge variant="secondary" className={source.className}>{source.badge}</Badge>
+          </CardAction>
         </CardHeader>
         <CardContent className="space-y-4">
           {config ? <>
-            <Field icon={Globe} label="Endpoint"><span className="break-all font-mono text-sm">{config.webhook_url}</span></Field>
-            <Field icon={Shield} label="Authentication">
-              {config.has_token ? <Badge variant="secondary" className="bg-success/10 text-success">Bearer token configured</Badge> : <Badge variant="destructive">No token</Badge>}
-            </Field>
+            {own === 'webhook' && <>
+              <Field icon={Globe} label="Endpoint"><span className="break-all font-mono text-sm">{config.webhook_url}</span></Field>
+              <Field icon={Shield} label="Authentication">
+                {config.has_token ? <Badge variant="secondary" className="bg-success/10 text-success">Bearer token configured</Badge> : <Badge variant="destructive">No token</Badge>}
+              </Field>
+            </>}
+            {own !== 'webhook' && <Field icon={AtSign} label="Sender"><span className="break-all text-sm">{sender(config)}</span>{config.reply_to && <p className="text-xs text-muted-foreground">Replies to {config.reply_to}</p>}</Field>}
+            {own === 'smtp' && <>
+              <Field icon={Server} label="Server"><span className="break-all font-mono text-sm">{config.smtp_host}:{config.smtp_port}</span> <Badge variant="outline" className="ml-1">{config.smtp_tls === 'tls' ? 'TLS' : 'STARTTLS'}</Badge></Field>
+              <Field icon={Shield} label="Authentication">
+                {config.smtp_username ? <span className="text-sm">{config.smtp_username} {config.has_secret ? <Badge variant="secondary" className="ml-1 bg-success/10 text-success">Password stored</Badge> : <Badge variant="destructive" className="ml-1">No password</Badge>}</span> : <span className="text-sm text-muted-foreground">None</span>}
+              </Field>
+            </>}
+            {own === 'resend' && <Field icon={Shield} label="API key">
+              {config.has_secret ? <Badge variant="secondary" className="bg-success/10 text-success">API key stored</Badge> : <Badge variant="destructive">No API key</Badge>}
+            </Field>}
             <Field icon={Clock} label="Last updated"><span className="text-sm">{new Date(config.updated_at).toLocaleString()}</span></Field>
           </> : <p className="text-sm text-muted-foreground">
             {status.global_configured
-              ? <>Using the global <code className="rounded bg-muted px-1 py-0.5 text-xs">EMAIL_WEBHOOK_URL</code>. Configure a webhook to give this environment its own endpoint.</>
-              : <>Set a webhook here, or <code className="rounded bg-muted px-1 py-0.5 text-xs">EMAIL_WEBHOOK_URL</code> on the server, so users can receive codes and invitations.</>}
+              ? <>Using the server-wide sender (<code className="rounded bg-muted px-1 py-0.5 text-xs">{GLOBAL_ENV[provider || 'webhook']}</code>). Configure delivery to give this environment its own.</>
+              : <>Configure a webhook, SMTP server or Resend here, or <code className="rounded bg-muted px-1 py-0.5 text-xs">EMAIL_PROVIDER</code> on the server, so users can receive codes and invitations.</>}
           </p>}
           {canWrite && <div className="flex flex-wrap gap-2 pt-1">
             {config ? <>
               <Button variant="outline" size="sm" onClick={() => setEditing(true)}><Pencil className="size-3.5" /> Update</Button>
               <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10" onClick={() => setRemoving(true)}><Trash2 className="size-3.5" /> Remove</Button>
-            </> : <Button size="sm" onClick={() => setEditing(true)}><Plus className="size-3.5" /> Configure webhook</Button>}
+            </> : <Button size="sm" onClick={() => setEditing(true)}><Plus className="size-3.5" /> Configure email delivery</Button>}
           </div>}
         </CardContent>
       </Card>
@@ -158,21 +164,27 @@ export default function NotificationsPage() {
       <Card className="lg:col-span-2">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base"><MailPlus className="size-4" /> Invitations</CardTitle>
-          <CardDescription>The page that accepts invitations. IAMKit adds <code className="text-xs">?token=…</code> and sends the result as <code className="text-xs">link</code>.</CardDescription>
+          <CardDescription>
+            When someone is invited to an organization, IAMKit emails them a link to this page, where they accept the invitation: a new person creates an account, an existing one joins the organization. Your own page gets <code className="text-xs">?token=…</code> and posts it to <code className="text-xs">/identity/v1/invitations/accept</code>; a webhook receives the full URL as <code className="text-xs">link</code>.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {config?.invitation_url
             ? <span className="break-all font-mono text-sm">{config.invitation_url}{config.invitation_url === status.hosted_invitation_url && <Badge variant="secondary" className="ml-2 font-sans">Hosted page</Badge>}</span>
-            : <p className="text-sm text-muted-foreground">{config ? 'Not set: invitation emails carry only the token.' : status.global_configured ? 'Invitation links need this environment’s own webhook; the global fallback sends only the token.' : 'Configure a webhook to set an invitation page.'}</p>}
+            : rendered(provider)
+              ? <span className="text-sm text-muted-foreground">IAMKit’s hosted page <Badge variant="secondary" className="ml-1">Hosted page</Badge></span>
+              : <p className="text-sm text-muted-foreground">{config ? 'Not set: invitation emails carry only the token.' : status.global_configured ? 'Invitation links need this environment’s own delivery settings; the global webhook receives only the token.' : 'Configure delivery to set an invitation page.'}</p>}
         </CardContent>
       </Card>
     </div>
 
-    <PurposesCard />
+    <TemplatesCard path={path} brandPath={`/environments/${environment}/login-settings`} locales={locales} canWrite={canWrite} active={rendered(provider)} />
+    {(provider === 'webhook' || provider === '') && <PurposesCard />}
 
     {editing && <DeliveryForm path={path} existing={config} hostedURL={status.hosted_invitation_url} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load() }} />}
-    {removing && <ConfirmDialog title="Remove this environment's delivery settings?" confirmLabel="Remove settings" description={status.global_configured ? 'This environment will fall back to the global EMAIL_WEBHOOK_URL.' : 'No global EMAIL_WEBHOOK_URL is set: this environment will stop delivering codes and invitations.'} onClose={() => setRemoving(false)} confirm={async () => { await api.delete(path); toast.success('Delivery config removed'); load() }} />}
-    {testing && <TestDialog path={path} source={status.source} onClose={() => { setTesting(false); load() }} />}
+    {removing && <ConfirmDialog title="Remove this environment's delivery settings?" confirmLabel="Remove settings" description={status.global_configured ? 'This environment will fall back to the server-wide sender.' : 'No server-wide sender is set: this environment will stop delivering codes and invitations.'} onClose={() => setRemoving(false)} confirm={async () => { await api.delete(path); toast.success('Delivery settings removed'); load() }} />}
+    {testing && <TestDialog path={path} source={status.source} provider={provider} onClose={() => { setTesting(false); load() }} />}
+    {previewing && <PreviewDialog path={path} locales={locales} onClose={() => setPreviewing(false)} />}
   </div>
 }
 
@@ -241,17 +253,20 @@ function PurposeRow({ p, open, toggle }: { p: typeof PURPOSES[number]; open: boo
   </>
 }
 
-function TestDialog({ path, source, onClose }: { path: string; source: Source; onClose: () => void }) {
+function TestDialog({ path, source, provider, onClose }: { path: string; source: Source; provider: Provider | ''; onClose: () => void }) {
   const [email, setEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<Attempt | null>(null)
+  const webhook = !rendered(provider)
 
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
     <DialogContent className="sm:max-w-md">
       <DialogTitle className="pr-6 text-base font-semibold">Send test email</DialogTitle>
       <DialogDescription className="text-muted-foreground">
-        Sends <code className="text-xs">{'{"email","purpose":"test"}'}</code> through {source === 'environment' ? 'this environment’s webhook' : 'the global EMAIL_WEBHOOK_URL'}. It carries no code; handle <code className="text-xs">test</code> in your service or expect it to be ignored.
+        {webhook
+          ? <>Sends <code className="text-xs">{'{"email","purpose":"test"}'}</code> through {source === 'environment' ? 'this environment’s webhook' : 'the global EMAIL_WEBHOOK_URL'}. It carries no code; handle <code className="text-xs">test</code> in your service or expect it to be ignored.</>
+          : <>Sends a sample email through {source === 'environment' ? 'this environment’s' : 'the server-wide'} {provider ? PROVIDERS[provider].label : ''} settings, in the environment’s branding and language.</>}
       </DialogDescription>
       <form className="space-y-4" onSubmit={async event => {
         event.preventDefault()
@@ -267,7 +282,7 @@ function TestDialog({ path, source, onClose }: { path: string; source: Source; o
         </div>
         {result && <div role="status" className={`flex items-start gap-2 rounded-md border p-3 text-sm ${result.delivered ? 'border-success/30 bg-success/5' : 'border-destructive/30 bg-destructive/5'}`}>
           {result.delivered ? <CircleCheck className="mt-0.5 size-4 shrink-0 text-success" /> : <CircleX className="mt-0.5 size-4 shrink-0 text-destructive" />}
-          <div><p className="font-medium">{result.delivered ? 'Webhook accepted the message' : 'Delivery failed'}</p><p className="text-xs text-muted-foreground">{outcome(result)}</p></div>
+          <div><p className="font-medium">{result.delivered ? (webhook ? 'Webhook accepted the message' : 'Email accepted for delivery') : 'Delivery failed'}</p><p className="text-xs text-muted-foreground">{outcome(result)}</p></div>
         </div>}
         {error && <ErrorState error={error} />}
         <div className="flex justify-end gap-2 border-t pt-4">
@@ -279,60 +294,3 @@ function TestDialog({ path, source, onClose }: { path: string; source: Source; o
   </Dialog>
 }
 
-function DeliveryForm({ path, existing, hostedURL, onClose, onSaved }: { path: string; existing: DeliveryConfig | null; hostedURL: string; onClose: () => void; onSaved: () => void }) {
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [invitationURL, setInvitationURL] = useState(existing?.invitation_url ?? '')
-  const pending = useRef(false)
-
-  return <Dialog open onOpenChange={open => { if (!open && !pending.current) onClose() }}>
-    <DialogContent className="sm:max-w-md">
-      <DialogTitle className="pr-6 text-base font-semibold">{existing ? 'Update' : 'Configure'} webhook</DialogTitle>
-      <DialogDescription className="text-muted-foreground">IAMKit will POST codes and invitations to this endpoint with the token as a Bearer header.</DialogDescription>
-      <form className="space-y-4" onSubmit={async event => {
-        event.preventDefault()
-        if (pending.current) return
-        const form = new FormData(event.currentTarget)
-        const data = {
-          webhook_url: String(form.get('webhook_url') ?? '').trim(),
-          webhook_token: String(form.get('webhook_token') ?? '').trim(),
-          invitation_url: invitationURL.trim(),
-        }
-        if (!data.webhook_url || !data.webhook_token) {
-          setError('Both URL and token are required.')
-          return
-        }
-        pending.current = true; setBusy(true); setError('')
-        try {
-          await api.put(path, data)
-          toast.success('Delivery config saved')
-          onSaved()
-        } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
-      }}>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium" htmlFor="webhook-url">Webhook URL</label>
-          <Input id="webhook-url" name="webhook_url" type="url" required disabled={busy} defaultValue={existing?.webhook_url ?? ''} placeholder="https://mail.example.com/send" />
-          <p className="text-xs text-muted-foreground">Must be HTTPS. HTTP is allowed only for localhost.</p>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium" htmlFor="webhook-token">Webhook token</label>
-          <Input id="webhook-token" name="webhook_token" type="password" required disabled={busy} placeholder={existing ? '(enter new token)' : 'Bearer authentication secret'} autoComplete="off" />
-          <p className="text-xs text-muted-foreground">Sent as <code className="text-[10px]">Authorization: Bearer &lt;token&gt;</code> with every delivery request.</p>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-sm font-medium" htmlFor="invitation-url">Invitation page (optional)</label>
-          <Input id="invitation-url" type="url" disabled={busy} value={invitationURL} onChange={e => setInvitationURL(e.target.value)} placeholder="https://app.example.com/join" />
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-xs text-muted-foreground">Your page that accepts invitations, or IAMKit’s hosted page.</p>
-            {hostedURL && invitationURL !== hostedURL && <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" disabled={busy} onClick={() => setInvitationURL(hostedURL)}>Use hosted invite page</Button>}
-          </div>
-        </div>
-        {error && <ErrorState error={error} />}
-        <div className="flex justify-end gap-2 border-t pt-4">
-          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
-        </div>
-      </form>
-    </DialogContent>
-  </Dialog>
-}
