@@ -378,16 +378,19 @@ type ConnectionFilter struct {
 type ConnectionView struct {
 	ID           identity.ConnectionID    `json:"id" db:"id"`
 	Organization *identity.OrganizationID `json:"organization_id" db:"organization_id"`
-	Name         string                   `json:"name" db:"name"`
-	Provider     string                   `json:"provider" db:"provider"`
-	Issuer       string                   `json:"issuer" db:"issuer"`
-	ClientID     string                   `json:"client_id" db:"client_id"`
-	Active       bool                     `json:"active" db:"active"`
-	JIT          bool                     `json:"jit_provisioning" db:"jit_provisioning"`
-	Enforcement  string                   `json:"enforcement" db:"enforcement"`
-	Signup       bool                     `json:"signup" db:"signup"`
-	LinkEmail    bool                     `json:"link_email" db:"link_email"`
-	Linked       int                      `json:"linked" db:"linked"`
+	// OrganizationName labels Organization for display; empty for
+	// environment connections.
+	OrganizationName string `json:"organization_name" db:"organization_name"`
+	Name             string `json:"name" db:"name"`
+	Provider         string `json:"provider" db:"provider"`
+	Issuer           string `json:"issuer" db:"issuer"`
+	ClientID         string `json:"client_id" db:"client_id"`
+	Active           bool   `json:"active" db:"active"`
+	JIT              bool   `json:"jit_provisioning" db:"jit_provisioning"`
+	Enforcement      string `json:"enforcement" db:"enforcement"`
+	Signup           bool   `json:"signup" db:"signup"`
+	LinkEmail        bool   `json:"link_email" db:"link_email"`
+	Linked           int    `json:"linked" db:"linked"`
 }
 
 // ConnectionDetail never exposes the secret. SecretSource is "env" or
@@ -395,6 +398,7 @@ type ConnectionView struct {
 type ConnectionDetail struct {
 	ID                 identity.ConnectionID    `json:"id" db:"id"`
 	Organization       *identity.OrganizationID `json:"organization_id" db:"organization_id"`
+	OrganizationName   string                   `json:"organization_name" db:"organization_name"`
 	Name               string                   `json:"name" db:"name"`
 	Provider           string                   `json:"provider" db:"provider"`
 	Options            Options                  `json:"options" db:"-"`

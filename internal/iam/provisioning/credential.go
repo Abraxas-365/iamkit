@@ -77,9 +77,12 @@ type CredentialView struct {
 	ID           identity.CredentialID   `json:"id"`
 	Name         string                  `json:"name"`
 	Organization identity.OrganizationID `json:"organization_id"`
-	Connection   identity.ConnectionID   `json:"connection_id"`
-	Expires      time.Time               `json:"expires_at"`
-	Revoked      *time.Time              `json:"revoked_at"`
-	Adopt        bool                    `json:"adopt_existing_members"`
-	AdoptScope   string                  `json:"adopt_scope"`
+	// OrganizationName and ConnectionName label the IDs for display.
+	OrganizationName string                `json:"organization_name"`
+	Connection       identity.ConnectionID `json:"connection_id"`
+	ConnectionName   string                `json:"connection_name"`
+	Expires          time.Time             `json:"expires_at"`
+	Revoked          *time.Time            `json:"revoked_at"`
+	Adopt            bool                  `json:"adopt_existing_members"`
+	AdoptScope       string                `json:"adopt_scope"`
 }

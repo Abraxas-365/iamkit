@@ -7,6 +7,11 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
+// ClientFilter narrows the client list; zero fields match everything.
+type ClientFilter struct {
+	Application identity.ApplicationID
+}
+
 type ClientView struct {
 	ID              identity.ClientID      `json:"id"`
 	Application     identity.ApplicationID `json:"application_id"`
@@ -27,14 +32,19 @@ type Registration struct {
 	HostedLogin bool                   `json:"hosted_login"`
 }
 
-// ClientUpdate changes the settings of an existing client.
+// ClientUpdate changes the settings of an existing client; nil fields
+// stay unchanged.
 type ClientUpdate struct {
-	HostedLogin *bool `json:"hosted_login"`
+	HostedLogin *bool     `json:"hosted_login"`
+	Redirects   *[]string `json:"redirect_uris"`
 }
 
 func (u ClientUpdate) Validate() error {
-	if u.HostedLogin == nil {
-		return errx.Validation("hosted_login is required")
+	if u.HostedLogin == nil && u.Redirects == nil {
+		return errx.Validation("hosted_login or redirect_uris is required")
+	}
+	if u.Redirects != nil && len(*u.Redirects) == 0 {
+		return errx.Validation("at least one redirect URI is required")
 	}
 	return nil
 }

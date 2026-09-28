@@ -21,8 +21,15 @@ type Organization struct {
 	MFAForFederated bool `json:"mfa_for_federated"`
 }
 type Summary struct {
-	ID   identity.OrganizationID `json:"id" db:"id"`
-	Name string                  `json:"name" db:"name"`
+	ID     identity.OrganizationID `json:"id" db:"id"`
+	Name   string                  `json:"name" db:"name"`
+	Active bool                    `json:"active" db:"active"`
+}
+
+// Filter narrows the organization list; zero fields match everything.
+type Filter struct {
+	// User keeps only organizations the user is a member of.
+	User identity.UserID
 }
 type Update struct {
 	Name            *string         `json:"name"`

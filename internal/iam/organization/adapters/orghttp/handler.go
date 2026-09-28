@@ -43,7 +43,15 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Handler) List(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
+	var filter organization.Filter
+	if raw := c.Query("user_id"); raw != "" {
+		user, err := identity.ParseUserID(raw)
+		if err != nil {
+			return errx.Validation("user_id must be a valid UUID")
+		}
+		filter.User = user
+	}
+	out, err := h.queries.List(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

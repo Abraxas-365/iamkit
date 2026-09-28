@@ -42,6 +42,7 @@ func env(c *fiber.Ctx) identity.EnvironmentID {
 func (h *Handler) RegisterManagement(r fiber.Router) {
 	r.Post("/oauth-clients", h.create)
 	r.Get("/oauth-clients", h.list)
+	r.Get("/oauth-clients/:id", h.find)
 	r.Patch("/oauth-clients/:id", h.update)
 	r.Delete("/oauth-clients/:id", h.disable)
 }
@@ -82,8 +83,27 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 	}
 	return c.SendStatus(204)
 }
+func (h *Handler) find(c *fiber.Ctx) error {
+	clientID, err := identity.ParseClientID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("OAuth client not found")
+	}
+	out, err := h.queries.Find(c.Context(), env(c), clientID)
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
 func (h *Handler) list(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
+	var filter oauth.ClientFilter
+	if raw := c.Query("application_id"); raw != "" {
+		application, err := identity.ParseApplicationID(raw)
+		if err != nil {
+			return errx.Validation("invalid application_id")
+		}
+		filter.Application = application
+	}
+	out, err := h.queries.List(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

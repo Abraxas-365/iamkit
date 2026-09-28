@@ -1,6 +1,7 @@
 package mgmthttp
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -25,7 +26,15 @@ func (h *Activity) Register(r fiber.Router) {
 	r.Get("/audit-events", h.audit)
 }
 func (h *Activity) sessions(c *fiber.Ctx) error {
-	out, err := h.queries.Sessions(c.Context(), envID(c), httpx.PaginationFromCtx(c))
+	var filter management.SessionFilter
+	if raw := c.Query("user_id"); raw != "" {
+		user, err := identity.ParseUserID(raw)
+		if err != nil {
+			return errx.Validation("user_id must be a valid UUID")
+		}
+		filter.User = user
+	}
+	out, err := h.queries.Sessions(c.Context(), envID(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

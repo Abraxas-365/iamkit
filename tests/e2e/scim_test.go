@@ -503,6 +503,10 @@ func TestSCIMAdoptExistingMembers(t *testing.T) {
 	for _, v := range views {
 		if v["connection_id"] == cred["connection_id"] && v["adopt_existing_members"] == true {
 			found = true
+			// The console shows names, not raw IDs.
+			if v["organization_name"] == "" || v["connection_name"] == "" {
+				t.Errorf("credential without names: %v", v)
+			}
 		}
 	}
 	if !found {

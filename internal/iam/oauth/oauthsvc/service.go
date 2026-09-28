@@ -52,6 +52,11 @@ func (s *Service) Update(ctx context.Context, m oauth.Mutation, id identity.Clie
 	if err := input.Validate(); err != nil {
 		return err
 	}
+	if input.Redirects != nil {
+		if err := identity.ValidateRedirects(*input.Redirects); err != nil {
+			return err
+		}
+	}
 	return s.repository.Update(ctx, m, id, input)
 }
 func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
@@ -60,8 +65,14 @@ func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id identity.Cli
 	}
 	return s.repository.Disable(ctx, m, id)
 }
-func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[oauth.ClientView], error) {
-	return s.repository.List(ctx, environment, page)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, filter oauth.ClientFilter, page query.Pagination) (query.Paginated[oauth.ClientView], error) {
+	return s.repository.List(ctx, environment, filter, page)
+}
+func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID) (oauth.ClientView, error) {
+	if id.IsZero() {
+		return oauth.ClientView{}, errx.Validation("invalid client")
+	}
+	return s.repository.Find(ctx, environment, id)
 }
 func (s *Service) Client(ctx context.Context, id identity.ClientID) (*oauth.Client, error) {
 	if id.IsZero() {

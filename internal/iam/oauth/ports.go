@@ -18,7 +18,8 @@ type Commands interface {
 	Disable(ctx context.Context, m Mutation, client identity.ClientID) error
 }
 type Queries interface {
-	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[ClientView], error)
+	List(ctx context.Context, environment identity.EnvironmentID, filter ClientFilter, page query.Pagination) (query.Paginated[ClientView], error)
+	Find(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (ClientView, error)
 }
 type Flows interface {
 	Client(ctx context.Context, client identity.ClientID) (*Client, error)
@@ -44,7 +45,8 @@ type Repository interface {
 	Create(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID, input Registration, secretHash []byte) error
 	Update(ctx context.Context, m Mutation, client identity.ClientID, input ClientUpdate) error
 	Disable(ctx context.Context, m Mutation, client identity.ClientID) error
-	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[ClientView], error)
+	List(ctx context.Context, environment identity.EnvironmentID, filter ClientFilter, page query.Pagination) (query.Paginated[ClientView], error)
+	Find(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (ClientView, error)
 	SaveTicket(ctx context.Context, ticketHash, bindingHash []byte, client *Client, form string) error
 	// PendingTicket reads an unconsumed, unexpired ticket without locking it.
 	PendingTicket(ctx context.Context, ticketHash []byte) (Ticket, error)
@@ -55,4 +57,6 @@ type Secrets interface {
 	Generate(prefix string) (string, []byte, error)
 	Hash(raw string) []byte
 }
-type Passwords interface{ Hash(password string) (string, error) }
+type Passwords interface {
+	Hash(password string) (string, error)
+}

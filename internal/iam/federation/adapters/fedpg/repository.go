@@ -207,7 +207,7 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		return query.Paginated[federation.ConnectionView]{}, failure(err)
 	}
 	out := []federation.ConnectionView{}
-	sel := fmt.Sprintf(`SELECT c.id, c.organization_id, c.name, c.provider, c.issuer, c.client_id, c.active, c.jit_provisioning, c.enforcement, c.signup, c.link_email,
+	sel := fmt.Sprintf(`SELECT c.id, c.organization_id, COALESCE((SELECT o.name FROM organizations o WHERE o.id=c.organization_id AND o.environment_id=c.environment_id),'') AS organization_name, c.name, c.provider, c.issuer, c.client_id, c.active, c.jit_provisioning, c.enforcement, c.signup, c.link_email,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
 		%s ORDER BY c.name LIMIT %d OFFSET %d`, base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &out, sel, args...); err != nil {
@@ -220,7 +220,7 @@ func (r *Repository) FindDetail(ctx context.Context, environment identity.Enviro
 		federation.ConnectionDetail
 		Options options `db:"options"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT c.id, c.organization_id, c.name, c.provider, c.options, c.issuer, c.client_id, COALESCE(c.secret_env,'') AS secret_env,
+	err := r.db.GetContext(ctx, &row, `SELECT c.id, c.organization_id, COALESCE((SELECT o.name FROM organizations o WHERE o.id=c.organization_id AND o.environment_id=c.environment_id),'') AS organization_name, c.name, c.provider, c.options, c.issuer, c.client_id, COALESCE(c.secret_env,'') AS secret_env,
 		CASE WHEN c.secret_sealed IS NULL THEN 'env' ELSE 'sealed' END AS secret_source,
 		c.active, c.jit_provisioning, c.jit_group_id, c.enforcement, c.signup, c.link_email, c.signup_organization_id, c.signup_group_id, c.created_at,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked

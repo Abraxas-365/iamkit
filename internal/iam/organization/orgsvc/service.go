@@ -20,8 +20,8 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	id := identity.NewOrganizationID()
 	return id, s.repository.Create(ctx, environment, id, name)
 }
-func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[organization.Summary], error) {
-	return s.repository.List(ctx, environment, page)
+func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, filter organization.Filter, page query.Pagination) (query.Paginated[organization.Summary], error) {
+	return s.repository.List(ctx, environment, filter, page)
 }
 func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, id identity.OrganizationID) (organization.Organization, error) {
 	if id.IsZero() {

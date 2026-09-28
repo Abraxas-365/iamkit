@@ -256,3 +256,70 @@ func TestIdentityIsolationJourney(t *testing.T) {
 		t.Fatal(fmt.Sprintf("unexpected implicit applications: %d", iamApps))
 	}
 }
+
+// TestUserScopedInventories covers the user_id filters the console's user
+// page relies on: the user's organizations and the user's sessions.
+func TestUserScopedInventories(t *testing.T) {
+	e := newEnv(t)
+	other := e.ID("POST", e.Base+"/organizations", fiber.Map{"name": "Globex"})
+	bob := e.User("Bob", "bob@example.com")
+	e.Join(other, bob)
+	e.Login(e.AliceEmail)
+
+	ids := func(path string) []string {
+		t.Helper()
+		items, _ := e.Must("GET", path, e.Owner, nil, 200).JSON["items"].([]any)
+		out := []string{}
+		for _, it := range items {
+			out = append(out, it.(map[string]any)["id"].(string))
+		}
+		return out
+	}
+	if got := ids(e.Base + "/organizations?user_id=" + e.Alice); len(got) != 1 || got[0] != e.Org {
+		t.Fatalf("alice organizations = %v", got)
+	}
+	if got := ids(e.Base + "/organizations?user_id=" + bob); len(got) != 1 || got[0] != other {
+		t.Fatalf("bob organizations = %v", got)
+	}
+	if got := ids(e.Base + "/organizations"); len(got) != 2 {
+		t.Fatalf("unfiltered organizations = %v", got)
+	}
+	items, _ := e.Must("GET", e.Base+"/organizations", e.Owner, nil, 200).JSON["items"].([]any)
+	if active, ok := items[0].(map[string]any)["active"].(bool); !ok || !active {
+		t.Fatalf("organization summary lacks active: %v", items[0])
+	}
+
+	if got := ids(e.Base + "/sessions?user_id=" + e.Alice); len(got) != 1 {
+		t.Fatalf("alice sessions = %v", got)
+	}
+	if got := ids(e.Base + "/sessions?user_id=" + bob); len(got) != 0 {
+		t.Fatalf("bob sessions = %v", got)
+	}
+	e.Must("GET", e.Base+"/sessions?user_id=nope", e.Owner, nil, 400)
+	e.Must("GET", e.Base+"/organizations?user_id=nope", e.Owner, nil, 400)
+}
+
+func TestAuditEventsNameTheirTarget(t *testing.T) {
+	e := newEnv(t)
+	org := e.ID("POST", e.Base+"/organizations", fiber.Map{"name": "Initech"})
+	e.Must("PATCH", e.Base+"/organizations/"+org, e.Owner, fiber.Map{"name": "Initrode"}, 204)
+	bob := e.User("Bob", "bob@example.com")
+	e.Join(org, bob)
+	e.Must("PATCH", e.Base+"/organizations/"+org+"/members/"+bob, e.Owner, fiber.Map{"sso_bypass": true}, 204)
+
+	items, _ := e.Must("GET", e.Base+"/audit-events?limit=100", e.Owner, nil, 200).JSON["items"].([]any)
+	labels := map[string]string{}
+	for _, it := range items {
+		ev := it.(map[string]any)
+		labels[ev["action"].(string)+" "+ev["target_id"].(string)] = ev["target_label"].(string)
+	}
+	// The label is the entity's current name; for nested paths it names the
+	// innermost entity (the member, not the organization).
+	orgPath := e.Base + "/organizations/" + org
+	if got := labels["PATCH "+orgPath]; got != "Initrode" {
+		t.Fatalf("organization target_label = %q (%v)", got, labels)
+	}
+	if got := labels["PATCH "+orgPath+"/members/"+bob]; got != "Bob" {
+		t.Fatalf("member target_label = %q (%v)", got, labels)
+	}
+}

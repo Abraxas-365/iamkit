@@ -16,14 +16,14 @@ type Commands interface {
 	UpdateMember(ctx context.Context, m Mutation, organization identity.OrganizationID, user identity.UserID, input MemberUpdate) error
 }
 type Queries interface {
-	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Summary], error)
+	List(ctx context.Context, environment identity.EnvironmentID, filter Filter, page query.Pagination) (query.Paginated[Summary], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Organization, error)
 	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, filter MemberFilter, page query.Pagination) (query.Paginated[MemberView], error)
 }
 
 type Repository interface {
 	Create(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, name string) error
-	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Summary], error)
+	List(ctx context.Context, environment identity.EnvironmentID, filter Filter, page query.Pagination) (query.Paginated[Summary], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Organization, error)
 	Update(ctx context.Context, m Mutation, organization identity.OrganizationID, input Update) error
 	AddMember(ctx context.Context, environment identity.EnvironmentID, input Membership) error

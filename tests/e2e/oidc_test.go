@@ -222,3 +222,49 @@ func oidcJourney(t *testing.T, app *fiber.App, call func(string, string, string,
 		t.Fatal("ID token accepted by API")
 	}
 }
+
+// TestOAuthClientAdministration covers reading one client and editing its
+// redirect URIs, which the console's client page relies on.
+func TestOAuthClientAdministration(t *testing.T) {
+	e := newEnv(t)
+	id := e.Must("POST", e.Base+"/oauth-clients", e.Owner, fiber.Map{"application_id": e.Client, "resource_id": e.Res, "redirect_uris": []string{"https://app.example/callback"}, "public": true}, 201).JSON["id"].(string)
+	got := e.Must("GET", e.Base+"/oauth-clients/"+id, e.Owner, nil, 200).JSON
+	if got["id"] != id || got["application_name"] == "" || got["resource_name"] == "" || got["hosted_login"] != false || got["active"] != true {
+		t.Fatalf("client = %v", got)
+	}
+
+	e.Must("PATCH", e.Base+"/oauth-clients/"+id, e.Owner, fiber.Map{"redirect_uris": []string{"https://app.example/callback", "https://app.example/alt"}}, 204)
+	got = e.Must("GET", e.Base+"/oauth-clients/"+id, e.Owner, nil, 200).JSON
+	if uris, _ := got["redirect_uris"].([]any); len(uris) != 2 || uris[1] != "https://app.example/alt" || got["hosted_login"] != false {
+		t.Fatalf("after redirect update = %v", got)
+	}
+	// Invalid or empty redirect lists are rejected and change nothing.
+	e.Must("PATCH", e.Base+"/oauth-clients/"+id, e.Owner, fiber.Map{"redirect_uris": []string{"http://evil.example/cb"}}, 400)
+	e.Must("PATCH", e.Base+"/oauth-clients/"+id, e.Owner, fiber.Map{"redirect_uris": []string{}}, 400)
+	e.Must("PATCH", e.Base+"/oauth-clients/"+id, e.Owner, fiber.Map{}, 400)
+	if uris, _ := e.Must("GET", e.Base+"/oauth-clients/"+id, e.Owner, nil, 200).JSON["redirect_uris"].([]any); len(uris) != 2 {
+		t.Fatalf("redirects changed by rejected update: %v", uris)
+	}
+
+	// Unknown and foreign clients are not found.
+	e.Must("GET", e.Base+"/oauth-clients/00000000-0000-7000-8000-000000000000", e.Owner, nil, 404)
+	e.Must("GET", e.Base+"/oauth-clients/not-a-uuid", e.Owner, nil, 404)
+
+	// The list narrows to one application's clients for its detail page.
+	other := e.ID("POST", e.Base+"/applications", fiber.Map{"name": "Other", "redirect_uris": []string{"https://other.example/cb"}})
+	count := func(query string) float64 {
+		t.Helper()
+		return e.Must("GET", e.Base+"/oauth-clients"+query, e.Owner, nil, 200).JSON["page"].(map[string]any)["total"].(float64)
+	}
+	if all, mine, none := count(""), count("?application_id="+e.Client), count("?application_id="+other); mine < 1 || none != 0 || all < mine {
+		t.Fatalf("client counts all=%v mine=%v other=%v", all, mine, none)
+	}
+	e.Must("GET", e.Base+"/oauth-clients?application_id=nope", e.Owner, nil, 400)
+
+	// Disabled clients stay readable but can no longer be edited.
+	e.Must("DELETE", e.Base+"/oauth-clients/"+id, e.Owner, nil, 204)
+	if got := e.Must("GET", e.Base+"/oauth-clients/"+id, e.Owner, nil, 200).JSON; got["active"] != false {
+		t.Fatalf("disabled client = %v", got)
+	}
+	e.Must("PATCH", e.Base+"/oauth-clients/"+id, e.Owner, fiber.Map{"hosted_login": true}, 404)
+}

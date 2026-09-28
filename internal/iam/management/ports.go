@@ -39,7 +39,7 @@ type ActivityCommands interface {
 	RevokeSession(ctx context.Context, environment identity.EnvironmentID, session identity.SessionID, actor, action, target string) error
 }
 type ActivityQueries interface {
-	Sessions(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Session], error)
+	Sessions(ctx context.Context, environment identity.EnvironmentID, filter SessionFilter, page query.Pagination) (query.Paginated[Session], error)
 	Audit(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[AuditEvent], error)
 }
 
@@ -74,7 +74,7 @@ type ControlRepository interface {
 }
 
 type ActivityRepository interface {
-	Sessions(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Session], error)
+	Sessions(ctx context.Context, environment identity.EnvironmentID, filter SessionFilter, page query.Pagination) (query.Paginated[Session], error)
 	Audit(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[AuditEvent], error)
 	RevokeSession(ctx context.Context, environment identity.EnvironmentID, session identity.SessionID, actor, action, target string) error
 }

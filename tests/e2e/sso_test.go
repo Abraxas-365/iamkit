@@ -242,6 +242,13 @@ func TestSealedConnectionBlocksPrivateProviders(t *testing.T) {
 	e := newEnv(t)
 	idp := newFakeIdP(t, e.Key, "acme-client")
 	conn := e.ID("POST", e.Base+"/federation-connections", fiber.Map{"organization_id": e.Org, "name": "Acme", "issuer": idp.URL, "client_id": "acme-client", "client_secret": "sealed-secret"})
+	// The console shows the organization's name for scoped connections.
+	if got := e.Must("GET", e.Base+"/federation-connections/"+conn, e.Owner, nil, 200).JSON; got["organization_name"] == "" || got["organization_name"] == nil {
+		t.Fatalf("connection detail without organization name: %v", got)
+	}
+	if list := items(e.Must("GET", e.Base+"/federation-connections", e.Owner, nil, 200)); len(list) != 1 || list[0]["organization_name"] != e.Must("GET", e.Base+"/federation-connections/"+conn, e.Owner, nil, 200).JSON["organization_name"] {
+		t.Fatalf("connection list names = %v", list)
+	}
 	if r := e.sso(idp, conn, e.Org, nil); r.Status != 502 {
 		t.Fatalf("loopback provider reached: %d %v", r.Status, r.JSON)
 	}

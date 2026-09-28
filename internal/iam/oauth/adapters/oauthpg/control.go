@@ -47,7 +47,11 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 	return conflict(err)
 }
 func (r *Repository) Update(ctx context.Context, m oauth.Mutation, id identity.ClientID, input oauth.ClientUpdate) error {
-	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login) WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin)
+	var redirects any
+	if input.Redirects != nil {
+		redirects = pq.StringArray(*input.Redirects)
+	}
+	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris) WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects)
 }
 func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
 	return r.audited(ctx, m, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
@@ -77,10 +81,15 @@ func (r *Repository) audited(ctx context.Context, m oauth.Mutation, statement st
 	}
 	return failure(tx.Commit())
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[oauth.ClientView], error) {
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, filter oauth.ClientFilter, page query.Pagination) (query.Paginated[oauth.ClientView], error) {
 	base := `FROM oauth_clients oc JOIN applications a ON a.id=oc.application_id JOIN resources res ON res.id=oc.resource_id WHERE oc.environment_id=$1`
 	args := []any{environment}
 	n := 1
+	if !filter.Application.IsZero() {
+		n++
+		base += fmt.Sprintf(" AND oc.application_id=$%d", n)
+		args = append(args, filter.Application)
+	}
 	if like := query.EscapeLike(page.Search); like != "" {
 		n++
 		base += fmt.Sprintf(" AND (a.name ILIKE $%d OR res.name ILIKE $%d)", n, n)
@@ -90,26 +99,45 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
 		return query.Paginated[oauth.ClientView]{}, failure(err)
 	}
-	var rows []struct {
-		ID              identity.ClientID      `db:"id"`
-		Application     identity.ApplicationID `db:"application_id"`
-		ApplicationName string                 `db:"application_name"`
-		Resource        identity.ResourceID    `db:"resource_id"`
-		ResourceName    string                 `db:"resource_name"`
-		Redirects       pq.StringArray         `db:"redirect_uris"`
-		Public          bool                   `db:"public"`
-		HostedLogin     bool                   `db:"hosted_login"`
-		Active          bool                   `db:"active"`
-	}
-	sel := fmt.Sprintf("SELECT oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.public, oc.hosted_login, oc.active %s ORDER BY a.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
+	rows := []clientViewRow{}
+	sel := fmt.Sprintf("SELECT %s %s ORDER BY a.name LIMIT %d OFFSET %d", clientColumns, base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
 		return query.Paginated[oauth.ClientView]{}, failure(err)
 	}
 	out := make([]oauth.ClientView, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), Public: row.Public, HostedLogin: row.HostedLogin, Active: row.Active})
+		out = append(out, row.view())
 	}
 	return query.NewPaginated(out, total, page), nil
+}
+func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID) (oauth.ClientView, error) {
+	var row clientViewRow
+	err := r.db.GetContext(ctx, &row, "SELECT "+clientColumns+` FROM oauth_clients oc JOIN applications a ON a.id=oc.application_id JOIN resources res ON res.id=oc.resource_id WHERE oc.environment_id=$1 AND oc.id=$2`, environment, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return oauth.ClientView{}, errx.NotFound("OAuth client not found")
+	}
+	if err != nil {
+		return oauth.ClientView{}, failure(err)
+	}
+	return row.view(), nil
+}
+
+const clientColumns = "oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.public, oc.hosted_login, oc.active"
+
+type clientViewRow struct {
+	ID              identity.ClientID      `db:"id"`
+	Application     identity.ApplicationID `db:"application_id"`
+	ApplicationName string                 `db:"application_name"`
+	Resource        identity.ResourceID    `db:"resource_id"`
+	ResourceName    string                 `db:"resource_name"`
+	Redirects       pq.StringArray         `db:"redirect_uris"`
+	Public          bool                   `db:"public"`
+	HostedLogin     bool                   `db:"hosted_login"`
+	Active          bool                   `db:"active"`
+}
+
+func (row clientViewRow) view() oauth.ClientView {
+	return oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), Public: row.Public, HostedLogin: row.HostedLogin, Active: row.Active}
 }
 func (r *Repository) SaveTicket(ctx context.Context, hash, binding []byte, client *oauth.Client, form string) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_authorizations(secret_hash,environment_id,client_id,binding_hash,request_form,expires_at) VALUES($1,$2,$3,$4,$5,now()+make_interval(secs => $6))`, hash, client.Environment, client.ID, binding, form, config.OAuthAuthorizationTicketTTL.Seconds())

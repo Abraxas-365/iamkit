@@ -7,16 +7,17 @@ requires owner. Credential responses are secrets and must be captured once.
 | Method/path | JSON body | Success |
 | --- | --- | --- |
 | `POST /federation-connections` | `name,client_id`, `provider` (`oidc` default \| `google` \| `microsoft` \| `github` \| `apple`), `issuer` (`oidc` only), `options` (see below) and exactly one of `client_secret` (stored encrypted; Apple: the `.p8` PEM) or `secret_env` (not Apple); optional `organization_id,jit_provisioning,jit_group_id,enforcement`, or without `organization_id`: `signup,signup_organization_id,signup_group_id,link_email` | 201 `{id}` |
-| `GET /federation-connections` | Optional `organization_id` filter | 200 page with `provider,organization_id,jit_provisioning,enforcement,signup,link_email` and linked counts |
-| `GET /federation-connections/:id` | — | 200 detail with `provider,options,callback_url`, sign-up settings, `secret_source` (`sealed`\|`env`), secret variable name for `env`; never the secret |
+| `GET /federation-connections` | Optional `organization_id` filter | 200 page with `provider,organization_id,organization_name,jit_provisioning,enforcement,signup,link_email` and linked counts |
+| `GET /federation-connections/:id` | — | 200 detail with `provider,organization_name,options,callback_url`, sign-up settings, `secret_source` (`sealed`\|`env`), secret variable name for `env`; never the secret |
 | `PATCH /federation-connections/:id` | Any of `name,client_secret,jit_provisioning,jit_group_id` (`""` clears),`enforcement,options,signup,link_email,signup_organization_id,signup_group_id` (`""` clears) | 204 |
 | `GET /federation-connections/:id/identities` | — | 200 page of subject/user links with `origin` (`linked`\|`jit`\|`email`\|`signup`) and `created_at` |
 | `DELETE /federation-connections/:id` | — | 204; disable |
 | `POST /external-identities` | `connection_id,user_id,subject` | 204 |
 | `DELETE /external-identities/:connection/:user` | — | 204 |
 | `POST /oauth-clients` | `application_id,resource_id,redirect_uris,public`, optional `hosted_login` | 201 `{id,client_id,client_secret}` |
-| `GET /oauth-clients` | — | 200 page (includes `hosted_login`) |
-| `PATCH /oauth-clients/:id` | `hosted_login` | 204 |
+| `GET /oauth-clients` | Optional `application_id` | 200 page (includes `hosted_login`) |
+| `GET /oauth-clients/:id` | — | 200 client `{id,application_id,application_name,resource_id,resource_name,redirect_uris,public,hosted_login,active}` |
+| `PATCH /oauth-clients/:id` | `hosted_login` and/or `redirect_uris` (non-empty, validated like create) | 204 |
 | `DELETE /oauth-clients/:id` | — | 204 |
 | `GET /login-settings` | — | 200 `{environment_id,display_name,logo_url,accent_color,theme,updated_at}` (defaults when unset) |
 | `PUT /login-settings` | `display_name` (≤100), `logo_url` (HTTPS), `accent_color` (`#rrggbb`), `theme` (see [hosted login](../../guides/hosted-login.md#branding)) | 200 normalized settings |
@@ -34,7 +35,7 @@ requires owner. Credential responses are secrets and must be captured once.
 | `GET /service-accounts` | — | 200 page |
 | `DELETE /service-accounts/:id` | — | 204 |
 | `POST /provisioning-credentials` | `name,organization_id`, optional `connection_id,expires_in,adopt_existing_members,adopt_scope` (`any`\|`verified_domains`) | 201 `{id,secret,expires_at,connection_id}` |
-| `GET /provisioning-credentials` | — | 200 array (includes `adopt_existing_members,adopt_scope`) |
+| `GET /provisioning-credentials` | — | 200 array (includes `organization_name,connection_name,adopt_existing_members,adopt_scope`) |
 | `DELETE /provisioning-credentials/:id` | — | 204 |
 | `POST /provisioned-identities` | `connection_id,user_id,external_id`; also re-anchors deprovisioned or internally anchored identities | 204 |
 | `POST /impersonations` | `organization_id,application_id,resource_id,user_id,reason` | 200 access token without refresh |

@@ -30,7 +30,7 @@ license to retry old rotating credentials indiscriminately. Token endpoint error
 use OAuth fields (`error`, etc.), not the management JSON envelope.
 
 Client administration: POST/GET `/management/v1/environments/:environment/oauth-clients`,
-PATCH `.../oauth-clients/:id` (`{hosted_login}`), DELETE `.../oauth-clients/:id`. Create returns 201
+GET/PATCH `.../oauth-clients/:id` (`{hosted_login,redirect_uris}`, either or both), DELETE `.../oauth-clients/:id`. Create returns 201
 `{id,client_id,client_secret}`; list uses a page with `hosted_login`; update and disable return 204.
 Branding: GET/PUT `.../login-settings` `{display_name,logo_url,accent_color,theme}` (200), per-client styles under
 `.../login-settings/clients/:client` and previews at `.../login-settings/preview` (see [integrations](integrations.md)).

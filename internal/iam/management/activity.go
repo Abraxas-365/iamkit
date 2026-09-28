@@ -14,6 +14,17 @@ type Session struct {
 	Resource     identity.ResourceID     `json:"resource_id" db:"resource_id"`
 	Expires      time.Time               `json:"expires_at" db:"expires_at"`
 	Revoked      *time.Time              `json:"revoked_at" db:"revoked_at"`
+	// Display labels for the referenced entities; empty when deleted.
+	UserName         string `json:"user_name" db:"user_name"`
+	UserEmail        string `json:"user_email" db:"user_email"`
+	OrganizationName string `json:"organization_name" db:"organization_name"`
+	ApplicationName  string `json:"application_name" db:"application_name"`
+	ResourceName     string `json:"resource_name" db:"resource_name"`
+}
+
+// SessionFilter narrows the session inventory; zero fields match everything.
+type SessionFilter struct {
+	User identity.UserID
 }
 type AuditEvent struct {
 	ID      string    `json:"id" db:"id"`
@@ -21,4 +32,10 @@ type AuditEvent struct {
 	Action  string    `json:"action" db:"action"`
 	Target  string    `json:"target_id" db:"target_id"`
 	Created time.Time `json:"created_at" db:"created_at"`
+	// ActorLabel is the operator or end user email behind Actor; empty for
+	// unknown actors (e.g. API keys of removed operators).
+	ActorLabel string `json:"actor_label" db:"actor_label"`
+	// TargetLabel is the current name of the entity Target refers to; empty
+	// when it cannot be resolved (deleted, or not a named entity).
+	TargetLabel string `json:"target_label" db:"target_label"`
 }

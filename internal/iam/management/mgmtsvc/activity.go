@@ -12,8 +12,8 @@ import (
 type Activity struct{ repository management.ActivityRepository }
 
 func NewActivity(r management.ActivityRepository) *Activity { return &Activity{r} }
-func (s *Activity) Sessions(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[management.Session], error) {
-	return s.repository.Sessions(ctx, environment, page)
+func (s *Activity) Sessions(ctx context.Context, environment identity.EnvironmentID, filter management.SessionFilter, page query.Pagination) (query.Paginated[management.Session], error) {
+	return s.repository.Sessions(ctx, environment, filter, page)
 }
 func (s *Activity) Audit(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[management.AuditEvent], error) {
 	return s.repository.Audit(ctx, environment, page)

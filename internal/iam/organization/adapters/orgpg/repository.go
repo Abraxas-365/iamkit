@@ -35,10 +35,15 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 	_, err := r.db.ExecContext(ctx, `INSERT INTO organizations(id,environment_id,name) VALUES($1,$2,$3)`, id, environment, name)
 	return failure(err)
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[organization.Summary], error) {
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, filter organization.Filter, page query.Pagination) (query.Paginated[organization.Summary], error) {
 	base := `FROM organizations WHERE environment_id=$1`
 	args := []any{environment}
 	n := 1
+	if !filter.User.IsZero() {
+		n++
+		base += fmt.Sprintf(" AND id IN (SELECT organization_id FROM memberships WHERE environment_id=$1 AND user_id=$%d)", n)
+		args = append(args, filter.User)
+	}
 	if like := query.EscapeLike(page.Search); like != "" {
 		n++
 		base += fmt.Sprintf(" AND name ILIKE $%d", n)
@@ -49,7 +54,7 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		return query.Paginated[organization.Summary]{}, failure(err)
 	}
 	out := []organization.Summary{}
-	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT id,name %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT id,name,active %s ORDER BY name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
 		return query.Paginated[organization.Summary]{}, failure(err)
 	}
 	return query.NewPaginated(out, total, page), nil

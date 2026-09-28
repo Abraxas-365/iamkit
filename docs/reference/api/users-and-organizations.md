@@ -38,7 +38,7 @@ just the account.
 | Method/path | Input | Success |
 | --- | --- | --- |
 | `POST /organizations` | `name` | 201 `{id}` |
-| `GET /organizations` | List parameters | 200 page |
+| `GET /organizations` | List parameters; optional `user_id` (only organizations the user belongs to) | 200 page of `{id,name,active}` |
 | `GET /organizations/:id` | Organization ID | 200 organization |
 | `PATCH /organizations/:id` | Update fields: `name`, `metadata`, `mfa_required`, `mfa_for_federated` ([MFA policy](../../guides/mfa.md#policy)) | 204 |
 | `POST /memberships` | `organization_id`, `user_id` | 201 |

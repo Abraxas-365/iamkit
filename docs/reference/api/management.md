@@ -60,8 +60,13 @@ Delivery configuration uses `GET /delivery` (200 configuration or 404),
 owner/admin, audited `delivery.test`, 5/min) sends a `test` message and returns
 the attempt. See [email delivery](../../guides/email-delivery.md) for precedence, rotation and field details.
 
-Administrative inventories include `GET /sessions`, `DELETE /sessions/:id` and
-`GET /audit-events` under this prefix. Session revocation affects online checks
+Administrative inventories include `GET /sessions` (optional `user_id` filter), `DELETE /sessions/:id` and
+`GET /audit-events` under this prefix. Sessions carry display labels
+`user_name,user_email,organization_name,application_name,resource_name` and
+audit events an `actor_label` (operator or end-user email; empty when unknown)
+and a `target_label` (current name of the innermost entity in `target_id`, e.g.
+the member for a membership path; empty when deleted or unnamed).
+Session revocation affects online checks
 and refresh; already issued JWTs require online checking to observe revocation
 before expiry. These inventory endpoints return arrays, not the entity-list
 pagination envelope. Do not assume a complete audit trail for every operation.

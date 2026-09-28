@@ -112,18 +112,20 @@ func (r *Repository) Credentials(ctx context.Context, environment identity.Envir
 		ID           identity.CredentialID   `db:"id"`
 		Name         string                  `db:"name"`
 		Organization identity.OrganizationID `db:"organization_id"`
+		OrgName      string                  `db:"organization_name"`
 		Connection   identity.ConnectionID   `db:"connection_id"`
+		ConnName     string                  `db:"connection_name"`
 		Expires      time.Time               `db:"expires_at"`
 		Revoked      *time.Time              `db:"revoked_at"`
 		Adopt        bool                    `db:"adopt_existing_members"`
 		AdoptScope   string                  `db:"adopt_scope"`
 	}
-	if err := r.db.SelectContext(ctx, &rows, `SELECT k.id,k.name,k.organization_id,k.connection_id,k.expires_at,k.revoked_at,c.adopt_existing_members,c.adopt_scope FROM provisioning_credentials k JOIN provisioning_connections c ON c.id=k.connection_id AND c.environment_id=k.environment_id WHERE k.environment_id=$1 ORDER BY k.id`, environment); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, `SELECT k.id,k.name,k.organization_id,o.name AS organization_name,k.connection_id,c.name AS connection_name,k.expires_at,k.revoked_at,c.adopt_existing_members,c.adopt_scope FROM provisioning_credentials k JOIN provisioning_connections c ON c.id=k.connection_id AND c.environment_id=k.environment_id JOIN organizations o ON o.id=k.organization_id AND o.environment_id=k.environment_id WHERE k.environment_id=$1 ORDER BY k.id`, environment); err != nil {
 		return nil, failure(err)
 	}
 	out := make([]provisioning.CredentialView, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, provisioning.CredentialView{ID: row.ID, Name: row.Name, Organization: row.Organization, Connection: row.Connection, Expires: row.Expires, Revoked: row.Revoked, Adopt: row.Adopt, AdoptScope: row.AdoptScope})
+		out = append(out, provisioning.CredentialView{ID: row.ID, Name: row.Name, Organization: row.Organization, OrganizationName: row.OrgName, Connection: row.Connection, ConnectionName: row.ConnName, Expires: row.Expires, Revoked: row.Revoked, Adopt: row.Adopt, AdoptScope: row.AdoptScope})
 	}
 	return out, nil
 }
