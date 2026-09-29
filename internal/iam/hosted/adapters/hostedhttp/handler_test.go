@@ -72,9 +72,13 @@ func TestSignInOptionsRender(t *testing.T) {
 	if strings.Contains(html, `name="password"`) || strings.Contains(html, "Forgot password") || !strings.Contains(html, "Email me a code") {
 		t.Fatal("code-only client must not show the password")
 	}
-	html = render("password", hosted.SignIn{Password: true})
+	html = render("password", hosted.SignIn{Password: true, PasswordReset: true})
 	if strings.Contains(html, "Email me a code") || !strings.Contains(html, "Forgot password") {
 		t.Fatal("password-only client must not offer the code")
+	}
+	html = render("password", hosted.SignIn{Password: true})
+	if !strings.Contains(html, `name="password"`) || strings.Contains(html, "Forgot password") {
+		t.Fatal("an environment without password reset must hide the link")
 	}
 }
 
@@ -172,7 +176,7 @@ func TestLayoutThemeParts(t *testing.T) {
 }
 
 func TestPreviewSamples(t *testing.T) {
-	for _, page := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "invite", "message"} {
+	for _, page := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "invite", "message", "signup", "signup-code"} {
 		for _, lang := range []string{"en", "es"} {
 			v, ok := sample(page, lang)
 			if !ok {

@@ -125,7 +125,7 @@ func (m Methods) apply(v *view) error {
 		}
 		buttons = append(buttons, federation.ConnectionSummary{Name: name, Provider: b.Provider})
 	}
-	signIn := hosted.SignIn{Password: m.Password, EmailCode: m.EmailCode, OrganizationSSO: m.OrganizationSSO}
+	signIn := hosted.SignIn{Password: m.Password, EmailCode: m.EmailCode, OrganizationSSO: m.OrganizationSSO, PasswordReset: m.Password}
 	if !signIn.EmailForm() && len(buttons) == 0 {
 		return errx.Validation("sign_in must show at least one method")
 	}
@@ -244,7 +244,7 @@ func preview(c *fiber.Ctx, settings hosted.Settings, in previewInput) error {
 func sample(page, lang string) (view, bool) {
 	const email = "jane@example.com"
 	connection := identity.ConnectionID{}
-	all := hosted.DefaultSignIn(identity.EnvironmentID{}, identity.ClientID{})
+	all := hosted.DefaultSignIn(identity.EnvironmentID{}, identity.ClientID{}).Within(authentication.DefaultSignInPolicy())
 	t := func(key string, args ...any) string { return i18n.T(lang, key, args...) }
 	v := view{Lang: lang}
 	switch page {
@@ -276,6 +276,10 @@ func sample(page, lang string) (view, bool) {
 		v.Invite = &invitation.Preview{Email: "j***@example.com", OrganizationName: "Acme Inc.", PasswordRequired: true}
 	case "message":
 		v.Title, v.Notice = t("hosted.invitation.accepted"), t("hosted.invitation.joined", "Acme Inc.")
+	case "signup":
+		v.Title, v.SignIn = t("hosted.title.signup"), all
+	case "signup-code":
+		v.Title, v.Email, v.Notice = t("hosted.title.check_email"), email, t("hosted.notice.signup_sent", email)
 	default:
 		return view{}, false
 	}
@@ -300,7 +304,8 @@ func (h *Handler) saveSignIn(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	var input hosted.SignIn
+	// Clients saved before sign-up existed omit it: they keep offering it.
+	input := hosted.SignIn{Signup: true}
 	if err = c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}

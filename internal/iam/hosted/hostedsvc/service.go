@@ -27,12 +27,39 @@ type Service struct {
 	challenges     hosted.Challenges
 	federation     hosted.Federation
 	second         hosted.SecondFactor
+	signIns        authentication.SignInPolicyQueries
+	signups        hosted.Signups
 	now            func() time.Time
 }
 
 // New builds the hosted flow; second may be nil (no multi-factor step).
 func New(repository hosted.Repository, secrets hosted.Secrets, authorizations hosted.Authorizations, authenticator authentication.Authenticator, challenges hosted.Challenges, federation hosted.Federation, second hosted.SecondFactor) *Service {
 	return &Service{repository: repository, secrets: secrets, authorizations: authorizations, authenticator: authenticator, challenges: challenges, federation: federation, second: second, now: time.Now}
+}
+
+// SetSignInPolicies narrows the pages to the environment's sign-in policy
+// (without it every method the client offers is shown).
+func (s *Service) SetSignInPolicies(p authentication.SignInPolicyQueries) { s.signIns = p }
+
+// SetSignups offers self-registration (without it the pages never do).
+func (s *Service) SetSignups(signups hosted.Signups) { s.signups = signups }
+
+// options are the client's sign-in options within the environment's
+// sign-in policy: what its pages offer.
+func (s *Service) options(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (hosted.SignIn, error) {
+	options, err := s.SignIn(ctx, environment, client)
+	if err != nil {
+		return options, err
+	}
+	policy := authentication.DefaultSignInPolicy()
+	if s.signIns != nil {
+		if policy, err = s.signIns.SignInPolicy(ctx, environment); err != nil {
+			return options, err
+		}
+	}
+	options = options.Within(policy)
+	options.Signup = options.Signup && s.signups != nil
+	return options, nil
 }
 
 var (
@@ -89,7 +116,7 @@ func (s *Service) Page(ctx context.Context, r hosted.Request) (hosted.Page, erro
 	if err != nil {
 		return hosted.Page{}, err
 	}
-	options, err := s.SignIn(ctx, client.Environment, client.ID)
+	options, err := s.options(ctx, client.Environment, client.ID)
 	if err != nil {
 		return hosted.Page{}, err
 	}
@@ -137,7 +164,7 @@ func (s *Service) offering(ctx context.Context, r hosted.Request, method func(ho
 		return authentication.Target{}, hosted.SignIn{}, oauth.Pending{}, err
 	}
 	client := p.Client
-	options, err := s.SignIn(ctx, client.Environment, client.ID)
+	options, err := s.options(ctx, client.Environment, client.ID)
 	if err != nil {
 		return authentication.Target{}, hosted.SignIn{}, oauth.Pending{}, err
 	}
@@ -147,9 +174,49 @@ func (s *Service) offering(ctx context.Context, r hosted.Request, method func(ho
 	return authentication.Target{Environment: client.Environment, Application: client.Application, Resource: client.Resource}, options, p, nil
 }
 
-func password(o hosted.SignIn) bool  { return o.Password }
-func emailCode(o hosted.SignIn) bool { return o.EmailCode }
-func emailForm(o hosted.SignIn) bool { return o.EmailForm() }
+func password(o hosted.SignIn) bool      { return o.Password }
+func passwordReset(o hosted.SignIn) bool { return o.PasswordReset }
+func emailCode(o hosted.SignIn) bool     { return o.EmailCode }
+func emailForm(o hosted.SignIn) bool     { return o.EmailForm() }
+func signup(o hosted.SignIn) bool        { return o.Signup }
+
+// Signup emails a code confirming the address of a new account. Which
+// methods the account may use is the authentication module's decision; the
+// page only offers what the client shows.
+func (s *Service) Signup(ctx context.Context, r hosted.Request, email, name, password string) (identity.ChallengeID, error) {
+	target, options, p, err := s.offering(ctx, r, signup)
+	if err != nil {
+		return identity.ChallengeID{}, err
+	}
+	switch {
+	case password != "" && !options.Password:
+		return identity.ChallengeID{}, hosted.ErrMethodUnavailable()
+	case password == "" && !options.EmailCode:
+		return identity.ChallengeID{}, errx.Validation("password is required")
+	}
+	return s.signups.Signup(ctx, authentication.Signup{Environment: target.Environment, Email: email, Name: name, Password: password, Locale: uiLocales(p)})
+}
+
+// CompleteSignup creates the account and continues as a verified login with
+// the method it signs in with. The new account belongs to the sign-up
+// organization only; whether that gives it access to the application is up
+// to the organization's grants.
+func (s *Service) CompleteSignup(ctx context.Context, r hosted.Request, challenge identity.ChallengeID, code string) (hosted.Result, error) {
+	target, _, err := s.offered(ctx, r, signup)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	created, err := s.signups.CompleteSignup(ctx, target.Environment, challenge, code)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	result, err := s.result(ctx, r, target, created.Verified())
+	var e *errx.Error
+	if errx.As(err, &e) && e.Code == hosted.CodeNoAccess {
+		return hosted.Result{}, hosted.ErrSignedUpNoAccess()
+	}
+	return result, err
+}
 
 // Identify routes the email: enforced organization SSO starts at once;
 // otherwise password, offering the organization's SSO when it has one.
@@ -220,7 +287,7 @@ func (s *Service) VerifyCode(ctx context.Context, r hosted.Request, challenge id
 }
 
 func (s *Service) SendReset(ctx context.Context, r hosted.Request, email string) (identity.ChallengeID, error) {
-	target, _, p, err := s.offering(ctx, r, password)
+	target, _, p, err := s.offering(ctx, r, passwordReset)
 	if err != nil {
 		return identity.ChallengeID{}, err
 	}
@@ -228,7 +295,7 @@ func (s *Service) SendReset(ctx context.Context, r hosted.Request, email string)
 }
 
 func (s *Service) Reset(ctx context.Context, r hosted.Request, challenge identity.ChallengeID, code, secret string) error {
-	target, _, err := s.offered(ctx, r, password)
+	target, _, err := s.offered(ctx, r, passwordReset)
 	if err != nil {
 		return err
 	}
@@ -275,7 +342,7 @@ func (s *Service) result(ctx context.Context, r hosted.Request, target authentic
 // parked under the authorization ticket.
 func (s *Service) step(ctx context.Context, r hosted.Request, target authentication.Target, login hosted.Login) (hosted.Result, error) {
 	verified := login.Verified
-	organizations, err := s.authenticator.Organizations(ctx, target, verified.User)
+	organizations, err := s.authenticator.Organizations(ctx, target, verified)
 	if err != nil {
 		return hosted.Result{}, err
 	}

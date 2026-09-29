@@ -14,6 +14,16 @@ import (
 type policyRepository struct {
 	authentication.PasswordPolicyRepository
 	policy *authentication.PasswordPolicy
+	// member are the requirements of the user's organizations.
+	member []authentication.PasswordRequirements
+}
+
+func (r policyRepository) MemberRequirements(context.Context, identity.EnvironmentID, identity.UserID) ([]authentication.PasswordRequirements, error) {
+	return r.member, nil
+}
+
+func (r policyRepository) ChallengeRequirements(context.Context, identity.EnvironmentID, identity.ChallengeID) ([]authentication.PasswordRequirements, error) {
+	return r.member, nil
 }
 
 func (r policyRepository) GetPasswordPolicy(context.Context, identity.EnvironmentID) (authentication.PasswordPolicy, error) {

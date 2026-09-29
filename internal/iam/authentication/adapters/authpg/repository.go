@@ -74,9 +74,14 @@ func (t *Transaction) SSORequired(ctx context.Context, b authentication.Context,
 		b.EnvironmentID, b.OrganizationID, identity.EmailDomain(email), email)
 	return required, failure(err)
 }
+func (t *Transaction) OrganizationMethods(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (authentication.Methods, error) {
+	var out authentication.Methods
+	err := t.tx.GetContext(ctx, &out, `SELECT allow_password,allow_email_code,allow_social FROM organizations WHERE environment_id=$1 AND id=$2`, environment, organization)
+	return out, credentialError(err)
+}
 func (t *Transaction) AccessibleOrganizations(ctx context.Context, target authentication.Target, user identity.UserID) ([]authentication.Organization, error) {
 	out := []authentication.Organization{}
-	err := t.tx.SelectContext(ctx, &out, `SELECT o.id,o.name,m.org_unit_id,m.manager_id FROM memberships m
+	err := t.tx.SelectContext(ctx, &out, `SELECT o.id,o.name,m.org_unit_id,m.manager_id,o.allow_password,o.allow_email_code,o.allow_social FROM memberships m
 		JOIN users u ON u.id=m.user_id AND u.environment_id=m.environment_id
 		JOIN organizations o ON o.id=m.organization_id AND o.environment_id=m.environment_id
 		JOIN applications a ON a.id=$3 AND a.environment_id=m.environment_id

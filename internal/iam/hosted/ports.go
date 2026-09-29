@@ -52,6 +52,12 @@ type Flow interface {
 	VerifyCode(ctx context.Context, r Request, challenge identity.ChallengeID, code string) (Result, error)
 	SendReset(ctx context.Context, r Request, email string) (identity.ChallengeID, error)
 	Reset(ctx context.Context, r Request, challenge identity.ChallengeID, code, password string) error
+	// Signup emails a code to confirm the address of a new account.
+	Signup(ctx context.Context, r Request, email, name, password string) (identity.ChallengeID, error)
+	// CompleteSignup creates the account once the code is right and signs
+	// it in like any verified login. A new account without access to the
+	// application answers ErrSignedUpNoAccess.
+	CompleteSignup(ctx context.Context, r Request, signup identity.ChallengeID, code string) (Result, error)
 	SSO(ctx context.Context, r Request, connection identity.ConnectionID) (federation.Start, error)
 	// Federated continues after a hosted single sign-on callback.
 	Federated(ctx context.Context, r Request, verified authentication.Verified) (Result, error)
@@ -94,6 +100,12 @@ type Authorizations interface {
 type Challenges interface {
 	InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose, locale string) (identity.ChallengeID, error)
 	VerifyChallenge(ctx context.Context, boundary authentication.Context, challenge identity.ChallengeID, code, purpose, password string) (authentication.Result, error)
+}
+
+// Signups is self-registration (authentication.SignupCommands).
+type Signups interface {
+	Signup(ctx context.Context, input authentication.Signup) (identity.ChallengeID, error)
+	CompleteSignup(ctx context.Context, environment identity.EnvironmentID, signup identity.ChallengeID, code string) (authentication.SignedUp, error)
 }
 
 // Federation is the part of the federation flows the hosted pages use.

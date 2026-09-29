@@ -66,10 +66,11 @@ type Passwords interface {
 	Hash(password string) (string, error)
 }
 
-// PasswordPolicy checks a new password against the environment's policy
+// PasswordPolicy checks a new account's password against the environment's
+// policy tightened by the inviting organization's requirements
 // (implemented by the authentication module).
 type PasswordPolicy interface {
-	CheckPassword(ctx context.Context, environment identity.EnvironmentID, password string) error
+	CheckMemberPassword(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, password string) error
 }
 
 // Mailer sends the invitation; Link returns the environment's accept link

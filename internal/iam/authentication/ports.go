@@ -44,11 +44,12 @@ type Authenticator interface {
 	VerifyPassword(ctx context.Context, environment identity.EnvironmentID, email, password string) (Verified, error)
 	VerifyCode(ctx context.Context, environment identity.EnvironmentID, challenge identity.ChallengeID, code string) (Verified, error)
 	// Organizations lists the organizations in which the user may use the
-	// target application and resource.
-	Organizations(ctx context.Context, target Target, user identity.UserID) ([]Organization, error)
+	// target application and resource with the method they verified with
+	// (ErrMethodNotAllowed when only the method keeps them out).
+	Organizations(ctx context.Context, target Target, verified Verified) ([]Organization, error)
 	// Issue creates the session; password and code logins are refused where
-	// the organization enforces SSO, and a verified login whose password
-	// expired is refused until ChangePassword.
+	// the organization enforces SSO or does not allow the method, and a
+	// verified login whose password expired is refused until ChangePassword.
 	Issue(ctx context.Context, boundary Context, verified Verified) (Issued, error)
 	// ChangePassword replaces the expired password of a verified login
 	// (after any second factor) and returns it cleared.
@@ -170,21 +171,30 @@ type Passwords interface {
 	Compare(hash, password string) bool
 }
 
-// PasswordPolicyCommands manage an environment's password policy; every
-// change is audited.
+// PasswordPolicyCommands manage an environment's password policy and the
+// requirements organizations add to it; every change is audited.
 type PasswordPolicyCommands interface {
 	SetPasswordPolicy(ctx context.Context, m Mutation, input PasswordPolicy) (PasswordPolicy, error)
 	// DeletePasswordPolicy returns the environment to the default policy.
 	DeletePasswordPolicy(ctx context.Context, m Mutation) error
+	SetOrganizationPasswordPolicy(ctx context.Context, m Mutation, organization identity.OrganizationID, input PasswordRequirements) (PasswordRequirements, error)
+	// DeleteOrganizationPasswordPolicy drops the organization's requirements.
+	DeleteOrganizationPasswordPolicy(ctx context.Context, m Mutation, organization identity.OrganizationID) error
 }
 
-// PasswordPolicyQueries read an environment's password policy.
+// PasswordPolicyQueries read password policies and check new passwords.
 type PasswordPolicyQueries interface {
 	// PasswordPolicy is the effective policy (Custom false for the default).
 	PasswordPolicy(ctx context.Context, environment identity.EnvironmentID) (PasswordPolicy, error)
+	// OrganizationPasswordPolicy is what the organization adds (Custom
+	// false when nothing).
+	OrganizationPasswordPolicy(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (PasswordRequirements, error)
 	// CheckPassword applies the environment's policy to a new password,
 	// breach check included.
 	CheckPassword(ctx context.Context, environment identity.EnvironmentID, password string) error
+	// CheckMemberPassword applies the environment's policy tightened by the
+	// organization's requirements (a new account joining it).
+	CheckMemberPassword(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, password string) error
 }
 
 // PasswordPolicyRepository stores password policies; writes audit m in the
@@ -194,6 +204,88 @@ type PasswordPolicyRepository interface {
 	GetPasswordPolicy(ctx context.Context, environment identity.EnvironmentID) (PasswordPolicy, error)
 	SetPasswordPolicy(ctx context.Context, m Mutation, input PasswordPolicy) error
 	DeletePasswordPolicy(ctx context.Context, m Mutation) error
+	// GetOrganizationPasswordPolicy returns the organization's saved
+	// requirements (Custom false when none); NotFound for an unknown
+	// organization.
+	GetOrganizationPasswordPolicy(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (PasswordRequirements, error)
+	// SetOrganizationPasswordPolicy saves them; NotFound for an unknown
+	// organization.
+	SetOrganizationPasswordPolicy(ctx context.Context, m Mutation, organization identity.OrganizationID, input PasswordRequirements) error
+	DeleteOrganizationPasswordPolicy(ctx context.Context, m Mutation, organization identity.OrganizationID) error
+	// MemberRequirements lists the requirements of every active
+	// organization the user is an active member of.
+	MemberRequirements(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) ([]PasswordRequirements, error)
+	// ChallengeRequirements is MemberRequirements for the user of a
+	// challenge (empty for an unknown one); read without locks.
+	ChallengeRequirements(ctx context.Context, environment identity.EnvironmentID, challenge identity.ChallengeID) ([]PasswordRequirements, error)
+}
+
+// SignInPolicyCommands manage an environment's sign-in policy; audited.
+type SignInPolicyCommands interface {
+	SetSignInPolicy(ctx context.Context, m Mutation, input SignInPolicy) (SignInPolicy, error)
+	// DeleteSignInPolicy returns the environment to the default policy.
+	DeleteSignInPolicy(ctx context.Context, m Mutation) error
+}
+
+// SignInPolicyQueries read an environment's sign-in policy.
+type SignInPolicyQueries interface {
+	// SignInPolicy is the effective policy (Custom false for the default).
+	SignInPolicy(ctx context.Context, environment identity.EnvironmentID) (SignInPolicy, error)
+}
+
+// SignInPolicyRepository stores sign-in policies; writes audit m in the
+// same transaction.
+type SignInPolicyRepository interface {
+	// GetSignInPolicy returns the saved policy; NotFound when there is none.
+	GetSignInPolicy(ctx context.Context, environment identity.EnvironmentID) (SignInPolicy, error)
+	SetSignInPolicy(ctx context.Context, m Mutation, input SignInPolicy) error
+	DeleteSignInPolicy(ctx context.Context, m Mutation) error
+	// SignupTarget reports whether organization is an active organization
+	// of the environment and group (when not zero) an operator-managed
+	// (not SCIM) group of it.
+	SignupTarget(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, group identity.GroupID) (organizationOK, groupOK bool, err error)
+}
+
+// SignupCommands are self-registration: a person asks for an account and
+// confirms their email with a code before it exists.
+type SignupCommands interface {
+	// Signup emails a code to confirm the address; it answers the same
+	// for an email that already has an account (nothing is sent then).
+	Signup(ctx context.Context, input Signup) (identity.ChallengeID, error)
+	// CompleteSignup checks the code and creates the account, its
+	// membership in the sign-up organization and its group membership.
+	CompleteSignup(ctx context.Context, environment identity.EnvironmentID, signup identity.ChallengeID, code string) (SignedUp, error)
+}
+
+// SignupTransaction is the storage of self-registration, one transaction.
+type SignupTransaction interface {
+	// AccountExists reports whether the environment has a user with email.
+	AccountExists(ctx context.Context, environment identity.EnvironmentID, email string) (bool, error)
+	// RecentSignups counts sign-ups for email in the last ten minutes.
+	RecentSignups(ctx context.Context, environment identity.EnvironmentID, email string) (int, error)
+	// CreateSignup stores p and consumes older sign-ups for its email.
+	CreateSignup(ctx context.Context, p PendingSignup) error
+	// PendingSignup locks the live (unconsumed, unexpired) sign-up;
+	// Unauthorized "invalid challenge" when there is none.
+	PendingSignup(ctx context.Context, environment identity.EnvironmentID, signup identity.ChallengeID) (PendingSignup, error)
+	FailSignup(ctx context.Context, signup identity.ChallengeID) error
+	// Join consumes the sign-up and creates its account, membership and
+	// group membership, audited with actor = the new user. An account
+	// with the email answers ErrAccountExists; an inactive organization
+	// ErrSignupDisabled.
+	Join(ctx context.Context, j Joining) error
+	// SSORequired is Transaction.SSORequired for an environment and email.
+	SSORequired(ctx context.Context, environment identity.EnvironmentID, email string) (bool, error)
+	// SignupMethods are the methods the sign-up organization allows; none
+	// when it is not an active organization of the environment.
+	SignupMethods(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Methods, error)
+	Commit() error
+	Rollback() error
+}
+
+// SignupRepository begins self-registration transactions.
+type SignupRepository interface {
+	BeginSignup(ctx context.Context) (SignupTransaction, error)
 }
 
 // Breaches reports whether a password appears in known data breaches.
@@ -255,9 +347,12 @@ type Transaction interface {
 	// the email: it has an active enforced connection, has verified the
 	// email's domain, and the email's user has no sso_bypass membership.
 	SSORequired(ctx context.Context, boundary Context, email string) (bool, error)
+	// OrganizationMethods are the sign-in methods the organization allows;
+	// Unauthorized (like a wrong password) for an unknown organization.
+	OrganizationMethods(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Methods, error)
 	// AccessibleOrganizations lists active organizations where the user is an
 	// active member with grants on the target resource of an active
-	// application linked to it.
+	// application linked to it, with the methods each allows.
 	AccessibleOrganizations(ctx context.Context, target Target, user identity.UserID) ([]Organization, error)
 	Resolve(ctx context.Context, boundary Context, user identity.UserID) (Access, error)
 	// CreateSession stores the session; authenticated is its auth_time,

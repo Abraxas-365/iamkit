@@ -28,7 +28,7 @@ var files embed.FS
 
 var pages = func() map[string]*template.Template {
 	out := map[string]*template.Template{}
-	for _, name := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message"} {
+	for _, name := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "signup", "signup-code"} {
 		t := template.Must(template.ParseFS(files, "templates/*.html"))
 		template.Must(t.New("content").Parse(`{{template "` + name + `/content" .}}`))
 		out[name] = t
@@ -92,6 +92,9 @@ func (h *Handler) Pages() map[string]fiber.Handler {
 		"POST /hosted/login/code/verify":  h.verifyCode,
 		"POST /hosted/login/reset":        h.sendReset,
 		"POST /hosted/login/reset/verify": h.reset,
+		"GET /hosted/signup":              h.signupPage,
+		"POST /hosted/signup":             h.signup,
+		"POST /hosted/signup/verify":      h.completeSignup,
 		"POST /hosted/login/sso":          h.sso,
 		"POST /hosted/login/organization": h.organization,
 		"POST /hosted/login/mfa":          h.secondFactor,
@@ -109,8 +112,10 @@ type view struct {
 	Nonce, Title, Subtitle, Error, Notice string
 	Brand                                 brand
 	Ticket, Email                         string
-	Connection                            *identity.ConnectionID
-	Connections                           []federation.ConnectionSummary
+	// Name is the name typed on the sign-up page.
+	Name        string
+	Connection  *identity.ConnectionID
+	Connections []federation.ConnectionSummary
 	// SignIn is which methods the client offers; zero on pages that do
 	// not depend on it.
 	SignIn        hosted.SignIn
@@ -186,6 +191,8 @@ var (
 		"PASSWORD_CHANGE_REQUIRED":   "hosted.subtitle.password_expired",
 		"TOO_MANY_REQUESTS":          "hosted.error.too_many",
 		"ACCOUNT_EXISTS":             "hosted.error.account_exists",
+		"SIGNUP_DISABLED":            "hosted.error.signup_disabled",
+		"SIGNED_UP_NO_ACCESS":        "hosted.error.signed_up_no_access",
 	}
 	problemMessages = map[string]string{
 		"invalid credentials or access token": "hosted.error.credentials",
@@ -200,6 +207,8 @@ var (
 		"provider did not supply a valid email":                                            "hosted.error.provider_email",
 		"provider email is not verified":                                                   "hosted.error.provider_email",
 		"invalid or expired invitation":                                                    "hosted.invitation.invalid",
+		"name is required":                                                                 "hosted.error.name_required",
+		"name must be at most 200 characters long":                                         "hosted.error.name_length",
 	}
 )
 

@@ -60,8 +60,11 @@
   "hosted.subtitle.password_expired": "Tu contraseña expiró. Elige una nueva para continuar.",
   "hosted.title.expired": "Inicio de sesión vencido",
   "hosted.expired": "Este enlace de inicio de sesión venció. Vuelve a la aplicación e inténtalo de nuevo.",
+  "hosted.title.signup": "Crea tu cuenta",
+  "hosted.title.signed_up": "Cuenta creada",
 
   "hosted.notice.code_sent": "Si la cuenta puede iniciar sesión con un código, enviamos un código de 8 dígitos a %s.",
+  "hosted.notice.signup_sent": "Ingresa el código de 8 dígitos que enviamos a %s. Si este correo ya tiene una cuenta, inicia sesión.",
   "hosted.notice.reset_sent": "Si la cuenta existe, enviamos un código de 8 dígitos a %s.",
   "hosted.notice.password_changed": "Tu contraseña se cambió. Inicia sesión con la nueva contraseña.",
 
@@ -96,6 +99,9 @@
   "hosted.form.codes_saved": "Ya guardé mis códigos — continuar",
   "hosted.form.name": "Nombre",
   "hosted.form.accept": "Aceptar invitación",
+  "hosted.form.create_account": "Crear cuenta",
+  "hosted.form.have_account": "¿Ya tienes una cuenta? Inicia sesión",
+  "hosted.form.optional": "(opcional: sin ella, te enviamos un código por correo para iniciar sesión)",
 
   "hosted.error.generic": "Algo salió mal. Inténtalo de nuevo.",
   "hosted.error.provider_unavailable": "El proveedor de inicio de sesión único de tu organización no responde. Inténtalo en unos minutos o contacta a tu administrador si el problema continúa.",
@@ -110,6 +116,10 @@
   "hosted.error.method_unavailable": "Este método de inicio de sesión no está disponible para esta aplicación.",
   "hosted.error.no_access": "Tu cuenta no tiene acceso a esta aplicación.",
   "hosted.error.account_exists": "Ya existe una cuenta con este correo. Inicia sesión con ella.",
+  "hosted.error.signup_disabled": "No es posible crear una cuenta. Pide una invitación a un administrador.",
+  "hosted.error.signed_up_no_access": "Tu cuenta se creó, pero aún no tiene acceso a esta aplicación. Contacta a un administrador.",
+  "hosted.error.name_required": "Ingresa tu nombre.",
+  "hosted.error.name_length": "El nombre debe tener como máximo 200 caracteres.",
   "hosted.error.login_expired": "Tu inicio de sesión tardó demasiado. Inicia sesión de nuevo.",
   "hosted.error.password_length": "La contraseña debe tener entre 12 y 72 caracteres.",
   "hosted.error.password_between": "La contraseña debe tener entre %d y %d caracteres.",

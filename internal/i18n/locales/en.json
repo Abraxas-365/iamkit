@@ -60,8 +60,11 @@
   "hosted.subtitle.password_expired": "Your password has expired. Choose a new one to continue.",
   "hosted.title.expired": "Sign-in expired",
   "hosted.expired": "This sign-in link has expired. Go back to the application and try again.",
+  "hosted.title.signup": "Create your account",
+  "hosted.title.signed_up": "Account created",
 
   "hosted.notice.code_sent": "If the account can sign in with a code, we sent an 8-digit code to %s.",
+  "hosted.notice.signup_sent": "Enter the 8-digit code we sent to %s. If this email already has an account, sign in instead.",
   "hosted.notice.reset_sent": "If the account exists, we sent an 8-digit code to %s.",
   "hosted.notice.password_changed": "Your password was changed. Sign in with the new password.",
 
@@ -96,6 +99,9 @@
   "hosted.form.codes_saved": "I saved my codes — continue",
   "hosted.form.name": "Name",
   "hosted.form.accept": "Accept invitation",
+  "hosted.form.create_account": "Create account",
+  "hosted.form.have_account": "Already have an account? Sign in",
+  "hosted.form.optional": "(optional — without one, we email you a code to sign in)",
 
   "hosted.error.generic": "Something went wrong. Please try again.",
   "hosted.error.provider_unavailable": "Your organization's single sign-on provider is not responding. Try again in a few minutes, or contact your administrator if the problem continues.",
@@ -110,6 +116,10 @@
   "hosted.error.method_unavailable": "This sign-in method is not available for this application.",
   "hosted.error.no_access": "Your account does not have access to this application.",
   "hosted.error.account_exists": "An account with this email already exists. Sign in with it.",
+  "hosted.error.signup_disabled": "Creating an account is not available. Ask an administrator for an invitation.",
+  "hosted.error.signed_up_no_access": "Your account was created, but it does not have access to this application yet. Contact an administrator.",
+  "hosted.error.name_required": "Enter your name.",
+  "hosted.error.name_length": "The name must be at most 200 characters long.",
   "hosted.error.login_expired": "Your sign-in took too long. Sign in again.",
   "hosted.error.password_length": "The password must be 12 to 72 characters long.",
   "hosted.error.password_between": "The password must be %d to %d characters long.",

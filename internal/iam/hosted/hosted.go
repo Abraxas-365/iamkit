@@ -80,5 +80,18 @@ func ErrLoginExpired() error {
 // ErrNoAccess is returned when the verified user may not use the client's
 // application in any organization.
 func ErrNoAccess() error {
-	return errx.Forbidden("your account does not have access to this application")
+	e := errx.Forbidden("your account does not have access to this application")
+	e.Code = CodeNoAccess
+	return e
+}
+
+// CodeNoAccess is the code of ErrNoAccess.
+const CodeNoAccess = "NO_ACCESS"
+
+// ErrSignedUpNoAccess is returned when a new account was created but its
+// sign-up organization gives it no access to the application yet.
+func ErrSignedUpNoAccess() error {
+	e := errx.Forbidden("your account was created, but it does not have access to this application yet")
+	e.Code = "SIGNED_UP_NO_ACCESS"
+	return e
 }

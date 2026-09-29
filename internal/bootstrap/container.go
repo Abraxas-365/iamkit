@@ -119,6 +119,8 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Tokens = authenticationModule.Tokens
 	s.Auth = authenticationModule.HTTP
 	s.PasswordPolicy = authenticationModule.PasswordPoliciesHTTP
+	s.SignInPolicy = authenticationModule.SignInPoliciesHTTP
+	s.Signup = authenticationModule.SignupHTTP
 	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, server.OperatorID).
 		Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService)
 	userModule := usermodule.New(usermodule.Deps{DB: db, ActorID: server.OperatorID, PasswordPolicy: authenticationModule.PasswordPolicies})
@@ -142,7 +144,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Applications = applicationModule.HTTP
 	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Key: key, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Tokens: s.Tokens, ActorID: server.OperatorID})
 	s.OAuth = oauthModule.HTTP
-	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: oauthModule.Flows, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, Finish: oauthModule.HTTP.Finish, ActorID: server.OperatorID})
+	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: oauthModule.Flows, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Finish: oauthModule.HTTP.Finish, ActorID: server.OperatorID})
 	s.Hosted = hostedModule.HTTP
 	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
 	// Rendered emails wear the environment's hosted login branding.

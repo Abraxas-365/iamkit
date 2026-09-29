@@ -3,6 +3,7 @@ package authhttp
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -22,6 +23,60 @@ func (h *PasswordPolicyHandler) Register(e fiber.Router) {
 	e.Get("/password-policy", h.Get)
 	e.Put("/password-policy", h.Set)
 	e.Delete("/password-policy", h.Delete)
+	e.Get("/organizations/:organization/password-policy", h.GetOrganization)
+	e.Put("/organizations/:organization/password-policy", h.SetOrganization)
+	e.Delete("/organizations/:organization/password-policy", h.DeleteOrganization)
+}
+
+func organizationParam(c *fiber.Ctx) (identity.OrganizationID, error) {
+	id, err := identity.ParseOrganizationID(c.Params("organization"))
+	if err != nil {
+		return id, errx.NotFound("organization not found")
+	}
+	return id, nil
+}
+
+// GetOrganization returns what the organization adds to the environment's
+// policy (custom false when nothing).
+func (h *PasswordPolicyHandler) GetOrganization(c *fiber.Ctx) error {
+	organization, err := organizationParam(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.queries.OrganizationPasswordPolicy(c.Context(), envParam(c), organization)
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+
+// SetOrganization replaces the organization's requirements.
+func (h *PasswordPolicyHandler) SetOrganization(c *fiber.Ctx) error {
+	organization, err := organizationParam(c)
+	if err != nil {
+		return err
+	}
+	var input authentication.PasswordRequirements
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	out, err := h.commands.SetOrganizationPasswordPolicy(c.Context(), h.mutation(c), organization, input)
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+
+// DeleteOrganization drops the organization's requirements.
+func (h *PasswordPolicyHandler) DeleteOrganization(c *fiber.Ctx) error {
+	organization, err := organizationParam(c)
+	if err != nil {
+		return err
+	}
+	if err := h.commands.DeleteOrganizationPasswordPolicy(c.Context(), h.mutation(c), organization); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
 }
 
 // Get returns the effective policy (custom false for the default).

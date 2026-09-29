@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -28,13 +29,32 @@ type SignIn struct {
 	OrganizationSSO bool                    `json:"organization_sso"`
 	AllConnections  bool                    `json:"all_connections"`
 	Connections     []identity.ConnectionID `json:"connection_ids"`
-	Custom          bool                    `json:"custom"`
-	UpdatedAt       *time.Time              `json:"updated_at,omitempty"`
+	// Signup offers "Create account" when the environment allows sign-up.
+	Signup    bool       `json:"signup"`
+	Custom    bool       `json:"custom"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	// PasswordReset offers "forgot password" on the page (computed by
+	// Within; never stored).
+	PasswordReset bool `json:"-"`
+}
+
+// Within narrows the client's options to what the environment's sign-in
+// policy allows (organizations narrow further once chosen). Sign-up needs
+// a method the page offers for the new account to sign in with.
+func (s SignIn) Within(p authentication.SignInPolicy) SignIn {
+	s.Password = s.Password && p.AllowPassword
+	s.EmailCode = s.EmailCode && p.AllowEmailCode
+	if !p.AllowSocial {
+		s.AllConnections, s.Connections = false, []identity.ConnectionID{}
+	}
+	s.PasswordReset = s.Password && p.AllowPasswordReset
+	s.Signup = s.Signup && p.AllowSignup && (s.Password || s.EmailCode)
+	return s
 }
 
 // DefaultSignIn offers every method.
 func DefaultSignIn(environment identity.EnvironmentID, client identity.ClientID) SignIn {
-	return SignIn{Environment: environment, Client: client, Password: true, EmailCode: true, OrganizationSSO: true, AllConnections: true, Connections: []identity.ConnectionID{}}
+	return SignIn{Environment: environment, Client: client, Password: true, EmailCode: true, OrganizationSSO: true, AllConnections: true, Connections: []identity.ConnectionID{}, Signup: true}
 }
 
 // Normalize drops duplicate connections and the list when all are shown.

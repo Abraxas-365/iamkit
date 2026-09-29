@@ -72,7 +72,8 @@ type Server struct {
 	Users               *userhttp.Handler
 	Delivery            *authhttp.DeliveryHandler
 	PasswordPolicy      *authhttp.PasswordPolicyHandler
-
+	SignInPolicy        *authhttp.SignInPolicyHandler
+	Signup              *authhttp.SignupHandler
 	// API routes (/api/v1/*) — JWT-based, permission-scoped.
 	API         *apiauth.Middleware
 	APIHandlers APIHandlerSet
@@ -161,6 +162,10 @@ func (s *Server) App() *fiber.App {
 	auth.Post("/refresh", limiter.New(limiter.Config{Max: 30}), s.Auth.Refresh)
 	auth.Post("/challenges", limiter.New(limiter.Config{Max: 20}), s.Auth.InitiateChallenge)
 	auth.Post("/challenges/verify", limiter.New(limiter.Config{Max: 30}), s.Auth.VerifyChallenge)
+	if s.Signup != nil {
+		auth.Post("/signup", limiter.New(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Signup.Signup)
+		auth.Post("/signup/verify", limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Signup.Verify)
+	}
 	auth.Post("/federation/start", limiter.New(limiter.Config{Max: 20}), s.Federation.Start)
 	auth.Get("/federation/callback", limiter.New(limiter.Config{Max: 30}), s.Federation.Callback)
 	auth.Post("/federation/callback", limiter.New(limiter.Config{Max: 30}), s.Federation.CallbackForm)

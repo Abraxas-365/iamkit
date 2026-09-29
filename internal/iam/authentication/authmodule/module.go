@@ -72,6 +72,12 @@ type Module struct {
 	// include the check other modules run on new passwords.
 	PasswordPolicies     authentication.PasswordPolicyQueries
 	PasswordPoliciesHTTP *authhttp.PasswordPolicyHandler
+	// SignInPolicies is the environment sign-in policy.
+	SignInPolicies     authentication.SignInPolicyQueries
+	SignInPoliciesHTTP *authhttp.SignInPolicyHandler
+	// Signups is self-registration (the hosted pages use it too).
+	Signups    authentication.SignupCommands
+	SignupHTTP *authhttp.SignupHandler
 	// Brand sets where rendered emails read the environment's brand, once
 	// the module owning it is built.
 	Brand func(authentication.Branding)
@@ -111,6 +117,9 @@ func New(deps Deps) Module {
 	}
 	policies := authsvc.NewPasswordPolicies(authpg.NewPasswordPolicyRepository(deps.DB), deps.Breaches)
 	service.SetPasswordPolicies(policies)
+	signIns := authsvc.NewSignInPolicies(authpg.NewSignInPolicyRepository(deps.DB))
+	service.SetSignInPolicies(signIns)
+	service.SetSignups(repo)
 	deliveryRepo := authpg.NewDeliveryConfigRepository(deps.DB)
 	factory := func(cfg authentication.DeliveryConfig, secret authentication.DeliverySecret) (authentication.Delivery, error) {
 		if cfg.Provider == authentication.ProviderWebhook {
@@ -148,6 +157,8 @@ func New(deps Deps) Module {
 		Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens),
 		HTTP: authhttp.New(service, service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc,
 		PasswordPolicies: policies, PasswordPoliciesHTTP: authhttp.NewPasswordPolicyHandler(policies, policies, deps.ActorID),
+		SignInPolicies: signIns, SignInPoliciesHTTP: authhttp.NewSignInPolicyHandler(signIns, signIns, deps.ActorID),
+		Signups: service, SignupHTTP: authhttp.NewSignupHandler(service),
 		Brand: func(b authentication.Branding) { branding.b.Store(&b) },
 	}
 }

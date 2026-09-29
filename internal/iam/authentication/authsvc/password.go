@@ -59,6 +59,81 @@ func policyTarget(environment identity.EnvironmentID) string {
 	return "/environments/" + environment.String() + "/password-policy"
 }
 
+func (p *PasswordPolicies) OrganizationPasswordPolicy(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (authentication.PasswordRequirements, error) {
+	if environment.IsZero() || organization.IsZero() {
+		return authentication.PasswordRequirements{}, errx.NotFound("organization not found")
+	}
+	return p.repository.GetOrganizationPasswordPolicy(ctx, environment, organization)
+}
+
+func (p *PasswordPolicies) SetOrganizationPasswordPolicy(ctx context.Context, m authentication.Mutation, organization identity.OrganizationID, input authentication.PasswordRequirements) (authentication.PasswordRequirements, error) {
+	if organization.IsZero() {
+		return authentication.PasswordRequirements{}, errx.NotFound("organization not found")
+	}
+	if err := input.Validate(); err != nil {
+		return authentication.PasswordRequirements{}, err
+	}
+	m.Action, m.Target = authentication.ActionOrganizationPasswordPolicyUpdated, organizationPolicyTarget(m.Environment, organization)
+	if err := p.repository.SetOrganizationPasswordPolicy(ctx, m, organization, input); err != nil {
+		return authentication.PasswordRequirements{}, err
+	}
+	return p.OrganizationPasswordPolicy(ctx, m.Environment, organization)
+}
+
+func (p *PasswordPolicies) DeleteOrganizationPasswordPolicy(ctx context.Context, m authentication.Mutation, organization identity.OrganizationID) error {
+	if organization.IsZero() {
+		return errx.NotFound("organization not found")
+	}
+	m.Action, m.Target = authentication.ActionOrganizationPasswordPolicyDeleted, organizationPolicyTarget(m.Environment, organization)
+	return p.repository.DeleteOrganizationPasswordPolicy(ctx, m, organization)
+}
+
+func organizationPolicyTarget(environment identity.EnvironmentID, organization identity.OrganizationID) string {
+	return "/environments/" + environment.String() + "/organizations/" + organization.String() + "/password-policy"
+}
+
+// MemberPolicy is the policy of the user's password: the environment's,
+// tightened by every organization they are an active member of (one
+// password serves them all).
+func (p *PasswordPolicies) MemberPolicy(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (authentication.PasswordPolicy, error) {
+	policy, err := p.PasswordPolicy(ctx, environment)
+	if err != nil {
+		return policy, err
+	}
+	requirements, err := p.repository.MemberRequirements(ctx, environment, user)
+	return tighten(policy, requirements), err
+}
+
+// ChallengePolicy is MemberPolicy for the user of a password-reset
+// challenge (the environment's for an unknown challenge).
+func (p *PasswordPolicies) ChallengePolicy(ctx context.Context, environment identity.EnvironmentID, challenge identity.ChallengeID) (authentication.PasswordPolicy, error) {
+	policy, err := p.PasswordPolicy(ctx, environment)
+	if err != nil {
+		return policy, err
+	}
+	requirements, err := p.repository.ChallengeRequirements(ctx, environment, challenge)
+	return tighten(policy, requirements), err
+}
+
+func tighten(policy authentication.PasswordPolicy, requirements []authentication.PasswordRequirements) authentication.PasswordPolicy {
+	for _, r := range requirements {
+		policy = policy.Tighten(r)
+	}
+	return policy
+}
+
+func (p *PasswordPolicies) CheckMemberPassword(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, password string) error {
+	policy, err := p.PasswordPolicy(ctx, environment)
+	if err != nil {
+		return err
+	}
+	requirements, err := p.OrganizationPasswordPolicy(ctx, environment, organization)
+	if err != nil {
+		return err
+	}
+	return p.check(ctx, policy.Tighten(requirements), password)
+}
+
 func (p *PasswordPolicies) CheckPassword(ctx context.Context, environment identity.EnvironmentID, password string) error {
 	policy, err := p.PasswordPolicy(ctx, environment)
 	if err != nil {
@@ -96,6 +171,15 @@ func (s *Service) policy(ctx context.Context, environment identity.EnvironmentID
 		return authentication.DefaultPasswordPolicy(), nil
 	}
 	return s.policies.PasswordPolicy(ctx, environment)
+}
+
+// memberPolicy is the policy of the user's password (PasswordPolicies.
+// MemberPolicy), the environment's when the user is unknown.
+func (s *Service) memberPolicy(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, policy authentication.PasswordPolicy) (authentication.PasswordPolicy, error) {
+	if s.policies == nil || user.IsZero() {
+		return policy, nil
+	}
+	return s.policies.MemberPolicy(ctx, environment, user)
 }
 
 // newPassword checks and hashes the password replacing currentHash.

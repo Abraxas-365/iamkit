@@ -35,4 +35,6 @@ type Organization struct {
 	Name    string                  `json:"name" db:"name"`
 	Unit    *identity.UnitID        `json:"org_unit_id" db:"org_unit_id"`
 	Manager *identity.UserID        `json:"manager_id" db:"manager_id"`
+	// Methods the organization allows (filled for sign-in only).
+	Methods `json:"-"`
 }

@@ -65,6 +65,33 @@ func TestPasswordPolicyValidate(t *testing.T) {
 	}
 }
 
+// An organization only tightens: longer minimum, extra classes, the
+// shorter non-zero expiry, breach check; zero values change nothing.
+func TestPasswordPolicyTighten(t *testing.T) {
+	env := PasswordPolicy{MinLength: 12, RequireDigit: true, MaxAgeDays: 90, LockoutThreshold: 5, LockoutMinutes: 15}
+	if got := env.Tighten(PasswordRequirements{}); got != env {
+		t.Fatalf("empty requirements changed the policy: %+v", got)
+	}
+	got := env.Tighten(PasswordRequirements{MinLength: 16, RequireSymbol: true, MaxAgeDays: 30, BreachCheck: true})
+	want := env
+	want.MinLength, want.RequireSymbol, want.MaxAgeDays, want.BreachCheck = 16, true, 30, true
+	if got != want {
+		t.Fatalf("got %+v want %+v", got, want)
+	}
+	if got = env.Tighten(PasswordRequirements{MinLength: 8, MaxAgeDays: 365}); got.MinLength != 12 || got.MaxAgeDays != 90 {
+		t.Fatalf("requirements loosened the policy: %+v", got)
+	}
+	noExpiry := PasswordPolicy{MinLength: 12}
+	if got = noExpiry.Tighten(PasswordRequirements{MaxAgeDays: 60}); got.MaxAgeDays != 60 {
+		t.Fatalf("organization expiry ignored: %+v", got)
+	}
+	for _, bad := range []PasswordRequirements{{MinLength: 7}, {MinLength: 73}, {MaxAgeDays: -1}, {MaxAgeDays: 3651}} {
+		if bad.Validate() == nil {
+			t.Errorf("%+v accepted", bad)
+		}
+	}
+}
+
 func TestPasswordExpiry(t *testing.T) {
 	now := time.Now()
 	p := PasswordPolicy{MaxAgeDays: 90}

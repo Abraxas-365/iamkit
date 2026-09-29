@@ -30,12 +30,12 @@ func New(r invitation.Repository, s invitation.Secrets, p invitation.Passwords, 
 }
 
 // SetPasswordPolicy makes new accounts' passwords follow the environment's
-// policy.
+// policy and the inviting organization's requirements.
 func (s *Service) SetPasswordPolicy(p invitation.PasswordPolicy) { s.policy = p }
 
-func (s *Service) checkPassword(ctx context.Context, environment identity.EnvironmentID, password string) error {
+func (s *Service) checkPassword(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, password string) error {
 	if s.policy != nil {
-		return s.policy.CheckPassword(ctx, environment, password)
+		return s.policy.CheckMemberPassword(ctx, environment, organization, password)
 	}
 	if len(password) < config.PasswordMinLength {
 		return errx.Validation("password must be 12-72 characters long")
@@ -233,7 +233,7 @@ func (s *Service) Accept(ctx context.Context, input invitation.Acceptance) (invi
 		case !t.SSORequired && input.Password == "":
 			return invitation.Accepted{}, errx.Validation("password is required")
 		case input.Password != "":
-			if err = s.checkPassword(ctx, t.Environment, input.Password); err != nil {
+			if err = s.checkPassword(ctx, t.Environment, t.Invitation.Organization, input.Password); err != nil {
 				return invitation.Accepted{}, err
 			}
 			if j.PasswordHash, err = s.passwords.Hash(input.Password); err != nil {

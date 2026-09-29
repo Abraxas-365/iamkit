@@ -28,6 +28,15 @@ type testTransaction struct {
 	changed     time.Time
 	newHash     string
 	audited     []string
+	// methods the boundary organization allows (nil: all)
+	methods *authentication.Methods
+}
+
+func (t *testTransaction) OrganizationMethods(context.Context, identity.EnvironmentID, identity.OrganizationID) (authentication.Methods, error) {
+	if t.methods == nil {
+		return authentication.AllMethods(), nil
+	}
+	return *t.methods, nil
 }
 
 func (t *testTransaction) SSORequired(context.Context, authentication.Context, string) (bool, error) {

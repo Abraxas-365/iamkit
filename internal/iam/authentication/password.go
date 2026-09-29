@@ -169,10 +169,60 @@ func (a PasswordAccount) Locked(now time.Time) bool {
 
 // Audit actions of password lockout.
 const (
-	ActionUserLocked            = "user.locked"
-	ActionPasswordPolicyUpdated = "password_policy.update"
-	ActionPasswordPolicyDeleted = "password_policy.delete"
+	ActionUserLocked                        = "user.locked"
+	ActionPasswordPolicyUpdated             = "password_policy.update"
+	ActionPasswordPolicyDeleted             = "password_policy.delete"
+	ActionOrganizationPasswordPolicyUpdated = "organization_password_policy.update"
+	ActionOrganizationPasswordPolicyDeleted = "organization_password_policy.delete"
 )
+
+// PasswordRequirements are the password rules an organization adds to its
+// environment's policy. Users belong to the environment and have one
+// password for every organization, so an organization cannot own their
+// policy: a member's policy is the environment's tightened by the
+// requirements of each organization they are an active member of
+// (PasswordPolicy.Tighten). Zero values add nothing; lockout stays the
+// environment's (it counts before any organization is known).
+type PasswordRequirements struct {
+	// MinLength 0 keeps the environment's minimum.
+	MinLength     int  `json:"min_length" db:"min_length"`
+	RequireUpper  bool `json:"require_upper" db:"require_upper"`
+	RequireLower  bool `json:"require_lower" db:"require_lower"`
+	RequireDigit  bool `json:"require_digit" db:"require_digit"`
+	RequireSymbol bool `json:"require_symbol" db:"require_symbol"`
+	// MaxAgeDays 0 keeps the environment's expiry.
+	MaxAgeDays  int  `json:"max_age_days" db:"max_age_days"`
+	BreachCheck bool `json:"breach_check" db:"breach_check"`
+	// Custom is false when the organization adds nothing.
+	Custom    bool       `json:"custom" db:"-"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty" db:"updated_at"`
+}
+
+func (r PasswordRequirements) Validate() error {
+	switch {
+	case r.MinLength != 0 && (r.MinLength < PasswordPolicyMinLength || r.MinLength > config.PasswordMaxLength):
+		return errx.Validation(fmt.Sprintf("min_length must be 0 or between %d and %d", PasswordPolicyMinLength, config.PasswordMaxLength))
+	case r.MaxAgeDays < 0 || r.MaxAgeDays > PasswordPolicyMaxAgeDays:
+		return errx.Validation(fmt.Sprintf("max_age_days must be between 0 and %d", PasswordPolicyMaxAgeDays))
+	}
+	return nil
+}
+
+// Tighten applies an organization's requirements: the longer minimum,
+// every required character class, the shorter expiry and the breach check
+// when either asks for it.
+func (p PasswordPolicy) Tighten(r PasswordRequirements) PasswordPolicy {
+	p.MinLength = max(p.MinLength, r.MinLength)
+	p.RequireUpper = p.RequireUpper || r.RequireUpper
+	p.RequireLower = p.RequireLower || r.RequireLower
+	p.RequireDigit = p.RequireDigit || r.RequireDigit
+	p.RequireSymbol = p.RequireSymbol || r.RequireSymbol
+	if r.MaxAgeDays > 0 && (p.MaxAgeDays == 0 || r.MaxAgeDays < p.MaxAgeDays) {
+		p.MaxAgeDays = r.MaxAgeDays
+	}
+	p.BreachCheck = p.BreachCheck || r.BreachCheck
+	return p
+}
 
 // CodePasswordChangeRequired answers a sign-in whose password expired: the
 // client sends the password again with new_password.

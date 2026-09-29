@@ -50,7 +50,7 @@ func (f *fakeAuthenticator) VerifyPassword(_ context.Context, _ identity.Environ
 func (f *fakeAuthenticator) VerifyCode(context.Context, identity.EnvironmentID, identity.ChallengeID, string) (authentication.Verified, error) {
 	return authentication.Verified{User: user, Method: authentication.MethodCode}, nil
 }
-func (f *fakeAuthenticator) Organizations(context.Context, authentication.Target, identity.UserID) ([]authentication.Organization, error) {
+func (f *fakeAuthenticator) Organizations(context.Context, authentication.Target, authentication.Verified) ([]authentication.Organization, error) {
 	return f.organizations, nil
 }
 func (f *fakeAuthenticator) Issue(_ context.Context, b authentication.Context, v authentication.Verified) (authentication.Issued, error) {

@@ -22,6 +22,8 @@ type Service struct {
 	deliverySvc *DeliveryService
 	second      authentication.SecondFactor
 	policies    *PasswordPolicies
+	signIns     *SignInPolicies
+	signups     authentication.SignupRepository
 }
 
 func New(repository authentication.Repository, passwords authentication.Passwords, secrets authentication.Secrets, delivery authentication.Delivery) *Service {
@@ -32,6 +34,10 @@ func (s *Service) SetDeliveryService(ds *DeliveryService) { s.deliverySvc = ds }
 // SetPasswordPolicies applies environment password policies (without them
 // every environment uses the default).
 func (s *Service) SetPasswordPolicies(p *PasswordPolicies) { s.policies = p }
+
+// SetSignInPolicies applies environment sign-in policies (without them
+// every method is allowed).
+func (s *Service) SetSignInPolicies(p *SignInPolicies) { s.signIns = p }
 
 // SetSecondFactor enables multi-factor authentication of logins.
 func (s *Service) SetSecondFactor(second authentication.SecondFactor) { s.second = second }
@@ -55,6 +61,9 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 	defer tx.Rollback()
 	// Checked before the password so a blocked login reveals neither whether
 	// the account exists nor whether the password was right.
+	if err = s.allowed(ctx, tx, boundary, authentication.MethodPassword); err != nil {
+		return out, err
+	}
 	if err = requireNoSSO(ctx, tx, boundary, email); err != nil {
 		return out, err
 	}
@@ -66,6 +75,11 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 	}
 	if err = s.checkPassword(ctx, tx, boundary.EnvironmentID, policy, account, matches); err != nil {
 		return out, credentialFailure(err)
+	}
+	// Expiry and new passwords follow the user's organizations too; lockout
+	// (above) only the environment.
+	if policy, err = s.memberPolicy(ctx, boundary.EnvironmentID, account.ID, policy); err != nil {
+		return out, err
 	}
 	var hash string
 	if policy.Expired(account.Changed, time.Now()) {
@@ -102,6 +116,9 @@ func (s *Service) SignIn(ctx context.Context, tx authentication.Transaction, bou
 // environment (social) connection is held to both like a password login.
 func (s *Service) SignInFederated(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, email string, organizationSSO bool) (authentication.Result, error) {
 	if !organizationSSO {
+		if err := s.allowed(ctx, tx, boundary, authentication.MethodSocial); err != nil {
+			return authentication.Result{}, err
+		}
 		if err := requireNoSSO(ctx, tx, boundary, email); err != nil {
 			return authentication.Result{}, err
 		}
@@ -208,11 +225,17 @@ func requireNoSSO(ctx context.Context, tx authentication.Transaction, boundary a
 		return err
 	}
 	if required {
-		e := errx.Forbidden("this organization requires single sign-on")
-		e.Code = "SSO_REQUIRED"
-		return e
+		return errSSORequired()
 	}
 	return nil
+}
+
+// errSSORequired refuses an email whose organization requires single
+// sign-on.
+func errSSORequired() error {
+	e := errx.Forbidden("this organization requires single sign-on")
+	e.Code = "SSO_REQUIRED"
+	return e
 }
 
 func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, amr []string) (authentication.Issued, error) {
@@ -299,6 +322,17 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 	if s.deliverySvc == nil && s.delivery == nil {
 		return identity.ChallengeID{}, errx.External("email delivery is not configured")
 	}
+	// Refused before any account lookup: the answer reveals none.
+	switch purpose {
+	case "password_reset":
+		if err = s.resetAllowed(ctx, environment); err != nil {
+			return identity.ChallengeID{}, err
+		}
+	case "login":
+		if err = s.environmentAllows(ctx, environment, authentication.MethodCode); err != nil {
+			return identity.ChallengeID{}, err
+		}
+	}
 	id := identity.NewChallengeID()
 	tx, err := s.repository.Begin(ctx)
 	if err != nil {
@@ -356,11 +390,20 @@ func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.C
 	var hash string
 	var err error
 	if purpose == "password_reset" {
+		if err = s.resetAllowed(ctx, boundary.EnvironmentID); err != nil {
+			return out, err
+		}
 		// Checked before the transaction: the breach check must not hold row
-		// locks. A reset has no current password to compare against.
+		// locks. A reset has no current password to compare against. The
+		// policy is the user's (their organizations tighten it).
 		policy, err := s.policy(ctx, boundary.EnvironmentID)
 		if err != nil {
 			return out, err
+		}
+		if s.policies != nil {
+			if policy, err = s.policies.ChallengePolicy(ctx, boundary.EnvironmentID, challengeID); err != nil {
+				return out, err
+			}
 		}
 		if hash, err = s.newPassword(ctx, policy, "", password); err != nil {
 			return out, err
@@ -371,6 +414,11 @@ func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.C
 		return out, err
 	}
 	defer tx.Rollback()
+	if purpose == "login" {
+		if err = s.allowed(ctx, tx, boundary, authentication.MethodCode); err != nil {
+			return out, err
+		}
+	}
 	row, err := tx.Challenge(ctx, challengeID, identity.UserID{}, purpose)
 	if err != nil {
 		return out, err

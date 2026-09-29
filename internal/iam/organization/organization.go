@@ -19,6 +19,12 @@ type Organization struct {
 	// MFAForFederated: SSO logins follow the same rule instead of trusting
 	// the identity provider.
 	MFAForFederated bool `json:"mfa_for_federated"`
+	// AllowPassword, AllowEmailCode and AllowSocial narrow the sign-in
+	// methods the environment allows (they never widen them); the
+	// organization's own SSO follows its enforcement instead.
+	AllowPassword  bool `json:"allow_password"`
+	AllowEmailCode bool `json:"allow_email_code"`
+	AllowSocial    bool `json:"allow_social"`
 }
 type Summary struct {
 	ID     identity.OrganizationID `json:"id" db:"id"`
@@ -37,6 +43,9 @@ type Update struct {
 	Metadata        json.RawMessage `json:"metadata"`
 	MFARequired     *bool           `json:"mfa_required"`
 	MFAForFederated *bool           `json:"mfa_for_federated"`
+	AllowPassword   *bool           `json:"allow_password"`
+	AllowEmailCode  *bool           `json:"allow_email_code"`
+	AllowSocial     *bool           `json:"allow_social"`
 }
 
 func (u Update) Validate() error {

@@ -57,10 +57,13 @@ func (r *Repository) Summary(ctx context.Context, environment identity.Environme
 
 func (r *Repository) Policy(ctx context.Context, b authentication.Context, user identity.UserID) (mfa.Policy, error) {
 	var out mfa.Policy
+	// The environment's sign-in policy requires for every organization.
 	err := r.db.GetContext(ctx, &out, `SELECT
 		EXISTS(SELECT 1 FROM user_factors f WHERE f.environment_id=$1 AND f.user_id=$3 AND f.confirmed_at IS NOT NULL) AS enrolled,
-		o.mfa_required, o.mfa_for_federated
-		FROM organizations o WHERE o.id=$2 AND o.environment_id=$1`, b.EnvironmentID, b.OrganizationID, user)
+		o.mfa_required OR coalesce(p.mfa_required,false) AS mfa_required,
+		o.mfa_for_federated OR coalesce(p.mfa_for_federated,false) AS mfa_for_federated
+		FROM organizations o LEFT JOIN sign_in_policies p ON p.environment_id=o.environment_id
+		WHERE o.id=$2 AND o.environment_id=$1`, b.EnvironmentID, b.OrganizationID, user)
 	if errors.Is(err, sql.ErrNoRows) {
 		return mfa.Policy{}, errx.Unauthorized("invalid credentials or access token")
 	}

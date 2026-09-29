@@ -31,6 +31,11 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 		return authentication.Verified{}, err
 	}
 	defer tx.Rollback()
+	// The organization is not chosen yet: only the environment's policy
+	// applies here; Organizations and Issue apply the organization's.
+	if err = s.allowed(ctx, tx, authentication.Context{EnvironmentID: environment}, authentication.MethodPassword); err != nil {
+		return authentication.Verified{}, err
+	}
 	if err = requireNoSSO(ctx, tx, authentication.Context{EnvironmentID: environment}, email); err != nil {
 		return authentication.Verified{}, err
 	}
@@ -46,6 +51,11 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 	if err = tx.Commit(); err != nil {
 		return authentication.Verified{}, err
 	}
+	// Expiry follows the user's organizations too; lockout only the
+	// environment.
+	if policy, err = s.memberPolicy(ctx, environment, account.ID, policy); err != nil {
+		return authentication.Verified{}, err
+	}
 	return authentication.Verified{User: account.ID, Email: email, Method: authentication.MethodPassword,
 		PasswordExpired: policy.Expired(account.Changed, time.Now())}, nil
 }
@@ -58,6 +68,9 @@ func (s *Service) ChangePassword(ctx context.Context, environment identity.Envir
 	}
 	policy, err := s.policy(ctx, environment)
 	if err != nil {
+		return verified, err
+	}
+	if policy, err = s.memberPolicy(ctx, environment, verified.User, policy); err != nil {
 		return verified, err
 	}
 	tx, err := s.repository.Begin(ctx)
@@ -93,6 +106,9 @@ func (s *Service) VerifyCode(ctx context.Context, environment identity.Environme
 		return authentication.Verified{}, err
 	}
 	defer tx.Rollback()
+	if err = s.allowed(ctx, tx, authentication.Context{EnvironmentID: environment}, authentication.MethodCode); err != nil {
+		return authentication.Verified{}, err
+	}
 	row, err := tx.Challenge(ctx, challenge, identity.UserID{}, "login")
 	if err != nil {
 		return authentication.Verified{}, err
@@ -121,8 +137,11 @@ func (s *Service) VerifyCode(ctx context.Context, environment identity.Environme
 	return authentication.Verified{User: row.User, Email: row.Email, Method: authentication.MethodCode}, nil
 }
 
-func (s *Service) Organizations(ctx context.Context, target authentication.Target, user identity.UserID) ([]authentication.Organization, error) {
-	if target.Environment.IsZero() || target.Application.IsZero() || target.Resource.IsZero() || user.IsZero() {
+// Organizations drops the organizations that do not allow the method the
+// user verified with; when that leaves none of several, the method is the
+// reason (ErrMethodNotAllowed) rather than missing access.
+func (s *Service) Organizations(ctx context.Context, target authentication.Target, verified authentication.Verified) ([]authentication.Organization, error) {
+	if target.Environment.IsZero() || target.Application.IsZero() || target.Resource.IsZero() || verified.User.IsZero() {
 		return nil, errx.Validation("invalid login target")
 	}
 	tx, err := s.repository.Begin(ctx)
@@ -130,7 +149,21 @@ func (s *Service) Organizations(ctx context.Context, target authentication.Targe
 		return nil, err
 	}
 	defer tx.Rollback()
-	return tx.AccessibleOrganizations(ctx, target, user)
+	all, err := tx.AccessibleOrganizations(ctx, target, verified.User)
+	if err != nil {
+		return nil, err
+	}
+	method := verified.PolicyMethod()
+	out := make([]authentication.Organization, 0, len(all))
+	for _, o := range all {
+		if o.Methods.Allows(method) {
+			out = append(out, o)
+		}
+	}
+	if len(out) == 0 && len(all) > 0 {
+		return nil, authentication.ErrMethodNotAllowed()
+	}
+	return out, nil
 }
 
 // Issue creates the session for a verified user in the chosen organization.
@@ -153,6 +186,11 @@ func (s *Service) Issue(ctx context.Context, boundary authentication.Context, ve
 		return authentication.Issued{}, err
 	}
 	defer tx.Rollback()
+	if method := verified.PolicyMethod(); method != "" {
+		if err = s.allowed(ctx, tx, boundary, method); err != nil {
+			return authentication.Issued{}, err
+		}
+	}
 	// Only the organization's own single sign-on satisfies its enforcement;
 	// environment connections (social providers) do not.
 	if verified.Method != authentication.MethodSSO || verified.Organization.IsZero() {
