@@ -4,11 +4,22 @@ Multiple API replicas share PostgreSQL and must agree on issuer, signing key,
 OAuth HMAC and provider bindings. Run migrations through a coordinated rollout.
 Replay/transaction locking does not by itself provide global request limiting.
 
+Every replica runs the back-channel logout dispatcher (every 5 seconds, 20
+notifications per round). Replicas lease rows with `FOR UPDATE SKIP LOCKED`, so
+adding replicas adds delivery capacity without duplicate sends; a replica that
+stops mid-send loses its lease after two minutes and another one retries. Egress
+to relying parties' logout URLs must be allowed (public addresses only).
+
 Rate limits are process-local. `RATE_LIMIT_PER_MINUTE` controls authenticated
 management/scoped API requests (default 120 per IP per minute); login/challenge
 endpoints have separate limits. Increasing replicas increases aggregate allowed
 traffic unless ingress provides a shared limit. Implement per-account and
 endpoint-specific abuse policy where your exposure requires it.
+
+Device authorization user codes have 20⁸ (≈2.6×10¹⁰) values and live ten
+minutes; per-IP limits (`/oauth/device_authorization` at the general limit,
+`POST /hosted/device*` at 10/min) keep guessing impractical from one address.
+Behind a shared ingress limit, keep code entry at least as tight.
 
 At the edge, constrain request sizes/timeouts, trust only known proxy hops and
 verify observed client IP. Never rely on forwarded headers supplied directly by

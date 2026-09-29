@@ -41,16 +41,18 @@ internal/
 | application | `internal/iam/application` | OAuth/OIDC application registration |
 | authentication | `internal/iam/authentication` | Password login, sessions, refresh tokens, challenges |
 | authorization | `internal/iam/authorization` | Resources, roles, grants, role assignments, group role assignments |
-| federation | `internal/iam/federation` | External OIDC identity provider connections |
+| federation | `internal/iam/federation` | External identity provider connections (OIDC, presets Google/Microsoft/GitHub/GitHub Enterprise/GitLab/Apple, generic OAuth 2.0 with a claim mapping, SAML 2.0 and LDAP/AD for organizations), linking by email, profile refresh |
 | hosted | `internal/iam/hosted` | Server-rendered hosted sign-in/invitation pages for `hosted_login` OAuth clients, login branding |
 | impersonation | `internal/iam/impersonation` | Audited admin impersonation |
 | invitation | `internal/iam/invitation` | Email invitations into organizations (token issue, preview, accept) |
 | management | `internal/iam/management` | Workspaces, projects, environments, operators, keys |
-| mfa | `internal/iam/mfa` | Second factors (TOTP), recovery codes, pending MFA logins, per-organization MFA policy |
-| oauth | `internal/iam/oauth` | OAuth2/OIDC server (authorization code + PKCE) |
+| mfa | `internal/iam/mfa` | Second factors (TOTP, email and SMS codes, WebAuthn security keys), passkeys, recovery codes, pending MFA logins, per-organization MFA policy and allowed factors |
+| oauth | `internal/iam/oauth` | OAuth2/OIDC server (authorization code + PKCE, RFC 8628 device authorization, RFC 8693 token exchange, client_credentials for service accounts, private_key_jwt, UserInfo, RFC 7662 introspection, RP-initiated and back-channel logout, per-client JWT or opaque access tokens) |
 | organization | `internal/iam/organization` | Organizations, memberships, org units, positions, groups, verified domains |
 | provisioning | `internal/iam/provisioning` | SCIM user and group provisioning |
+| samlidp | `internal/iam/samlidp` | IAMKit as a SAML 2.0 identity provider for applications: registered service providers (entity ID, ACS URLs, application/resource, NameID format, attribute mapping), SP-initiated SSO through the hosted pages |
 | serviceaccount | `internal/iam/serviceaccount` | Machine-to-machine credentials |
+| signing | `internal/iam/signing` | Per-environment token signing keys (`next`→`active`→`retiring`→`retired`), JWKS, the `Keyring` every token signer/verifier uses |
 | user | `internal/iam/user` | End-user CRUD |
 
 ---
@@ -152,12 +154,18 @@ drive `SignupCommands` (`Signup` parks a `signups` row and emails an
 `CompleteSignup` creates the verified user, membership and group membership in
 one `SignupTransaction.Join`, audited `user.signup`, no session — hosted
 `Flow.CompleteSignup` then continues through `hostedsvc.result`; per-client
-`client_sign_in.signup` hides the hosted link)). Its `authmail` SMTP/Resend/webhook adapters dial environment providers
+`client_sign_in.signup` hides the hosted link); its `allowed_factors`
+(`identity.ValidateFactors`, omitted on PUT = keep) intersects the organization's
+`allowed_factors` in `mfapg.Policy`) and `SMSCommands`/`SMSQueries`/`SMSRepository`
+(one SMS provider per environment, `twilio` or `webhook`, secret sealed; the
+`authsms` adapters dial through the guarded transport — `authmodule.Mail.SMSClient`
+/ `TwilioEndpoint` override it in tests; attempts share `delivery_activity`
+keyed by `channel`). Its `authmail` SMTP/Resend/webhook adapters dial environment providers
 through `netx.GuardedDialer` (webhooks also sign requests per Standard
 Webhooks, `authmail.SignWebhook`); the deployment-wide provider (`EMAIL_PROVIDER`,
 read in `bootstrap/mail.go`) may reach private hosts; tests override both via
-`bootstrap.WithMail` (`Dial`, `ResendClient`, `WebhookClient`), and the
-development-only `IAMKIT_ALLOW_PRIVATE_DELIVERY` sets `Dial`/`WebhookClient`
+`bootstrap.WithMail` (`Dial`, `ResendClient`, `WebhookClient`, `SMSClient`), and the
+development-only `IAMKIT_ALLOW_PRIVATE_DELIVERY` sets `Dial`/`WebhookClient`/`SMSClient`
 to unguarded ones (warning logged). Management has
 `ControlCommands`/`ControlQueries` and `ActivityCommands`/`ActivityQueries`.
 Method names still use standard verbs (`Create`, `List`, `Find`). When a
@@ -198,17 +206,29 @@ infrastructure concerns that should be swappable:
 | `Delivery` | authentication | Send challenge codes and invitations (`Message`); per environment a webhook, SMTP or Resend configuration (`DeliveryConfig.Provider`), else the global one |
 | `Mailer` / `Renderer` / `Branding` | authentication | Send a rendered `Email` (SMTP, Resend); render a `Message` in the environment's `Brand` and language (`internal/i18n`); read that brand |
 | `Mailer` | invitation | Send invitation mail and build links; `invmail` adapts authentication delivery |
-| `Provider` | federation | OIDC provider discovery and credential approval |
-| `Flows` | federation | Browser login flows (`Discover`, `Start`, `StartHosted`, `Callback`, `EnvironmentConnections`), separate from Commands/Queries. `Callback` returns an `Outcome`: a session, or for hosted starts (`Continuation` = OAuth ticket) only the `Verified` identity |
+| `Provider` | federation | Provider discovery, authorization and verification (`fedoidc`): OIDC discovery + ID token, or for `github`/`github_enterprise`/`oauth2` (no ID token, no nonce) PKCE + a user API read (`gitHubClaims` at the connection's API base; `oauth2Claims` maps `Options.Claims` dotted paths, email verified only via the mapped member). `federation.Preset` derives the issuer (`base_url`, or the `authorize_url` origin for `oauth2`). `fedsaml` (`github.com/crewjam/saml`) serves `ProviderSAML` (organization connections only): `Prepare` fetches/parses IdP metadata (guarded transport) and sets `Issuer` = IdP entity ID, `Client` = SP entity ID (`federation.SAMLServiceProvider`); `Authorize` builds an HTTP-Redirect AuthnRequest whose ID is `fedsaml.RequestID(nonce)`; `Verify` checks the posted response (signature, `InResponseTo`, audience, ACS, validity) and maps NameID/`Options.Attributes`; `Metadata` serves SP metadata. The SP key is the environment's `signing.Keyring` signer with a self-signed certificate derived from it (stable across replicas). `fedmodule.router` picks `fedoidc` or `fedsaml` by `Connection.Provider`. The ACS (`fedhttp.ACS`) parks the response (`Repository.ParkAssertion`, `saml_responses`, one-time `ik_saml_` handle) and 303s to the ordinary callback, which takes it (`TakeAssertion`) under the binding cookie; `UseAssertion` (`saml_assertions`) refuses replays. Tests use the in-process IdP `fedsaml/samltest` |
+| `Directory` | federation | Password check against an organization's LDAP directory (`ProviderLDAP`, organization connections only, no redirect). `fedldap` (`github.com/go-ldap/ldap/v3`) dials `ldaps://` or `ldap://`+StartTLS (plaintext refused by `validLDAP`) through `netx.GuardedDialer` unless the host is in `IAMKIT_LDAP_ALLOWED_HOSTS` (`fedmodule.Deps.LDAPAllowed`; tests replace the dial via `bootstrap.WithLDAPDialer`), binds as `Options.BindDN` (password = the sealed client secret) or anonymously, searches `UserBaseDN` with `UserFilter` (`{email}`/`{username}` escaped; exactly one entry), binds as it and maps `Options.Attributes`. `Discovery.Provider` = `ldap` tells clients to post the password: headless `Flows.Directory` (`POST /identity/v1/federation/ldap/login`, answers like `/login`), hosted `Flows.DirectoryHosted` via `hosted.Flow.Directory` (Route method `ldap`). Both reuse `fedsvc` account resolution, so logins are `authentication.MethodSSO` (`amr` `fed`). Issuer = `federation.LDAPServer(url)`, Client = lowercased base DN; neither can change. Tests use the in-process directory `fedldap/ldaptest` (`github.com/jimlambrt/gldap`) |
+| `Flows` | federation | Browser login flows (`Discover`, `Start`, `StartHosted`, `Callback`, `EnvironmentConnections`), separate from Commands/Queries. `Callback` returns an `Outcome`: a session, or for hosted starts (`Continuation` = OAuth ticket) only the `Verified` identity. First logins go through `Connection.Admit` → `Repository.Provision` (`Provisioning.Create` = JIT; without it an organization `link_email` connection links only an existing member, origin `email`); `Connection.UpdateProfile` calls `Repository.Refresh` (`Connection.Profile`) on every sign-in, audited `federation.profile_updated` |
 | `Authenticator` | authentication | Verify a credential without a session (`VerifyPassword`, `VerifyCode` → `Verified`), list accessible `Organizations` (leaving out those whose methods refuse the `Verified.PolicyMethod()`), then `Issue` the session once the organization is chosen (re-checks SSO enforcement and the method) |
 | `Flow` | hosted | The hosted sign-in journey; consumes the `Authorizations` (pending OAuth ticket), `Challenges`, `Federation`, `Invitations` and `SecondFactor` ports declared in `hosted/ports.go` plus `authentication.Authenticator`. The parked `hosted.Login{Verified, Chosen, Attempts}` carries state between pages; `hostedsvc.step` orders: MFA first for an enrolled user with several organizations (non-SSO logins; a factor applies in all of them) → chooser → MFA/enrollment for the chosen organization → `Issue`. Second-factor tries are reserved atomically (`Repository.Attempt`) before the code is checked |
 | `SecondFactor` | authentication | Login-time MFA (`Requirement`, `Begin`, `Complete`, `Enroll`), implemented by `mfasvc` (`mfa.Logins`). `Login`/`VerifyChallenge` return `authentication.Result{Issued, MFA}`: `SignIn` commits the credential transaction, then either issues the session or parks a pending `ik_mfa_` login. `authhttp.Respond` renders either shape; federation receives it as the injected `Respond` closure |
 | `Logins` | mfa | Everything login flows need from mfa (headless pending logins + hosted `Verify`/`Enrolling` without a pending token) |
 | `TOTP` | mfa | RFC 6238 codes/URIs (`mfatotp`, stdlib only, RFC test vectors) |
+| `Relying` | mfa | WebAuthn relying party (`mfawebauthn.New(issuer, origins)`: RP ID = issuer host, origins = issuer origin + `IAMKIT_WEBAUTHN_ORIGINS`; zero value disabled). Ceremony state is opaque to `mfasvc` and parked in `webauthn_sessions` (hashed `ik_wa_` id, single use, `config.WebAuthnCeremonyTTL`). Tests drive it with the stdlib software authenticator `mfawebauthn/softkey` |
+| `Passkeys` | mfa, authentication, hosted | Discoverable-credential sign-in: `mfa.Passkeys` (`BeginPasskey`/`FinishPasskey` → user) is consumed by `authsvc` as `authentication.Passkeys`, which exposes `PasskeyCommands` (headless `/identity/v1/passkeys/login/*`) and `Authenticator.VerifyPasskey` (hosted); `hosted.Passkeys` starts hosted ceremonies. A passkey is gated by `SignInPolicy.AllowPasskey`, `organizations.allow_passkey` (method `passkey`) and the `webauthn` factor being allowed; its `amr` is `hwk`,`user`,`mfa` (`authentication.FirstFactorAMR`), so `HasMFA` skips the second factor |
+| `Sender` | mfa | Deliver email/SMS factor codes; `mfasend.Sender` adapts authentication `Delivery` (purpose `mfa`) and `SMSCommands.SendSMS`, wired by `mfamodule.Module.Deliver` in bootstrap |
+| `SMSDelivery` | authentication | Send one `SMS` (`authsms.Twilio`, `authsms.Webhook`, Standard Webhooks-signed) |
 | `Cipher` | authentication, federation, mfa | Seal/open stored secrets (SMTP password / Resend API key, client secrets, TOTP secrets); implemented by `internal/cryptox.Sealer` (`IAMKIT_ENCRYPTION_KEY`), injected via `bootstrap.WithSealer` |
 | `Breaches` | authentication | Breached-password lookup for the policy's `breach_check`; `authhibp` (Have I Been Pwned range API, k-anonymity). Errors and `config.BreachCheckTimeout` fail open; tests replace it via `bootstrap.WithBreaches` (nil disables) |
 | `TokenCodec` | authentication | JWT sign/parse (combines `TokenIssuer` + `TokenValidator`) |
+| `Keyring` | signing | `Signer(environment)` (the environment's active key, else the deployment key `JWT_PRIVATE_KEY_PATH`; an active key that cannot be opened fails closed), `Verifier(kid)` (`Verifier.Allows(environment)`: environment keys verify only their environment), `JWKS`. `signingsvc` caches published keys `config.SigningKeyCacheTTL` and reloads on an unknown kid at most once per `config.SigningKeyMissInterval`. Consumed by `authjwt.Codec` and `oauthfosite` (`Signer`, `Hints`, provider); private halves sealed with `signing.Cipher` (`IAMKIT_ENCRYPTION_KEY`, else 422 `ENCRYPTION_KEY_REQUIRED`). Retiring needs `config.SigningKeyRetireDelay` after demotion or `force` (409 `KEY_IN_USE`) |
 | `Transaction` | authentication, invitation, mfa, oauth | Database transaction handle for multi-step mutations |
+| `AccountRepository` | oauth | Service accounts as OAuth clients of `client_credentials` (`FindAccount` → `oauth.Account`: SHA-256 secret hash + `identity.ClientAuth`). `oauthfosite.Accounts.Authenticate` runs fosite's client authentication over it (`digest` hasher, not bcrypt); `oauthhttp.Handler.token` branches `grant_type=client_credentials` to it (set with `Handler.Accounts`) and mints with `authhttp.Tokens.IssueMachine` — the same token as `/identity/v1/machine-token`, which refuses `private_key_jwt` accounts |
+| `LogoutCommands` / `LogoutQueries` / `LogoutRepository` / `LogoutSender` / `Dispatcher` | oauth | Back-channel logout. A trigger (`queue_logout_notification`, migration 027) fills the `logout_notifications` outbox when a session with `oauth_client_id` ends (`revoked_at` set or row deleted) and the client has a `backchannel_logout_uri`. `oauthsvc.Logouts.DispatchLogouts` leases due rows (`ClaimLogouts`, `FOR UPDATE SKIP LOCKED`, safe on every replica), sends through `oauthfosite.LogoutSender` (logout+jwt signed by the environment key, guarded transport) and retries with `oauth.RetryAfter` until `LogoutMaxAttempts`, then `LogoutFailed` audits `oauth.backchannel_failed`. `Logouts.Run` is the first background worker: `oauthmodule.Module.Dispatch` → `server.Server.Background`, started by `Server.Start(ctx)` from `cmd/iamkit` and stopped with the signal context; tests call `Server.LogoutDispatcher` directly. Operators read `…/logout-deliveries` and retry failed ones (`oauthhttp.Logouts`) |
+| `Devices` | oauth, hosted | RFC 8628 device authorization grant. `oauth_clients.grant_types` (`oauth.ValidateGrantTypes`: default `authorization_code`+`refresh_token`; `GrantDeviceCode` needs `hosted_login`; redirect URIs only with `authorization_code`). `oauth_device_codes` (migration 028) keeps hashed `ik_device_` and user codes (`UserCodeAlphabet`, 8 consonants); `oauth.Device.Poll` is the polling state machine (`authorization_pending`, `slow_down`, `expired_token`, `access_denied`, `invalid_grant` as `errx.Error.Code`). `/hosted/device` (`hostedhttp` device pages, `hosted.Devices`) runs the unchanged hosted journey on an `oauth_authorizations` ticket with `device_hash`; `oauthhttp.Handler.finish` branches on `Ticket.Device` to `Authorization.ApproveDevice` (audited `oauth.device_approved`) and renders `hostedhttp.Handler.DeviceApproved` instead of redirecting. At `/oauth/token` fosite authenticates the client, `oauthfosite.deviceGrant` (a custom `TokenEndpointHandler`) checks the request and mints tokens after `Devices.RedeemDevice` fills the session (`Handler.session`, shared with the code flow). Wired in bootstrap with `Handler.Devices` on both HTTP handlers |
+| `Exchanges` / `ExchangeRepository` | oauth | RFC 8693 token exchange at `/oauth/token`, handled in `oauthhttp.exchangeToken` before fosite (fosite only authenticates the client via `oauthfosite.AuthenticateClient`); issued tokens are ordinary IAMKit access JWTs signed with `authhttp.Tokens.Sign` (no refresh/ID token). `subject_token_type` `access_token`: a confidential client with `oauth.GrantTokenExchange` (`oauth.ValidateExchangeClient`) exchanges a user token for another resource of its application — `oauthpg.ExchangeSession` recomputes access with `authpg.Resolve` and reuses/creates a child session (`sessions.parent_session_id`, one live child per resource, revoked with its parent by trigger `session_children_ended`, migration 029; audited `oauth.token_exchanged`). `urn:iamkit:params:oauth:token-type:user_id`: a service account with `service_accounts.can_impersonate` (owner-only `saccthttp` `PUT …/impersonation`, audited `service_account.impersonation`; forbidding revokes its `sessions.actor_account_id` sessions) impersonates a user with a `reason`; the token's `act` claim (`authentication.Token.ActorAccount`) names it and `Token.Impersonated()` covers both actor kinds; audited `oauth.impersonated`. Errors are `errx` with `oauth.Exchange*` codes mapped to OAuth errors by `exchangeError` |
+| `Protocol` / `Flows` | samlidp | SAML IdP. `samlxml` (crewjam `IdentityProvider` pieces) builds the IdP metadata at `/saml/:environment/metadata` (entity ID = that URL, SSO `/saml/:environment/sso`, key = the environment's `signing.Keyring` signer + `signing.Signer.Certificate`), decodes AuthnRequests (Redirect or POST) and signs responses + assertions (RSA-SHA256, not encrypted, `SessionIndex` = IAMKit session). `samlidp.AuthnRequest.Check` accepts only a registered issuer (`FindEntity`) and ACS URL; AuthnRequest signatures are not verified. `Flows.Begin` parks it in `saml_sso_requests` (hashed `ik_samlreq_` ticket = `samlidp.TicketPrefix`, browser binding hash, `RequestTTL`, single use) and `samlhttp.SSO` 303s to `/hosted/login`. Bootstrap's `tickets` composite (`internal/bootstrap/saml.go`) implements `hosted.Authorizations`, routing `ik_samlreq_` tickets to `Flows.Target` as an `oauth.Pending` whose `Client` has a zero ID (environment branding and default sign-in options, `hostedsvc.options`); `finisher` routes `Finish` to `samlhttp.Handler.Finish`, which `Flows.Finish`es (audited `saml.assertion_issued`) and renders `hostedhttp.Handler.PostForm` (auto-submit form, nonce'd script). Service providers reference `application_resources`; deleting one is a hard delete. Tests use the in-process SP `samlxml/samltest` |
+| `Hints` | oauth | Verify an `id_token_hint` for `/oauth/end_session` (`oauthfosite.Hints`: `signing.Keyring` + issuer, expired tokens allowed) → `oauth.IDTokenHint`; `oauthsvc.Logout` ends its `sid` via `Repository.EndSession` (audited `oauth.logout`) |
 
 These follow the same rule: defined in `ports.go`, implemented by adapters,
 consumed by services.
@@ -240,11 +260,43 @@ consumed by services.
    federation callback resume a hosted login, and the hosted module receives
    `oauthhttp.Handler.Finish` to complete the authorization.
 
-8. **Hosted pages** (`hostedhttp`) are server-rendered `html/template` files
-   embedded from `templates/`, without JavaScript. Every page sets its own CSP
+8. **OIDC endpoints** live in `oauthhttp`: discovery is built from
+   `oauth.NewDiscovery` (a struct; only add fields); `/oauth/introspect`
+   uses fosite's introspection factory (`oauthfosite.Session.GetExtraClaims`
+   surfaces the IAMKit access claims) and re-checks session/client liveness
+   with `Flows.Access`; `/oauth/userinfo` goes through `authhttp.Tokens.Self`
+   and needs an OAuth-issued token (`oauth_client_id`, `scp` ∋ `openid`);
+   `/oauth/end_session` renders `hostedhttp.Handler.SignedOut`, wired in
+   bootstrap with `oauthhttp.Handler.SignedOut`; `/oauth/device_authorization`
+   authenticates clients with `oauthfosite.AuthenticateClient` (fosite's
+   own client authentication outside its endpoints). Token endpoint
+   authentication of OAuth clients and service accounts is one
+   `identity.ClientAuth` (`none`, `client_secret_basic`, `client_secret_post`,
+   `private_key_jwt` with `jwks` or `jwks_uri`); `oauthfosite.authClient`
+   turns it into fosite's client view. `private_key_jwt` assertion `jti`s are
+   single-use per client in `client_assertion_jtis` (`oauthfosite.Assertions`);
+   `jwks_uri` is fetched through `oauthfosite.KeyFetcher` over the guarded
+   transport (`bootstrap.WithFederationTransport` replaces it in tests).
+   `oauth_clients.access_token_format` (`oauth.TokenFormatJWT` default,
+   `TokenFormatOpaque`) picks the access token shape: `oauthfosite.formatStrategy`
+   issues JWTs or fosite HMAC handles (`ory_at_…`) and validates both by shape,
+   so a format change never strands issued tokens. Opaque tokens are resolved
+   only by `/oauth/introspect` and `/oauth/userinfo` (`Handler.opaqueToken`:
+   `Flows.AccessTokenClient` finds the client by `oauthfosite.OpaqueKey`, then
+   fosite introspection + `Flows.Access` liveness); `apiauth`, `/identity/v1`
+   and SDK validation accept JWTs only. `finish` records the
+   session's client (`Authorization.Bind` → `sessions.oauth_client_id`).
+
+9. **Hosted pages** (`hostedhttp`) are server-rendered `html/template` files
+   embedded from `templates/`, without JavaScript except one embedded
+   WebAuthn script (security keys, passkeys) emitted only when a ceremony
+   can be offered, and the one-line auto-submit of the SAML response page
+   (`post`), both bound to the CSP script nonce. Every page sets its own CSP
    with a per-response style nonce; `internal/server/hosted.go` mounts them
    under `/hosted` with frame/referrer headers and per-route rate limits.
-   Every form action re-validates the OAuth ticket and its binding cookie.
+   Every form action re-validates the OAuth (or SAML, `ik_samlreq_`) ticket
+   and its binding cookie. The SAML IdP routes (`/saml/:environment/*`) are
+   mounted by `Server.samlRoutes` with the same headers and their own limits.
 
 ### Interface Parameter Naming
 
@@ -628,10 +680,19 @@ runs for another's routes (`tests/e2e/scoped_api_test.go`).
 every access token issued for the session (including refreshes) and onto OIDC
 ID tokens via `oauth.Authorization.Session` → `oauth.SessionInfo`. First
 factors: `pwd`, `email`, `fed` (`authentication.MethodAMR`); a second factor
-appends `mfa.AMR(proof)` = `otp` + `mfa`. Headless second-factor logins park
+appends `mfa.AMR(proof)` = `otp` + `mfa` (TOTP, email code), `sms` + `mfa`,
+`hwk` + `mfa` (security key, `authentication.Proof.WebAuthn()`), or `mfa`
+(recovery); a passkey first factor is `hwk` + `user` + `mfa`. WebAuthn
+factors keep their `mfa.Credential` JSON in `user_factors.data` with
+`credential_id` unique per environment; a signature counter that goes
+backwards refuses the assertion and audits `mfa.clone_detected`. Email/SMS factors store a hashed 6-digit code on
+`user_factors` (`config.FactorCodeTTL`, `FactorCodeCooldown`,
+`FactorCodesPerHour`); `mfa.Policy.Usable` never offers the email factor after
+an email-code first factor. Headless second-factor logins park
 as `mfa_logins` rows keyed by the hash of an `ik_mfa_` token (5 min, 5
 attempts); no session exists until verification. Wrong codes also count per
-factor across every path (`user_factors.failed_attempts`): every
+user across every factor and path (`user_mfa_state.failed_attempts`, so
+switching factor does not reset it): every
 `config.MFAFailures` in a row lock it for `mfa.Lockout` (15 min doubling,
 24 h max, 429 `MFA_LOCKED` via `errx.TooManyRequests`, audited `mfa.locked`); callers commit the
 transaction on a wrong code so the count sticks. Unconfirmed factors expire
@@ -689,7 +750,7 @@ same transaction as the data change. The HTTP handler constructs `Mutation`
 from the authenticated context. Exception: when one command can emit several
 actions, the service sets `Action` itself (e.g. `mfasvc` writes `mfa.enrolled`,
 `mfa.removed`, `mfa.recovery_regenerated`, `mfa.recovery_used`, `mfa.reset`,
-`mfa.locked`).
+`mfa.locked`, `mfa.clone_detected`).
 
 ---
 
@@ -704,7 +765,11 @@ actions, the service sets `Action` itself (e.g. `mfasvc` writes `mfa.enrolled`,
 | `github.com/golang-jwt/jwt/v5` | JWT signing/parsing | `authjwt/` only |
 | `github.com/ory/fosite` | OAuth2 server | `oauthfosite/` only |
 | `github.com/coreos/go-oidc/v3` | OIDC discovery | `fedoidc/` only |
+| `github.com/crewjam/saml` | SAML 2.0 service provider and identity provider (and the test IdP/SP) | `fedsaml/`, `samlxml/` only |
+| `github.com/go-ldap/ldap/v3` | LDAP client (and the test directory's filter parsing) | `fedldap/` only |
+| `github.com/jimlambrt/gldap` | In-process LDAP server for tests | `fedldap/ldaptest/` only |
 | `rsc.io/qr` | Enrollment QR code (PNG data URI) | `hostedhttp/` only |
+| `github.com/go-webauthn/webauthn` | WebAuthn ceremonies (security keys, passkeys) | `mfawebauthn/` only |
 
 **Rule:** Domain packages and services never import framework types. They
 depend only on `identity`, `query`, `errx`, and stdlib.

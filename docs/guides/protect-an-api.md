@@ -40,7 +40,8 @@ real database queries must also constrain `organization_id` to the validated ten
 
 Online introspection checks current session, account and grant state; if IAMKit is
 unreachable, fail closed. Do not silently fall back to decoding JWT payloads.
-Offline validation uses the issuer's trusted JWKS/RSA key and validates RS256,
+Offline validation uses the issuer's trusted JWKS (`authclient.NewKeySet` +
+`ValidateWithKeySet` follow [key rotations](signing-keys.md)) and validates RS256,
 expiry and expected boundaries. It avoids a network request per API call but
 cannot observe revocation until expiry. Define key-cache refresh and failure policy.
 

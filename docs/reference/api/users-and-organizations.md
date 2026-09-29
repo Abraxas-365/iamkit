@@ -13,7 +13,7 @@ Lists of users, organizations and members use the
 | `POST /users` | `name`, `email`; optional `password`, `otp_enabled` | 201 `{id}` |
 | `GET /users` | List parameters | 200 page of users |
 | `GET /users/:id` | User ID | 200 user |
-| `PATCH /users/:id` | Optional `name`, `active`, `otp_enabled`, `metadata` | 204 |
+| `PATCH /users/:id` | Optional `name`, `active`, `otp_enabled`, `metadata`, `phone` (E.164, `""` clears; a changed number is unverified) | 204 |
 | `DELETE /users/:id` | User ID | 204; suspend, not erase |
 | `DELETE /users/:id/permanent` | User ID | 204; permanently erases the user and every session, membership, group membership, grant, role assignment, position assignment, external identity, provisioned identity, second factor, recovery code and identity challenge referencing them. Irreversible. |
 | `GET /users/:id/factors` | User ID | 200 `{factors:[{id,kind,confirmed_at,last_used_at,created_at}],recovery_codes_remaining}`; never secrets |
@@ -21,7 +21,7 @@ Lists of users, organizations and members use the
 | `POST /users/:id/unlock` | User ID | 204; clears the wrong-password count and [password lockout](../../guides/password-policy.md); audited `user.unlocked` |
 
 List items contain only `id,email,name,active`. Use `GET /users/:id` for
-`email_verified,otp_enabled,metadata` and the password lockout state
+`email_verified,otp_enabled,phone,phone_verified,metadata` and the password lockout state
 (`failed_logins`, `locked_until` — null when not locked) as well; missing list fields are not evidence
 that those settings are false. Neither response exposes password hashes.
 Non-empty passwords must follow the environment's
@@ -44,7 +44,7 @@ just the account.
 | `POST /organizations` | `name` | 201 `{id}` |
 | `GET /organizations` | List parameters; optional `user_id` (only organizations the user belongs to) | 200 page of `{id,name,active}` |
 | `GET /organizations/:id` | Organization ID | 200 organization |
-| `PATCH /organizations/:id` | Update fields: `name`, `metadata`, `mfa_required`, `mfa_for_federated` ([MFA policy](../../guides/mfa.md#policy)), `allow_password`, `allow_email_code`, `allow_social` ([sign-in methods](../../guides/sign-in-methods.md#three-layers)) | 204 |
+| `PATCH /organizations/:id` | Update fields: `name`, `metadata`, `mfa_required`, `mfa_for_federated`, `allowed_factors` ([MFA policy](../../guides/mfa.md#policy)), `allow_password`, `allow_email_code`, `allow_social`, `allow_passkey` ([sign-in methods](../../guides/sign-in-methods.md#three-layers)) | 204 |
 | `POST /memberships` | `organization_id`, `user_id` | 201 |
 | `GET /organizations/:organization/members` | Organization ID | 200 page |
 | `PATCH /organizations/:organization/members/:user` | `sso_bypass` | 204; 400 for an empty patch |

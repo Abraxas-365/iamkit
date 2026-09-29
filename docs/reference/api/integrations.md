@@ -6,18 +6,18 @@ requires owner. Credential responses are secrets and must be captured once.
 
 | Method/path | JSON body | Success |
 | --- | --- | --- |
-| `POST /federation-connections` | `name,client_id`, `provider` (`oidc` default \| `google` \| `microsoft` \| `github` \| `apple`), `issuer` (`oidc` only), `options` (see below) and exactly one of `client_secret` (stored encrypted; Apple: the `.p8` PEM) or `secret_env` (not Apple); optional `organization_id,jit_provisioning,jit_group_id,enforcement`, or without `organization_id`: `signup,signup_organization_id,signup_group_id,link_email` | 201 `{id}` |
+| `POST /federation-connections` | `name,client_id`, `provider` (`oidc` default \| `google` \| `microsoft` \| `github` \| `apple` \| `gitlab` \| `github_enterprise` \| `oauth2` \| `saml` \| `ldap`), `issuer` (`oidc` only), `options` (see below) and exactly one of `client_secret` (stored encrypted; Apple: the `.p8` PEM) or `secret_env` (not Apple) — `saml`: no `client_id`, secret or issuer, `organization_id` required, `options.metadata_url` or `options.metadata_xml` ([SAML](../../guides/saml.md)); `ldap`: no `client_id`, `secret_env` or issuer, `organization_id` required, `options.url` and `options.user_base_dn`, `client_secret` = the `bind_dn` password exactly when `options.bind_dn` is set ([LDAP](../../guides/ldap.md)); optional `link_email,update_profile`, `organization_id,jit_provisioning,jit_group_id,enforcement`, or without `organization_id`: `signup,signup_organization_id,signup_group_id` | 201 `{id}` |
 | `GET /federation-connections` | Optional `organization_id` filter; optional `scope` (`environment`: social login connections \| `organization`: organization SSO connections) | 200 page with `provider,organization_id,organization_name,jit_provisioning,enforcement,signup,link_email` and linked counts |
-| `GET /federation-connections/:id` | — | 200 detail with `provider,organization_name,options,callback_url`, sign-up settings, `secret_source` (`sealed`\|`env`), secret variable name for `env`; never the secret |
-| `PATCH /federation-connections/:id` | Any of `name,client_secret,jit_provisioning,jit_group_id` (`""` clears),`enforcement,options,signup,link_email,signup_organization_id,signup_group_id` (`""` clears) | 204 |
+| `GET /federation-connections/:id` | — | 200 detail with `provider,organization_name,options,callback_url`, sign-up settings, `secret_source` (`sealed`\|`env`\|`none` for SAML and anonymous LDAP), secret variable name for `env`; never the secret; SAML connections add `saml` `{entity_id,acs_url,metadata_url}` (the service provider values to give the identity provider) |
+| `PATCH /federation-connections/:id` | Any of `name,client_secret,jit_provisioning,jit_group_id` (`""` clears),`enforcement,options,signup,link_email,update_profile,signup_organization_id,signup_group_id` (`""` clears) | 204 |
 | `GET /federation-connections/:id/identities` | — | 200 page of subject/user links with `origin` (`linked`\|`jit`\|`email`\|`signup`) and `created_at` |
 | `DELETE /federation-connections/:id` | — | 204; disable |
 | `POST /external-identities` | `connection_id,user_id,subject` | 204 |
 | `DELETE /external-identities/:connection/:user` | — | 204 |
-| `POST /oauth-clients` | `application_id,resource_id,redirect_uris,public`, optional `hosted_login` | 201 `{id,client_id,client_secret}` |
+| `POST /oauth-clients` | `application_id,resource_id,redirect_uris,public`, optional `hosted_login`, `grant_types`, `access_token_format` (`jwt`/`opaque`) | 201 `{id,client_id,client_secret}` |
 | `GET /oauth-clients` | Optional `application_id` | 200 page (includes `hosted_login`) |
-| `GET /oauth-clients/:id` | — | 200 client `{id,application_id,application_name,resource_id,resource_name,redirect_uris,public,hosted_login,active}` |
-| `PATCH /oauth-clients/:id` | `hosted_login` and/or `redirect_uris` (non-empty, validated like create) | 204 |
+| `GET /oauth-clients/:id` | — | 200 client `{id,application_id,application_name,resource_id,resource_name,redirect_uris,public,hosted_login,grant_types,access_token_format,active}` |
+| `PATCH /oauth-clients/:id` | `hosted_login`, `grant_types`, `access_token_format` and/or `redirect_uris` (non-empty, validated like create) | 204 |
 | `DELETE /oauth-clients/:id` | — | 204 |
 | `GET /login-settings` | — | 200 `{environment_id,display_name,logo_url,accent_color,theme,updated_at}` (defaults when unset) |
 | `PUT /login-settings` | `display_name` (≤100), `logo_url` (HTTPS), `accent_color` (`#rrggbb`), `theme` (see [hosted login](../../guides/hosted-login.md#branding)) | 200 normalized settings |
@@ -31,8 +31,11 @@ requires owner. Credential responses are secrets and must be captured once.
 | `DELETE /login-settings/clients/:client/sign-in` | — | 204; the client offers every method again |
 | `GET /login-settings/preview` | `?page=`, `?scheme=light\|dark`, optional `?client=`, optional `?sign_in=` (JSON, see [previews](../../guides/hosted-login.md#previews)) | 200 `{html}` with the saved style |
 | `POST /login-settings/preview` | `{page,scheme,settings,sign_in?}` | 200 `{html}` with the unsaved style (write access) |
-| `POST /service-accounts` | `name,application_id,resource_id,permissions`, optional `expires_in` | 201 `{id,secret,expires_at}` |
-| `GET /service-accounts` | — | 200 page |
+| `POST /service-accounts` | `name,application_id,resource_id,permissions`, optional `expires_in`, `token_endpoint_auth_method` (`client_secret_basic` default, `client_secret_post`, `private_key_jwt`), `token_endpoint_auth_signing_alg` (RS256 default; RS/PS/ES 256–512), `jwks` or `jwks_uri` (private_key_jwt, exactly one) | 201 `{id,secret,expires_at}` |
+| `GET /service-accounts` | — | 200 page (with the authentication fields) |
+| `GET /service-accounts/:id` | — | 200 account (never its secret) |
+| `PUT /service-accounts/:id/authentication` | `token_endpoint_auth_method`, `token_endpoint_auth_signing_alg`, `jwks`, `jwks_uri` (the whole configuration) | 200 account; audited `service_account.authentication` |
+| `PUT /service-accounts/:id/impersonation` | `allowed` (bool) — the account may impersonate users through [token exchange](oauth-oidc.md) | 200 account (`can_impersonate`); workspace owners only (403 otherwise); audited `service_account.impersonation`; `false` ends the sessions it opened |
 | `DELETE /service-accounts/:id` | — | 204 |
 | `POST /provisioning-credentials` | `name,organization_id`, optional `connection_id,expires_in,adopt_existing_members,adopt_scope` (`any`\|`verified_domains`) | 201 `{id,secret,expires_at,connection_id}` |
 | `GET /provisioning-credentials` | — | 200 array (includes `organization_name,connection_name,adopt_existing_members,adopt_scope`) |
@@ -51,9 +54,24 @@ ID, fixed after creation) and takes `tenants` (tenant IDs allowed under
 `common`/`organizations`); Google takes `domains` (only Google Workspace
 accounts of these domains, by the ID token's `hd` claim); Apple requires
 `team_id` and `key_id` (a new `key_id`
-needs a new `client_secret`). Other providers take none. `signup` requires
+needs a new `client_secret`); GitLab takes `base_url` (a self-managed
+instance, else `https://gitlab.com`) and GitHub Enterprise requires it (the
+server; IAMKit calls `/login/oauth/*` and `/api/v3`) — `base_url` becomes the
+issuer and cannot change. `oauth2` requires `authorize_url,token_url,userinfo_url`
+(HTTPS) and `claims` `{subject, email, email_verified, name}` — dotted member
+paths into the user info JSON, `subject` required — plus optional `scopes`
+(≤ 20); its issuer is the authorization URL's origin, so `authorize_url`
+must keep its host. An `oauth2` email counts as verified only when the
+`email_verified` member is `true`. `saml` requires exactly one of `metadata_url` (HTTPS, public address, fetched on create and on every `PATCH` that sends it) or `metadata_xml` (≤ 512 KiB) and takes `name_id_format` (`unspecified`\|`persistent`\|`email`\|`transient`), `attributes` `{subject,email,name}` (attribute names; `transient` requires `subject`) and `sign_requests`; its issuer is the IdP entity ID and cannot change (400). `ldap` takes `url` (`ldaps://` or `ldap://` with `start_tls: true`; plaintext is refused), `user_base_dn`, optional `bind_dn`, `user_filter` (with `{email}`/`{username}`, default `(|(mail={email})(userPrincipalName={email}))`), `ca_pem` and `attributes` `{subject,email,name}`; its issuer is the server `ldaps://host:port` and neither the host nor `user_base_dn` can change (400); clearing `bind_dn` drops the stored password. Other providers take none. `signup` requires
 `signup_organization_id`; `signup_group_id` requires `signup`; `signup: false`
-clears both. Organization connections reject `signup` and `link_email`. See
+clears both. Organization connections reject `signup`; their `link_email`
+links, even without JIT, an unlinked identity whose verified email is on a
+verified domain of the organization to the existing **member** with that
+email (origin `email`, audited `federation.email`); anyone else gets 401.
+`update_profile` refreshes the linked user's name at every sign-in, and its
+email when the provider verifies a new one, the account is passwordless and
+not SCIM-managed, no other account has it and (organization connections) it
+is on a verified domain (audited `federation.profile_updated`). See
 [social login](../../guides/social-login.md) and
 [sign-in methods](../../guides/hosted-login.md#sign-in-methods). A `secret_env`
 issuer/client/secret reference must match deployment approval exactly.

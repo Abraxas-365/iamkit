@@ -45,7 +45,7 @@ GET/HEAD select the read permission; mutations select write.
 | Resources, application-resource bindings, application resource lists | `iam:resources:read`, `iam:resources:write` |
 | Roles, role assignments, group role assignments, effective roles | `iam:roles:read`, `iam:roles:write` |
 | Grants | `iam:grants:read`, `iam:grants:write` |
-| Service accounts (create/list/revoke) | `iam:service-accounts:read`, `iam:service-accounts:write` |
+| Service accounts (create/list/get/authentication/revoke) | `iam:service-accounts:read`, `iam:service-accounts:write` |
 | Delivery configuration (`GET`, `PUT`, `DELETE /delivery`; `GET /delivery/status`; `POST /delivery/test`; `GET`, `POST /delivery/preview`; `GET /delivery/templates`; `GET`, `PUT`, `DELETE /delivery/templates/:purpose/:locale`) | `iam:delivery:read` (`GET`), `iam:delivery:write` (others, including draft `POST /delivery/preview`) |
 
 There are no workspace/operator, federation, OAuth-client or SCIM-credential

@@ -16,7 +16,7 @@ Owner/admin writes; viewers read. Entity lists use the
 | `GET /resources/:id` | — | 200 resource |
 | `PUT /resources/:id` | `name`, `permissions` | 204 |
 | `POST /application-resources` | `application_id`, `resource_id` | 201 |
-| `DELETE /application-resources/:application/:resource` | — | 204 |
+| `DELETE /application-resources/:application/:resource` | — | 204; 409 while sessions, OAuth clients, service accounts or SAML applications use the pair |
 | `GET /applications/:application/resources` | — | 200 page |
 | `POST /roles` | `name`, `resource_id`, `permissions` | 201 `{id}` |
 | `GET /roles` | — | 200 page |
@@ -34,6 +34,12 @@ Owner/admin writes; viewers read. Entity lists use the
 | `GET /grants` | — | 200 page |
 | `GET /grants/:id` | — | 200 grant |
 | `DELETE /grants/:id` | — | 204 |
+| `GET /saml/identity-provider` | — | 200 `{entity_id,sso_url,metadata_url,certificate}` ([SAML applications](../../guides/saml-apps.md)) |
+| `POST /saml/service-providers` | `name`, `application_id`, `resource_id` (linked), `entity_id`, `acs_urls` (1–10 HTTPS), optional `name_id_format` (`email` default \| `persistent`), `attributes` (name → `email`\|`name`\|`user_id`\|`organization_id`\|`permissions`, ≤ 32) | 201 service provider; 409 for a taken entity ID or an unlinked resource; audited `saml_service_provider.create` |
+| `GET /saml/service-providers` | Optional `application_id`, `search` (name, entity ID), list parameters | 200 page of `{id,environment_id,name,application_id,application_name,resource_id,resource_name,entity_id,acs_urls,name_id_format,attributes,created_at}` |
+| `GET /saml/service-providers/:id` | — | 200 service provider |
+| `PATCH /saml/service-providers/:id` | Any of `name`, `acs_urls`, `name_id_format`, `attributes` (replaces the map) | 200 service provider; audited `saml_service_provider.update` |
+| `DELETE /saml/service-providers/:id` | — | 204; pending sign-ins fail; audited `saml_service_provider.delete` |
 
 `GET /role-assignments` supports `role_id`, `organization_id`, `user_id`,
 `resource_id`, `search`, `limit`, `offset`. Filtering and pagination are performed

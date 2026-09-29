@@ -1,4 +1,4 @@
-# Social login: Google, Microsoft, GitHub, Apple
+# Social login: Google, Microsoft, GitHub, Apple, GitLab and any OAuth 2.0 provider
 
 Social login lets anyone sign in with an account they already have. It uses
 **environment connections** (no `organization_id`) created from a provider
@@ -35,8 +35,10 @@ POST /management/v1/environments/ENV_UUID/federation-connections
  "link_email":true,"signup":true,"signup_organization_id":"ORG_UUID","signup_group_id":"GROUP_UUID"}
 ```
 
-`provider` is `google`, `microsoft`, `github`, `apple` or `oidc` (default; any
-OpenID Connect provider, `issuer` required). Presets ignore `issuer`; the
+`provider` is `google`, `microsoft`, `github`, `apple`, `gitlab`,
+`github_enterprise`, `oauth2` or `oidc` (default; any OpenID Connect provider,
+`issuer` required — this is also how you connect ZITADEL, Keycloak or another
+IAMKit). Presets ignore `issuer`; the
 connection shows the derived one. The name is the button label: "Continue
 with Google".
 
@@ -80,6 +82,53 @@ user's numeric ID as the subject and takes the **primary, verified** address
 from `/user/emails` (scopes `read:user user:email`). Use an OAuth App, not a
 GitHub App.
 
+### GitHub Enterprise Server
+
+The same OAuth App flow on your own server: `"provider":"github_enterprise"`
+with `options.base_url` (e.g. `https://github.acme.com`). IAMKit uses
+`{base_url}/login/oauth/*` and the REST API at `{base_url}/api/v3`; the base
+URL is the connection's issuer and cannot change.
+
+### GitLab
+
+GitLab → Preferences (or Admin, or a group) → Applications; add the redirect
+URI with the scopes `openid profile email`. GitLab is an OpenID Connect
+provider: `"provider":"gitlab"` uses `https://gitlab.com`, or set
+`options.base_url` to a self-managed instance (fixed after creation).
+
+### Any OAuth 2.0 provider
+
+Providers without OpenID Connect (Discord, Slack v1, a custom server) use
+`"provider":"oauth2"` with their endpoints and a **claim mapping** that says
+where the user info JSON keeps the identity (dotted paths for nested members):
+
+```http
+POST …/federation-connections
+{"provider":"oauth2","name":"Discord","client_id":"…","client_secret":"…",
+ "options":{"authorize_url":"https://discord.com/oauth2/authorize",
+  "token_url":"https://discord.com/api/oauth2/token",
+  "userinfo_url":"https://discord.com/api/users/@me","scopes":["identify","email"],
+  "claims":{"subject":"id","email":"email","email_verified":"verified","name":"global_name"}}}
+```
+
+IAMKit uses PKCE and `state` (there is no ID token, so no nonce), then calls
+`userinfo_url` with the access token. `subject` must be a string or number.
+The email counts as verified **only** when the mapped `email_verified` member
+is `true`; without that mapping it never is, so it cannot sign up or link.
+The connection's issuer is the origin of `authorize_url`; endpoints may move
+within that host, but a different host needs a new connection.
+
+With the `iam` CLI:
+
+```sh
+iam federation create --provider oauth2 --name Discord --client-id ID --client-secret-file secret.txt \
+  --authorize-url https://discord.com/oauth2/authorize --token-url https://discord.com/api/oauth2/token \
+  --userinfo-url https://discord.com/api/users/@me --scopes identify,email \
+  --claim-subject id --claim-email email --claim-email-verified verified --claim-name global_name
+iam federation create --provider gitlab --base-url https://git.acme.com --name GitLab --client-id ID --client-secret-file secret.txt
+iam federation update CONN_ID --update-profile
+```
+
 ### Apple
 
 Apple Developer → Certificates, IDs & Profiles:
@@ -92,7 +141,7 @@ Apple Developer → Certificates, IDs & Profiles:
 ```http
 POST …/federation-connections
 {"provider":"apple","name":"Apple","client_id":"com.example.web",
- "client_secret":"-----BEGIN PRIVATE KEY-----\n…\n-----END PRIVATE KEY-----",
+ "client_secret":"<contents of AuthKey_KEY1234567.p8>",
  "options":{"team_id":"ABCDE12345","key_id":"KEY1234567"},"signup":true,"signup_organization_id":"ORG_UUID"}
 ```
 
@@ -126,7 +175,16 @@ works like before: only operator-linked subjects
 `signup` requires `signup_organization_id` (an active organization of the
 environment); `signup_group_id` must be an operator-managed group of it.
 `PATCH {"signup": false}` also clears both. Organization connections cannot
-use `signup` or `link_email`; they have [JIT provisioning](federation.md#just-in-time-provisioning).
+use `signup`; they have [JIT provisioning](federation.md#just-in-time-provisioning)
+and [email linking of members](federation.md#linking-members-by-email).
+
+## Keeping profiles in sync
+
+With `"update_profile": true` every sign-in refreshes the linked user's name
+from the provider. The email follows too when the provider verifies a new
+address, the account has no password (the provider is how it signs in), no
+SCIM directory manages it and no other account has the address; the change is
+audited `federation.profile_updated`. Off by default.
 
 A new user without a default group has no roles, so the first sign-in ends
 with 403 "signed in, but the user has no access to this application" until an

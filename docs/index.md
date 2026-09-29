@@ -29,8 +29,10 @@ choose the login methods and operational controls you need.
   [sign-in methods](guides/sign-in-methods.md)
 - [Email delivery (webhook, SMTP, Resend) and email wording](guides/email-delivery.md)
 - [OIDC federation](guides/federation.md): [social login (Google, Microsoft, GitHub, Apple)](guides/social-login.md),
-  [Google](guides/google-login.md), [Microsoft](guides/microsoft-login.md)
-- [OAuth/OIDC clients](guides/oauth-oidc.md), [hosted login pages](guides/hosted-login.md)
+  [Google](guides/google-login.md), [Microsoft](guides/microsoft-login.md),
+  [SAML 2.0 single sign-on](guides/saml.md), [LDAP / Active Directory](guides/ldap.md)
+- [OAuth/OIDC clients](guides/oauth-oidc.md), [hosted login pages](guides/hosted-login.md),
+  [signing keys and rotation](guides/signing-keys.md), [SAML applications (IAMKit as IdP)](guides/saml-apps.md)
 - [Organizations](guides/organizations.md), [service accounts](guides/service-accounts.md),
   [SCIM provisioning](guides/scim-provisioning.md), [impersonation](guides/impersonation.md)
 - [Runnable examples and prerequisites](examples/README.md)

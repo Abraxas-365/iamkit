@@ -18,6 +18,8 @@ containers after changes. Keep secrets outside source control and frontend build
 | `IAMKIT_PROVIDER_*` | As referenced by a binding | External provider client secret; server-only |
 | `IAMKIT_ENCRYPTION_KEY` | Unset: features storing secrets fail | Base64 of 32 bytes; encrypts stored secrets (organization SSO client secrets, SMTP passwords, Resend API keys). See [encryption key](#encryption-key) |
 | `IAMKIT_ENCRYPTION_KEYS_OLD` | Empty | Comma-separated previous keys, decrypt-only, for rotation |
+| `IAMKIT_LDAP_ALLOWED_HOSTS` | Empty: public addresses only | Comma-separated hosts or `host:port` of [LDAP directories](../guides/ldap.md) on private networks that IAMKit may dial; every other directory must resolve to a public address |
+| `IAMKIT_WEBAUTHN_ORIGINS` | Empty: only the issuer's origin | Comma-separated extra origins (custom sign-in UIs) allowed to run [security key and passkey](../guides/mfa.md#security-keys-and-passkeys) ceremonies; the relying-party ID stays the issuer's host |
 | `CORS_ALLOWED_ORIGINS` | Empty: no CORS middleware | Comma-separated allowed origins; enables credentials, so never use untrusted origins or wildcard |
 | `RATE_LIMIT_PER_MINUTE` | 120 | Per-IP, per-process limit on authenticated management and scoped API routes; invalid/non-positive values fall back to default |
 | `IAMKIT_BOOTSTRAP_EMAIL` | Unset: no automatic bootstrap | First-boot owner email; automatic bootstrap logs a one-time key |

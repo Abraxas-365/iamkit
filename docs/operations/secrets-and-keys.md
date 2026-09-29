@@ -20,8 +20,14 @@ offline JWT consumer aware of the event. Choose online checking when necessary.
 
 ## Signing key change
 
-Only one private signing key is configured. Do not assume an overlap/automatic
-rotation protocol. Schedule a change, back up current material securely, determine
+Prefer [environment signing keys](../guides/signing-keys.md): they rotate with
+overlap (publish, activate, retire) and need no restart or re-login. Their
+private halves are sealed with `IAMKIT_ENCRYPTION_KEY`; keep the old key in
+`IAMKIT_ENCRYPTION_KEYS_OLD` while any active or retiring environment key was
+sealed with it, or that environment stops signing.
+
+The deployment key (`JWT_PRIVATE_KEY_PATH`) still signs for every environment
+without an active key and has no overlap protocol. Schedule a change, back up current material securely, determine
 which sessions/tokens must be invalidated, replace the mount atomically, restart
 all signers consistently and refresh consumers' JWKS caches. Expect old tokens
 not to verify against a key set containing only the replacement. Test re-login,
@@ -33,11 +39,12 @@ requires incident containment, not merely routine restart.
 
 ## Encryption key rotation
 
-`IAMKIT_ENCRYPTION_KEY` seals SSO client secrets, TOTP secrets and environment
-SMTP passwords / Resend API keys. To rotate: set the new key, move the old one to
-`IAMKIT_ENCRYPTION_KEYS_OLD`, restart, re-save every SSO client secret and email
+`IAMKIT_ENCRYPTION_KEY` seals SSO client secrets, TOTP secrets, environment
+SMTP passwords / Resend API keys and SMS credentials (Twilio auth token, SMS
+webhook token). To rotate: set the new key, move the old one to
+`IAMKIT_ENCRYPTION_KEYS_OLD`, restart, re-save every SSO client secret, email
 secret (for email: `PUT …/delivery` with the password or API key, or
-`iam delivery set`), and only then drop the old key. TOTP secrets cannot be
+`iam delivery set`) and SMS secret (`PUT …/sms` or `iam sms set`), and only then drop the old key. TOTP secrets cannot be
 re-saved: keep the old key in `IAMKIT_ENCRYPTION_KEYS_OLD` while factors sealed
 with it are in use. An email secret sealed with a dropped key fails delivery with
 `stored credential could not be decrypted`. See the

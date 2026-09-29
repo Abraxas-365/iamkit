@@ -171,6 +171,12 @@ PUT /management/v1/environments/ENV_UUID/login-settings/clients/CLIENT_UUID/sign
 - `all_connections`: every active environment connection, including ones
   added later; otherwise only `connection_ids` (active environment
   connections; organization connections are governed by `organization_sso`).
+- `passkey`: **Sign in with a passkey** and passkey autofill on the email
+  field, when the environment and organization allow
+  [passkeys](mfa.md#passkeys) (default `true` for new clients; clients that
+  saved their options before passkeys existed keep `false`). The page loads
+  one small script, bound to its CSP nonce, only when a passkey or security
+  key can be used.
 - `signup`: the **Create account** link, when the environment allows
   [sign-up](signup-and-onboarding.md#self-service-sign-up) (default `true`;
   it also needs `password` or `email_code`).
@@ -203,6 +209,15 @@ organization enforces SSO), an existing one just joins. Point the delivery
 `invitation_url` at `https://IAMKIT_HOST/hosted/invite` to send users there.
 Accepting does not sign the user in; they sign in through your app next.
 
+## Device approval
+
+`/hosted/device` is where users approve a [device authorization](oauth-oidc.md#devices-without-a-browser-device-authorization-grant)
+(TVs, CLIs): they type the code the device shows (prefilled from
+`verification_uri_complete`), see the application and requested access, and
+either refuse ("This wasn't me") or sign in through the journey above. The
+pages wear the client's (else the environment's) branding and language; when
+sign-in finishes they show "Device connected" instead of redirecting.
+
 ## Security properties
 
 - Pages are server-rendered HTML without JavaScript. Every response carries a
@@ -211,7 +226,8 @@ Accepting does not sign the user in; they sign in through your app next.
   `Referrer-Policy: no-referrer`.
 - Every form action re-validates the ticket and its browser binding; a stolen
   ticket cannot be used from another browser.
-- Page views are limited to 60/min and form posts to 30/min per IP and route.
+- Page views are limited to 60/min and form posts to 30/min per IP and route
+  (device code entry: 10/min).
 - Error messages do not reveal whether an account exists beyond what the
   identity API already does.
 

@@ -23,18 +23,61 @@ routes. Supply deadlines and never log token-pair values.
   factor is needed — check `MFARequired` before using `AccessToken` (then
   `ExpiresIn` is the 5-minute pending-login lifetime). Call `EnrollMFA(ctx, pair.MFAToken)`
   first if `EnrollmentRequired`, then `VerifyMFA(ctx, pair.MFAToken, code)`.
+  For an email or SMS factor call `ChallengeMFA(ctx, pair.MFAToken, "email"|"sms")`
+  first to send the code (masked `CodeSent.Destination`). For a security key
+  (`"webauthn"` in `Factors`) call `AssertMFA(ctx, pair.MFAToken)`, pass
+  `WebAuthnOptions.Options` to the browser, then
+  `VerifyMFAWebAuthn(ctx, pair.MFAToken, session, credential)`.
+  Passkeys: `BeginPasskeyLogin(ctx, environment)` then
+  `PasskeyLogin(ctx, LoginContext{…}, session, credential)` (tokens directly,
+  no second factor).
   Self-service: `ListFactors`, `StartTOTP`, `ConfirmTOTP`, `RemoveTOTP`,
-  `RegenerateRecoveryCodes` (all but `ListFactors` need a sign-in within 10
+  `StartEmailFactor`, `StartSMSFactor(…, phone)`, `ConfirmFactor(…, kind, code)`,
+  `SendFactorCode(…, kind)`, `RemoveFactor(…, kind, code)`,
+  `RegenerateRecoveryCodes`, and for security keys and passkeys
+  `StartWebAuthn(…, name, passkey)`, `FinishWebAuthn(…, session, credential)`
+  (→ `WebAuthnRegistration{Factor, RecoveryCodes}`), `ProveWebAuthn`,
+  `RenameWebAuthn(…, factor, name)`, `RemoveWebAuthn(…, factor, WebAuthnProof{…})`
+  (all but `ListFactors` need a sign-in within 10
   minutes, else 403 `REAUTHENTICATION_REQUIRED`). `Claims.HasMFA()` checks the `amr` claim
   (see [MFA](../../guides/mfa.md)).
 - `Introspect(ctx, token, issuer, audience, environment, application, resource)`
   validates current state plus configured boundaries.
 
 `Validate(raw, rsaKey, issuer, audience, environment, application, resource)` is
-explicitly offline. After either validation mode, check organization and required
+explicitly offline. `ValidateWithKeySet(ctx, raw, keys, …same boundaries)` picks
+the key by the token's `kid` from `NewKeySet(jwksURL, client)`, which caches
+`/.well-known/jwks.json` (refresh every `MaxAge`, 10 minutes, and on an unknown
+`kid` at most once per `MinRefresh`, 30 seconds), so tokens keep validating
+across [signing-key rotations](../../guides/signing-keys.md). After either validation mode, check organization and required
 permissions. See [protected API example](../../guides/protect-an-api.md).
 
-OAuth helpers: `NewOAuth`, `NewPKCE`, `Exchange`, `Refresh`, `Revoke`. They do not
+OAuth helpers: `NewOAuth`, `NewPKCE`, `Exchange`, `Refresh`, `Revoke`,
+`ClientCredentials` (service accounts: `NewOAuth(url, accountID, secret)`),
+options `WithClientSecretPost` and `WithPrivateKeyJWT(key, kid, alg)` (signs a
+fresh one-minute RFC 7523 assertion per request; introspection keeps Basic),
+`UserInfo` (OIDC UserInfo), `Introspect` (RFC 7662, confidential clients) and
+`EndSessionURL` (RP-initiated logout URL). Device authorization grant
+(RFC 8628): `AuthorizeDevice(ctx, scopes...)` → `DeviceAuthorization{DeviceCode,
+UserCode, VerificationURI, VerificationURIComplete, ExpiresIn, Interval}`,
+`PollDevice(ctx, deviceCode)` (one poll; `*OAuthError` codes
+`DeviceAuthorizationPending`, `DeviceSlowDown`, `DeviceAccessDenied`,
+`DeviceExpired`) and `WaitDevice(ctx, authorization)` (polls at the interval,
++5 s per `slow_down`, until tokens, a final error or `ctx` ends);
+`DeviceGrantType` is the grant URN. Token exchange (RFC 8693):
+`ExchangeToken(ctx, subjectToken, audience, permissions...)` (a confidential
+client with `TokenExchangeGrantType`: the user's token for another resource
+of the application) and `Impersonate(ctx, user, organization, reason)` (a
+service account allowed to impersonate), both → `ExchangedToken{AccessToken,
+IssuedTokenType, TokenType, ExpiresIn}`; constants `AccessTokenType`,
+`UserIDTokenType`. `Claims.Act` (`*Actor{Subject}`) is the RFC 8693 actor of
+service-account impersonation; `Claims.Impersonated()` is true when
+`ActorID` or `Act` is set.
+`ValidateLogoutToken(ctx, raw, keys, issuer, clientID)` verifies the
+`logout_token` IAMKit POSTs to a client's back-channel logout URL (signature,
+`iss`, `aud`, `exp`, the logout event, `sid`, no `nonce`) and returns
+`LogoutToken{Subject, SessionID, …}`; answer 400 on error, remember `jti` until
+`exp` if you need replay protection. They do not
 render login/consent or replace state/nonce validation. OAuth errors have a separate
 `OAuthError` type. For query-bearing profile helpers, verify URL encoding for your
 actual audience value; use `url.Values` in direct HTTP integrations.

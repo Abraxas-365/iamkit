@@ -16,6 +16,7 @@ Manage it in the console (**Sign-in → Sign-in methods**), with the
 | `allow_password_reset` | "Forgot password" hidden and refused; needs `allow_password` |
 | `allow_email_code` | Email-code sign-in refused |
 | `allow_social` | [Environment connections](social-login.md) (Google, Microsoft…) refused |
+| `allow_passkey` | [Passkey](mfa.md#passkeys) sign-in refused (it also needs `webauthn` in `allowed_factors`); omitted on `PUT` keeps the current value |
 
 | Field | Effect when `true` |
 | --- | --- |
@@ -23,7 +24,13 @@ Manage it in the console (**Sign-in → Sign-in methods**), with the
 | `mfa_for_federated` | The same after social and SSO sign-ins |
 | `allow_signup` | [Self-service sign-up](signup-and-onboarding.md#self-service-sign-up) into `signup_organization_id` (required) and optionally `signup_group_id` |
 
-`PUT` replaces the whole policy (audited `sign_in_policy.update`); `DELETE`
+`allowed_factors` lists the [second-factor kinds](mfa.md#allowed-factors)
+users may enroll and sign in with (`totp`, `email`, `sms`, `webauthn`; default
+`["totp","webauthn"]`). Organizations narrow it with their own
+`allowed_factors`.
+
+`PUT` replaces the whole policy (audited `sign_in_policy.update`), except
+that an omitted `allowed_factors` keeps its current value; `DELETE`
 restores the default (`sign_in_policy.delete`). `GET` returns `custom: false`
 for the default. Turning every method off is valid: only organization SSO
 connections remain.
@@ -34,7 +41,8 @@ The effective methods are the intersection of three layers; each can only
 narrow the one above:
 
 1. **Environment** — this policy.
-2. **Organization** — `allow_password`, `allow_email_code`, `allow_social` on
+2. **Organization** — `allow_password`, `allow_email_code`, `allow_social`,
+   `allow_passkey` on
    the organization (`PATCH /organizations/:id`, console organization page,
    `iam organizations update --allow-password=false`, SDK
    `SetOrganizationMethods`). An organization cannot turn on a method the

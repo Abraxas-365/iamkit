@@ -8,6 +8,27 @@ Use `context.WithTimeout` and check every returned error before using an ID.
 Invitations: `Invite`, `Invitations(ctx, org, status)` (status filtered
 client-side on the first page), `Invitation`, `ResendInvitation` and
 `RevokeInvitation`; the issued token is returned only by `Invite` and resend.
+OAuth clients: `CreateOAuthClient` (`OAuthClient.PostLogoutRedirectURIs` for
+`/oauth/end_session`), `OAuthClients`, `DisableOAuthClient` and
+`UpdateOAuthClient` (`OAuthClientPatch` `HostedLogin`, `RedirectURIs`,
+`PostLogoutRedirectURIs`, `GrantTypes`, `AccessTokenFormat`, `TokenEndpointAuthMethod`, `TokenEndpointAuthAlg`,
+`JWKS`, `JWKSURI`; nil fields unchanged). `ClientAuthentication` (embedded in
+`OAuthClient` and `ServiceAccount`) sets token endpoint authentication
+(`AuthClientSecretBasic`, `AuthClientSecretPost`, `AuthPrivateKeyJWT`);
+`ServiceAccount(ctx, id)` and `SetServiceAccountAuthentication` read and change
+a service account's. `SetServiceAccountImpersonation(ctx, id, allowed)`
+(workspace owners) lets it impersonate users through token exchange
+(`ServiceAccount.CanImpersonate`). `OAuthClient.AccessTokenFormat` is `AccessTokenJWT`
+(default) or `AccessTokenOpaque`. `OAuthClient.GrantTypes` (empty: authorization
+code + refresh token) takes `GrantAuthorizationCode`, `GrantRefreshToken`,
+`GrantDeviceCode` (needs `HostedLogin`; device-only clients need no
+`RedirectURIs`) and `GrantTokenExchange` (confidential clients only). Opaque tokens are not accepted by
+`authclient.Validator` or the IAMKit APIs — resolve them with `Introspect`.
+Back-channel logout: `OAuthClient.BackchannelLogoutURI` /
+`BackchannelLogoutSessionRequired` (and the same `OAuthClientPatch` pointers;
+`""` turns it off); `LogoutDeliveries(ctx, status)` and
+`RetryLogoutDelivery(ctx, id)` read and requeue deliveries. Receivers verify the
+POSTed token with `authclient.ValidateLogoutToken`.
 Hosted login: `OAuthClient.HostedLogin` at creation, `UpdateOAuthClient(ctx, id,
 OAuthClientPatch{HostedLogin: &on})`, branding with `LoginSettings` /
 `SetLoginSettings` (`LoginTheme` for mode, colors, header and footer), and per-client
@@ -16,11 +37,22 @@ styles with `ClientLoginStyles`, `ClientLoginSettings`, `SetClientLoginSettings`
 Sign-in methods per client: `ClientSignIn`, `ClientSignIns`, `SetClientSignIn(ctx,
 client, SignIn{...})` and `DeleteClientSignIn`. Social login: `CreateFederation`
 with `Provider` (`ProviderGoogle`, `ProviderMicrosoft`, `ProviderGitHub`,
-`ProviderApple`), `Options *FederationOptions` and `Signup`/`LinkEmail`; the
+`ProviderApple`, `ProviderGitLab`, `ProviderGitHubEnterprise`, `ProviderOAuth2`),
+`Options *FederationOptions` (`BaseURL`; for OAuth 2.0 the endpoints, `Scopes`
+and `Claims *FederationClaimMap`) and `Signup`/`LinkEmail`/`UpdateProfile`; the
 detail's `CallbackURL` is the redirect URI to register (see
 [social login](../../guides/social-login.md)).
 MFA: `SetOrganizationMFA(ctx, org, OrganizationMFA{Required: &on})`,
-`UserFactors` and `ResetUserFactors` (see [MFA](../../guides/mfa.md)).
+`SetOrganizationFactors(ctx, org, OrganizationFactors{AllowedFactors: …})`,
+`SignInPolicy.AllowedFactors`, `UserFactors` and `ResetUserFactors`; the SMS
+provider: `SMSConfig`, `SetSMSConfig`, `DeleteSMSConfig`, `SMSStatus`,
+`TestSMS` (see [MFA](../../guides/mfa.md)).
+Signing keys: `SigningKeys`, `SigningKey(ctx, kid)`, `CreateSigningKey`,
+`ActivateSigningKey(ctx, kid)` and `RetireSigningKey(ctx, kid, force)` (see
+[signing keys](../../guides/signing-keys.md)).
+SAML applications (IAMKit as the identity provider): `SAMLIdentityProvider`,
+`SAMLApps`, `SAMLApp(ctx, id)`, `CreateSAMLApp`, `UpdateSAMLApp(ctx, id, …)`
+and `DeleteSAMLApp(ctx, id)` (see [SAML applications](../../guides/saml-apps.md)).
 Passwords: `PasswordPolicy`, `SetPasswordPolicy` (replaces the whole policy),
 `DeletePasswordPolicy` and `UnlockUser` (also on `apiclient`, with
 `iam:users:write`); a rejected password is `apierror.CodePasswordPolicy` with
@@ -29,7 +61,9 @@ Organization password requirements: `OrganizationPasswordPolicy`,
 `SetOrganizationPasswordPolicy`, `DeleteOrganizationPasswordPolicy`.
 Sign-in methods: `SignInPolicy`, `SetSignInPolicy`, `DeleteSignInPolicy` and,
 per organization, `SetOrganizationMethods` (see
-[sign-in methods](../../guides/sign-in-methods.md)).
+[sign-in methods](../../guides/sign-in-methods.md)). Passkeys:
+`SignInPolicy.AllowPasskey`, `OrganizationMethods.Passkey` and
+`SignIn.Passkey` for hosted clients (see [passkeys](../../guides/mfa.md#passkeys)).
 
 For a list returning a page, a low-level pattern is:
 
@@ -47,7 +81,8 @@ Typed slice list methods currently need envelope compatibility work; see
 explicit HTTP URL query handling for filters until a matching helper exists.
 
 `apiclient.New(baseURL, jwt, ...)` targets `/api/v1`, not `/management/v1`.
-Exchange a service credential with `authclient.MachineToken`, pass its access JWT,
+Exchange a service credential with `authclient.MachineToken` (or
+`authclient.NewOAuth(url, accountID, secret).ClientCredentials`), pass its access JWT,
 and refresh that token through another exchange when needed. `SetToken` updates
 the client's token; coordinate concurrent use rather than racing token mutation.
 Never pass raw `ik_svc_` credentials to `apiclient`.

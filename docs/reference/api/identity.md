@@ -7,19 +7,26 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 | Method/path | Input/authority | Success |
 | --- | --- | --- |
 | `POST /login` | boundary + `email`, `password`; optional `new_password` to replace an expired one | 200 token pair, or an [MFA step](#multi-factor); 403 `PASSWORD_CHANGE_REQUIRED` when the [password policy](../../guides/password-policy.md) expired the password |
-| `POST /mfa/verify` | `mfa_token`, `code` (TOTP or recovery) | 200 token pair (+ `recovery_codes` after enrollment); rate limited |
+| `POST /mfa/verify` | `mfa_token`, `code` (TOTP, emailed/texted code, or recovery), or `webauthn_session` + `credential` (security key) | 200 token pair (+ `recovery_codes` after enrollment); rate limited |
 | `POST /mfa/enroll` | `mfa_token` of a login with `enrollment_required` | 200 `{secret,otpauth_uri}`; rate limited |
+| `POST /mfa/challenge` | `mfa_token`, `factor` (`email`\|`sms`) | 202 `{factor,destination,expires_at}`; 422 `FACTOR_NOT_ALLOWED`; 429 `CODE_COOLDOWN`/`CODE_LIMIT`; rate limited |
+| `POST /mfa/webauthn` | `mfa_token` of a login with `webauthn` in `factors` | 200 `{webauthn_session,options,expires_at}` for `navigator.credentials.get`; rate limited |
+| `POST /passkeys/login/begin` | `environment_id` | 200 `{webauthn_session,options,expires_at}`; 403 `METHOD_NOT_ALLOWED` when passkeys are off; rate limited |
+| `POST /passkeys/login/finish` | boundary + `webauthn_session`, `credential` | 200 token pair (`amr` `hwk`,`user`,`mfa`; no second factor); 401 unknown or non-passkey credential, replay, cloned key; 403 `SSO_REQUIRED`/`METHOD_NOT_ALLOWED`; rate limited |
 | `POST /refresh` | original boundary + `refresh_token` | 200 replacement token pair |
 | `POST /machine-token` | Bearer `ik_svc_…`; no body needed | 200 access token, no user refresh |
 | `POST /challenges` | `environment_id`, `email`, `purpose`, optional `locale` (email language, e.g. `es`; used when IAMKit writes the email) | 202 challenge response |
 | `POST /challenges/verify` | `environment_id`, `challenge_id`, `code`, `purpose`; full boundary for login; `password` for reset | Login: 200 pair; reset/verification: 204 |
-| `POST /discover` | `environment_id`, `email` | 200 `{method:"sso"\|"password",organization_id?,connection_id?,required}`; by email domain only; rate limited |
+| `POST /discover` | `environment_id`, `email` | 200 `{method:"sso"\|"password",organization_id?,connection_id?,required,provider?}`; by email domain only; `provider:"ldap"` means post the password to `/federation/ldap/login` instead of redirecting; rate limited |
 | `POST /signup` | `environment_id`, `email`, `name`, `password?`, `locale?` | 202 challenge response, the same for existing accounts; 403 `SIGNUP_DISABLED`/`SSO_REQUIRED`; rate limited. See [sign-up](../../guides/signup-and-onboarding.md#self-service-sign-up) |
 | `POST /signup/verify` | `environment_id`, `challenge_id`, `code` | 201 `{user_id,organization_id,email}`; no session; 409 `ACCOUNT_EXISTS`; rate limited |
 | `POST /invitations/preview` | `token` | 200 [invitation preview](#invitations); 401 unknown, used, revoked or expired; rate limited |
 | `POST /invitations/accept` | `token`, `name?`, `password?` | 200 `{user_id,organization_id,email,sso_required,created}`; no session; rate limited |
 | `POST /federation/start` | boundary + `connection_id`; organization connections need their own `organization_id` | 200 `{authorization_url}` + binding cookie |
 | `GET /federation/callback` | `code`, `state` query + binding cookie | 200 token pair |
+| `POST /federation/saml/acs` | form `SAMLResponse`, `RelayState` (the SAML assertion consumer service, HTTP-POST binding; 30/min per IP) | 303 to `/federation/callback?code=ik_saml_…&state=…`; 401 for an unknown/expired RelayState |
+| `POST /federation/ldap/login` | boundary (with the connection's `organization_id`) + `connection_id`, `email`, `password` ([LDAP](../../guides/ldap.md); 10/min per IP) | Like `POST /login`: 200 token pair or an [MFA step](#multi-factor); 401 for a wrong password, an unknown or ambiguous user; 502 when the directory cannot be reached |
+| `GET /federation/saml/:environment/:connection/metadata` | — (public, 60/min per IP) | 200 SP metadata XML (`application/samlmetadata+xml`); 404 for a non-SAML or inactive connection |
 | `POST /introspect` | Bearer access token; `environment_id`, `audience` | 200 `{active:false}` or `{active:true,claims:{…}}` |
 | `POST /logout` | Bearer user token; `environment_id`, `audience` | 204 |
 | `GET /me` | Bearer user token; query `environment_id`, `audience` | 200 profile |
@@ -28,9 +35,17 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 | `POST /memberships` | Bearer user token; `environment_id`, `audience`, `user_id` | 201; requires `iam:members:write` |
 | `GET /me/factors` | Bearer user token; query `environment_id`, `audience` | 200 `{factors,recovery_codes_remaining}` |
 | `POST /me/factors/totp` | Bearer user token; `environment_id`, `audience` | 201 `{factor_id,secret,otpauth_uri}` |
-| `POST /me/factors/totp/confirm` | Bearer user token; `environment_id`, `audience`, `code` | 200 `{recovery_codes}` |
-| `DELETE /me/factors/totp` | Bearer user token; `environment_id`, `audience`, `code` | 204 |
-| `POST /me/factors/recovery-codes` | Bearer user token; `environment_id`, `audience`, `code` | 200 `{recovery_codes}` |
+| `POST /me/factors/email` | Bearer user token; `environment_id`, `audience` | 202 `{factor,destination,expires_at}` |
+| `POST /me/factors/sms` | Bearer user token; `environment_id`, `audience`, `phone` | 202 `{factor,destination,expires_at}` |
+| `POST /me/factors/{totp,email,sms}/confirm` | Bearer user token; `environment_id`, `audience`, `code` | 200 `{recovery_codes}` |
+| `POST /me/factors/{email,sms}/challenge` | Bearer user token; `environment_id`, `audience` | 202 `{factor,destination,expires_at}` |
+| `DELETE /me/factors/{totp,email,sms}` | Bearer user token; `environment_id`, `audience`, `code` | 204 |
+| `POST /me/factors/recovery-codes` | Bearer user token; `environment_id`, `audience`, `code` (or a key assertion) | 200 `{recovery_codes}` |
+| `POST /me/factors/webauthn` | Bearer user token; `environment_id`, `audience`, `name`, `passkey?` | 201 `{webauthn_session,options,expires_at}` for `navigator.credentials.create` |
+| `POST /me/factors/webauthn/confirm` | Bearer user token; `environment_id`, `audience`, `webauthn_session`, `credential` | 201 `{factor,recovery_codes?}` |
+| `POST /me/factors/webauthn/challenge` | Bearer user token; `environment_id`, `audience` | 200 `{webauthn_session,options,expires_at}` (possession proof) |
+| `PATCH /me/factors/webauthn/:id` | Bearer user token; `environment_id`, `audience`, `name` | 200 factor |
+| `DELETE /me/factors/webauthn/:id` | Bearer user token; `environment_id`, `audience`, `code` or `webauthn_session` + `credential` | 204 |
 
 The membership endpoint uses the authenticated user's organization context; it
 is not a sign-up. Impersonated tokens cannot update self-service profiles.
@@ -70,8 +85,14 @@ Source: `internal/server/server.go`,
 
 Password login, email-code login and the SSO callback return, instead of a
 token pair, `{mfa_required:true,mfa_token:"ik_mfa_…",factors,enrollment_required,expires_in}`
-when the user has an authenticator or the organization requires one. No
+when the user has a usable factor or the organization requires one. No
 session exists until `/mfa/verify` succeeds (5 minutes, 5 wrong codes).
+Email and SMS factors need `/mfa/challenge` first to send the code; security
+keys need `/mfa/webauthn` for the assertion options. WebAuthn `options` are
+the standard `PublicKeyCredential{Creation,Request}Options` as JSON
+(base64url binary fields, no `publicKey` wrapper); `credential` is the
+browser's `PublicKeyCredential.toJSON()`. Passkeys sign in without a prior
+step (`/passkeys/login/*`). See [security keys and passkeys](../../guides/mfa.md#security-keys-and-passkeys).
 Self-service factor endpoints refuse impersonated tokens (403). See the
 [MFA guide](../../guides/mfa.md).
 

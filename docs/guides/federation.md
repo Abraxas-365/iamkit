@@ -15,7 +15,10 @@ kinds of connection:
 
 Every connection has a `provider`: a preset (`google`, `microsoft`, `github`,
 `apple`) whose issuer and endpoints IAMKit knows, or `oidc` (default) for any
-OpenID Connect provider with an `issuer`. Presets work for both kinds, e.g. an
+OpenID Connect provider with an `issuer`. Organizations whose identity
+provider speaks SAML 2.0 use a `saml` connection instead — see
+[SAML single sign-on](saml.md). Organizations with an LDAP directory or
+Active Directory use an `ldap` connection — see [LDAP](ldap.md). Presets work for both kinds, e.g. an
 organization's Google Workspace or Entra tenant.
 
 Prerequisite for both: the exact callback
@@ -75,7 +78,26 @@ group the account is created but has no roles, so the login is refused with
 403 until access is granted. Later logins use the linked subject only; the
 email claim is not consulted again. Only operator-managed groups (not SCIM
 directory groups) can be the default group. With `jit_provisioning: false`,
-users must be linked explicitly as for environment connections.
+users must be linked explicitly as for environment connections, unless
+`link_email` is on.
+
+### Linking members by email
+
+`"link_email": true` on an organization connection links, without JIT, an
+unlinked subject to the **existing member** whose email the provider sends,
+when that email is on one of the organization's verified domains and is not
+`email_verified: false`. Nobody is created and no membership is added: a
+non-member, an unknown email or another domain gets 401. The identity has
+`origin: "email"` and the link is audited `federation.email`. With JIT on as
+well, JIT's adopt-or-create applies instead.
+
+`"update_profile": true` refreshes a linked user's name at every sign-in, and
+their email when it changes to another verified-domain address and the
+account is passwordless and not SCIM-managed (see
+[social login](social-login.md#keeping-profiles-in-sync)).
+
+Organization SSO also accepts `"provider":"gitlab"` with `options.base_url`
+for a company's self-managed GitLab.
 
 ### Enforcement
 

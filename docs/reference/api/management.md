@@ -81,11 +81,35 @@ use `GET|PUT|DELETE /organizations/:id/password-policy` (`min_length`,
 
 The [sign-in methods](../../guides/sign-in-methods.md) policy uses
 `GET|PUT|DELETE /sign-in-policy` (`allow_password`, `allow_email_code`,
-`allow_social`, `allow_password_reset`, `mfa_required`, `mfa_for_federated`,
+`allow_social`, `allow_passkey` ([passkeys](../../guides/mfa.md#passkeys); omitted = keep),
+`allow_password_reset`, `mfa_required`, `mfa_for_federated`,
+`allowed_factors` (second-factor kinds, default `["totp","webauthn"]`;
+omitted = keep — see [MFA](../../guides/mfa.md#allowed-factors)),
 `allow_signup`, `signup_organization_id`, `signup_group_id` — see
 [sign-up](../../guides/signup-and-onboarding.md#self-service-sign-up);
 `custom: false` for the default), audited as
 `sign_in_policy.update`/`sign_in_policy.delete`.
+
+The SMS provider for [email and SMS second factors](../../guides/mfa.md#sms-provider)
+uses `GET|PUT|DELETE /sms` (`provider` `twilio` with `account_sid`,
+`auth_token`, `from_number` or `messaging_service_sid`; or `webhook` with
+`webhook_url`, `webhook_token`; secrets never returned, omitted = keep),
+`GET /sms/status` and `POST /sms/test` (`{"phone"}`, E.164, rate limited),
+audited `sms.update`/`sms.delete`/`sms.test`.
+
+### Signing keys
+
+[Environment signing keys](../../guides/signing-keys.md) use `GET /signing-keys`
+(page of keys, active first: `kid,environment_id,alg,state,created_at,
+activated_at,retire_after,retired_at,public_jwk`; `public_jwk` omitted once
+retired), `GET /signing-keys/:kid`, `POST /signing-keys` (201 `next` key; 422
+`ENCRYPTION_KEY_REQUIRED` without `IAMKIT_ENCRYPTION_KEY`),
+`POST /signing-keys/:kid/activate` (200; the previous active key becomes
+`retiring` with `retire_after` 20 minutes ahead; 409 for a retired key) and
+`POST /signing-keys/:kid/retire` (optional `{"force":true}`; 200; 409
+`KEY_IN_USE` for the active key, or a retiring key before `retire_after`
+without `force`). Writes need owner/admin and are audited
+`signing_key.create`/`.activate`/`.retire`. A `kid` of another environment is 404.
 
 Administrative inventories include `GET /sessions` (optional `user_id` filter), `DELETE /sessions/:id` and
 `GET /audit-events` under this prefix. Sessions carry display labels
@@ -93,7 +117,9 @@ Administrative inventories include `GET /sessions` (optional `user_id` filter), 
 audit events an `actor_label` (operator or end-user email; empty when unknown)
 and a `target_label` (current name of the innermost entity in `target_id`, e.g.
 the member for a membership path; empty when deleted or unnamed).
-Session revocation affects online checks
+`GET /logout-deliveries` and `POST /logout-deliveries/:id/retry` expose
+[back-channel logout](oauth-oidc.md) deliveries (a revoked session of a client
+with a `backchannel_logout_uri` queues one). Session revocation affects online checks
 and refresh; already issued JWTs require online checking to observe revocation
 before expiry. These inventory endpoints return arrays, not the entity-list
 pagination envelope. Do not assume a complete audit trail for every operation.

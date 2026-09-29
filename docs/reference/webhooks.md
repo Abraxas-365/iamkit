@@ -43,6 +43,20 @@ only check it keep working; prefer the signature, which also rejects replays.
 Purposes: `login`, `password_reset`, `email_verification`. The code is secret,
 single-use and valid for five minutes.
 
+Purpose `mfa` carries a 6-digit [second-factor](../guides/mfa.md) code
+(`{"email","purpose":"mfa","code":"123456"}`). It is sent only after an
+operator adds `email` to the sign-in policy's `allowed_factors`, so existing
+webhooks never receive it unexpectedly.
+
+## SMS webhook
+
+The SMS provider `webhook` (`PUT …/sms`) receives the same signed POST
+(signature keyed with the SMS webhook token) with
+`{"phone":"+15551234567","purpose":"mfa","code":"123456","body":"…"}`.
+Purposes: `mfa`, `phone_verification` (confirming a new number) and `test`
+(no code). `body` is IAMKit's text in the environment's language; send it or
+write your own. Answer 2xx.
+
 Test sends from the console (`POST …/delivery/test`) use purpose `test` with
 only `email` and `purpose`: `{"email":"ops@example.com","purpose":"test"}`.
 Accept or ignore them with a 2xx.

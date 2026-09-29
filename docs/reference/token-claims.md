@@ -1,6 +1,9 @@
 # Token claims
 
-Access tokens are signed RSA JWTs. Consumers must verify the expected issuer,
+Access tokens are signed RSA JWTs — except for OAuth clients set to
+`access_token_format: opaque`, whose access tokens are random `ory_at_…` handles
+that only `/oauth/introspect` and `/oauth/userinfo` resolve (introspection
+returns the claims below). ID tokens are always JWTs. Consumers of JWTs must verify the expected issuer,
 audience, expiry and RS256 algorithm, then application-specific boundaries.
 Base claims include `iss`, `sub`, `aud`, `exp`, `iat`, and `jti` where issued.
 Do not decode without verifying and treat that as authentication.
@@ -15,20 +18,29 @@ Do not decode without verifying and treat that as authentication.
 | `organization_id` | Tenant on user/application tokens; absent for machines |
 | `sid` | User session identifier; absent for machines |
 | `actor_id` | Operator attribution on impersonated tokens |
+| `act` | `{"sub": "<service account id>"}` ([RFC 8693](https://www.rfc-editor.org/rfc/rfc8693)) on tokens a service account got by [impersonation](../guides/impersonation.md#service-accounts-token-exchange) |
 | `oauth_client_id` | OAuth client binding when applicable |
-| `amr` | How the session authenticated: `pwd`, `email` or `fed`, plus `otp` and `mfa` after a [second factor](../guides/mfa.md). Also in OIDC ID tokens |
-| `auth_time` | When the session signed in (Unix seconds); unchanged by refreshes. Absent on machine and impersonation tokens |
+| `amr` | How the session authenticated: `pwd`, `email` or `fed`, plus `otp` + `mfa` (authenticator or email code), `sms` + `mfa` (text), `hwk` + `mfa` (security key) or `mfa` (recovery code) after a [second factor](../guides/mfa.md); a [passkey](../guides/mfa.md#passkeys) sign-in is `hwk`, `user`, `mfa`. Also in OIDC ID tokens |
+| `scp` | OAuth scopes granted (OAuth access tokens only) |
+| `auth_time` | When the session signed in (Unix seconds); unchanged by refreshes. Absent on machine and impersonation tokens; [exchanged](../guides/oauth-oidc.md#calling-another-api-as-the-user-token-exchange) tokens keep the original |
 
 Application-purpose tokens need subject, organization and session context.
 Machine tokens must not be interpreted as organization users. OIDC ID tokens
 identify the authentication event to a client; they are not business API tokens.
+ID tokens carry `sid` (the session `/oauth/end_session` ends), `environment_id`
+and `organization_id`.
 
 `GET /.well-known/jwks.json` publishes verification material, never private keys.
 Fetch only from the configured issuer, not an arbitrary token-supplied URL.
-A single active signing key is configured; plan cache invalidation and re-login
-when changing it. Offline validation cannot observe revocation before expiry.
+It lists the deployment key and every environment's `next`, `active` and
+`retiring` keys; the token's `kid` header picks one. Environments
+[rotate keys](../guides/signing-keys.md) without re-login: cache the JWKS by
+`kid` and refresh on an unknown `kid` (the SDK's `authclient.KeySet` does).
+An environment key only verifies tokens of its own environment. Offline
+validation cannot observe revocation before expiry.
 
 `POST /identity/v1/introspect` checks current state and returns `active` with
 claims when valid. Its expected environment/audience must come from trusted API
 configuration; still compare application/resource/organization and permissions.
-See [protected API](../guides/protect-an-api.md).
+See [protected API](../guides/protect-an-api.md). OAuth resource servers can
+use RFC 7662 `POST /oauth/introspect` instead ([protocol reference](api/oauth-oidc.md)).
