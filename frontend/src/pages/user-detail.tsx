@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Ban, Building2, KeyRound, Pencil, Plus, RotateCcw, ShieldCheck, Smartphone, Trash2, UserX } from 'lucide-react'
+import { Ban, Building2, KeyRound, LockOpen, Pencil, Plus, RotateCcw, ShieldCheck, Smartphone, Trash2, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, FormDialog, Properties, Status, Time } from '@/components/library/patterns'
 import { AssignRoleDialog } from '@/components/library/assign-role'
 
-interface User { id: string; name: string; email: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; metadata?: Record<string, unknown> | null }
+interface User { id: string; name: string; email: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; metadata?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null }
 interface Org { id: string; name: string; active: boolean }
 interface Factor { id: string; kind: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
@@ -36,6 +36,7 @@ export default function UserDetailPage() {
   const [editing, setEditing] = useState(false)
   const [suspend, setSuspend] = useState(false)
   const [purge, setPurge] = useState(false)
+  const [unlock, setUnlock] = useState(false)
   const load = useCallback(() => { setError(''); api.get<User>(path).then(setUser).catch(e => setError(message(e))) }, [path])
   useEffect(load, [load])
 
@@ -50,9 +51,15 @@ export default function UserDetailPage() {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <h1 className="font-mono text-2xl font-bold tracking-tight">{label}</h1>
         <Status active={user.active} label={user.active ? 'Active' : 'Suspended'} />
+        {user.locked_until && <Badge variant="secondary" className="bg-destructive/10 text-destructive">Locked</Badge>}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground"><span>{user.email}</span><CopyText value={user.id} short label="Copy user ID" /></div>
     </div>
+
+    {user.locked_until && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 p-4 text-sm">
+      <div><p className="font-medium">Locked after {user.failed_logins} wrong passwords</p><p className="text-muted-foreground">Password sign-in is refused until <Time value={user.locked_until} />. A password reset also unlocks the account.</p></div>
+      {canWrite && <Button variant="outline" onClick={() => setUnlock(true)}><LockOpen /> Unlock</Button>}
+    </div>}
 
     <DetailSection title="Profile" actions={canWrite && <Button variant="outline" size="sm" onClick={() => setEditing(true)}><Pencil /> Edit</Button>}>
       <Properties items={[
@@ -94,6 +101,7 @@ export default function UserDetailPage() {
     {suspend && (user.active
       ? <ConfirmDialog title={`Suspend ${label}?`} description="They can no longer sign in and their sessions stop refreshing. You can reactivate them later." confirmLabel="Suspend" onClose={() => setSuspend(false)} confirm={async () => { await api.delete(path); toast.success('User suspended'); load() }} />
       : <ConfirmDialog title={`Reactivate ${label}?`} description="They can sign in again with their existing memberships and roles." confirmLabel="Reactivate" onClose={() => setSuspend(false)} confirm={async () => { await api.patch(path, { active: true }); toast.success('User reactivated'); load() }} />)}
+    {unlock && <ConfirmDialog title={`Unlock ${label}?`} description="Clears the wrong-password count so they can sign in with their password again." confirmLabel="Unlock" onClose={() => setUnlock(false)} confirm={async () => { await api.post(`${path}/unlock`); toast.success('User unlocked'); load() }} />}
     {purge && <ConfirmDialog title="Permanently delete user?" description={`This erases ${label} and every session, membership, grant, role assignment, and linked identity for them in this environment. This cannot be undone.`} confirmLabel="Delete permanently" confirmationText={label} onClose={() => setPurge(false)} confirm={async () => { await api.delete(`${path}/permanent`); toast.success('User deleted'); navigate(`${console}/users`) }} />}
   </div>
 }
