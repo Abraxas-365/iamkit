@@ -18,11 +18,15 @@ Lists of users, organizations and members use the
 | `DELETE /users/:id/permanent` | User ID | 204; permanently erases the user and every session, membership, group membership, grant, role assignment, position assignment, external identity, provisioned identity, second factor, recovery code and identity challenge referencing them. Irreversible. |
 | `GET /users/:id/factors` | User ID | 200 `{factors:[{id,kind,confirmed_at,last_used_at,created_at}],recovery_codes_remaining}`; never secrets |
 | `DELETE /users/:id/factors` | User ID | 204; removes every [second factor](../../guides/mfa.md) and recovery code (lost device) and clears a lockout; audited `mfa.reset`. 404 when the user has none |
+| `POST /users/:id/unlock` | User ID | 204; clears the wrong-password count and [password lockout](../../guides/password-policy.md); audited `user.unlocked` |
 
 List items contain only `id,email,name,active`. Use `GET /users/:id` for
-`email_verified,otp_enabled,metadata` as well; missing list fields are not evidence
+`email_verified,otp_enabled,metadata` and the password lockout state
+(`failed_logins`, `locked_until` — null when not locked) as well; missing list fields are not evidence
 that those settings are false. Neither response exposes password hashes.
-Non-empty passwords must be 12–72 bytes. Name cannot be
+Non-empty passwords must follow the environment's
+[password policy](../../guides/password-policy.md) (default 12–72 bytes; 400
+`PASSWORD_POLICY` with `details.rule`). Name cannot be
 blank. Email is normalized by the service. Metadata is JSON, not an encoded JSON
 string. Password is not a user PATCH field; use the challenge reset workflow.
 

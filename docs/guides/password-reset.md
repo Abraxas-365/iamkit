@@ -13,7 +13,8 @@ Content-Type: application/json
 ```
 
 Show the generic 202 message, store the returned challenge ID and collect the
-8-character code and a new 12–72 byte password. Then:
+8-character code and a new password that follows the environment's
+[password policy](password-policy.md) (default 12–72 bytes). Then:
 
 ```http
 POST /identity/v1/challenges/verify
@@ -24,8 +25,10 @@ Content-Type: application/json
 
 Use real IDs and the delivered code. Success is **204 with no token response**;
 return the user to login. Full org/app/resource context is not required for reset.
-Reset marks email verified and password changes invalidate sessions/challenges;
-offline JWT consumers cannot observe revocation instantly.
+Reset marks email verified, clears a [password lockout](password-policy.md#lockout),
+restarts password expiry, and password changes invalidate sessions/challenges;
+offline JWT consumers cannot observe revocation instantly. A password that breaks
+the policy answers 400 `PASSWORD_POLICY` with `details.rule`.
 
 Codes expire in five minutes, are single-use and allow five failures. Resending
 supersedes the old same-purpose challenge. Never log codes or new passwords.

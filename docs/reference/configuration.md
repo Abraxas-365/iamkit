@@ -112,7 +112,9 @@ A published host port defaults to all interfaces unless explicitly restricted.
 
 ## Fixed contracts (not environment settings)
 
-- Password length: 12–72 bytes; bcrypt cost 12.
+- Password length: 12–72 bytes for operators and, by default, end users (an
+  environment's [password policy](../guides/password-policy.md) can raise the
+  end-user minimum and add rules); bcrypt cost 12.
 - JWTs: 15 minutes; user session/refresh window: 24 hours; operator session: 1 hour.
 - Challenges: 5 minutes, 8-character code, at most 5 wrong attempts; a new challenge
   consumes previous unconsumed challenges of the same purpose.

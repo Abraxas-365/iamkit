@@ -25,7 +25,7 @@ choose the login methods and operational controls you need.
 - [Signup and onboarding](guides/signup-and-onboarding.md)
 - [Password login](guides/password-login.md), [email OTP](guides/email-otp.md),
   [password reset](guides/password-reset.md), [email verification](guides/email-verification.md),
-  [multi-factor (TOTP)](guides/mfa.md)
+  [multi-factor (TOTP)](guides/mfa.md), [password policy, lockout and expiry](guides/password-policy.md)
 - [Email delivery (webhook, SMTP, Resend) and email wording](guides/email-delivery.md)
 - [OIDC federation](guides/federation.md): [social login (Google, Microsoft, GitHub, Apple)](guides/social-login.md),
   [Google](guides/google-login.md), [Microsoft](guides/microsoft-login.md)

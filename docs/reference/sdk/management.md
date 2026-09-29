@@ -21,6 +21,10 @@ detail's `CallbackURL` is the redirect URI to register (see
 [social login](../../guides/social-login.md)).
 MFA: `SetOrganizationMFA(ctx, org, OrganizationMFA{Required: &on})`,
 `UserFactors` and `ResetUserFactors` (see [MFA](../../guides/mfa.md)).
+Passwords: `PasswordPolicy`, `SetPasswordPolicy` (replaces the whole policy),
+`DeletePasswordPolicy` and `UnlockUser` (also on `apiclient`, with
+`iam:users:write`); a rejected password is `apierror.CodePasswordPolicy` with
+`Rule()` naming the failed rule (see [password policy](../../guides/password-policy.md)).
 
 For a list returning a page, a low-level pattern is:
 

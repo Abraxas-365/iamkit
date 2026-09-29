@@ -3,7 +3,12 @@
 Ordinary API failures use a JSON `error` object with `code`, `message`, `type`
 and `http_status`. Treat HTTP status as the transport result and code as a
 machine-readable classification; do not branch on English messages. Internal
-errors must not be surfaced as stack traces or secret payloads.
+errors must not be surfaced as stack traces or secret payloads. A few client
+errors add a `details` object: `PASSWORD_POLICY` (400, a new password breaks the
+[password policy](../guides/password-policy.md)) carries `rule`
+(`length`, `upper`, `lower`, `digit`, `symbol`, `breached`, `reused`) and
+`min_length`. `PASSWORD_CHANGE_REQUIRED` (403) means the password matched but has
+expired; resend the login with `new_password`.
 
 | Status | Typical action |
 | --- | --- |

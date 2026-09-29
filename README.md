@@ -317,8 +317,12 @@ Email OTP is a login method, **not** a second-factor MFA feature.
 
 Forgot password uses `/challenges` with `purpose: "password_reset"`, followed by
 `/challenges/verify` with environment, challenge ID, code, purpose and the new
-12–72 byte password. Success returns 204, not a login session. It requires an
+password. Success returns 204, not a login session. It requires an
 existing password and configured email delivery. Your app supplies the UI.
+
+New passwords follow the environment's [password policy](docs/guides/password-policy.md)
+(default 12–72 bytes; optional composition rules and breached-password check),
+which can also lock accounts after repeated wrong passwords and expire old ones.
 
 ## Model and capabilities
 

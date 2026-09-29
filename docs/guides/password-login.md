@@ -30,3 +30,9 @@ resource fails. Login does not automatically enforce `email_verified`; enforce
 email-ownership onboarding policy deliberately. Show a generic sign-in error,
 not whether an address exists. Provide [password reset](password-reset.md) when
 email delivery is configured.
+
+With a [password policy](password-policy.md) that expires passwords, a correct
+but expired password answers 403 `PASSWORD_CHANGE_REQUIRED`: ask for a new one
+and repeat the request with `new_password` (400 `PASSWORD_POLICY` explains a
+rejected one via `details.rule`). Locked accounts answer the same 401 as a wrong
+password.

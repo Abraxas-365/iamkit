@@ -6,7 +6,7 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 
 | Method/path | Input/authority | Success |
 | --- | --- | --- |
-| `POST /login` | boundary + `email`, `password` | 200 token pair, or an [MFA step](#multi-factor) |
+| `POST /login` | boundary + `email`, `password`; optional `new_password` to replace an expired one | 200 token pair, or an [MFA step](#multi-factor); 403 `PASSWORD_CHANGE_REQUIRED` when the [password policy](../../guides/password-policy.md) expired the password |
 | `POST /mfa/verify` | `mfa_token`, `code` (TOTP or recovery) | 200 token pair (+ `recovery_codes` after enrollment); rate limited |
 | `POST /mfa/enroll` | `mfa_token` of a login with `enrollment_required` | 200 `{secret,otpauth_uri}`; rate limited |
 | `POST /refresh` | original boundary + `refresh_token` | 200 replacement token pair |
@@ -85,7 +85,9 @@ token returns the same 401, so tokens cannot be probed.
 
 Accept rules:
 
-- **New account:** `password` (12–72 characters) is required, unless the
+- **New account:** `password` (following the environment's
+  [password policy](../../guides/password-policy.md); 400 `PASSWORD_POLICY`
+  otherwise) is required, unless the
   organization enforces SSO for the email's verified domain; then it is
   rejected (400) and the person signs in through SSO, which links by email.
 - **Existing account:** `password` is rejected (400); accepting never changes

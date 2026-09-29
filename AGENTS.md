@@ -136,7 +136,10 @@ sealed-secret connections; tests replace it via
 (per-environment email delivery; secrets sealed with `Cipher`, never returned)
 and `TemplateCommands`/`TemplateQueries`/`TemplateRepository` (email wording
 overrides per purpose × language, text only — `Copy` with `{{placeholders}}`,
-no HTML). Its `authmail` SMTP/Resend/webhook adapters dial environment providers
+no HTML) and `PasswordPolicyCommands`/`PasswordPolicyQueries`/`PasswordPolicyRepository`
+(one end-user `PasswordPolicy` per environment, default when none is saved;
+user and invitation modules consume it through their own one-method
+`PasswordPolicy` port, wired in bootstrap). Its `authmail` SMTP/Resend/webhook adapters dial environment providers
 through `netx.GuardedDialer` (webhooks also sign requests per Standard
 Webhooks, `authmail.SignWebhook`); the deployment-wide provider (`EMAIL_PROVIDER`,
 read in `bootstrap/mail.go`) may reach private hosts; tests override both via
@@ -190,6 +193,7 @@ infrastructure concerns that should be swappable:
 | `Logins` | mfa | Everything login flows need from mfa (headless pending logins + hosted `Verify`/`Enrolling` without a pending token) |
 | `TOTP` | mfa | RFC 6238 codes/URIs (`mfatotp`, stdlib only, RFC test vectors) |
 | `Cipher` | authentication, federation, mfa | Seal/open stored secrets (SMTP password / Resend API key, client secrets, TOTP secrets); implemented by `internal/cryptox.Sealer` (`IAMKIT_ENCRYPTION_KEY`), injected via `bootstrap.WithSealer` |
+| `Breaches` | authentication | Breached-password lookup for the policy's `breach_check`; `authhibp` (Have I Been Pwned range API, k-anonymity). Errors and `config.BreachCheckTimeout` fail open; tests replace it via `bootstrap.WithBreaches` (nil disables) |
 | `TokenCodec` | authentication | JWT sign/parse (combines `TokenIssuer` + `TokenValidator`) |
 | `Transaction` | authentication, invitation, mfa, oauth | Database transaction handle for multi-step mutations |
 
@@ -626,6 +630,19 @@ second as the first token and kept across refreshes); the self-service
 `/identity/v1/me/factors*` routes (`mfahttp.RegisterSelf`) refuse
 impersonated tokens and require a sign-in within `config.MFAFreshAuth` for
 changes (`mfa.Fresh`, 403 `REAUTHENTICATION_REQUIRED`).
+
+**End-user passwords** follow the environment's `authentication.PasswordPolicy`
+(`Check` for new passwords → 400 `PASSWORD_POLICY`, `errx.Error.Public` details
+`rule`/`min_length`; only `Public` details reach clients). Every wrong password
+increments `users.failed_logins` (committed before the uniform 401); reaching
+`lockout_threshold` sets `locked_until` via `authentication.Lockout` (the
+helper `mfa.Lockout` wraps) and audits `user.locked`; a locked account answers
+the same 401 and counts nothing. `user.Commands.Unlock` / a reset clears it.
+`password_changed_at` older than `max_age_days`: headless `Login` answers 403
+`PASSWORD_CHANGE_REQUIRED` until it gets `new_password`, whose hash waits on
+`mfa_logins.password_hash` when a second factor follows; hosted parks
+`hosted_logins.password_change` and asks last, after MFA. Email-code logins
+skip expiry.
 
 Operator console sessions store their sign-in `method` (`password`/`sso`)
 and `authenticated_at` on `operator_sessions`; `management.Principal`

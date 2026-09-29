@@ -67,6 +67,14 @@ wording. Email wording: `GET /delivery/templates`, `GET|PUT|DELETE
 /delivery/templates/:purpose/:locale` (audited `email_template.updated`/`.reset`).
 See [email delivery](../../guides/email-delivery.md) for precedence, fields, wording and rotation.
 
+The end-user [password policy](../../guides/password-policy.md) uses
+`GET /password-policy` (200 policy; the default with `custom: false` when none is
+saved), `PUT /password-policy` (the complete policy: `min_length`, `require_upper`,
+`require_lower`, `require_digit`, `require_symbol`, `max_age_days`,
+`lockout_threshold`, `lockout_minutes`, `breach_check`; 200 saved policy) and
+`DELETE /password-policy` (204, back to the default), audited as
+`password_policy.update`/`password_policy.delete`.
+
 Administrative inventories include `GET /sessions` (optional `user_id` filter), `DELETE /sessions/:id` and
 `GET /audit-events` under this prefix. Sessions carry display labels
 `user_name,user_email,organization_name,application_name,resource_name` and
