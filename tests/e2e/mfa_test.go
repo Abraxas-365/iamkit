@@ -366,12 +366,12 @@ func TestMFALockoutAndFreshAuth(t *testing.T) {
 		t.Fatalf("lockout = %s", locked.Body)
 	}
 	// It lifts after the lockout; the right code then resets the count.
-	if _, err := e.DB.Exec(`UPDATE user_factors SET locked_until=now()-interval '1 second' WHERE user_id=$1`, e.Alice); err != nil {
+	if _, err := e.DB.Exec(`UPDATE user_mfa_state SET locked_until=now()-interval '1 second' WHERE user_id=$1`, e.Alice); err != nil {
 		t.Fatal(err)
 	}
 	pair := e.Must("POST", "/identity/v1/mfa/verify", "", fiber.Map{"mfa_token": token, "code": totp(t, secret, 1)}, 200)
 	var failures int
-	if err := e.DB.Get(&failures, `SELECT failed_attempts FROM user_factors WHERE user_id=$1`, e.Alice); err != nil || failures != 0 {
+	if err := e.DB.Get(&failures, `SELECT failed_attempts FROM user_mfa_state WHERE user_id=$1`, e.Alice); err != nil || failures != 0 {
 		t.Fatalf("failures after success = %d (%v)", failures, err)
 	}
 

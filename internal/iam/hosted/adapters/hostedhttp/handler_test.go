@@ -27,6 +27,7 @@ func TestPagesRenderAndEscape(t *testing.T) {
 		Challenge:     identity.NewChallengeID(),
 		Organizations: []authentication.Organization{{ID: identity.NewOrganizationID(), Name: "Org <b>"}},
 		Token:         "ik_invite_x", Invite: &invitation.Preview{Email: "a***@example.com", PasswordRequired: true},
+		Post: &PostForm{Action: `https://sp.example/acs"><script>`, Fields: [][2]string{{"SAMLResponse", `"><script>x`}}},
 	}
 	for name, page := range pages {
 		var out bytes.Buffer

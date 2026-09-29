@@ -36,6 +36,16 @@ func newFakeIdP(t *testing.T, key *rsa.PrivateKey, client string) *fakeIdP {
 			json.NewEncoder(w).Encode(map[string]any{"issuer": issuer, "authorization_endpoint": issuer + "/authorize", "token_endpoint": issuer + "/token", "jwks_uri": issuer + "/keys", "id_token_signing_alg_values_supported": []string{"RS256"}})
 		case "/keys":
 			json.NewEncoder(w).Encode(map[string]any{"keys": []map[string]any{{"kty": "RSA", "alg": "RS256", "use": "sig", "kid": "provider", "n": base64.RawURLEncoding.EncodeToString(key.N.Bytes()), "e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes())}}})
+		case "/me":
+			// OAuth 2.0 userinfo for oauth2 connections: the login's claims
+			// under "user".
+			if r.Header.Get("Authorization") != "Bearer upstream" {
+				http.Error(w, "unauthorized", 401)
+				return
+			}
+			p.mu.Lock()
+			json.NewEncoder(w).Encode(map[string]any{"user": p.claims})
+			p.mu.Unlock()
 		case "/token":
 			if err := r.ParseForm(); err != nil || r.Form.Get("code") != "provider-code" {
 				http.Error(w, "invalid code", 400)

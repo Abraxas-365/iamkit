@@ -30,7 +30,10 @@ type SignIn struct {
 	AllConnections  bool                    `json:"all_connections"`
 	Connections     []identity.ConnectionID `json:"connection_ids"`
 	// Signup offers "Create account" when the environment allows sign-up.
-	Signup    bool       `json:"signup"`
+	Signup bool `json:"signup"`
+	// Passkey offers "Sign in with a passkey" (and passkey autofill on the
+	// email field).
+	Passkey   bool       `json:"passkey"`
 	Custom    bool       `json:"custom"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	// PasswordReset offers "forgot password" on the page (computed by
@@ -47,6 +50,8 @@ func (s SignIn) Within(p authentication.SignInPolicy) SignIn {
 	if !p.AllowSocial {
 		s.AllConnections, s.Connections = false, []identity.ConnectionID{}
 	}
+	// A passkey is a security key: the webauthn factor must be allowed too.
+	s.Passkey = s.Passkey && p.PasskeyAllowed() && slices.Contains(p.AllowedFactors, "webauthn")
 	s.PasswordReset = s.Password && p.AllowPasswordReset
 	s.Signup = s.Signup && p.AllowSignup && (s.Password || s.EmailCode)
 	return s
@@ -54,7 +59,7 @@ func (s SignIn) Within(p authentication.SignInPolicy) SignIn {
 
 // DefaultSignIn offers every method.
 func DefaultSignIn(environment identity.EnvironmentID, client identity.ClientID) SignIn {
-	return SignIn{Environment: environment, Client: client, Password: true, EmailCode: true, OrganizationSSO: true, AllConnections: true, Connections: []identity.ConnectionID{}, Signup: true}
+	return SignIn{Environment: environment, Client: client, Password: true, EmailCode: true, OrganizationSSO: true, AllConnections: true, Connections: []identity.ConnectionID{}, Signup: true, Passkey: true}
 }
 
 // Normalize drops duplicate connections and the list when all are shown.
@@ -75,7 +80,7 @@ func (s SignIn) Validate() error {
 	if len(s.Connections) > MaxSignInConnections {
 		return errx.Validation("connection_ids has at most 50 connections")
 	}
-	if !s.EmailForm() && !s.AllConnections && len(s.Connections) == 0 {
+	if !s.EmailForm() && !s.Passkey && !s.AllConnections && len(s.Connections) == 0 {
 		return errx.Validation("enable at least one sign-in method")
 	}
 	return nil

@@ -7,10 +7,16 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/adapters/saccthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/adapters/sacctpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/sacctsvc"
+	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
 )
 
-type Deps struct{ DB *sqlx.DB }
+type Deps struct {
+	DB      *sqlx.DB
+	ActorID func(*fiber.Ctx) string
+	// Owner reports whether the caller is a workspace owner.
+	Owner func(*fiber.Ctx) bool
+}
 type Module struct {
 	Commands serviceaccount.Commands
 	Queries  serviceaccount.Queries
@@ -19,5 +25,5 @@ type Module struct {
 
 func New(deps Deps) Module {
 	service := sacctsvc.New(sacctpg.New(deps.DB), mgmtsecret.Generator{})
-	return Module{Commands: service, Queries: service, HTTP: saccthttp.New(service, service)}
+	return Module{Commands: service, Queries: service, HTTP: saccthttp.New(service, service, deps.ActorID, deps.Owner)}
 }

@@ -30,6 +30,34 @@ func bearer(c *fiber.Ctx) string {
 func (h *Tokens) Validate(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
 	return h.validator.Validate(c.Context(), bearer(c), audience, environment)
 }
+
+// Self validates the bearer token by its own claims (any environment and
+// audience IAMKit issued it for) and reads the user's profile.
+func (h *Tokens) Self(c *fiber.Ctx) (authentication.Token, authentication.Profile, error) {
+	token, err := h.validator.ValidateSelf(c.Context(), bearer(c))
+	if err != nil {
+		return token, authentication.Profile{}, err
+	}
+	profile, err := h.queries.Profile(c.Context(), token)
+	return token, profile, err
+}
+
+// ProfileOf reads the profile of a token resolved elsewhere (an opaque
+// OAuth access token introspected by the OAuth module).
+func (h *Tokens) ProfileOf(c *fiber.Ctx, token authentication.Token) (authentication.Profile, error) {
+	return h.queries.Profile(c.Context(), token)
+}
+
+// Verify validates a raw access token by its own claims, like Self does
+// for the bearer token (OAuth token exchange subject tokens).
+func (h *Tokens) Verify(c *fiber.Ctx, raw string) (authentication.Token, error) {
+	return h.validator.ValidateSelf(c.Context(), raw)
+}
+
+// Sign issues an access token for audience without writing a response.
+func (h *Tokens) Sign(c *fiber.Ctx, t authentication.Token, audience string) (string, error) {
+	return h.issuer.Issue(c.Context(), t, audience)
+}
 func (h *Tokens) Issue(c *fiber.Ctx, t authentication.Token, audience, refresh string) error {
 	return h.IssueWith(c, t, audience, refresh, nil)
 }
@@ -37,7 +65,7 @@ func (h *Tokens) Issue(c *fiber.Ctx, t authentication.Token, audience, refresh s
 // IssueWith answers a login that enrolled its first second factor with
 // the recovery codes, shown this once.
 func (h *Tokens) IssueWith(c *fiber.Ctx, t authentication.Token, audience, refresh string, recoveryCodes []string) error {
-	raw, err := h.issuer.Issue(t, audience)
+	raw, err := h.issuer.Issue(c.Context(), t, audience)
 	if err != nil {
 		return err
 	}
@@ -66,8 +94,26 @@ func (h *Tokens) Machine(c *fiber.Ctx) error {
 	}
 	return tokenResponse(c, raw, "")
 }
-func (h *Tokens) JWKS(c *fiber.Ctx) error { return c.JSON(h.issuer.JWKS()) }
-func (h *Tokens) KeyID() string           { return h.issuer.KeyID() }
+
+// IssueMachine is the token response of an already authenticated service
+// account (OAuth client_credentials); it sets Cache-Control like Machine.
+func (h *Tokens) IssueMachine(c *fiber.Ctx, account identity.AccountID) (fiber.Map, error) {
+	raw, err := h.issuer.MachineAccount(c.Context(), account)
+	if err != nil {
+		return nil, err
+	}
+	c.Set("Cache-Control", "no-store")
+	return tokenBody(raw, ""), nil
+}
+func (h *Tokens) JWKS(c *fiber.Ctx) error {
+	out, err := h.issuer.JWKS(c.Context())
+	if err != nil {
+		return err
+	}
+	// Caches may keep it briefly: a new key is published before it signs.
+	c.Set("Cache-Control", "public, max-age=60")
+	return c.JSON(out)
+}
 func (h *Tokens) Introspect(c *fiber.Ctx) error {
 	var input struct {
 		Environment identity.EnvironmentID `json:"environment_id"`

@@ -116,6 +116,8 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	sa := e.Group("/service-accounts", apiauth.ReadWrite(authorization.PermServiceAccountsRead, authorization.PermServiceAccountsWrite))
 	sa.Post("/", s.APIHandlers.ServiceAccounts.Create)
 	sa.Get("/", s.APIHandlers.ServiceAccounts.List)
+	sa.Get("/:id", s.APIHandlers.ServiceAccounts.Find)
+	sa.Put("/:id/authentication", s.APIHandlers.ServiceAccounts.SetAuthentication)
 	sa.Delete("/:id", s.APIHandlers.ServiceAccounts.Revoke)
 
 	// Delivery config
@@ -134,6 +136,14 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 			delivery.Put("/templates/:purpose/:locale", d.SetTemplate)
 			delivery.Delete("/templates/:purpose/:locale", d.ResetTemplate)
 		}
+	}
+	if h := s.APIHandlers.SMS; h != nil {
+		sms := e.Group("/sms", apiauth.ReadWrite(authorization.PermDeliveryRead, authorization.PermDeliveryWrite))
+		sms.Get("/", h.Get)
+		sms.Put("/", h.Set)
+		sms.Delete("/", h.Delete)
+		sms.Get("/status", h.Status)
+		sms.Post("/test", h.Limit, h.Test)
 	}
 }
 

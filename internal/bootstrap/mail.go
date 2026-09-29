@@ -43,7 +43,8 @@ func mailFromEnv() (authentication.Delivery, authmodule.Mail, error) {
 		// loopback or a private network (reopens SSRF from delivery settings).
 		mail.Dial = (&net.Dialer{Timeout: config.ExternalHTTPTimeout}).DialContext
 		mail.WebhookClient = http.DefaultTransport
-		slog.Warn("IAMKIT_ALLOW_PRIVATE_DELIVERY is on: environment email webhooks and SMTP servers may reach localhost and private networks. Development only — never enable it in production")
+		mail.SMSClient = http.DefaultTransport
+		slog.Warn("IAMKIT_ALLOW_PRIVATE_DELIVERY is on: environment email/SMS webhooks and SMTP servers may reach localhost and private networks. Development only — never enable it in production")
 	}
 	port := 0
 	if v := strings.TrimSpace(os.Getenv("SMTP_PORT")); v != "" {

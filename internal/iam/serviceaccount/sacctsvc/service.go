@@ -21,6 +21,7 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	if err := input.Validate(); err != nil {
 		return out, err
 	}
+	input.ClientAuth = input.ClientAuth.WithDefaults(false)
 	ttl, err := identity.ParseTTL(input.ExpiresIn)
 	if err != nil {
 		return out, err
@@ -44,6 +45,33 @@ func (s *Service) Revoke(ctx context.Context, environment identity.EnvironmentID
 		return errx.NotFound("resource not found")
 	}
 	return s.repository.Revoke(ctx, environment, id)
+}
+func (s *Service) SetAuthentication(ctx context.Context, m serviceaccount.Mutation, id identity.AccountID, input identity.ClientAuth) error {
+	if id.IsZero() {
+		return errx.NotFound("resource not found")
+	}
+	input = input.WithDefaults(false)
+	if err := input.Validate(false); err != nil {
+		return err
+	}
+	m.Action, m.Target = "service_account.authentication", id.String()
+	return s.repository.SetAuthentication(ctx, m, id, input)
+}
+func (s *Service) SetImpersonation(ctx context.Context, m serviceaccount.Mutation, owner bool, id identity.AccountID, allowed bool) error {
+	if !owner {
+		return errx.Forbidden("only workspace owners may let a service account impersonate")
+	}
+	if id.IsZero() {
+		return errx.NotFound("resource not found")
+	}
+	m.Action, m.Target = "service_account.impersonation", id.String()
+	return s.repository.SetImpersonation(ctx, m, id, allowed)
+}
+func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, id identity.AccountID) (serviceaccount.Account, error) {
+	if id.IsZero() {
+		return serviceaccount.Account{}, errx.NotFound("resource not found")
+	}
+	return s.repository.Find(ctx, environment, id)
 }
 func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[serviceaccount.Account], error) {
 	return s.repository.List(ctx, environment, page)

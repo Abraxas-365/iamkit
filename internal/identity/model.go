@@ -43,6 +43,50 @@ func Email(value string) (string, error) {
 	return value, nil
 }
 
+// Phone normalizes a phone number to E.164 ("+" then 7 to 15 digits, no
+// leading zero); spaces, dashes, dots and parentheses are dropped.
+func Phone(value string) (string, error) {
+	invalid := errx.Validation("phone must be in international format, e.g. +14155550100")
+	var b strings.Builder
+	for i, r := range strings.TrimSpace(value) {
+		switch {
+		case r == '+' && i == 0, r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ' || r == '-' || r == '.' || r == '(' || r == ')':
+		default:
+			return "", invalid
+		}
+	}
+	out := b.String()
+	if len(out) < 8 || len(out) > 16 || out[0] != '+' || out[1] == '0' {
+		return "", invalid
+	}
+	return out, nil
+}
+
+// FactorKinds are the second-factor kinds, in the order they are offered.
+var FactorKinds = []string{"totp", "webauthn", "sms", "email"}
+
+// ValidateFactors checks a list of allowed second-factor kinds (sign-in
+// policies, organizations): known, distinct, at least one.
+func ValidateFactors(field string, kinds []string) error {
+	if len(kinds) == 0 {
+		return errx.Validation(field + " needs at least one factor")
+	}
+	seen := map[string]bool{}
+	for _, k := range kinds {
+		known := false
+		for _, f := range FactorKinds {
+			known = known || f == k
+		}
+		if !known || seen[k] {
+			return errx.Validation(field + " must list distinct factors among totp, webauthn, sms, email")
+		}
+		seen[k] = true
+	}
+	return nil
+}
+
 // Permissions are resource-local, exact names. Wildcards cannot become
 // application authority. The "management" namespace remains reserved for
 // operator-only console/API authority and can never appear in a resource's

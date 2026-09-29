@@ -29,6 +29,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedoidc"
+	"github.com/Abraxas-365/iamkit/internal/server"
 	"github.com/Abraxas-365/iamkit/migrations"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
@@ -142,6 +143,9 @@ type Harness struct {
 	// IdP routes identity-provider traffic of sealed-secret connections;
 	// tests point it at their TLS provider (see fakeIdP).
 	IdP *switchTransport
+	// Server exposes background work tests drive synchronously
+	// (LogoutDispatcher).
+	Server *server.Server
 }
 
 // switchTransport delegates to a replaceable transport, by default the
@@ -189,9 +193,10 @@ func newHarness(t *testing.T, opts ...bootstrap.Option) *Harness {
 	}
 	idp := &switchTransport{}
 	opts = append([]bootstrap.Option{bootstrap.WithResolver(dns), bootstrap.WithSealer(sealer), bootstrap.WithFederationTransport(idp)}, opts...)
-	app := bootstrap.New(db, key, "https://iam.example", mail, opts...).App()
+	s := bootstrap.New(db, key, "https://iam.example", mail, opts...)
+	app := s.App()
 	t.Cleanup(func() { app.Shutdown() })
-	return &Harness{t: t, DB: db, App: app, Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp}
+	return &Harness{t: t, DB: db, App: app, Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp, Server: s}
 }
 
 // fakeDNS serves TXT records for domain verification; names in fail return

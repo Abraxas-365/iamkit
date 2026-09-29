@@ -22,23 +22,22 @@ type Tokens struct {
 func NewTokens(r authentication.TokenRepository, c authentication.TokenCodec, s authentication.Secrets, o authentication.OAuthTokens) *Tokens {
 	return &Tokens{r, c, s, o}
 }
-func (s *Tokens) KeyID() string { return s.codec.KeyID() }
-func (s *Tokens) JWKS() any     { return s.codec.JWKS() }
-func (s *Tokens) Issue(input authentication.Token, audience string) (string, error) {
+func (s *Tokens) JWKS(ctx context.Context) (any, error) { return s.codec.JWKS(ctx) }
+func (s *Tokens) Issue(ctx context.Context, input authentication.Token, audience string) (string, error) {
 	now := time.Now()
 	input.ID = uuid.NewString()
 	input.Audience = []string{audience}
 	input.IssuedAt = now.Unix()
 	input.NotBefore = now.Unix()
 	input.ExpiresAt = now.Add(config.TokenTTL).Unix()
-	return s.codec.Sign(input)
+	return s.codec.Sign(ctx, input)
 }
 func (s *Tokens) Validate(ctx context.Context, raw string, audience string, environment identity.EnvironmentID) (authentication.Token, error) {
 	var out authentication.Token
 	if environment.IsZero() || audience == "" {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	out, err := s.codec.Verify(raw, audience)
+	out, err := s.codec.Verify(ctx, raw, audience)
 	if err != nil {
 		return out, err
 	}
@@ -52,7 +51,7 @@ func (s *Tokens) Validate(ctx context.Context, raw string, audience string, envi
 	if err != nil || !identity.Subset(out.Permissions, current) {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	if !out.ActorID.IsZero() {
+	if out.Impersonated() {
 		active, err := s.repository.ActorActive(ctx, out)
 		if err != nil || !active {
 			return out, errx.Unauthorized("impersonation actor disabled")
@@ -62,7 +61,7 @@ func (s *Tokens) Validate(ctx context.Context, raw string, audience string, envi
 }
 
 func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.Token, error) {
-	out, err := s.codec.VerifySelf(raw)
+	out, err := s.codec.VerifySelf(ctx, raw)
 	if err != nil {
 		return out, err
 	}
@@ -83,7 +82,7 @@ func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.T
 	if err != nil || !identity.Subset(out.Permissions, current) {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	if !out.ActorID.IsZero() {
+	if out.Impersonated() {
 		active, err := s.repository.ActorActive(ctx, out)
 		if err != nil || !active {
 			return out, errx.Unauthorized("impersonation actor disabled")
@@ -121,7 +120,14 @@ func (s *Tokens) Machine(ctx context.Context, raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return s.Issue(token, audience)
+	return s.Issue(ctx, token, audience)
+}
+func (s *Tokens) MachineAccount(ctx context.Context, account identity.AccountID) (string, error) {
+	token, audience, err := s.repository.MachineAccount(ctx, account)
+	if err != nil {
+		return "", err
+	}
+	return s.Issue(ctx, token, audience)
 }
 func (s *Tokens) Logout(ctx context.Context, token authentication.Token) error {
 	if token.Purpose != "application" {
@@ -142,7 +148,7 @@ func (s *Tokens) Organizations(ctx context.Context, token authentication.Token) 
 	return s.repository.Organizations(ctx, token)
 }
 func (s *Tokens) UpdateProfile(ctx context.Context, token authentication.Token, name string) error {
-	if token.Purpose != "application" || !token.ActorID.IsZero() {
+	if token.Purpose != "application" || token.Impersonated() {
 		return errx.Forbidden("non-impersonated user session required")
 	}
 	name = strings.TrimSpace(name)

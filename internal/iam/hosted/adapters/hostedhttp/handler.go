@@ -1,5 +1,6 @@
 // Package hostedhttp serves the hosted sign-in pages as server-rendered HTML
-// (no JavaScript) and the management API for their branding.
+// and the management API for their branding. Only pages offering a
+// security key or passkey carry a script (webauthn.js, nonce-bound).
 package hostedhttp
 
 import (
@@ -7,8 +8,11 @@ import (
 	"crypto/rand"
 	"embed"
 	"encoding/base64"
+	"encoding/json"
 	"html/template"
 	"log/slog"
+	"slices"
+	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -26,9 +30,15 @@ import (
 //go:embed templates/*.html
 var files embed.FS
 
+// script runs security key and passkey ceremonies on the pages that offer
+// them; it is inlined with the response's nonce.
+//
+//go:embed templates/webauthn.js
+var script string
+
 var pages = func() map[string]*template.Template {
 	out := map[string]*template.Template{}
-	for _, name := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "signup", "signup-code"} {
+	for _, name := range []string{"identify", "password", "directory", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "signup", "signup-code", "device", "device-confirm", "post"} {
 		t := template.Must(template.ParseFS(files, "templates/*.html"))
 		template.Must(t.New("content").Parse(`{{template "` + name + `/content" .}}`))
 		out[name] = t
@@ -53,6 +63,7 @@ type Handler struct {
 	invitations hosted.Invitations
 	finish      Finisher
 	actor       func(*fiber.Ctx) string
+	devices     hosted.Devices
 }
 
 func New(flow hosted.Flow, commands hosted.Commands, queries hosted.Queries, invitations hosted.Invitations, finish Finisher, actor func(*fiber.Ctx) string) *Handler {
@@ -84,25 +95,32 @@ func locales(c *fiber.Ctx) error { return c.JSON(fiber.Map{"items": i18n.Locales
 // Pages are the hosted page handlers; the server mounts them with its rate
 // limits and security headers.
 func (h *Handler) Pages() map[string]fiber.Handler {
-	return map[string]fiber.Handler{
-		"GET /hosted/login":               h.login,
-		"POST /hosted/login/identify":     h.identify,
-		"POST /hosted/login/password":     h.password,
-		"POST /hosted/login/code":         h.sendCode,
-		"POST /hosted/login/code/verify":  h.verifyCode,
-		"POST /hosted/login/reset":        h.sendReset,
-		"POST /hosted/login/reset/verify": h.reset,
-		"GET /hosted/signup":              h.signupPage,
-		"POST /hosted/signup":             h.signup,
-		"POST /hosted/signup/verify":      h.completeSignup,
-		"POST /hosted/login/sso":          h.sso,
-		"POST /hosted/login/organization": h.organization,
-		"POST /hosted/login/mfa":          h.secondFactor,
-		"POST /hosted/login/mfa/continue": h.continueLogin,
-		"POST /hosted/login/password/new": h.changePassword,
-		"GET /hosted/invite":              h.invite,
-		"POST /hosted/invite":             h.accept,
+	pages := map[string]fiber.Handler{
+		"GET /hosted/login":                  h.login,
+		"POST /hosted/login/identify":        h.identify,
+		"POST /hosted/login/password":        h.password,
+		"POST /hosted/login/code":            h.sendCode,
+		"POST /hosted/login/code/verify":     h.verifyCode,
+		"POST /hosted/login/reset":           h.sendReset,
+		"POST /hosted/login/reset/verify":    h.reset,
+		"GET /hosted/signup":                 h.signupPage,
+		"POST /hosted/signup":                h.signup,
+		"POST /hosted/signup/verify":         h.completeSignup,
+		"POST /hosted/login/directory":       h.directory,
+		"POST /hosted/login/sso":             h.sso,
+		"POST /hosted/login/organization":    h.organization,
+		"POST /hosted/login/mfa":             h.secondFactor,
+		"POST /hosted/login/mfa/webauthn":    h.securityKey,
+		"POST /hosted/login/passkey":         h.passkey,
+		"POST /hosted/login/passkey/options": h.passkeyOptions,
+		"POST /hosted/login/mfa/send":        h.sendFactorCode,
+		"POST /hosted/login/mfa/continue":    h.continueLogin,
+		"POST /hosted/login/password/new":    h.changePassword,
+		"GET /hosted/invite":                 h.invite,
+		"POST /hosted/invite":                h.accept,
 	}
+	h.devicePages(pages)
+	return pages
 }
 
 // view is the data every page renders with.
@@ -128,7 +146,38 @@ type view struct {
 	Secret        string
 	QR            template.URL
 	RecoveryCodes []string
+	// UserCode and Device: the device approval pages.
+	UserCode string
+	Device   *oauth.DeviceRequest
+	// Factors are the second factors the login accepts (email and sms
+	// offer to send a code); EnrollEmail offers enrolling the email address.
+	Factors     []string
+	EnrollEmail bool
+	// Post is the form the "post" page submits to another site (a SAML
+	// response to the service provider's ACS).
+	Post *PostForm
 }
+
+// PostForm is a cross-site form post: the action and hidden fields.
+type PostForm struct {
+	Action string
+	Fields [][2]string
+}
+
+// Script is whether the page runs a security key or passkey ceremony.
+func (v view) Script() bool {
+	return v.Offers("webauthn") || (v.SignIn.Passkey && v.Token == "" && v.Invite == nil)
+}
+
+// WebAuthnJS is the ceremony script.
+func (v view) WebAuthnJS() template.JS { return template.JS(script) }
+
+// Offers reports whether the login accepts the factor kind.
+func (v view) Offers(kind string) bool { return slices.Contains(v.Factors, kind) }
+
+// FactorList is Factors for a hidden field (display hint only: the server
+// re-checks every factor it is asked to use).
+func (v view) FactorList() string { return strings.Join(v.Factors, ",") }
 
 // T is the page text for key in the page language.
 func (v view) T(key string, args ...any) string { return i18n.T(v.Lang, key, args...) }
@@ -148,8 +197,18 @@ func render(c *fiber.Ctx, status int, page string, v view) error {
 	if err != nil {
 		return err
 	}
-	// data: images are the server-rendered enrollment QR code.
-	c.Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+v.Nonce+"'; img-src https: data:; base-uri 'none'; frame-ancestors 'none'")
+	// data: images are the server-rendered enrollment QR code; pages with a
+	// security key or passkey run the nonce-bound script, which fetches
+	// ceremony options from these pages' own origin; the post page's script
+	// only submits its form (form-action is left open for it: the action is
+	// a registered ACS URL).
+	scripts := ""
+	if v.Script() {
+		scripts = "; script-src 'nonce-" + v.Nonce + "'; connect-src 'self'"
+	} else if v.Post != nil {
+		scripts = "; script-src 'nonce-" + v.Nonce + "'"
+	}
+	c.Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+v.Nonce+"'; img-src https: data:; base-uri 'none'; frame-ancestors 'none'"+scripts)
 	c.Set("Cache-Control", "no-store")
 	c.Set("Content-Type", fiber.MIMETextHTMLCharsetUTF8)
 	return c.Status(status).Send(out)
@@ -195,8 +254,9 @@ var (
 		"SIGNED_UP_NO_ACCESS":        "hosted.error.signed_up_no_access",
 	}
 	problemMessages = map[string]string{
-		"invalid credentials or access token": "hosted.error.credentials",
-		"invalid challenge":                   "hosted.error.code",
+		"invalid credentials or access token":    "hosted.error.credentials",
+		"invalid challenge":                      "hosted.error.code",
+		"the security key could not be verified": "hosted.error.key",
 		"your organization requires single sign-on, which this application does not offer": "hosted.error.sso_not_offered",
 		"this email cannot sign in to this application with single sign-on":                "hosted.error.sso_email",
 		"your account does not have access to this application":                            "hosted.error.no_access",
@@ -296,7 +356,27 @@ func (h *Handler) identify(c *fiber.Ctx) error {
 		return h.federate(c, route.Redirect, route.Binding)
 	}
 	v.Connection = route.Connection
+	if route.Method == federation.ProviderLDAP {
+		return render(c, fiber.StatusOK, "directory", v)
+	}
 	return render(c, fiber.StatusOK, "password", v)
+}
+
+// directory checks the password with the organization's LDAP directory.
+func (h *Handler) directory(c *fiber.Ctx) error {
+	r := h.request(c)
+	v, ok, err := h.base(c, r)
+	if !ok {
+		return err
+	}
+	v.Title, v.Email = v.T("hosted.title.sign_in"), c.FormValue("email")
+	connection, _ := identity.ParseConnectionID(c.FormValue("connection_id"))
+	v.Connection = &connection
+	result, err := h.flow.Directory(c.Context(), r, connection, v.Email, c.FormValue("password"))
+	if err != nil {
+		return h.retry(c, v, "directory", err)
+	}
+	return h.result(c, v, result)
 }
 
 func (h *Handler) password(c *fiber.Ctx) error {
@@ -430,13 +510,88 @@ func (h *Handler) secondFactor(c *fiber.Ctx) error {
 		return err
 	}
 	enrolling := c.FormValue("enrolling") == "true"
-	result, err := h.flow.SecondFactor(c.Context(), r, c.FormValue("code"))
+	proof := authentication.Proof{Code: c.FormValue("code"), Session: c.FormValue("webauthn_session")}
+	if raw := c.FormValue("credential"); raw != "" {
+		proof.Credential = json.RawMessage(raw)
+	}
+	result, err := h.flow.SecondFactor(c.Context(), r, proof)
 	if err != nil {
 		var e *errx.Error
 		if enrolling && !(errx.As(err, &e) && e.Code == "LOGIN_EXPIRED") {
 			return h.enrollPage(c, r, v, err)
 		}
-		v.Title = v.T("hosted.title.mfa")
+		v.Title, v.Subtitle = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa")
+		v.Factors = factorList(c.FormValue("factors"))
+		return h.retry(c, v, "mfa", err)
+	}
+	return h.result(c, v, result)
+}
+
+// factorList reads the factors hidden field back (display only).
+func factorList(raw string) []string {
+	out := []string{}
+	for _, k := range strings.Split(raw, ",") {
+		if slices.Contains([]string{"totp", "webauthn", "email", "sms", "recovery"}, k) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// securityKey answers the options of the parked login's security key
+// prompt (JSON, for webauthn.js).
+func (h *Handler) securityKey(c *fiber.Ctx) error {
+	out, err := h.flow.SecurityKey(c.Context(), h.request(c))
+	return ceremony(c, out, err)
+}
+
+// passkeyOptions answers the options of a passkey sign-in (JSON).
+func (h *Handler) passkeyOptions(c *fiber.Ctx) error {
+	out, err := h.flow.PasskeyOptions(c.Context(), h.request(c))
+	return ceremony(c, out, err)
+}
+
+// ceremony writes ceremony options, or the error in the page language.
+func ceremony(c *fiber.Ctx, out authentication.WebAuthnOptions, err error) error {
+	c.Set("Cache-Control", "no-store")
+	if err != nil {
+		status, text := failed(c, language(c, ""), err)
+		return c.Status(status).JSON(fiber.Map{"error": text})
+	}
+	return c.JSON(out)
+}
+
+// passkey signs in with the browser's passkey assertion.
+func (h *Handler) passkey(c *fiber.Ctx) error {
+	r := h.request(c)
+	v, ok, err := h.base(c, r)
+	if !ok {
+		return err
+	}
+	v.Title = v.T("hosted.title.sign_in")
+	result, err := h.flow.Passkey(c.Context(), r, c.FormValue("webauthn_session"), []byte(c.FormValue("credential")))
+	if err != nil {
+		return h.retry(c, v, "identify", err)
+	}
+	return h.result(c, v, result)
+}
+
+// sendFactorCode emails or texts a second-factor code, then shows the code
+// page with where it went.
+func (h *Handler) sendFactorCode(c *fiber.Ctx) error {
+	r := h.request(c)
+	v, ok, err := h.base(c, r)
+	if !ok {
+		return err
+	}
+	result, err := h.flow.SendFactorCode(c.Context(), r, c.FormValue("factor"))
+	if err != nil {
+		var e *errx.Error
+		if c.FormValue("enrolling") == "true" && !(errx.As(err, &e) && e.Code == "LOGIN_EXPIRED") {
+			return h.enrollPage(c, r, v, err)
+		}
+		v.Title, v.Subtitle = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa")
+		v.Factors = factorList(c.FormValue("factors"))
 		return h.retry(c, v, "mfa", err)
 	}
 	return h.result(c, v, result)
@@ -455,11 +610,24 @@ func (h *Handler) enrollPage(c *fiber.Ctx, r hosted.Request, v view, problem err
 	return h.renderEnroll(c, status, v, enrollment)
 }
 
-func (h *Handler) renderEnroll(c *fiber.Ctx, status int, v view, e authentication.Enrollment) error {
-	v.Title, v.Subtitle, v.Secret = v.T("hosted.title.enroll"), v.T("hosted.subtitle.enroll"), e.Secret
-	if code, err := qr.Encode(e.URI, qr.M); err == nil {
-		code.Scale = 4
-		v.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(code.PNG()))
+// renderEnroll shows how the login adds a second factor: an authenticator
+// (QR code and key) and/or a code emailed to the address.
+func (h *Handler) renderEnroll(c *fiber.Ctx, status int, v view, result hosted.Result) error {
+	v.Title, v.EnrollEmail = v.T("hosted.title.enroll"), result.EnrollEmail
+	switch {
+	case result.Enroll != nil && result.EnrollEmail:
+		v.Subtitle = v.T("hosted.subtitle.enroll_choice")
+	case result.Enroll != nil:
+		v.Subtitle = v.T("hosted.subtitle.enroll")
+	default:
+		v.Subtitle = v.T("hosted.subtitle.enroll_email")
+	}
+	if e := result.Enroll; e != nil {
+		v.Secret = e.Secret
+		if code, err := qr.Encode(e.URI, qr.M); err == nil {
+			code.Scale = 4
+			v.QR = template.URL("data:image/png;base64," + base64.StdEncoding.EncodeToString(code.PNG()))
+		}
 	}
 	return render(c, status, "enroll", v)
 }
@@ -498,10 +666,14 @@ func (h *Handler) result(c *fiber.Ctx, v view, result hosted.Result) error {
 	case result.Login != nil:
 		return h.finish(c, v.Ticket, *result.Login)
 	case result.SecondFactor:
-		v.Title, v.Subtitle = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa")
+		v.Title, v.Subtitle, v.Factors = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa"), result.Factors
+		if s := result.Sent; s != nil {
+			v.Notice = v.T("hosted.notice.factor_sent_"+s.Factor, s.Destination)
+			v.Subtitle = v.T("hosted.subtitle.mfa_code")
+		}
 		return render(c, fiber.StatusOK, "mfa", v)
-	case result.Enroll != nil:
-		return h.renderEnroll(c, fiber.StatusOK, v, *result.Enroll)
+	case result.Enroll != nil || result.EnrollEmail:
+		return h.renderEnroll(c, fiber.StatusOK, v, result)
 	case len(result.RecoveryCodes) > 0:
 		v.Title, v.Subtitle, v.RecoveryCodes = v.T("hosted.title.recovery"), v.T("hosted.subtitle.recovery"), result.RecoveryCodes
 		return render(c, fiber.StatusOK, "recovery", v)
@@ -549,6 +721,26 @@ func (h *Handler) invite(c *fiber.Ctx) error {
 func invalidInvitation(c *fiber.Ctx) error {
 	lang := language(c, "")
 	return message(c, lang, fiber.StatusBadRequest, i18n.T(lang, "hosted.invitation.title"), i18n.T(lang, "hosted.invitation.invalid"))
+}
+
+// SignedOut is the page /oauth/end_session shows when it does not redirect
+// back to the application: signed out, or why the request was refused. It
+// uses the environment's branding and language when the logout named one.
+func (h *Handler) SignedOut(c *fiber.Ctx, environment identity.EnvironmentID, problem error) error {
+	settings := hosted.Settings{}
+	if !environment.IsZero() {
+		if s, err := h.queries.Settings(c.Context(), environment); err == nil {
+			settings = s
+		}
+	}
+	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, "")}
+	if problem != nil {
+		status, text := failed(c, v.Lang, problem)
+		v.Title, v.Error = v.T("hosted.title.sign_out_failed"), text
+		return render(c, status, "message", v)
+	}
+	v.Title, v.Notice = v.T("hosted.title.signed_out"), v.T("hosted.signed_out")
+	return render(c, fiber.StatusOK, "message", v)
 }
 
 // environmentLanguage is the environment language, else the browser's.

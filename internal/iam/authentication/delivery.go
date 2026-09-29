@@ -199,7 +199,7 @@ type PreviewInput struct {
 const MaxAppName = 100
 
 // PreviewPurposes are the emails IAMKit renders.
-var PreviewPurposes = []string{PurposeLogin, PurposePasswordReset, PurposeEmailVerification, PurposeInvitation, PurposeTest}
+var PreviewPurposes = []string{PurposeLogin, PurposePasswordReset, PurposeEmailVerification, PurposeInvitation, PurposeMFA, PurposeTest}
 
 // Validate checks the purpose and draft wording; an unknown locale falls
 // back like any other.
@@ -312,6 +312,12 @@ var reasons = map[string]string{
 	CodeSMTPRejected:        "SMTP server rejected the message",
 	CodeDeliveryCredential:  "stored credential could not be decrypted",
 	CodeDeliveryAddress:     "email provider address is not allowed",
+	// SMS providers.
+	CodeSMSUnavailable:         "no SMS provider configured",
+	CodeSMSProviderRejected:    "SMS provider rejected the request",
+	CodeSMSProviderAuth:        "SMS provider rejected the credentials",
+	CodeSMSProviderTimeout:     "SMS provider did not respond in time",
+	CodeSMSProviderUnreachable: "SMS provider could not be reached",
 }
 
 // Describe classifies a delivery error into a status (when the webhook or

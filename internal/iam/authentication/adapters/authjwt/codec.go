@@ -1,48 +1,60 @@
 package authjwt
 
 import (
-	"crypto/rsa"
-	"crypto/sha256"
-	"crypto/x509"
-	"encoding/base64"
-	"math/big"
+	"context"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/signing"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// Codec signs with the key the keyring names for the token's environment
+// (its active key, else the deployment key) and verifies by kid.
 type Codec struct {
-	key    *rsa.PrivateKey
+	keys   signing.Keyring
 	issuer string
 }
 
-func New(key *rsa.PrivateKey, issuer string) *Codec { return &Codec{key, issuer} }
+func New(keys signing.Keyring, issuer string) *Codec { return &Codec{keys, issuer} }
+
+// actor is the RFC 8693 act claim.
+type actor struct {
+	Subject string `json:"sub"`
+}
 
 // claims is the JWT payload — all ID fields remain plain strings for JWT serialization.
 type claims struct {
 	identity.Access
-	Purpose       string   `json:"purpose"`
-	SessionID     string   `json:"sid,omitempty"`
-	OAuthClientID string   `json:"oauth_client_id,omitempty"`
-	ActorID       string   `json:"actor_id,omitempty"`
-	AMR           []string `json:"amr,omitempty"`
+	Purpose       string `json:"purpose"`
+	SessionID     string `json:"sid,omitempty"`
+	OAuthClientID string `json:"oauth_client_id,omitempty"`
+	ActorID       string `json:"actor_id,omitempty"`
+	// Act is the RFC 8693 actor: the service account impersonating.
+	Act *actor   `json:"act,omitempty"`
+	AMR []string `json:"amr,omitempty"`
 	// NumericDate accepts the float form fosite writes (1.7e+09).
 	AuthTime *jwt.NumericDate `json:"auth_time,omitempty"`
+	Scopes   []string         `json:"scp,omitempty"`
 	jwt.RegisteredClaims
 }
 
-func (c *Codec) KeyID() string {
-	der, _ := x509.MarshalPKIXPublicKey(&c.key.PublicKey)
-	hash := sha256.Sum256(der)
-	return base64.RawURLEncoding.EncodeToString(hash[:16])
+// JWKS is every published key: the deployment key and every environment
+// key not retired.
+func (c *Codec) JWKS(ctx context.Context) (any, error) {
+	keys, err := c.keys.JWKS(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"keys": keys}, nil
 }
-func (c *Codec) JWKS() any {
-	return map[string]any{"keys": []map[string]any{{"kty": "RSA", "use": "sig", "alg": "RS256", "kid": c.KeyID(), "n": base64.RawURLEncoding.EncodeToString(c.key.N.Bytes()), "e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(c.key.E)).Bytes())}}}
-}
-func (c *Codec) Sign(input authentication.Token) (string, error) {
+func (c *Codec) Sign(ctx context.Context, input authentication.Token) (string, error) {
+	key, err := c.keys.Signer(ctx, input.EnvironmentID)
+	if err != nil {
+		return "", err
+	}
 	payload := claims{
 		Access:        input.Access,
 		Purpose:       input.Purpose,
@@ -50,6 +62,7 @@ func (c *Codec) Sign(input authentication.Token) (string, error) {
 		OAuthClientID: input.OAuthClientID.String(),
 		ActorID:       input.ActorID.String(),
 		AMR:           input.AMR,
+		Scopes:        input.Scopes,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   input.Subject.String(),
 			Issuer:    c.issuer,
@@ -60,22 +73,25 @@ func (c *Codec) Sign(input authentication.Token) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(time.Unix(input.ExpiresAt, 0)),
 		},
 	}
+	if !input.ActorAccount.IsZero() {
+		payload.Act = &actor{Subject: input.ActorAccount.String()}
+	}
 	if input.AuthTime != 0 {
 		payload.AuthTime = jwt.NewNumericDate(time.Unix(input.AuthTime, 0))
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, payload)
-	token.Header["kid"] = c.KeyID()
-	raw, err := token.SignedString(c.key)
+	token.Header["kid"] = key.ID
+	raw, err := token.SignedString(key.Private)
 	if err != nil {
 		return "", errx.Wrap(err, "sign access token", errx.TypeInternal)
 	}
 	return raw, nil
 }
-func (c *Codec) Verify(raw, audience string) (authentication.Token, error) {
-	return c.parse(raw, jwt.WithAudience(audience))
+func (c *Codec) Verify(ctx context.Context, raw, audience string) (authentication.Token, error) {
+	return c.parse(ctx, raw, jwt.WithAudience(audience))
 }
-func (c *Codec) VerifySelf(raw string) (authentication.Token, error) {
-	return c.parse(raw)
+func (c *Codec) VerifySelf(ctx context.Context, raw string) (authentication.Token, error) {
+	return c.parse(ctx, raw)
 }
 
 func mustParse[T any](s string) identity.ID[T] {
@@ -86,11 +102,21 @@ func mustParse[T any](s string) identity.ID[T] {
 	return id
 }
 
-func (c *Codec) parse(raw string, extra ...jwt.ParserOption) (authentication.Token, error) {
+func (c *Codec) parse(ctx context.Context, raw string, extra ...jwt.ParserOption) (authentication.Token, error) {
 	payload := &claims{}
 	opts := append([]jwt.ParserOption{jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer(c.issuer), jwt.WithExpirationRequired()}, extra...)
-	token, err := jwt.ParseWithClaims(raw, payload, func(*jwt.Token) (any, error) { return &c.key.PublicKey, nil }, opts...)
-	if err != nil || !token.Valid {
+	var verifier signing.Verifier
+	token, err := jwt.ParseWithClaims(raw, payload, func(t *jwt.Token) (any, error) {
+		kid, _ := t.Header["kid"].(string)
+		key, err := c.keys.Verifier(ctx, kid)
+		if err != nil {
+			return nil, err
+		}
+		verifier = key
+		return key.Public, nil
+	}, opts...)
+	// An environment key only vouches for its own environment's tokens.
+	if err != nil || !token.Valid || !verifier.Allows(payload.EnvironmentID) {
 		return authentication.Token{}, errx.Unauthorized("invalid credentials or access token")
 	}
 	out := authentication.Token{
@@ -100,11 +126,19 @@ func (c *Codec) parse(raw string, extra ...jwt.ParserOption) (authentication.Tok
 		OAuthClientID: mustParseClient(payload.OAuthClientID),
 		ActorID:       mustParseOperator(payload.ActorID),
 		AMR:           payload.AMR,
+		Scopes:        payload.Scopes,
 		Subject:       mustParseUser(payload.Subject),
 		Issuer:        payload.Issuer,
 		Audience:      []string(payload.Audience),
 		ID:            payload.ID,
 		ExpiresAt:     payload.ExpiresAt.Unix(),
+	}
+	if payload.Act != nil {
+		account, err := identity.ParseAccountID(payload.Act.Subject)
+		if err != nil {
+			return authentication.Token{}, errx.Unauthorized("invalid credentials or access token")
+		}
+		out.ActorAccount = account
 	}
 	if payload.IssuedAt != nil {
 		out.IssuedAt = payload.IssuedAt.Unix()

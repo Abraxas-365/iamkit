@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
-	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/ory/fosite"
 )
@@ -32,11 +32,16 @@ func (s *Store) Client(ctx context.Context, id string) (*oauth.Client, error) {
 	return s.Clients.FindActive(ctx, s.Environment, clientID)
 }
 func clientDTO(c *oauth.Client) *fosite.DefaultOpenIDConnectClient {
-	method := "client_secret_basic"
-	if c.Public {
-		method = "none"
+	return authClient(&fosite.DefaultClient{ID: c.ID.String(), Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: []string{"openid", "profile", "email", "offline_access"}, Public: c.Public, Audience: []string{c.Audience}, GrantTypes: grantTypes(c), ResponseTypes: []string{"code"}}, c.Auth)
+}
+
+// grantTypes are the client's grants (the defaults for a client built
+// without them).
+func grantTypes(c *oauth.Client) []string {
+	if len(c.GrantTypes) == 0 {
+		return oauth.DefaultGrantTypes
 	}
-	return &fosite.DefaultOpenIDConnectClient{DefaultClient: &fosite.DefaultClient{ID: c.ID.String(), Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: []string{"openid", "profile", "email", "offline_access"}, Public: c.Public, Audience: []string{c.Audience}, GrantTypes: []string{"authorization_code", "refresh_token"}, ResponseTypes: []string{"code"}}, TokenEndpointAuthMethod: method}
+	return c.GrantTypes
 }
 func (s *Store) GetClient(ctx context.Context, id string) (fosite.Client, error) {
 	c, err := s.Client(ctx, id)
@@ -49,11 +54,11 @@ func (s *Store) GetClient(ctx context.Context, id string) (fosite.Client, error)
 	}
 	return clientDTO(c), nil
 }
-func (s *Store) ClientAssertionJWTValid(context.Context, string) error {
-	return fosite.ErrInvalidClient
+func (s *Store) ClientAssertionJWTValid(ctx context.Context, jti string) error {
+	return Assertions{s.DB}.Valid(ctx, jti)
 }
-func (s *Store) SetClientAssertionJWT(context.Context, string, time.Time) error {
-	return fosite.ErrInvalidClient
+func (s *Store) SetClientAssertionJWT(ctx context.Context, jti string, expires time.Time) error {
+	return Assertions{s.DB}.Use(ctx, jti, expires)
 }
 func SignatureHash(signature string) string {
 	h := sha256.Sum256([]byte(signature))

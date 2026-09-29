@@ -17,6 +17,10 @@ type User struct {
 	Active        bool            `json:"active" db:"active"`
 	EmailVerified bool            `json:"email_verified" db:"email_verified"`
 	OTPEnabled    bool            `json:"otp_enabled" db:"otp_enabled"`
+	// Phone is the user's number (E.164, "" when none); PhoneVerified once
+	// an SMS code sent to it was entered (SMS second factor).
+	Phone         string          `json:"phone" db:"phone"`
+	PhoneVerified bool            `json:"phone_verified" db:"phone_verified"`
 	Metadata      json.RawMessage `json:"metadata" db:"metadata"`
 	// FailedLogins counts wrong passwords in a row; LockedUntil is set while
 	// the password policy locks the account (POST .../unlock clears both).
@@ -51,11 +55,32 @@ type Update struct {
 	Active     *bool           `json:"active"`
 	OTPEnabled *bool           `json:"otp_enabled"`
 	Metadata   json.RawMessage `json:"metadata"`
+	// Phone sets the user's number ("" clears it); a changed number is no
+	// longer verified. It never changes an enrolled SMS factor.
+	Phone *string `json:"phone"`
+}
+
+// Normalize brings the phone number to E.164 when it is valid.
+func (u Update) Normalize() Update {
+	if u.Phone != nil && strings.TrimSpace(*u.Phone) != "" {
+		if phone, err := identity.Phone(*u.Phone); err == nil {
+			u.Phone = &phone
+		}
+	} else if u.Phone != nil {
+		empty := ""
+		u.Phone = &empty
+	}
+	return u
 }
 
 func (u Update) Validate() error {
 	if u.Name != nil && strings.TrimSpace(*u.Name) == "" {
 		return errx.Validation("user name is required")
+	}
+	if u.Phone != nil && *u.Phone != "" {
+		if _, err := identity.Phone(*u.Phone); err != nil {
+			return err
+		}
 	}
 	return nil
 }

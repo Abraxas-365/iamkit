@@ -192,7 +192,9 @@ func TestHostedLoginJourney(t *testing.T) {
 	login := b.authorize(client)
 	csp := login.Header.Get("Content-Security-Policy")
 	if !strings.Contains(csp, "default-src 'none'") || !strings.Contains(csp, "style-src 'nonce-") || !strings.Contains(csp, "frame-ancestors 'none'") ||
-		login.Header.Get("X-Frame-Options") != "DENY" || login.Header.Get("Cache-Control") != "no-store" || strings.Contains(login.Body, "<script") {
+		login.Header.Get("X-Frame-Options") != "DENY" || login.Header.Get("Cache-Control") != "no-store" ||
+		// The only script (passkeys) is the embedded one, bound to the nonce.
+		strings.Count(login.Body, "<script") != strings.Count(login.Body, "<script nonce=") || strings.Contains(csp, "unsafe-inline") {
 		t.Fatalf("headers = %v", login.Header)
 	}
 	// A ticket without its browser binding is useless.

@@ -49,6 +49,11 @@ func (t *Transaction) PasswordUser(ctx context.Context, b authentication.Context
 	err := t.tx.GetContext(ctx, &row, `SELECT id,password_hash,failed_logins,locked_until,password_changed_at FROM users WHERE environment_id=$1 AND email=$2 AND active FOR UPDATE`, b.EnvironmentID, email)
 	return row, credentialError(err)
 }
+func (t *Transaction) ActiveEmail(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (string, error) {
+	var email string
+	err := t.tx.GetContext(ctx, &email, `SELECT email FROM users WHERE environment_id=$1 AND id=$2 AND active`, environment, user)
+	return email, credentialError(err)
+}
 func (t *Transaction) SetLoginFailures(ctx context.Context, user identity.UserID, failures int, lockedUntil *time.Time) error {
 	_, err := t.tx.ExecContext(ctx, `UPDATE users SET failed_logins=$2,locked_until=$3 WHERE id=$1`, user, failures, lockedUntil)
 	return failure(err)
@@ -76,12 +81,12 @@ func (t *Transaction) SSORequired(ctx context.Context, b authentication.Context,
 }
 func (t *Transaction) OrganizationMethods(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (authentication.Methods, error) {
 	var out authentication.Methods
-	err := t.tx.GetContext(ctx, &out, `SELECT allow_password,allow_email_code,allow_social FROM organizations WHERE environment_id=$1 AND id=$2`, environment, organization)
+	err := t.tx.GetContext(ctx, &out, `SELECT allow_password,allow_email_code,allow_social,allow_passkey AND 'webauthn'=ANY(allowed_factors) AS allow_passkey FROM organizations WHERE environment_id=$1 AND id=$2`, environment, organization)
 	return out, credentialError(err)
 }
 func (t *Transaction) AccessibleOrganizations(ctx context.Context, target authentication.Target, user identity.UserID) ([]authentication.Organization, error) {
 	out := []authentication.Organization{}
-	err := t.tx.SelectContext(ctx, &out, `SELECT o.id,o.name,m.org_unit_id,m.manager_id,o.allow_password,o.allow_email_code,o.allow_social FROM memberships m
+	err := t.tx.SelectContext(ctx, &out, `SELECT o.id,o.name,m.org_unit_id,m.manager_id,o.allow_password,o.allow_email_code,o.allow_social,o.allow_passkey AND 'webauthn'=ANY(o.allowed_factors) AS allow_passkey FROM memberships m
 		JOIN users u ON u.id=m.user_id AND u.environment_id=m.environment_id
 		JOIN organizations o ON o.id=m.organization_id AND o.environment_id=m.environment_id
 		JOIN applications a ON a.id=$3 AND a.environment_id=m.environment_id

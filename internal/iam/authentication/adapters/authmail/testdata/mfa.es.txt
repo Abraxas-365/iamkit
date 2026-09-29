@@ -1,0 +1,10 @@
+Subject: Tu código de verificación de Acme
+
+Tu código de verificación
+
+Ingresa este código para confirmar que eres tú. Vence en 5 minutos.
+
+    12345678
+
+--
+Si no intentaste iniciar sesión, alguien podría conocer tu contraseña: cámbiala.

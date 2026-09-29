@@ -15,7 +15,7 @@ func TestEmailTemplates(t *testing.T) {
 	path := e.Base + "/delivery/templates"
 
 	grid := e.Must("GET", path, e.Owner, nil, 200).JSON["items"].([]any)
-	if len(grid) != 10 {
+	if len(grid) != 12 { // 6 purposes (incl. mfa) × 2 languages
 		t.Fatalf("grid = %d items", len(grid))
 	}
 	for _, item := range grid {

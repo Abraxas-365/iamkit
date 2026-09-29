@@ -20,12 +20,30 @@ func (r *Repository) Current(ctx context.Context, t authentication.Token, enviro
 	}
 	return []string(current), credentialError(err)
 }
+
+// ActorActive reports whether whoever impersonates in the token's session
+// may still do so: a workspace owner (operators) or a live service account
+// still allowed to impersonate.
 func (r *Repository) ActorActive(ctx context.Context, t authentication.Token) (bool, error) {
 	var active bool
+	if !t.ActorAccount.IsZero() {
+		err := r.db.GetContext(ctx, &active, `SELECT EXISTS(SELECT 1 FROM sessions s JOIN service_accounts a ON a.id=s.actor_account_id AND a.environment_id=s.environment_id WHERE s.id=$1 AND s.actor_account_id=$2 AND a.can_impersonate AND a.revoked_at IS NULL AND a.expires_at>now())`, t.SessionID, t.ActorAccount)
+		return active, failure(err)
+	}
 	err := r.db.GetContext(ctx, &active, `SELECT EXISTS(SELECT 1 FROM sessions s JOIN environments e ON e.id=s.environment_id JOIN projects p ON p.id=e.project_id JOIN workspace_members m ON m.workspace_id=p.workspace_id AND m.operator_id=s.actor_id WHERE s.id=$1 AND s.actor_id=$2 AND m.active AND m.role='owner')`, t.SessionID, t.ActorID)
 	return active, failure(err)
 }
 func (r *Repository) Machine(ctx context.Context, hash []byte) (authentication.Token, string, error) {
+	// An account that authenticates with private_key_jwt has no usable secret.
+	return r.machine(ctx, `s.secret_hash=$1 AND s.token_endpoint_auth_method<>'private_key_jwt'`, hash)
+}
+
+// MachineAccount is Machine for an account authenticated another way
+// (OAuth client_credentials, including private_key_jwt).
+func (r *Repository) MachineAccount(ctx context.Context, account identity.AccountID) (authentication.Token, string, error) {
+	return r.machine(ctx, `s.id=$1`, account)
+}
+func (r *Repository) machine(ctx context.Context, match string, arg any) (authentication.Token, string, error) {
 	var row struct {
 		ID          identity.UserID        `db:"id"`
 		Environment identity.EnvironmentID `db:"environment_id"`
@@ -34,7 +52,7 @@ func (r *Repository) Machine(ctx context.Context, hash []byte) (authentication.T
 		Audience    string                 `db:"audience"`
 		Permissions pq.StringArray         `db:"permissions"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT s.id,s.environment_id,s.application_id,s.resource_id,r.audience,s.permissions FROM service_accounts s JOIN resources r ON r.id=s.resource_id AND r.environment_id=s.environment_id JOIN applications a ON a.id=s.application_id AND a.environment_id=s.environment_id WHERE s.secret_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND a.active`, hash)
+	err := r.db.GetContext(ctx, &row, `SELECT s.id,s.environment_id,s.application_id,s.resource_id,r.audience,s.permissions FROM service_accounts s JOIN resources r ON r.id=s.resource_id AND r.environment_id=s.environment_id JOIN applications a ON a.id=s.application_id AND a.environment_id=s.environment_id WHERE `+match+` AND s.revoked_at IS NULL AND s.expires_at>now() AND a.active`, arg)
 	if err != nil {
 		return authentication.Token{}, "", errx.Unauthorized("invalid credentials or access token")
 	}

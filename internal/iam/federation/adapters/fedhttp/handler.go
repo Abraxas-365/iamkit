@@ -193,6 +193,62 @@ func (h *Handler) CallbackForm(c *fiber.Ctx) error {
 	return c.Redirect("/identity/v1/federation/callback?"+q.Encode(), fiber.StatusSeeOther)
 }
 
+// ACS is the SAML assertion consumer service (HTTP-POST binding). Like
+// CallbackForm, the cross-site POST carries no binding cookie, so the
+// response is parked for its RelayState and a 303 hands its one-time
+// handle to the GET callback, which the browser sends with the cookie.
+func (h *Handler) ACS(c *fiber.Ctx) error {
+	c.Set("Cache-Control", "no-store")
+	c.Set("Referrer-Policy", "no-referrer")
+	state := c.FormValue("RelayState")
+	handle, err := h.flows.Assertion(c.Context(), state, c.FormValue("SAMLResponse"))
+	if err != nil {
+		return err
+	}
+	q := url.Values{"code": {handle}, "state": {state}}
+	return c.Redirect("/identity/v1/federation/callback?"+q.Encode(), fiber.StatusSeeOther)
+}
+
+// SAMLMetadata serves a SAML connection's service provider metadata; its
+// URL is the service provider's entity ID.
+func (h *Handler) SAMLMetadata(c *fiber.Ctx) error {
+	environment, err := identity.ParseEnvironmentID(c.Params("environment"))
+	if err != nil {
+		return errx.NotFound("SAML connection not found")
+	}
+	connection, err := identity.ParseConnectionID(c.Params("connection"))
+	if err != nil {
+		return errx.NotFound("SAML connection not found")
+	}
+	out, err := h.flows.SAMLMetadata(c.Context(), environment, connection)
+	if err != nil {
+		return err
+	}
+	c.Set("Content-Type", "application/samlmetadata+xml")
+	c.Set("Cache-Control", "public, max-age=300")
+	return c.Send(out)
+}
+
+// DirectoryLogin signs in with a password the organization's LDAP
+// directory checks (Discovery.Provider "ldap"); it answers like
+// /identity/v1/login.
+func (h *Handler) DirectoryLogin(c *fiber.Ctx) error {
+	var input struct {
+		authentication.Context
+		Connection identity.ConnectionID `json:"connection_id"`
+		Email      string                `json:"email"`
+		Password   string                `json:"password"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	out, err := h.flows.Directory(c.Context(), input.Context, input.Connection, input.Email, input.Password)
+	if err != nil {
+		return err
+	}
+	return h.respond(c, out)
+}
+
 // Discover serves POST /identity/v1/discover: which login method an email
 // should use. The answer depends only on the email's domain.
 func (h *Handler) Discover(c *fiber.Ctx) error {

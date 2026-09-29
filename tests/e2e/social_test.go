@@ -22,7 +22,7 @@ func TestSocialLogin(t *testing.T) {
 	// Sign-up needs an organization of the environment; organization
 	// connections cannot sign up or link.
 	e.Must("POST", connections, e.Owner, fiber.Map{"name": "Social", "issuer": idp.URL, "client_id": "social-client", "client_secret": "sealed-secret", "signup": true}, 400)
-	e.Must("POST", connections, e.Owner, fiber.Map{"organization_id": e.Org, "name": "Org", "issuer": idp.URL, "client_id": "social-client", "client_secret": "sealed-secret", "link_email": true}, 400)
+	e.Must("POST", connections, e.Owner, fiber.Map{"organization_id": e.Org, "name": "Org", "issuer": idp.URL, "client_id": "social-client", "client_secret": "sealed-secret", "signup": true, "signup_organization_id": e.Org}, 400)
 	e.Must("POST", connections, e.Owner, fiber.Map{"name": "Social", "provider": "google", "issuer": idp.URL, "client_id": "social-client", "client_secret": "x"}, 400)
 	group := e.ID("POST", e.Base+"/organizations/"+e.Org+"/groups", fiber.Map{"name": "Customers"})
 	reader := e.ID("POST", e.Base+"/roles", fiber.Map{"name": "reader", "resource_id": e.Res, "permissions": []string{"invoices:read"}})

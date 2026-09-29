@@ -3,7 +3,6 @@ package authmodule
 
 import (
 	"context"
-	"crypto/rsa"
 	"net"
 	"net/http"
 	"sync/atomic"
@@ -16,8 +15,10 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authmail"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authsecret"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authsms"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authsvc"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
+	"github.com/Abraxas-365/iamkit/internal/iam/signing"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
@@ -25,12 +26,13 @@ import (
 
 type Deps struct {
 	DB           *sqlx.DB
-	Key          *rsa.PrivateKey
+	Keys         signing.Keyring // signs and verifies tokens (per-environment keys, deployment key)
 	Issuer       string
 	Delivery     authentication.Delivery
 	OAuthTokens  authentication.OAuthTokens // nil rejects every OAuth-issued access token
 	IssueSession func(*fiber.Ctx, authentication.Issued) error
 	SecondFactor authentication.SecondFactor // nil disables MFA
+	Passkeys     authentication.Passkeys     // nil disables passkey sign-in
 	Cipher       authentication.Cipher       // seals delivery secrets; nil refuses to store them
 	ActorID      func(*fiber.Ctx) string     // operator of management routes
 	// Breaches checks new passwords against known breaches when a policy
@@ -51,6 +53,10 @@ type Mail struct {
 	ResendEndpoint string
 	ResendClient   http.RoundTripper
 	WebhookClient  http.RoundTripper
+	// SMSClient reaches environment SMS endpoints (default guarded);
+	// TwilioEndpoint replaces Twilio's API base (tests).
+	SMSClient      http.RoundTripper
+	TwilioEndpoint string
 }
 
 // Sender is a deployment-wide email provider IAMKit renders for.
@@ -76,8 +82,14 @@ type Module struct {
 	SignInPolicies     authentication.SignInPolicyQueries
 	SignInPoliciesHTTP *authhttp.SignInPolicyHandler
 	// Signups is self-registration (the hosted pages use it too).
-	Signups    authentication.SignupCommands
+	Signups authentication.SignupCommands
+	// Passkeys is passkey sign-in; nil when Deps.Passkeys is.
+	Passkeys   authentication.PasskeyCommands
 	SignupHTTP *authhttp.SignupHandler
+	// SMS is the environment's SMS provider (second-factor texts).
+	SMS        authentication.SMSCommands
+	SMSQueries authentication.SMSQueries
+	SMSHTTP    *authhttp.SMSHandler
 	// Brand sets where rendered emails read the environment's brand, once
 	// the module owning it is built.
 	Brand func(authentication.Branding)
@@ -114,6 +126,9 @@ func New(deps Deps) Module {
 	service := authsvc.New(repo, authbcrypt.Hasher{}, authsecret.Generator{}, global)
 	if deps.SecondFactor != nil {
 		service.SetSecondFactor(deps.SecondFactor)
+	}
+	if deps.Passkeys != nil {
+		service.SetPasskeys(deps.Passkeys)
 	}
 	policies := authsvc.NewPasswordPolicies(authpg.NewPasswordPolicyRepository(deps.DB), deps.Breaches)
 	service.SetPasswordPolicies(policies)
@@ -152,13 +167,20 @@ func New(deps Deps) Module {
 	deliverySvc.SetRenderer(renderer)
 	deliverySvc.SetTemplates(templates)
 	service.SetDeliveryService(deliverySvc)
-	tokens := authsvc.NewTokens(repo, authjwt.New(deps.Key, deps.Issuer), authsecret.Generator{}, deps.OAuthTokens)
+	sms := authsvc.NewSMSService(authpg.NewSMSRepository(deps.DB), authsvc.SMSFactory(authsms.Factory(deps.Mail.SMSClient, deps.Mail.TwilioEndpoint)), deps.Cipher, branding, deps.Mail.Locale)
+	tokens := authsvc.NewTokens(repo, authjwt.New(deps.Keys, deps.Issuer), authsecret.Generator{}, deps.OAuthTokens)
+	var passkeys authentication.PasskeyCommands
+	if deps.Passkeys != nil {
+		passkeys = service
+	}
 	return Module{
+		Passkeys: passkeys,
 		Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens),
-		HTTP: authhttp.New(service, service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc,
+		HTTP: authhttp.New(service, service, service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc,
 		PasswordPolicies: policies, PasswordPoliciesHTTP: authhttp.NewPasswordPolicyHandler(policies, policies, deps.ActorID),
 		SignInPolicies: signIns, SignInPoliciesHTTP: authhttp.NewSignInPolicyHandler(signIns, signIns, deps.ActorID),
 		Signups: service, SignupHTTP: authhttp.NewSignupHandler(service),
+		SMS: sms, SMSQueries: sms, SMSHTTP: authhttp.NewSMSHandler(sms, sms, deps.ActorID),
 		Brand: func(b authentication.Branding) { branding.b.Store(&b) },
 	}
 }

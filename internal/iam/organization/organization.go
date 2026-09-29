@@ -19,12 +19,16 @@ type Organization struct {
 	// MFAForFederated: SSO logins follow the same rule instead of trusting
 	// the identity provider.
 	MFAForFederated bool `json:"mfa_for_federated"`
-	// AllowPassword, AllowEmailCode and AllowSocial narrow the sign-in
-	// methods the environment allows (they never widen them); the
-	// organization's own SSO follows its enforcement instead.
+	// AllowPassword, AllowEmailCode, AllowSocial and AllowPasskey narrow
+	// the sign-in methods the environment allows (they never widen them);
+	// the organization's own SSO follows its enforcement instead.
 	AllowPassword  bool `json:"allow_password"`
 	AllowEmailCode bool `json:"allow_email_code"`
 	AllowSocial    bool `json:"allow_social"`
+	AllowPasskey   bool `json:"allow_passkey"`
+	// AllowedFactors narrow the environment's allowed second factors
+	// (default all: the environment decides).
+	AllowedFactors []string `json:"allowed_factors"`
 }
 type Summary struct {
 	ID     identity.OrganizationID `json:"id" db:"id"`
@@ -46,11 +50,16 @@ type Update struct {
 	AllowPassword   *bool           `json:"allow_password"`
 	AllowEmailCode  *bool           `json:"allow_email_code"`
 	AllowSocial     *bool           `json:"allow_social"`
+	AllowPasskey    *bool           `json:"allow_passkey"`
+	AllowedFactors  []string        `json:"allowed_factors"`
 }
 
 func (u Update) Validate() error {
 	if u.Name != nil && strings.TrimSpace(*u.Name) == "" {
 		return errx.Validation("organization name is required")
+	}
+	if u.AllowedFactors != nil {
+		return identity.ValidateFactors("allowed_factors", u.AllowedFactors)
 	}
 	return nil
 }

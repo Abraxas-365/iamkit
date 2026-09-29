@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
@@ -17,11 +18,12 @@ type Service struct {
 	cipher     federation.Cipher
 	secrets    federation.Secrets
 	sessions   federation.Sessions
+	directory  federation.Directory
 	issuer     string
 }
 
-func New(r federation.Repository, p federation.Provider, cipher federation.Cipher, secrets federation.Secrets, sessions federation.Sessions, issuer string) *Service {
-	return &Service{r, p, cipher, secrets, sessions, issuer}
+func New(r federation.Repository, p federation.Provider, directory federation.Directory, cipher federation.Cipher, secrets federation.Secrets, sessions federation.Sessions, issuer string) *Service {
+	return &Service{repository: r, provider: p, directory: directory, cipher: cipher, secrets: secrets, sessions: sessions, issuer: issuer}
 }
 
 func (s *Service) Create(ctx context.Context, m federation.Mutation, input federation.ConnectionInput) (identity.ConnectionID, error) {
@@ -29,6 +31,11 @@ func (s *Service) Create(ctx context.Context, m federation.Mutation, input feder
 		return identity.ConnectionID{}, err
 	}
 	c := input.Connection(m.Environment)
+	c.ID = identity.NewConnectionID()
+	c, err := s.prepare(ctx, c)
+	if err != nil {
+		return identity.ConnectionID{}, err
+	}
 	if err := s.check(ctx, c); err != nil {
 		return identity.ConnectionID{}, err
 	}
@@ -42,8 +49,19 @@ func (s *Service) Create(ctx context.Context, m federation.Mutation, input feder
 		}
 		c.Sealed = sealed
 	}
-	c.ID = identity.NewConnectionID()
 	return c.ID, s.repository.Create(ctx, m, c)
+}
+
+// prepare lets the provider complete a connection (SAML metadata) and
+// requires HTTPS for SAML, whose endpoints live under the issuer.
+func (s *Service) prepare(ctx context.Context, c federation.Connection) (federation.Connection, error) {
+	if c.Provider != federation.ProviderSAML {
+		return c, nil
+	}
+	if !strings.HasPrefix(s.issuer, "https://") {
+		return c, errx.Validation("SAML connections require an HTTPS issuer")
+	}
+	return s.provider.Prepare(ctx, c)
 }
 
 func (s *Service) Update(ctx context.Context, m federation.Mutation, id identity.ConnectionID, input federation.ConnectionUpdate) error {
@@ -60,6 +78,19 @@ func (s *Service) Update(ctx context.Context, m federation.Mutation, id identity
 	c, err := input.Apply(current)
 	if err != nil {
 		return err
+	}
+	if c.Provider == federation.ProviderSAML && input.Options != nil {
+		// Refetch or reparse the metadata; the identity provider's entity
+		// ID is what linked subjects belong to, so it cannot change.
+		if input.Options.MetadataURL != "" && input.Options.MetadataXML == "" {
+			c.Options.MetadataXML = ""
+		}
+		if c, err = s.prepare(ctx, c); err != nil {
+			return err
+		}
+		if c.Issuer != current.Issuer {
+			return errx.Validation("the metadata names another identity provider entity ID; create another connection")
+		}
 	}
 	if c.Provider == federation.ProviderApple && input.ClientSecret != nil {
 		if _, err = federation.ParseAppleKey(*input.ClientSecret); err != nil {
@@ -156,6 +187,13 @@ func (s *Service) Connection(ctx context.Context, environment identity.Environme
 	}
 	out, err := s.repository.FindDetail(ctx, environment, connectionID)
 	out.Callback = s.provider.Callback()
+	if out.Provider == federation.ProviderSAML {
+		sp := federation.SAMLServiceProvider(s.issuer, environment, connectionID)
+		out.SAML, out.Callback = &sp, sp.ACS
+	}
+	if out.Provider == federation.ProviderLDAP {
+		out.Callback = ""
+	}
 	return out, err
 }
 func (s *Service) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID, page query.Pagination) (query.Paginated[federation.ExternalIdentityView], error) {
@@ -229,6 +267,9 @@ func (s *Service) connection(ctx context.Context, environment identity.Environme
 
 func (s *Service) start(ctx context.Context, connection federation.Connection, row federation.State) (federation.Start, error) {
 	var out federation.Start
+	if connection.Provider == federation.ProviderLDAP {
+		return out, errx.Validation("LDAP connections sign in with a password: POST /identity/v1/federation/ldap/login")
+	}
 	state, hash, err := s.secrets.Generate("ik_state_")
 	if err != nil {
 		return out, err
@@ -267,24 +308,25 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 	if err != nil {
 		return out, err
 	}
+	if connection.Provider == federation.ProviderSAML {
+		// The code is the handle the assertion consumer service parked the
+		// response under, for this state only.
+		if code, err = s.repository.TakeAssertion(ctx, s.secrets.Hash(state), s.secrets.Hash(code)); err != nil {
+			return out, err
+		}
+	}
 	claims, err := s.provider.Verify(ctx, connection, code, row.Nonce, row.Verifier)
 	if err != nil {
 		return out, err
 	}
-	tx, user, err := s.repository.LinkedUser(ctx, row.Boundary.EnvironmentID, row.Connection, claims.Subject)
+	if claims.Assertion != "" {
+		if err = s.repository.UseAssertion(ctx, connection.ID, claims.Assertion, claims.AssertionExpires); err != nil {
+			return out, err
+		}
+	}
+	tx, user, err := s.account(ctx, connection, claims)
 	if err != nil {
 		return out, err
-	}
-	if tx == nil {
-		if err = s.join(ctx, connection, claims); err != nil {
-			return out, err
-		}
-		if tx, user, err = s.repository.LinkedUser(ctx, row.Boundary.EnvironmentID, row.Connection, claims.Subject); err != nil {
-			return out, err
-		}
-		if tx == nil {
-			return out, errx.Unauthorized("external identity is not linked")
-		}
 	}
 	defer tx.Rollback()
 	// Enforcement is checked for the account's own email: the provider's
@@ -306,6 +348,102 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 	return out, err
 }
 
+// account refreshes the profile when the connection asks for it, then
+// returns the user linked to the claims' subject, linking it first when the
+// connection allows (join), with the open transaction to sign in with.
+func (s *Service) account(ctx context.Context, connection federation.Connection, claims federation.Claims) (authentication.Transaction, federation.Account, error) {
+	if connection.UpdateProfile {
+		// Before the lookup, so the session carries the refreshed email.
+		if err := s.repository.Refresh(ctx, connection.Profile(claims)); err != nil {
+			return nil, federation.Account{}, err
+		}
+	}
+	tx, user, err := s.repository.LinkedUser(ctx, connection.Environment, connection.ID, claims.Subject)
+	if err != nil || tx != nil {
+		return tx, user, err
+	}
+	if err = s.join(ctx, connection, claims); err != nil {
+		return nil, federation.Account{}, err
+	}
+	if tx, user, err = s.repository.LinkedUser(ctx, connection.Environment, connection.ID, claims.Subject); err != nil {
+		return nil, federation.Account{}, err
+	}
+	if tx == nil {
+		return nil, federation.Account{}, errx.Unauthorized("external identity is not linked")
+	}
+	return tx, user, nil
+}
+
+// Directory signs in headlessly with a password the organization's LDAP
+// directory checks. Like the organization's other single sign-on, it
+// satisfies SSO enforcement and its MFA policy for federated logins.
+func (s *Service) Directory(ctx context.Context, b authentication.Context, id identity.ConnectionID, email, password string) (authentication.Result, error) {
+	if err := b.Validate(); err != nil {
+		return authentication.Result{}, err
+	}
+	connection, claims, err := s.bind(ctx, b.EnvironmentID, id, email, password)
+	if err != nil {
+		return authentication.Result{}, err
+	}
+	if connection.Organization != b.OrganizationID {
+		return authentication.Result{}, errx.Validation("connection belongs to another organization")
+	}
+	tx, user, err := s.account(ctx, connection, claims)
+	if err != nil {
+		return authentication.Result{}, err
+	}
+	defer tx.Rollback()
+	result, err := s.sessions.SignIn(ctx, tx, b, user.ID, user.Email, true)
+	if unauthorized(err) {
+		return result, errx.Forbidden("signed in, but the user has no access to this application")
+	}
+	return result, err
+}
+
+// DirectoryHosted checks a directory password for the hosted pages.
+func (s *Service) DirectoryHosted(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID, email, password string) (authentication.Verified, error) {
+	connection, claims, err := s.bind(ctx, environment, id, email, password)
+	if err != nil {
+		return authentication.Verified{}, err
+	}
+	tx, user, err := s.account(ctx, connection, claims)
+	if err != nil {
+		return authentication.Verified{}, err
+	}
+	defer tx.Rollback()
+	return authentication.Verified{User: user.ID, Email: user.Email, Method: authentication.MethodSSO, Organization: connection.Organization}, nil
+}
+
+// bind checks the password with the directory of an active LDAP
+// connection. The email must be on a domain the organization verified, so
+// a directory cannot sign in addresses its organization does not own.
+func (s *Service) bind(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID, email, password string) (federation.Connection, federation.Claims, error) {
+	var claims federation.Claims
+	email, err := identity.Email(email)
+	if err != nil || environment.IsZero() || id.IsZero() {
+		return federation.Connection{}, claims, errx.Validation("environment_id, connection_id and a valid email are required")
+	}
+	if password == "" || len(password) > 1024 {
+		return federation.Connection{}, claims, errx.Unauthorized("invalid credentials")
+	}
+	connection, err := s.repository.Find(ctx, environment, id)
+	if err != nil {
+		return connection, claims, err
+	}
+	if connection.Provider != federation.ProviderLDAP {
+		return connection, claims, errx.NotFound("LDAP connection not found")
+	}
+	d, err := s.repository.Discover(ctx, environment, identity.EmailDomain(email))
+	if err != nil {
+		return connection, claims, err
+	}
+	if d.Organization == nil || *d.Organization != connection.Organization {
+		return connection, claims, errx.Unauthorized("invalid credentials")
+	}
+	claims, err = s.directory.Authenticate(ctx, connection, email, password)
+	return connection, claims, err
+}
+
 // join links an unlinked subject on first login when the connection allows
 // it: organization JIT provisioning, or sign-up and email linking of an
 // environment connection.
@@ -324,7 +462,7 @@ func (s *Service) join(ctx context.Context, c federation.Connection, claims fede
 }
 
 // provision links an unlinked subject on first login when the connection
-// allows it: the provider email must be verified (or unreported) and its
+// allows it (JIT, or linking by email to an existing account): the provider email must be verified (or unreported) and its
 // domain verified by the connection's organization, which the repository
 // checks in its transaction. The account persists even when the user has no
 // access yet, so operators can find it and grant roles.
@@ -334,6 +472,7 @@ func (s *Service) provision(ctx context.Context, c federation.Connection, claims
 		return err
 	}
 	return s.repository.Provision(ctx, federation.Provisioning{
+		Create:     c.JIT,
 		Connection: c.ID, Environment: c.Environment, Organization: c.Organization, Group: c.JITGroup,
 		User: identity.NewUserID(), Subject: claims.Subject, Email: email, Domain: identity.EmailDomain(email), Name: claims.DisplayName(email),
 	})
@@ -342,6 +481,40 @@ func (s *Service) provision(ctx context.Context, c federation.Connection, claims
 func unauthorized(err error) bool {
 	var e *errx.Error
 	return errx.As(err, &e) && e.Type == errx.TypeAuthorization && e.HTTPStatus == 401
+}
+
+// Assertion parks a SAML response for its RelayState. The state and the
+// response are only checked here for shape; the callback (in the browser
+// that holds the binding cookie) verifies both.
+func (s *Service) Assertion(ctx context.Context, state, response string) (string, error) {
+	if !strings.HasPrefix(state, "ik_state_") || len(state) > 128 || response == "" {
+		return "", errx.Unauthorized("invalid SAML response or RelayState")
+	}
+	if len(response) > config.SAMLResponseMax {
+		return "", errx.Validation("SAML response too large")
+	}
+	handle, hash, err := s.secrets.Generate("ik_saml_")
+	if err != nil {
+		return "", err
+	}
+	if err = s.repository.ParkAssertion(ctx, s.secrets.Hash(state), hash, response); err != nil {
+		return "", err
+	}
+	return handle, nil
+}
+
+func (s *Service) SAMLMetadata(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) ([]byte, error) {
+	if environment.IsZero() || id.IsZero() {
+		return nil, errx.NotFound("SAML connection not found")
+	}
+	c, err := s.repository.Find(ctx, environment, id)
+	if err != nil {
+		return nil, err
+	}
+	if c.Provider != federation.ProviderSAML {
+		return nil, errx.NotFound("SAML connection not found")
+	}
+	return s.provider.Metadata(ctx, c)
 }
 
 var _ federation.Commands = (*Service)(nil)

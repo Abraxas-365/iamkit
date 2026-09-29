@@ -3,6 +3,7 @@
 package mfahttp
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -37,10 +38,22 @@ func (h *Handler) WithActor(actor func(*fiber.Ctx) string) *Handler {
 // behind limit.
 func (h *Handler) RegisterSelf(r fiber.Router, limit fiber.Handler) {
 	r.Get("/me/factors", limit, h.List)
-	r.Post("/me/factors/totp", limit, h.Start)
-	r.Post("/me/factors/totp/confirm", limit, h.Confirm)
-	r.Delete("/me/factors/totp", limit, h.Remove)
 	r.Post("/me/factors/recovery-codes", limit, h.Regenerate)
+	for _, kind := range []string{mfa.KindTOTP, mfa.KindEmail, mfa.KindSMS} {
+		kind := kind
+		r.Post("/me/factors/"+kind, limit, func(c *fiber.Ctx) error { return h.Start(c, kind) })
+		r.Post("/me/factors/"+kind+"/confirm", limit, func(c *fiber.Ctx) error { return h.Confirm(c, kind) })
+		r.Delete("/me/factors/"+kind, limit, func(c *fiber.Ctx) error { return h.Remove(c, kind) })
+	}
+	for _, kind := range []string{mfa.KindEmail, mfa.KindSMS} {
+		kind := kind
+		r.Post("/me/factors/"+kind+"/challenge", limit, func(c *fiber.Ctx) error { return h.Challenge(c, kind) })
+	}
+	r.Post("/me/factors/webauthn", limit, h.StartWebAuthn)
+	r.Post("/me/factors/webauthn/confirm", limit, h.FinishWebAuthn)
+	r.Post("/me/factors/webauthn/challenge", limit, h.ProveWebAuthn)
+	r.Patch("/me/factors/webauthn/:id", limit, h.RenameWebAuthn)
+	r.Delete("/me/factors/webauthn/:id", limit, h.RemoveWebAuthn)
 }
 
 // Register mounts the operator routes under an environment.
@@ -53,6 +66,18 @@ type selfInput struct {
 	Environment identity.EnvironmentID `json:"environment_id"`
 	Audience    string                 `json:"audience"`
 	Code        string                 `json:"code"`
+	Phone       string                 `json:"phone"`
+	// A security key proof or registration answers Session with the
+	// browser's PublicKeyCredential JSON.
+	Session    string          `json:"webauthn_session"`
+	Credential json.RawMessage `json:"credential"`
+	Name       string          `json:"name"`
+	Passkey    bool            `json:"passkey"`
+}
+
+// proof is the possession proof of a change: a code or a key assertion.
+func (i selfInput) proof() authentication.Proof {
+	return authentication.Proof{Code: i.Code, Session: i.Session, Credential: i.Credential}
 }
 
 // self authenticates the user's own access token (login API or OAuth);
@@ -65,7 +90,7 @@ func (h *Handler) self(c *fiber.Ctx, environment identity.EnvironmentID, audienc
 	if token.Purpose != "application" || token.Subject.IsZero() {
 		return token, errx.Forbidden("a user access token is required")
 	}
-	if !token.ActorID.IsZero() {
+	if token.Impersonated() {
 		return token, errx.Forbidden("impersonated sessions cannot manage authenticators")
 	}
 	return token, nil
@@ -105,25 +130,34 @@ func (h *Handler) List(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-func (h *Handler) Start(c *fiber.Ctx) error {
-	_, token, err := h.body(c)
+// Start begins a factor: a TOTP secret to scan, or a code sent to the
+// user's email address or to the phone number given.
+func (h *Handler) Start(c *fiber.Ctx, kind string) error {
+	input, token, err := h.body(c)
 	if err != nil {
 		return err
+	}
+	c.Set("Cache-Control", "no-store")
+	if kind != mfa.KindTOTP {
+		sent, err := h.commands.StartCode(c.Context(), token.EnvironmentID, token.Subject, kind, input.Phone)
+		if err != nil {
+			return err
+		}
+		return c.Status(fiber.StatusAccepted).JSON(sent)
 	}
 	out, err := h.commands.Start(c.Context(), token.EnvironmentID, token.Subject)
 	if err != nil {
 		return err
 	}
-	c.Set("Cache-Control", "no-store")
 	return c.Status(201).JSON(out)
 }
 
-func (h *Handler) Confirm(c *fiber.Ctx) error {
+func (h *Handler) Confirm(c *fiber.Ctx, kind string) error {
 	input, token, err := h.body(c)
 	if err != nil {
 		return err
 	}
-	codes, err := h.commands.Confirm(c.Context(), mutation(token), token.Subject, input.Code)
+	codes, err := h.commands.Confirm(c.Context(), mutation(token), token.Subject, kind, input.Code)
 	if err != nil {
 		return err
 	}
@@ -131,12 +165,26 @@ func (h *Handler) Confirm(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"recovery_codes": codes})
 }
 
-func (h *Handler) Remove(c *fiber.Ctx) error {
+// Challenge sends a code to the user's active email or SMS factor, to
+// prove possession for a change.
+func (h *Handler) Challenge(c *fiber.Ctx, kind string) error {
+	_, token, err := h.body(c)
+	if err != nil {
+		return err
+	}
+	sent, err := h.commands.SendProof(c.Context(), token.EnvironmentID, token.Subject, kind)
+	if err != nil {
+		return err
+	}
+	return c.Status(fiber.StatusAccepted).JSON(sent)
+}
+
+func (h *Handler) Remove(c *fiber.Ctx, kind string) error {
 	input, token, err := h.body(c)
 	if err != nil {
 		return err
 	}
-	if err = h.commands.Remove(c.Context(), mutation(token), token.Subject, input.Code); err != nil {
+	if err = h.commands.Remove(c.Context(), mutation(token), token.Subject, kind, input.proof()); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -147,12 +195,86 @@ func (h *Handler) Regenerate(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	codes, err := h.commands.Regenerate(c.Context(), mutation(token), token.Subject, input.Code)
+	codes, err := h.commands.Regenerate(c.Context(), mutation(token), token.Subject, input.proof())
 	if err != nil {
 		return err
 	}
 	c.Set("Cache-Control", "no-store")
 	return c.JSON(fiber.Map{"recovery_codes": codes})
+}
+
+// StartWebAuthn begins registering a security key or passkey: pass
+// options to navigator.credentials.create.
+func (h *Handler) StartWebAuthn(c *fiber.Ctx) error {
+	input, token, err := h.body(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.commands.StartWebAuthn(c.Context(), token.EnvironmentID, token.Subject, mfa.StartRegistration{Name: input.Name, Passkey: input.Passkey})
+	if err != nil {
+		return err
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.Status(201).JSON(out)
+}
+
+// FinishWebAuthn stores the key from the browser's attestation.
+func (h *Handler) FinishWebAuthn(c *fiber.Ctx) error {
+	input, token, err := h.body(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.commands.FinishWebAuthn(c.Context(), mutation(token), token.Subject, input.Session, input.Credential)
+	if err != nil {
+		return err
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.Status(201).JSON(out)
+}
+
+// ProveWebAuthn starts a key assertion that proves possession for a change.
+func (h *Handler) ProveWebAuthn(c *fiber.Ctx) error {
+	_, token, err := h.body(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.commands.ProveWebAuthn(c.Context(), token.EnvironmentID, token.Subject)
+	if err != nil {
+		return err
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(out)
+}
+
+func (h *Handler) RenameWebAuthn(c *fiber.Ctx) error {
+	factor, err := identity.ParseFactorID(c.Params("id"))
+	if err != nil {
+		return errx.Validation("invalid factor id")
+	}
+	input, token, err := h.body(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.commands.RenameWebAuthn(c.Context(), token.EnvironmentID, token.Subject, factor, input.Name)
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+
+func (h *Handler) RemoveWebAuthn(c *fiber.Ctx) error {
+	factor, err := identity.ParseFactorID(c.Params("id"))
+	if err != nil {
+		return errx.Validation("invalid factor id")
+	}
+	input, token, err := h.body(c)
+	if err != nil {
+		return err
+	}
+	if err = h.commands.RemoveWebAuthn(c.Context(), mutation(token), token.Subject, factor, input.proof()); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
 }
 
 func operatorTarget(c *fiber.Ctx) (identity.EnvironmentID, identity.UserID, error) {

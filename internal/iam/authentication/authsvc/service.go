@@ -21,6 +21,7 @@ type Service struct {
 	delivery    authentication.Delivery
 	deliverySvc *DeliveryService
 	second      authentication.SecondFactor
+	passkeys    authentication.Passkeys
 	policies    *PasswordPolicies
 	signIns     *SignInPolicies
 	signups     authentication.SignupRepository
@@ -38,6 +39,9 @@ func (s *Service) SetPasswordPolicies(p *PasswordPolicies) { s.policies = p }
 // SetSignInPolicies applies environment sign-in policies (without them
 // every method is allowed).
 func (s *Service) SetSignInPolicies(p *SignInPolicies) { s.signIns = p }
+
+// SetPasskeys enables passkey sign-in.
+func (s *Service) SetPasskeys(passkeys authentication.Passkeys) { s.passkeys = passkeys }
 
 // SetSecondFactor enables multi-factor authentication of logins.
 func (s *Service) SetSecondFactor(second authentication.SecondFactor) { s.second = second }
@@ -130,14 +134,15 @@ func (s *Service) SignInFederated(ctx context.Context, tx authentication.Transac
 // tx before the session (so a refused session keeps the old one), or once
 // the second factor passed.
 func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string, federated bool, passwordHash string) (authentication.Result, error) {
-	amr := []string{authentication.MethodAMR(method)}
-	if s.second != nil {
+	amr := authentication.FirstFactorAMR(method)
+	// A passkey verified the user on the key: it is multi-factor already.
+	if s.second != nil && !authentication.HasMFA(amr) {
 		// Access first, so the MFA answer never reveals a membership the
 		// user does not have.
 		if _, err := tx.Resolve(ctx, boundary, user); err != nil {
 			return authentication.Result{}, err
 		}
-		req, err := s.second.Requirement(ctx, boundary, user, federated)
+		req, err := s.second.Requirement(ctx, boundary, user, federated, amr)
 		if err != nil {
 			return authentication.Result{}, err
 		}
@@ -164,7 +169,7 @@ func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, bou
 }
 
 // VerifyMFA completes a login with its second factor.
-func (s *Service) VerifyMFA(ctx context.Context, token, code string) (authentication.Issued, error) {
+func (s *Service) VerifyMFA(ctx context.Context, token string, proof authentication.Proof) (authentication.Issued, error) {
 	if s.second == nil {
 		return authentication.Issued{}, errx.NotFound("multi-factor authentication is not enabled")
 	}
@@ -172,7 +177,7 @@ func (s *Service) VerifyMFA(ctx context.Context, token, code string) (authentica
 	// The session is created before the second-factor transaction commits:
 	// when it fails, the pending login, the confirmed factor and its
 	// recovery codes roll back and the user can try again.
-	done, err := s.second.Complete(ctx, token, code, func(done authentication.Completed) error {
+	done, err := s.second.Complete(ctx, token, proof, func(done authentication.Completed) error {
 		tx, err := s.repository.Begin(ctx)
 		if err != nil {
 			return err
@@ -200,6 +205,22 @@ func (s *Service) EnrollMFA(ctx context.Context, token string) (authentication.E
 		return authentication.Enrollment{}, errx.NotFound("multi-factor authentication is not enabled")
 	}
 	return s.second.Enroll(ctx, token)
+}
+
+// ChallengeMFA sends the emailed or texted code of a pending login.
+func (s *Service) ChallengeMFA(ctx context.Context, token, factor string) (authentication.CodeSent, error) {
+	if s.second == nil {
+		return authentication.CodeSent{}, errx.NotFound("multi-factor authentication is not enabled")
+	}
+	return s.second.Challenge(ctx, token, factor)
+}
+
+// AssertMFA starts the security key prompt of a pending login.
+func (s *Service) AssertMFA(ctx context.Context, token string) (authentication.WebAuthnOptions, error) {
+	if s.second == nil {
+		return authentication.WebAuthnOptions{}, errx.NotFound("multi-factor authentication is not enabled")
+	}
+	return s.second.Assert(ctx, token)
 }
 
 // invalidCredentials is the single response for every login credential

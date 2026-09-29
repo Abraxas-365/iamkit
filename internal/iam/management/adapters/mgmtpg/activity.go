@@ -37,6 +37,7 @@ func (r *Repository) Sessions(ctx context.Context, environment identity.Environm
 	}
 	return query.NewPaginated(out, total, page), nil
 }
+
 // targetLabel names the entity an audit event is about: the last UUID of its
 // target (a bare ID or the request path), looked up among the environment's
 // named entities. Empty when nothing matches, e.g. after a hard delete.
@@ -69,7 +70,7 @@ func (r *Repository) Audit(ctx context.Context, environment identity.Environment
 	}
 	out := []management.AuditEvent{}
 	sel := fmt.Sprintf(`SELECT e.id,e.actor_id,e.action,e.target_id,e.created_at,
-		COALESCE((SELECT email FROM operators WHERE id=e.actor_id),(SELECT email FROM users WHERE id=e.actor_id AND environment_id=e.environment_id),'') AS actor_label,
+		COALESCE((SELECT email FROM operators WHERE id=e.actor_id),(SELECT email FROM users WHERE id=e.actor_id AND environment_id=e.environment_id),(SELECT name FROM service_accounts WHERE id=e.actor_id AND environment_id=e.environment_id),'') AS actor_label,
 		%s AS target_label
 		FROM (SELECT * %s ORDER BY id DESC LIMIT %d OFFSET %d) e
 		LEFT JOIN LATERAL (SELECT substring(e.target_id FROM '.*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})')::uuid AS id) t ON true

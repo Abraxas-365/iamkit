@@ -6,6 +6,9 @@ import (
 )
 
 func OperatorID(c *fiber.Ctx) string { return mgmthttp.Principal(c).OperatorID.String() }
+
+// Owner reports whether the operator is a workspace owner.
+func Owner(c *fiber.Ctx) bool { return mgmthttp.Principal(c).Role == "owner" }
 func (s *Server) managementRoutes(r fiber.Router) {
 	s.Control.Register(r)
 	if s.OperatorSSO != nil {
@@ -23,6 +26,9 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	s.administrationRoutes(e)
 	s.Impersonation.Register(e)
 	s.OAuth.RegisterManagement(e)
+	if s.LogoutDeliveries != nil {
+		s.LogoutDeliveries.Register(e)
+	}
 	s.Federation.Register(e)
 	if s.Hosted != nil {
 		s.Hosted.RegisterManagement(e)
@@ -31,10 +37,19 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	if s.Delivery != nil {
 		s.Delivery.Register(e)
 	}
+	if s.SMS != nil {
+		s.SMS.Register(e)
+	}
 	if s.PasswordPolicy != nil {
 		s.PasswordPolicy.Register(e)
 	}
 	if s.SignInPolicy != nil {
 		s.SignInPolicy.Register(e)
+	}
+	if s.SigningKeys != nil {
+		s.SigningKeys.Register(e)
+	}
+	if s.SAML != nil {
+		s.SAML.Register(e)
 	}
 }

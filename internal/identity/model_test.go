@@ -2,6 +2,19 @@ package identity
 
 import "testing"
 
+func TestPhone(t *testing.T) {
+	for in, want := range map[string]string{"+1 (415) 555-0100": "+14155550100", "+51.987.654.321": "+51987654321"} {
+		if got, err := Phone(in); err != nil || got != want {
+			t.Errorf("Phone(%q) = %q, %v", in, got, err)
+		}
+	}
+	for _, bad := range []string{"", "4155550100", "+0123456789", "+1", "+1234567890123456", "+1 415 555 01OO", "1+4155550100"} {
+		if _, err := Phone(bad); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+}
+
 func TestPermissionBoundary(t *testing.T) {
 	for _, p := range []string{"iam:*", "management:keys:write", "*", "invoice:*", " x", ""} {
 		if ValidatePermissions([]string{p}, "") == nil {

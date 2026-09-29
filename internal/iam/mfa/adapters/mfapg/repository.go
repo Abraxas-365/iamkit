@@ -5,6 +5,7 @@ package mfapg
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -29,7 +30,7 @@ func failure(err error) error {
 	return errx.Wrap(err, "mfa persistence failed", errx.TypeInternal)
 }
 
-const factorColumns = `id,kind,confirmed_at,last_used_at,created_at,secret_sealed,last_step,failed_attempts,locked_until`
+const factorColumns = `id,kind,name,confirmed_at,last_used_at,created_at,secret_sealed,last_step,coalesce(data->>'phone','') AS phone,code_hash,code_expires_at,code_sent_at,code_attempts,codes_sent,codes_window,data,passkey`
 
 func (r *Repository) Begin(ctx context.Context) (mfa.Transaction, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -51,23 +52,56 @@ func (r *Repository) Summary(ctx context.Context, environment identity.Environme
 	if err := r.db.SelectContext(ctx, &out.Factors, `SELECT `+factorColumns+` FROM user_factors WHERE environment_id=$1 AND user_id=$2 ORDER BY created_at`, environment, user); err != nil {
 		return mfa.Summary{}, failure(err)
 	}
-	err := r.db.GetContext(ctx, &out.RecoveryCodes, `SELECT count(*) FROM recovery_codes WHERE environment_id=$1 AND user_id=$2 AND used_at IS NULL`, environment, user)
+	var lock mfa.Lock
+	err := r.db.GetContext(ctx, &lock, `SELECT failed_attempts,locked_until FROM user_mfa_state WHERE environment_id=$1 AND user_id=$2`, environment, user)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return mfa.Summary{}, failure(err)
+	}
+	out.LockedUntil = lock.LockedUntil
+	for i := range out.Factors {
+		if out.Factors[i].Active() {
+			out.Factors[i].LockedUntil = lock.LockedUntil
+		}
+	}
+	err = r.db.GetContext(ctx, &out.RecoveryCodes, `SELECT count(*) FROM recovery_codes WHERE environment_id=$1 AND user_id=$2 AND used_at IS NULL`, environment, user)
 	return out, failure(err)
 }
 
 func (r *Repository) Policy(ctx context.Context, b authentication.Context, user identity.UserID) (mfa.Policy, error) {
-	var out mfa.Policy
-	// The environment's sign-in policy requires for every organization.
-	err := r.db.GetContext(ctx, &out, `SELECT
-		EXISTS(SELECT 1 FROM user_factors f WHERE f.environment_id=$1 AND f.user_id=$3 AND f.confirmed_at IS NOT NULL) AS enrolled,
-		o.mfa_required OR coalesce(p.mfa_required,false) AS mfa_required,
-		o.mfa_for_federated OR coalesce(p.mfa_for_federated,false) AS mfa_for_federated
-		FROM organizations o LEFT JOIN sign_in_policies p ON p.environment_id=o.environment_id
-		WHERE o.id=$2 AND o.environment_id=$1`, b.EnvironmentID, b.OrganizationID, user)
-	if errors.Is(err, sql.ErrNoRows) {
+	var row struct {
+		Active            pq.StringArray `db:"active"`
+		Allowed           pq.StringArray `db:"allowed"`
+		Required          bool           `db:"required"`
+		RequiredFederated bool           `db:"required_federated"`
+		Found             bool           `db:"found"`
+	}
+	// The environment's sign-in policy requires for every organization and
+	// lists the factors allowed; an organization narrows that list. A zero
+	// organization reads the environment's rules only.
+	err := r.db.GetContext(ctx, &row, `SELECT
+		coalesce((SELECT array_agg(DISTINCT f.kind) FROM user_factors f WHERE f.environment_id=e.id AND f.user_id=$3 AND f.confirmed_at IS NOT NULL), '{}') AS active,
+		ARRAY(SELECT unnest(coalesce(p.allowed_factors,'{totp,webauthn}'::text[]))
+			INTERSECT SELECT unnest(coalesce(o.allowed_factors,'{totp,email,sms,webauthn}'::text[]))) AS allowed,
+		coalesce(o.mfa_required,false) OR coalesce(p.mfa_required,false) AS required,
+		coalesce(o.mfa_for_federated,false) OR coalesce(p.mfa_for_federated,false) AS required_federated,
+		$2::uuid IS NULL OR o.id IS NOT NULL AS found
+		FROM environments e
+		LEFT JOIN sign_in_policies p ON p.environment_id=e.id
+		LEFT JOIN organizations o ON o.id=$2 AND o.environment_id=e.id
+		WHERE e.id=$1`, b.EnvironmentID, b.OrganizationID, user)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && !row.Found) {
 		return mfa.Policy{}, errx.Unauthorized("invalid credentials or access token")
 	}
-	return out, failure(err)
+	if err != nil {
+		return mfa.Policy{}, failure(err)
+	}
+	return mfa.Policy{Active: []string(row.Active), Allowed: []string(row.Allowed), Required: row.Required, RequiredFederated: row.RequiredFederated}, nil
+}
+
+func (r *Repository) Allowed(ctx context.Context, environment identity.EnvironmentID) ([]string, error) {
+	var out pq.StringArray
+	err := r.db.GetContext(ctx, &out, `SELECT coalesce((SELECT allowed_factors FROM sign_in_policies WHERE environment_id=$1),'{totp,webauthn}'::text[])`, environment)
+	return []string(out), failure(err)
 }
 
 // Account names the user after the environment's hosted login branding, or
@@ -126,13 +160,26 @@ type Transaction struct{ tx *sqlx.Tx }
 
 var _ mfa.Transaction = (*Transaction)(nil)
 
-func (t *Transaction) Factor(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (mfa.Factor, bool, error) {
-	var f mfa.Factor
-	err := t.tx.GetContext(ctx, &f, `SELECT `+factorColumns+` FROM user_factors WHERE environment_id=$1 AND user_id=$2 AND kind='totp' FOR UPDATE`, environment, user)
+func (t *Transaction) Factors(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) ([]mfa.Factor, error) {
+	out := []mfa.Factor{}
+	err := t.tx.SelectContext(ctx, &out, `SELECT `+factorColumns+` FROM user_factors WHERE environment_id=$1 AND user_id=$2 ORDER BY created_at FOR UPDATE`, environment, user)
+	return out, failure(err)
+}
+
+func (t *Transaction) Lock(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (mfa.Lock, error) {
+	var out mfa.Lock
+	err := t.tx.GetContext(ctx, &out, `SELECT failed_attempts,locked_until FROM user_mfa_state WHERE environment_id=$1 AND user_id=$2 FOR UPDATE`, environment, user)
 	if errors.Is(err, sql.ErrNoRows) {
-		return mfa.Factor{}, false, nil
+		return mfa.Lock{}, nil
 	}
-	return f, err == nil, failure(err)
+	return out, failure(err)
+}
+
+func (t *Transaction) SetLock(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, lock mfa.Lock) error {
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO user_mfa_state(environment_id,user_id,failed_attempts,locked_until) VALUES($1,$2,$3,$4)
+		ON CONFLICT (environment_id,user_id) DO UPDATE SET failed_attempts=EXCLUDED.failed_attempts, locked_until=EXCLUDED.locked_until`,
+		environment, user, lock.Failures, lock.LockedUntil)
+	return failure(err)
 }
 
 func (t *Transaction) UseStep(ctx context.Context, factor identity.FactorID, step int64) error {
@@ -145,8 +192,71 @@ func (t *Transaction) Confirm(ctx context.Context, factor identity.FactorID, ste
 	return failure(err)
 }
 
-func (t *Transaction) SetFailures(ctx context.Context, factor identity.FactorID, failures int, lockedUntil *time.Time) error {
-	_, err := t.tx.ExecContext(ctx, `UPDATE user_factors SET failed_attempts=$2, locked_until=$3 WHERE id=$1`, factor, failures, lockedUntil)
+func (t *Transaction) DeleteFactor(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, factor identity.FactorID) error {
+	_, err := t.tx.ExecContext(ctx, `DELETE FROM user_factors WHERE environment_id=$1 AND user_id=$2 AND id=$3`, environment, user, factor)
+	return failure(err)
+}
+
+// SaveCodeFactor inserts the factor, or refreshes the user's unconfirmed
+// one of that kind (new number, new enrollment window, no live code). An
+// active one is left alone: the upsert returns no row.
+func (t *Transaction) SaveCodeFactor(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, factor identity.FactorID, kind, phone string) (mfa.Factor, error) {
+	data := `{}`
+	if phone != "" {
+		b, err := json.Marshal(map[string]string{"phone": phone})
+		if err != nil {
+			return mfa.Factor{}, failure(err)
+		}
+		data = string(b)
+	}
+	var out mfa.Factor
+	err := t.tx.GetContext(ctx, &out, `INSERT INTO user_factors(id,environment_id,user_id,kind,data) VALUES($1,$2,$3,$4,$5::jsonb)
+		ON CONFLICT (environment_id,user_id,kind) WHERE kind IN ('totp','email','sms')
+		DO UPDATE SET data=EXCLUDED.data, created_at=now(), code_hash=NULL, code_expires_at=NULL, code_attempts=0
+		WHERE user_factors.confirmed_at IS NULL
+		RETURNING `+factorColumns, factor, environment, user, kind, data)
+	var pqErr *pq.Error
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return mfa.Factor{}, errx.Conflict("an " + kind + " factor is already enrolled; remove it first")
+	case errors.As(err, &pqErr) && pqErr.Code == "23503":
+		return mfa.Factor{}, errx.NotFound("user not found")
+	}
+	return out, failure(err)
+}
+
+func (t *Transaction) SetCode(ctx context.Context, factor identity.FactorID, code mfa.Code) error {
+	_, err := t.tx.ExecContext(ctx, `UPDATE user_factors SET code_hash=$2, code_expires_at=$3, code_sent_at=$4, code_attempts=0, codes_sent=$5, codes_window=$6 WHERE id=$1`,
+		factor, code.Hash, code.Expires, code.Sent, code.Count, code.Window)
+	return failure(err)
+}
+
+func (t *Transaction) UseCode(ctx context.Context, factor identity.FactorID) error {
+	_, err := t.tx.ExecContext(ctx, `UPDATE user_factors SET code_hash=NULL, code_expires_at=NULL, code_attempts=0, last_used_at=now() WHERE id=$1`, factor)
+	return failure(err)
+}
+
+func (t *Transaction) FailCode(ctx context.Context, factor identity.FactorID, limit int) error {
+	_, err := t.tx.ExecContext(ctx, `UPDATE user_factors SET code_attempts=code_attempts+1,
+		code_hash=CASE WHEN code_attempts+1>=$2 THEN NULL ELSE code_hash END,
+		code_expires_at=CASE WHEN code_attempts+1>=$2 THEN NULL ELSE code_expires_at END
+		WHERE id=$1`, factor, limit)
+	return failure(err)
+}
+
+// ConfirmCode activates the factor; a confirmed SMS number becomes the
+// user's verified phone.
+func (t *Transaction) ConfirmCode(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, factor identity.FactorID) error {
+	var phone string
+	err := t.tx.GetContext(ctx, &phone, `UPDATE user_factors SET confirmed_at=now(), last_used_at=now(), code_hash=NULL, code_expires_at=NULL, code_attempts=0
+		WHERE id=$1 AND environment_id=$2 AND user_id=$3 RETURNING coalesce(data->>'phone','')`, factor, environment, user)
+	if err != nil {
+		return failure(err)
+	}
+	if phone == "" {
+		return nil
+	}
+	_, err = t.tx.ExecContext(ctx, `UPDATE users SET phone=$3, phone_verified=true WHERE id=$1 AND environment_id=$2`, user, environment, phone)
 	return failure(err)
 }
 
@@ -181,7 +291,13 @@ func (t *Transaction) DeleteFactors(ctx context.Context, environment identity.En
 		return false, failure(err)
 	}
 	m, err := codes.RowsAffected()
-	return n+m > 0, failure(err)
+	if err != nil {
+		return false, failure(err)
+	}
+	if _, err = t.tx.ExecContext(ctx, `DELETE FROM user_mfa_state WHERE environment_id=$1 AND user_id=$2`, environment, user); err != nil {
+		return false, failure(err)
+	}
+	return n+m > 0, nil
 }
 
 func (t *Transaction) Pending(ctx context.Context, hash []byte) (mfa.Pending, error) {
@@ -220,6 +336,87 @@ func (t *Transaction) DeletePending(ctx context.Context, hash []byte) error {
 func (t *Transaction) Audit(ctx context.Context, m mfa.Mutation) error {
 	_, err := t.tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
 	return failure(err)
+}
+
+func (t *Transaction) SaveWebAuthn(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, f mfa.Factor, c mfa.Credential) error {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return failure(err)
+	}
+	_, err = t.tx.ExecContext(ctx, `INSERT INTO user_factors(id,environment_id,user_id,kind,name,data,credential_id,passkey,confirmed_at,created_at)
+		VALUES($1,$2,$3,'webauthn',$4,$5::jsonb,$6,$7,$8,$8)`, f.ID, environment, user, f.Name, data, c.ID, f.Passkey, f.Confirmed)
+	var pqErr *pq.Error
+	switch {
+	case errors.As(err, &pqErr) && pqErr.Code == "23505":
+		return errx.Conflict("this security key is already registered")
+	case errors.As(err, &pqErr) && pqErr.Code == "23503":
+		return errx.NotFound("user not found")
+	}
+	return failure(err)
+}
+
+func (t *Transaction) UseWebAuthn(ctx context.Context, factor identity.FactorID, c mfa.Credential) error {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return failure(err)
+	}
+	_, err = t.tx.ExecContext(ctx, `UPDATE user_factors SET data=$2::jsonb, last_used_at=now() WHERE id=$1`, factor, data)
+	return failure(err)
+}
+
+func (t *Transaction) TakeCeremony(ctx context.Context, hash []byte, environment identity.EnvironmentID, purpose string) (mfa.Ceremony, bool, error) {
+	var row struct {
+		User    *identity.UserID `db:"user_id"`
+		Data    []byte           `db:"data"`
+		Expires time.Time        `db:"expires_at"`
+	}
+	err := t.tx.GetContext(ctx, &row, `DELETE FROM webauthn_sessions WHERE id_hash=$1 AND environment_id=$2 AND purpose=$3 RETURNING user_id,data,expires_at`, hash, environment, purpose)
+	if errors.Is(err, sql.ErrNoRows) {
+		return mfa.Ceremony{}, false, nil
+	}
+	if err != nil {
+		return mfa.Ceremony{}, false, failure(err)
+	}
+	var data ceremonyData
+	if err = json.Unmarshal(row.Data, &data); err != nil {
+		return mfa.Ceremony{}, false, failure(err)
+	}
+	out := mfa.Ceremony{Environment: environment, Purpose: purpose, State: data.State, Name: data.Name, Passkey: data.Passkey, Expires: row.Expires}
+	if row.User != nil {
+		out.User = *row.User
+	}
+	return out, row.Expires.After(time.Now()), nil
+}
+
+// ceremonyData is webauthn_sessions.data.
+type ceremonyData struct {
+	State   json.RawMessage `json:"state"`
+	Name    string          `json:"name,omitempty"`
+	Passkey bool            `json:"passkey,omitempty"`
+}
+
+func (r *Repository) SaveCeremony(ctx context.Context, hash []byte, c mfa.Ceremony) error {
+	data, err := json.Marshal(ceremonyData{State: c.State, Name: c.Name, Passkey: c.Passkey})
+	if err != nil {
+		return failure(err)
+	}
+	var user *identity.UserID
+	if !c.User.IsZero() {
+		user = &c.User
+	}
+	_, err = r.db.ExecContext(ctx, `WITH sweep AS (DELETE FROM webauthn_sessions WHERE expires_at<now())
+		INSERT INTO webauthn_sessions(id_hash,environment_id,user_id,purpose,data,expires_at) VALUES($1,$2,$3,$4,$5::jsonb,$6)`,
+		hash, c.Environment, user, c.Purpose, data, c.Expires)
+	return failure(err)
+}
+
+func (r *Repository) RenameFactor(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, factor identity.FactorID, name string) (mfa.Factor, error) {
+	var out mfa.Factor
+	err := r.db.GetContext(ctx, &out, `UPDATE user_factors SET name=$4 WHERE environment_id=$1 AND user_id=$2 AND id=$3 AND kind='webauthn' RETURNING `+factorColumns, environment, user, factor, name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return mfa.Factor{}, errx.NotFound("security key not found")
+	}
+	return out, failure(err)
 }
 
 func (t *Transaction) Commit() error { return failure(t.tx.Commit()) }

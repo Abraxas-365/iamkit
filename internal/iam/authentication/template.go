@@ -19,6 +19,9 @@ const (
 	PurposePasswordReset     = "password_reset"
 	PurposeEmailVerification = "email_verification"
 	PurposeInvitation        = "invitation"
+	// PurposeMFA is a second-factor code of the user's email factor. Only
+	// environments that allow the email factor ever send one.
+	PurposeMFA = "mfa"
 )
 
 // Copy is the wording of one email. The layout around it (logo, code box,
@@ -131,6 +134,7 @@ var placeholders = map[string][]string{
 	PurposeLogin:             {PlaceholderAppName, PlaceholderEmail, PlaceholderCode, PlaceholderExpiresIn},
 	PurposePasswordReset:     {PlaceholderAppName, PlaceholderEmail, PlaceholderCode, PlaceholderExpiresIn},
 	PurposeEmailVerification: {PlaceholderAppName, PlaceholderEmail, PlaceholderCode, PlaceholderExpiresIn},
+	PurposeMFA:               {PlaceholderAppName, PlaceholderEmail, PlaceholderCode, PlaceholderExpiresIn},
 	PurposeInvitation:        {PlaceholderAppName, PlaceholderEmail, PlaceholderOrganization, PlaceholderInviter, PlaceholderExpiresAt},
 	PurposeTest:              {PlaceholderAppName, PlaceholderEmail},
 }

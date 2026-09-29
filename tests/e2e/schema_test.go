@@ -215,13 +215,29 @@ func TestSchemaMFA(t *testing.T) {
 	db := freshDB(t)
 	f := newSchemaFixture(t, db)
 	factor := `INSERT INTO user_factors(id,environment_id,user_id,kind,secret_sealed) VALUES($1,$2,$3,$4,'v1:x')`
-	expectSQL(t, db, "unknown kind", checkSQL, factor, uuid.NewString(), f.envA, f.userA, "sms")
+	expectSQL(t, db, "unknown kind", checkSQL, factor, uuid.NewString(), f.envA, f.userA, "voice")
 	expectSQL(t, db, "user of another environment", foreignSQL, factor, uuid.NewString(), f.envA, f.userB, "totp")
 	expectSQL(t, db, "factor", okSQL, factor, uuid.NewString(), f.envA, f.userA, "totp")
 	expectSQL(t, db, "second totp", uniqueSQL, factor, uuid.NewString(), f.envA, f.userA, "totp")
-	expectSQL(t, db, "secret required", "23502", `INSERT INTO user_factors(id,environment_id,user_id,kind,secret_sealed) VALUES($1,$2,$3,'totp',NULL)`, uuid.NewString(), f.envB, f.userB)
-	if n := count(t, db, `SELECT count(*) FROM user_factors WHERE failed_attempts=0 AND locked_until IS NULL AND last_step=0 AND confirmed_at IS NULL`); n != 1 {
+	expectSQL(t, db, "secret required", checkSQL, `INSERT INTO user_factors(id,environment_id,user_id,kind,secret_sealed) VALUES($1,$2,$3,'totp',NULL)`, uuid.NewString(), f.envB, f.userB)
+	// 020: several WebAuthn credentials per user, no secret; one SMS factor.
+	// 022: a key needs its credential id, unique per environment.
+	webauthn := `INSERT INTO user_factors(id,environment_id,user_id,kind,name,credential_id) VALUES($1,$2,$3,$4,'key',$5)`
+	expectSQL(t, db, "key without credential", checkSQL, webauthn, uuid.NewString(), f.envA, f.userA, "webauthn", nil)
+	expectSQL(t, db, "first key", okSQL, webauthn, uuid.NewString(), f.envA, f.userA, "webauthn", []byte("k1"))
+	expectSQL(t, db, "second key", okSQL, webauthn, uuid.NewString(), f.envA, f.userA, "webauthn", []byte("k2"))
+	expectSQL(t, db, "reused credential", uniqueSQL, webauthn, uuid.NewString(), f.envA, f.userA, "webauthn", []byte("k1"))
+	expectSQL(t, db, "credential in another environment", okSQL, webauthn, uuid.NewString(), f.envB, f.userB, "webauthn", []byte("k1"))
+	expectSQL(t, db, "sms", okSQL, webauthn, uuid.NewString(), f.envA, f.userA, "sms", nil)
+	expectSQL(t, db, "second sms", uniqueSQL, webauthn, uuid.NewString(), f.envA, f.userA, "sms", nil)
+	if n := count(t, db, `SELECT count(*) FROM user_factors WHERE kind='totp' AND last_step=0 AND confirmed_at IS NULL AND data='{}'`); n != 1 {
 		t.Fatalf("factor defaults: %d", n)
+	}
+	lock := `INSERT INTO user_mfa_state(environment_id,user_id) VALUES($1,$2)`
+	expectSQL(t, db, "lock of another environment", foreignSQL, lock, f.envA, f.userB)
+	expectSQL(t, db, "lock", okSQL, lock, f.envA, f.userA)
+	if n := count(t, db, `SELECT count(*) FROM user_mfa_state WHERE failed_attempts=0 AND locked_until IS NULL`); n != 1 {
+		t.Fatalf("lock defaults: %d", n)
 	}
 
 	code := `INSERT INTO recovery_codes(environment_id,user_id,code_hash) VALUES($1,$2,$3)`
@@ -251,7 +267,7 @@ func TestSchemaMFA(t *testing.T) {
 
 	expectSQL(t, db, "leave organization", okSQL, `DELETE FROM memberships WHERE user_id=$1`, f.userA)
 	expectSQL(t, db, "delete user", okSQL, `DELETE FROM users WHERE id=$1`, f.userA)
-	if n := count(t, db, `SELECT (SELECT count(*) FROM user_factors)+(SELECT count(*) FROM recovery_codes)+(SELECT count(*) FROM mfa_logins)`); n != 0 {
+	if n := count(t, db, `SELECT (SELECT count(*) FROM user_factors WHERE user_id=$1)+(SELECT count(*) FROM recovery_codes)+(SELECT count(*) FROM mfa_logins)+(SELECT count(*) FROM user_mfa_state)`, f.userA); n != 0 {
 		t.Fatalf("MFA rows survived user deletion: %d", n)
 	}
 }
@@ -269,7 +285,7 @@ func TestSchemaSocialLogin(t *testing.T) {
 	expectSQL(t, db, "signup without organization", checkSQL, insert, uuid.NewString(), f.envA, nil, "https://a", "google", true, false, nil, nil)
 	expectSQL(t, db, "organization without signup", checkSQL, insert, uuid.NewString(), f.envA, nil, "https://a", "google", false, false, f.orgA, nil)
 	expectSQL(t, db, "signup on organization connection", checkSQL, insert, uuid.NewString(), f.envA, f.orgA, "https://a", "oidc", true, false, f.orgA, nil)
-	expectSQL(t, db, "link on organization connection", checkSQL, insert, uuid.NewString(), f.envA, f.orgA, "https://a", "oidc", false, true, nil, nil)
+	expectSQL(t, db, "link on organization connection (030)", okSQL, insert, uuid.NewString(), f.envA, f.orgA, "https://a", "oidc", false, true, nil, nil)
 	expectSQL(t, db, "signup organization of another environment", foreignSQL, insert, uuid.NewString(), f.envA, nil, "https://a", "google", true, false, f.orgB, nil)
 	expectSQL(t, db, "group of another organization", foreignSQL, insert, uuid.NewString(), f.envA, nil, "https://a", "google", true, false, f.orgA, other)
 	social := uuid.NewString()

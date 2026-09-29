@@ -1,6 +1,7 @@
 package authentication
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -103,6 +104,14 @@ type Enrollment struct {
 	URI    string `json:"otpauth_uri"`
 }
 
+// CodeSent says where an emailed or texted second-factor code went: the
+// factor kind, the masked address or number, and when the code expires.
+type CodeSent struct {
+	Factor      string    `json:"factor"`
+	Destination string    `json:"destination"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
 // MethodAMR is the authentication method reference of a first factor.
 func MethodAMR(method string) string {
 	switch method {
@@ -112,8 +121,49 @@ func MethodAMR(method string) string {
 		return "email"
 	case MethodSSO:
 		return "fed"
+	case MethodPasskey:
+		return "hwk"
 	}
 	return method
+}
+
+// FirstFactorAMR returns the method references a first factor gives a
+// session: a passkey verified the user on a hardware-bound key, which is
+// multi-factor on its own (RFC 8176 hwk, user, mfa).
+func FirstFactorAMR(method string) []string {
+	out := []string{MethodAMR(method)}
+	if method == MethodPasskey {
+		out = append(out, PasskeyAMR()...)
+	}
+	return out
+}
+
+// PasskeyAMR are the references a passkey adds after hwk.
+func PasskeyAMR() []string { return []string{"user", "mfa"} }
+
+// Proof is what a user answers a second-factor (or possession) check
+// with: a code — authenticator, emailed or texted, or recovery — or a
+// WebAuthn assertion (the browser's PublicKeyCredential JSON) answering
+// the ceremony Session.
+type Proof struct {
+	Code       string          `json:"code"`
+	Session    string          `json:"webauthn_session"`
+	Credential json.RawMessage `json:"credential"`
+}
+
+// CodeProof is a proof by code.
+func CodeProof(code string) Proof { return Proof{Code: code} }
+
+// WebAuthn reports whether the proof is a WebAuthn assertion.
+func (p Proof) WebAuthn() bool { return p.Session != "" }
+
+// WebAuthnOptions start a security key or passkey prompt: Options is
+// passed to navigator.credentials.create / get (publicKey member), and the
+// browser's answer is posted back with Session.
+type WebAuthnOptions struct {
+	Session   string          `json:"webauthn_session"`
+	Options   json.RawMessage `json:"options"`
+	ExpiresAt time.Time       `json:"expires_at"`
 }
 
 // HasMFA reports whether the method references include a second factor.
@@ -131,6 +181,8 @@ const (
 	MethodPassword = "password"
 	MethodCode     = "code"
 	MethodSSO      = "sso"
+	// MethodPasskey signs in with a discoverable WebAuthn credential.
+	MethodPasskey = "passkey"
 )
 
 // Verified is a user who proved their identity before the organization of

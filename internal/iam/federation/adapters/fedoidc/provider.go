@@ -99,7 +99,8 @@ func (p Provider) context(ctx context.Context, c federation.Connection) context.
 }
 
 // session is what one authorization or callback needs: the provider's
-// OIDC metadata (nil for GitHub, which is OAuth 2.0 only) and client.
+// OIDC metadata (nil for GitHub and OAuth 2.0 connections, which have no
+// ID token) and client.
 type session struct {
 	oidc   *oidc.Provider
 	config *oauth2.Config
@@ -112,9 +113,14 @@ func (p Provider) session(ctx context.Context, c federation.Connection) (session
 	}
 	config := &oauth2.Config{ClientID: c.Client, ClientSecret: secret, RedirectURL: p.Callback(), Scopes: []string{oidc.ScopeOpenID, "profile", "email"}}
 	switch c.Provider {
-	case federation.ProviderGitHub:
-		config.Endpoint = oauth2.Endpoint{AuthURL: GitHubEndpoints.Auth, TokenURL: GitHubEndpoints.Token, AuthStyle: oauth2.AuthStyleInParams}
+	case federation.ProviderGitHub, federation.ProviderGitHubEnterprise:
+		auth, token, _ := gitHubEndpoints(c)
+		config.Endpoint = oauth2.Endpoint{AuthURL: auth, TokenURL: token, AuthStyle: oauth2.AuthStyleInParams}
 		config.Scopes = []string{"read:user", "user:email"}
+		return session{config: config}, nil
+	case federation.ProviderOAuth2:
+		config.Endpoint = oauth2.Endpoint{AuthURL: c.Options.AuthorizeURL, TokenURL: c.Options.TokenURL}
+		config.Scopes = c.Options.Scopes
 		return session{config: config}, nil
 	case federation.ProviderApple:
 		if config.ClientSecret, err = appleSecret(c, secret, time.Now()); err != nil {
@@ -164,7 +170,7 @@ func (p Provider) Authorize(ctx context.Context, c federation.Connection, state,
 	}
 	options := []oauth2.AuthCodeOption{oauth2.S256ChallengeOption(verifier)}
 	switch c.Provider {
-	case federation.ProviderGitHub:
+	case federation.ProviderGitHub, federation.ProviderGitHubEnterprise, federation.ProviderOAuth2:
 		// No ID token, so no nonce; state and PKCE bind the callback.
 	case federation.ProviderApple:
 		// Apple requires form_post when asking for the name or email, and
@@ -190,8 +196,12 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, code, non
 	if err != nil {
 		return federation.Claims{}, errx.Unauthorized("provider exchange rejected")
 	}
-	if c.Provider == federation.ProviderGitHub {
-		return gitHubClaims(ctx, s.config.Client(ctx, token))
+	if gitHub(c) {
+		_, _, api := gitHubEndpoints(c)
+		return gitHubClaims(ctx, s.config.Client(ctx, token), api)
+	}
+	if c.Provider == federation.ProviderOAuth2 {
+		return oauth2Claims(ctx, s.config.Client(ctx, token), c)
 	}
 	raw, ok := token.Extra("id_token").(string)
 	if !ok {
@@ -252,6 +262,16 @@ func flag(v any) *bool {
 // being misconfigured rather than the caller unauthorized.
 func GuardedTransport() http.RoundTripper {
 	return &http.Transport{DialContext: netx.GuardedDialer().DialContext, TLSHandshakeTimeout: config.ExternalHTTPTimeout, ResponseHeaderTimeout: config.ExternalHTTPTimeout, IdleConnTimeout: 90 * time.Second, ForceAttemptHTTP2: true}
+}
+
+// Prepare leaves OIDC and OAuth 2.0 connections as they are.
+func (Provider) Prepare(_ context.Context, c federation.Connection) (federation.Connection, error) {
+	return c, nil
+}
+
+// Metadata is SAML only.
+func (Provider) Metadata(context.Context, federation.Connection) ([]byte, error) {
+	return nil, errx.NotFound("SAML connection not found")
 }
 
 var _ federation.Provider = Provider{}

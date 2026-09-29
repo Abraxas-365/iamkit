@@ -201,7 +201,7 @@ func (s *Service) Issue(ctx context.Context, boundary authentication.Context, ve
 	// Hosted pages verify the second factor before issuing; this is the
 	// backstop should a caller skip that step.
 	if s.second != nil && !authentication.HasMFA(verified.AMR) {
-		req, err := s.second.Requirement(ctx, boundary, verified.User, verified.FederatedFor(boundary.OrganizationID))
+		req, err := s.second.Requirement(ctx, boundary, verified.User, verified.FederatedFor(boundary.OrganizationID), verified.Methods())
 		if err != nil {
 			return authentication.Issued{}, err
 		}

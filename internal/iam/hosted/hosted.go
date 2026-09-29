@@ -38,8 +38,9 @@ type Page struct {
 }
 
 // Route is where an identified email signs in: single sign-on (the browser
-// goes to Redirect, with Binding as the federation cookie) or password,
-// with SSO offered as an alternative when Connection is set.
+// goes to Redirect, with Binding as the federation cookie), the password of
+// the organization's LDAP directory (Method "ldap", Connection set) or
+// password, with SSO offered as an alternative when Connection is set.
 type Route struct {
 	Method     string
 	Redirect   string
@@ -52,12 +53,19 @@ type Route struct {
 type Result struct {
 	Organizations []authentication.Organization
 	Login         *oauth.Login
-	// SecondFactor asks for an authenticator or recovery code.
+	// SecondFactor asks for a second-factor or recovery code; Factors are
+	// the kinds the login accepts (email and sms offer to send a code).
 	SecondFactor bool
+	Factors      []string
+	// Sent says where a code just went.
+	Sent *authentication.CodeSent
 	// PasswordChange asks for a new password: the current one expired.
 	PasswordChange bool
-	// Enroll asks the user to add an authenticator the organization requires.
-	Enroll *authentication.Enrollment
+	// Enroll asks the user to add an authenticator the organization
+	// requires; EnrollEmail offers the email address instead (Enroll is nil
+	// when an authenticator app is not allowed).
+	Enroll      *authentication.Enrollment
+	EnrollEmail bool
 	// RecoveryCodes are shown once after enrolling; the user then continues.
 	RecoveryCodes []string
 }

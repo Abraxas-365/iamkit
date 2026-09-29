@@ -68,6 +68,7 @@ func (s *Service) Update(ctx context.Context, mutation user.Mutation, id identit
 	if id.IsZero() {
 		return errx.Validation("invalid user update")
 	}
+	input = input.Normalize()
 	if err := input.Validate(); err != nil {
 		return err
 	}

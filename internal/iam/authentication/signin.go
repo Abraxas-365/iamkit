@@ -1,6 +1,7 @@
 package authentication
 
 import (
+	"slices"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -18,12 +19,19 @@ type SignInPolicy struct {
 	AllowEmailCode bool `json:"allow_email_code" db:"allow_email_code"`
 	// AllowSocial covers environment connections (Google, Microsoft, ...).
 	AllowSocial bool `json:"allow_social" db:"allow_social"`
+	// AllowPasskey lets users sign in with a passkey (needs the webauthn
+	// factor allowed). Omitted on update, the stored value is kept.
+	AllowPasskey *bool `json:"allow_passkey" db:"allow_passkey"`
 	// AllowPasswordReset offers "forgot password" (needs AllowPassword).
 	AllowPasswordReset bool `json:"allow_password_reset" db:"allow_password_reset"`
 	// MFARequired and MFAForFederated apply to every organization, on top
 	// of the organization's own mfa_required / mfa_for_federated.
 	MFARequired     bool `json:"mfa_required" db:"mfa_required"`
 	MFAForFederated bool `json:"mfa_for_federated" db:"mfa_for_federated"`
+	// AllowedFactors are the second-factor kinds users may use (totp,
+	// webauthn, sms, email); organizations narrow them. Email and SMS are
+	// off by default. Omitted on update, the stored list is kept.
+	AllowedFactors []string `json:"allowed_factors" db:"-"`
 	// AllowSignup lets people create their own account (verified email
 	// first) in SignupOrganization and, when set, SignupGroup. The
 	// organization is kept while sign-up is off.
@@ -37,13 +45,21 @@ type SignInPolicy struct {
 
 // DefaultSignInPolicy allows every method and requires no second factor.
 func DefaultSignInPolicy() SignInPolicy {
-	return SignInPolicy{AllowPassword: true, AllowEmailCode: true, AllowSocial: true, AllowPasswordReset: true}
+	passkey := true
+	return SignInPolicy{AllowPassword: true, AllowEmailCode: true, AllowSocial: true, AllowPasskey: &passkey, AllowPasswordReset: true, AllowedFactors: DefaultFactors()}
 }
+
+// DefaultFactors are the second factors of an environment without a policy:
+// authenticator apps and security keys. Email and SMS codes are opt-in.
+func DefaultFactors() []string { return []string{"totp", "webauthn"} }
 
 // Validate accepts every combination of methods: with all off only
 // organization single sign-on remains, which is a valid enterprise setup.
 // Sign-up needs an organization and a method new accounts can sign in with.
 func (p SignInPolicy) Validate() error {
+	if err := identity.ValidateFactors("allowed_factors", p.AllowedFactors); err != nil {
+		return err
+	}
 	if p.AllowPasswordReset && !p.AllowPassword {
 		return errx.Validation("allow_password_reset needs allow_password")
 	}
@@ -81,10 +97,13 @@ type Methods struct {
 	Password  bool `db:"allow_password"`
 	EmailCode bool `db:"allow_email_code"`
 	Social    bool `db:"allow_social"`
+	Passkey   bool `db:"allow_passkey"`
 }
 
 // AllMethods allows everything (no organization chosen yet).
-func AllMethods() Methods { return Methods{Password: true, EmailCode: true, Social: true} }
+func AllMethods() Methods {
+	return Methods{Password: true, EmailCode: true, Social: true, Passkey: true}
+}
 
 // Allows reports whether method (MethodPassword, MethodCode, MethodSocial)
 // is allowed; "" (organization SSO) always is.
@@ -96,13 +115,20 @@ func (m Methods) Allows(method string) bool {
 		return m.EmailCode
 	case MethodSocial:
 		return m.Social
+	case MethodPasskey:
+		return m.Passkey
 	}
 	return true
 }
 
 // Methods are the environment's allowed methods.
 func (p SignInPolicy) Methods() Methods {
-	return Methods{Password: p.AllowPassword, EmailCode: p.AllowEmailCode, Social: p.AllowSocial}
+	return Methods{Password: p.AllowPassword, EmailCode: p.AllowEmailCode, Social: p.AllowSocial, Passkey: p.PasskeyAllowed() && slices.Contains(p.AllowedFactors, "webauthn")}
+}
+
+// PasskeyAllowed reads AllowPasskey (nil: allowed, the default).
+func (p SignInPolicy) PasskeyAllowed() bool {
+	return p.AllowPasskey == nil || *p.AllowPasskey
 }
 
 // Audit actions of sign-in policies.

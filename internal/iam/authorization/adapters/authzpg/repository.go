@@ -111,7 +111,8 @@ func (r *Repository) LinkApplication(ctx context.Context, environment identity.E
 func (r *Repository) UnlinkApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) error {
 	res, err := r.db.ExecContext(ctx, `DELETE FROM application_resources WHERE environment_id=$1 AND application_id=$2 AND resource_id=$3`, environment, application, resource)
 	if err != nil {
-		return failure(err)
+		// Still referenced (OAuth clients, SAML service providers, …).
+		return conflict(err)
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {

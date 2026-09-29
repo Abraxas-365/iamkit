@@ -2,7 +2,9 @@
 package oauthmodule
 
 import (
-	"crypto/rsa"
+	"context"
+	"net/http"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
@@ -12,6 +14,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/oauthsvc"
+	"github.com/Abraxas-365/iamkit/internal/iam/signing"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
 	"github.com/ory/fosite"
@@ -19,25 +22,43 @@ import (
 
 type Deps struct {
 	DB         *sqlx.DB
-	Key        *rsa.PrivateKey
+	Keys       signing.Keyring
 	Issuer     string
 	HMACSecret func() string
-	Tokens     *authhttp.Tokens
-	ActorID    func(*fiber.Ctx) string
+	// Transport reaches clients' jwks_uri and back-channel logout URIs
+	// (nil: public addresses only).
+	Transport http.RoundTripper
+	Tokens    *authhttp.Tokens
+	ActorID   func(*fiber.Ctx) string
 }
 type Module struct {
-	Commands oauth.Commands
-	Flows    oauth.Flows
-	HTTP     *oauthhttp.Handler
+	// Logouts serves the back-channel logout delivery log.
+	Logouts *oauthhttp.Logouts
+	// Dispatch sends back-channel logout notifications every interval until
+	// ctx ends (run it in a goroutine on every replica).
+	Dispatch func(ctx context.Context, interval time.Duration)
+	// Dispatcher sends one round now (tests).
+	Dispatcher oauth.Dispatcher
+	Commands   oauth.Commands
+	Flows      oauth.Flows
+	// Devices is the device authorization grant (the hosted module serves
+	// its user side; wire oauthhttp.Handler.Devices to enable it).
+	Devices oauth.Devices
+	HTTP    *oauthhttp.Handler
 }
 
 func New(deps Deps) Module {
 	clients := oauthpg.New(deps.DB)
-	service := oauthsvc.New(clients, mgmtsecret.Generator{}, authbcrypt.Hasher{})
+	service := oauthsvc.New(clients, mgmtsecret.Generator{}, authbcrypt.Hasher{}, oauthfosite.Hints{Keys: deps.Keys, Issuer: deps.Issuer})
+	fetcher := oauthfosite.NewKeyFetcher(deps.Transport)
 	provider := func(client *oauth.Client) (fosite.OAuth2Provider, *oauthfosite.Store, error) {
 		store := &oauthfosite.Store{DB: deps.DB, Environment: client.Environment, Clients: clients}
-		p, err := oauthfosite.NewProvider(store, deps.Issuer, []byte(deps.HMACSecret()), deps.Key)
+		p, err := oauthfosite.NewProvider(store, deps.Issuer, []byte(deps.HMACSecret()), deps.Keys, fetcher, client.AccessTokenFormat == oauth.TokenFormatOpaque)
 		return p, store, err
 	}
-	return Module{Commands: service, Flows: service, HTTP: oauthhttp.New(service, service, service, provider, deps.Tokens, deps.Issuer, deps.ActorID)}
+	handler := oauthhttp.New(service, service, service, provider, deps.Tokens, deps.Issuer, deps.ActorID)
+	handler.Accounts(oauthfosite.NewAccounts(deps.DB, clients, deps.Issuer, fetcher))
+	handler.Exchanges(service)
+	logouts := oauthsvc.NewLogouts(clients, oauthfosite.NewLogoutSender(deps.Keys, deps.Issuer, deps.Transport))
+	return Module{Commands: service, Flows: service, Devices: service, HTTP: handler, Logouts: oauthhttp.NewLogouts(logouts, logouts, deps.ActorID), Dispatch: logouts.Run, Dispatcher: logouts}
 }

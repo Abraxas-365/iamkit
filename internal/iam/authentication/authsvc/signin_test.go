@@ -2,6 +2,7 @@ package authsvc
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
@@ -86,8 +87,16 @@ func TestSignInPolicyValidate(t *testing.T) {
 		t.Fatalf("SSO-only environment refused: %v", err)
 	}
 	got, err := NewSignInPolicies(signInRepository{}).SignInPolicy(context.Background(), testBoundary().EnvironmentID)
-	if err != nil || got.Custom || got != authentication.DefaultSignInPolicy() {
+	if err != nil || got.Custom || !reflect.DeepEqual(got, authentication.DefaultSignInPolicy()) {
 		t.Fatalf("default: %+v %v", got, err)
+	}
+	p.AllowedFactors = []string{"totp", "fax"}
+	if p.Validate() == nil {
+		t.Fatal("unknown factor accepted")
+	}
+	p.AllowedFactors = nil
+	if p.Validate() == nil {
+		t.Fatal("no factor accepted")
 	}
 }
 

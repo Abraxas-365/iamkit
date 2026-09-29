@@ -121,6 +121,7 @@ type (
 	domainTag       struct{} // organization domain
 	invitationTag   struct{}
 	factorTag       struct{} // MFA factor
+	spTag           struct{} // SAML service provider
 )
 
 // tagName returns a human-readable name for error messages.
@@ -175,6 +176,8 @@ func tagName[T any]() string {
 		return "invitation_id"
 	case factorTag:
 		return "factor_id"
+	case spTag:
+		return "service_provider_id"
 	default:
 		return "id"
 	}
@@ -207,6 +210,8 @@ type (
 	DomainID       = ID[domainTag]
 	InvitationID   = ID[invitationTag]
 	FactorID       = ID[factorTag]
+	// ServiceProviderID names a SAML service provider (application).
+	ServiceProviderID = ID[spTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -235,6 +240,9 @@ func NewGroupID() GroupID               { return NewID[groupTag]() }
 func NewDomainID() DomainID             { return NewID[domainTag]() }
 func NewInvitationID() InvitationID     { return NewID[invitationTag]() }
 func NewFactorID() FactorID             { return NewID[factorTag]() }
+func NewServiceProviderID() ServiceProviderID {
+	return NewID[spTag]()
+}
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -262,6 +270,9 @@ func ParseGroupID(raw string) (GroupID, error)               { return ParseID[gr
 func ParseDomainID(raw string) (DomainID, error)             { return ParseID[domainTag](raw) }
 func ParseInvitationID(raw string) (InvitationID, error)     { return ParseID[invitationTag](raw) }
 func ParseFactorID(raw string) (FactorID, error)             { return ParseID[factorTag](raw) }
+func ParseServiceProviderID(raw string) (ServiceProviderID, error) {
+	return ParseID[spTag](raw)
+}
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.
 func MustParseEnvironmentID(raw string) EnvironmentID   { return MustParseID[environmentTag](raw) }
@@ -288,3 +299,6 @@ func MustParseGroupID(raw string) GroupID               { return MustParseID[gro
 func MustParseDomainID(raw string) DomainID             { return MustParseID[domainTag](raw) }
 func MustParseInvitationID(raw string) InvitationID     { return MustParseID[invitationTag](raw) }
 func MustParseFactorID(raw string) FactorID             { return MustParseID[factorTag](raw) }
+func MustParseServiceProviderID(raw string) ServiceProviderID {
+	return MustParseID[spTag](raw)
+}

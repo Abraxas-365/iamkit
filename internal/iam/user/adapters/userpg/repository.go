@@ -57,7 +57,7 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.UserID) (user.User, error) {
 	var row user.User
-	err := r.db.GetContext(ctx, &row, `SELECT id,email,name,active,email_verified,otp_enabled,metadata,failed_logins,CASE WHEN locked_until>now() THEN locked_until END AS locked_until FROM users WHERE environment_id=$1 AND id=$2`, environment, id)
+	err := r.db.GetContext(ctx, &row, `SELECT id,email,name,active,email_verified,otp_enabled,phone,phone_verified,metadata,failed_logins,CASE WHEN locked_until>now() THEN locked_until END AS locked_until FROM users WHERE environment_id=$1 AND id=$2`, environment, id)
 	return row, failure(err, "find user")
 }
 
@@ -93,7 +93,9 @@ func (r *Repository) Update(ctx context.Context, m user.Mutation, id identity.Us
 	if len(input.Metadata) > 0 {
 		metadata = string(input.Metadata)
 	}
-	res, err := tx.ExecContext(ctx, `UPDATE users SET name=coalesce($3,name),active=coalesce($4,active),metadata=coalesce($5::jsonb,metadata),otp_enabled=coalesce($6,otp_enabled) WHERE environment_id=$1 AND id=$2`, m.Environment, id, input.Name, input.Active, metadata, input.OTPEnabled)
+	res, err := tx.ExecContext(ctx, `UPDATE users SET name=coalesce($3,name),active=coalesce($4,active),metadata=coalesce($5::jsonb,metadata),otp_enabled=coalesce($6,otp_enabled),
+		phone_verified=CASE WHEN $7::text IS NULL OR $7::text=phone THEN phone_verified ELSE false END,phone=coalesce($7::text,phone)
+		WHERE environment_id=$1 AND id=$2`, m.Environment, id, input.Name, input.Active, metadata, input.OTPEnabled, input.Phone)
 	if err != nil {
 		return failure(err, "conflicting or out-of-bound resource")
 	}
@@ -141,6 +143,7 @@ func (r *Repository) Delete(ctx context.Context, m user.Mutation, id identity.Us
 		`DELETE FROM mfa_logins WHERE environment_id=$1 AND user_id=$2`,
 		`DELETE FROM recovery_codes WHERE environment_id=$1 AND user_id=$2`,
 		`DELETE FROM user_factors WHERE environment_id=$1 AND user_id=$2`,
+		`DELETE FROM user_mfa_state WHERE environment_id=$1 AND user_id=$2`,
 	}
 	for _, stmt := range statements {
 		if _, err = tx.ExecContext(ctx, stmt, m.Environment, id); err != nil {

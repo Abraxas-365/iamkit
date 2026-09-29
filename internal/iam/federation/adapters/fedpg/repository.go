@@ -57,11 +57,12 @@ type connectionRow struct {
 	LinkEmail          bool                    `db:"link_email"`
 	SignupOrganization identity.OrganizationID `db:"signup_organization_id"`
 	SignupGroup        identity.GroupID        `db:"signup_group_id"`
+	UpdateProfile      bool                    `db:"update_profile"`
 }
 
 func (r connectionRow) connection() federation.Connection {
 	return federation.Connection{ID: r.ID, Environment: r.Environment, Organization: r.Organization, Name: r.Name, Issuer: r.Issuer, Client: r.Client, SecretEnv: r.SecretEnv.String, Sealed: r.Sealed.String, JIT: r.JIT, JITGroup: r.JITGroup, Enforcement: r.Enforcement,
-		Provider: r.Provider, Options: federation.Options(r.Options), Signup: r.Signup, LinkEmail: r.LinkEmail, SignupOrganization: r.SignupOrganization, SignupGroup: r.SignupGroup}
+		Provider: r.Provider, Options: federation.Options(r.Options), Signup: r.Signup, LinkEmail: r.LinkEmail, SignupOrganization: r.SignupOrganization, SignupGroup: r.SignupGroup, UpdateProfile: r.UpdateProfile}
 }
 
 func null(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }
@@ -77,8 +78,8 @@ func (r *Repository) Create(ctx context.Context, m federation.Mutation, c federa
 		return failure(err)
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO federation_connections(id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-		c.ID, c.Environment, c.Organization, c.Name, c.Issuer, c.Client, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, c.Provider, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO federation_connections(id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id,update_profile) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
+		c.ID, c.Environment, c.Organization, c.Name, c.Issuer, c.Client, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, c.Provider, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup, c.UpdateProfile); err != nil {
 		return conflict(err)
 	}
 	m.Target += "/" + c.ID.String()
@@ -91,11 +92,11 @@ func (r *Repository) Create(ctx context.Context, m federation.Mutation, c federa
 // Update rewrites the mutable settings of an active connection. When the
 // secret changes, the legacy reference is cleared in the same statement.
 func (r *Repository) Update(ctx context.Context, m federation.Mutation, c federation.Connection) error {
-	return r.mutate(ctx, m, `UPDATE federation_connections SET name=$3,secret_env=$4,secret_sealed=$5,jit_provisioning=$6,jit_group_id=$7,enforcement=$8,options=$9,signup=$10,link_email=$11,signup_organization_id=$12,signup_group_id=$13 WHERE id=$1 AND environment_id=$2 AND active`,
-		c.ID, c.Environment, c.Name, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup)
+	return r.mutate(ctx, m, `UPDATE federation_connections SET name=$3,secret_env=$4,secret_sealed=$5,jit_provisioning=$6,jit_group_id=$7,enforcement=$8,options=$9,signup=$10,link_email=$11,signup_organization_id=$12,signup_group_id=$13,update_profile=$14 WHERE id=$1 AND environment_id=$2 AND active`,
+		c.ID, c.Environment, c.Name, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup, c.UpdateProfile)
 }
 
-const connectionColumns = `id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id`
+const connectionColumns = `id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id,update_profile`
 
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
 	var row connectionRow
@@ -213,7 +214,7 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		return query.Paginated[federation.ConnectionView]{}, failure(err)
 	}
 	out := []federation.ConnectionView{}
-	sel := fmt.Sprintf(`SELECT c.id, c.organization_id, COALESCE((SELECT o.name FROM organizations o WHERE o.id=c.organization_id AND o.environment_id=c.environment_id),'') AS organization_name, c.name, c.provider, c.issuer, c.client_id, c.active, c.jit_provisioning, c.enforcement, c.signup, c.link_email,
+	sel := fmt.Sprintf(`SELECT c.id, c.organization_id, COALESCE((SELECT o.name FROM organizations o WHERE o.id=c.organization_id AND o.environment_id=c.environment_id),'') AS organization_name, c.name, c.provider, c.issuer, c.client_id, c.active, c.jit_provisioning, c.enforcement, c.signup, c.link_email, c.update_profile,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
 		%s ORDER BY c.name LIMIT %d OFFSET %d`, base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &out, sel, args...); err != nil {
@@ -227,8 +228,8 @@ func (r *Repository) FindDetail(ctx context.Context, environment identity.Enviro
 		Options options `db:"options"`
 	}
 	err := r.db.GetContext(ctx, &row, `SELECT c.id, c.organization_id, COALESCE((SELECT o.name FROM organizations o WHERE o.id=c.organization_id AND o.environment_id=c.environment_id),'') AS organization_name, c.name, c.provider, c.options, c.issuer, c.client_id, COALESCE(c.secret_env,'') AS secret_env,
-		CASE WHEN c.secret_sealed IS NULL THEN 'env' ELSE 'sealed' END AS secret_source,
-		c.active, c.jit_provisioning, c.jit_group_id, c.enforcement, c.signup, c.link_email, c.signup_organization_id, c.signup_group_id, c.created_at,
+		CASE WHEN c.provider='saml' OR (c.provider='ldap' AND c.secret_sealed IS NULL) THEN 'none' WHEN c.secret_sealed IS NULL THEN 'env' ELSE 'sealed' END AS secret_source,
+		c.active, c.jit_provisioning, c.jit_group_id, c.enforcement, c.signup, c.link_email, c.signup_organization_id, c.signup_group_id, c.update_profile, c.created_at,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
 		FROM federation_connections c WHERE c.id=$1 AND c.environment_id=$2`, id, environment)
 	if errors.Is(err, sql.ErrNoRows) {

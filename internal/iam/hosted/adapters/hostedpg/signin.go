@@ -23,12 +23,13 @@ type signInRow struct {
 	AllConnections  bool                   `db:"all_connections"`
 	Connections     pq.StringArray         `db:"connections"`
 	Signup          bool                   `db:"signup"`
+	Passkey         bool                   `db:"passkey"`
 	UpdatedAt       time.Time              `db:"updated_at"`
 }
 
 func (r signInRow) signIn() (hosted.SignIn, error) {
 	out := hosted.SignIn{Environment: r.Environment, Client: r.Client, Password: r.Password, EmailCode: r.EmailCode, OrganizationSSO: r.OrganizationSSO,
-		AllConnections: r.AllConnections, Connections: make([]identity.ConnectionID, 0, len(r.Connections)), Signup: r.Signup, Custom: true, UpdatedAt: &r.UpdatedAt}
+		AllConnections: r.AllConnections, Connections: make([]identity.ConnectionID, 0, len(r.Connections)), Signup: r.Signup, Passkey: r.Passkey, Custom: true, UpdatedAt: &r.UpdatedAt}
 	for _, raw := range r.Connections {
 		id, err := identity.ParseConnectionID(raw)
 		if err != nil {
@@ -39,7 +40,7 @@ func (r signInRow) signIn() (hosted.SignIn, error) {
 	return out, nil
 }
 
-const signInColumns = `environment_id,client_id,password,email_code,organization_sso,all_connections,connections::text[] AS connections,signup,updated_at`
+const signInColumns = `environment_id,client_id,password,email_code,organization_sso,all_connections,connections::text[] AS connections,signup,passkey,updated_at`
 
 func (r *Repository) SignIn(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (hosted.SignIn, bool, error) {
 	var row signInRow
@@ -92,10 +93,10 @@ func (r *Repository) SaveSignIn(ctx context.Context, m hosted.Mutation, client i
 		return hosted.SignIn{}, errx.NotFound("oauth client not found")
 	}
 	var row signInRow
-	err = tx.GetContext(ctx, &row, `INSERT INTO client_sign_in(client_id,environment_id,password,email_code,organization_sso,all_connections,connections,signup) VALUES($1,$2,$3,$4,$5,$6,$7::uuid[],$8)
+	err = tx.GetContext(ctx, &row, `INSERT INTO client_sign_in(client_id,environment_id,password,email_code,organization_sso,all_connections,connections,signup,passkey) VALUES($1,$2,$3,$4,$5,$6,$7::uuid[],$8,$9)
 		ON CONFLICT (client_id) DO UPDATE SET password=EXCLUDED.password, email_code=EXCLUDED.email_code, organization_sso=EXCLUDED.organization_sso,
-			all_connections=EXCLUDED.all_connections, connections=EXCLUDED.connections, signup=EXCLUDED.signup, updated_at=now()
-		RETURNING `+signInColumns, client, m.Environment, input.Password, input.EmailCode, input.OrganizationSSO, input.AllConnections, pq.Array(connections), input.Signup)
+			all_connections=EXCLUDED.all_connections, connections=EXCLUDED.connections, signup=EXCLUDED.signup, passkey=EXCLUDED.passkey, updated_at=now()
+		RETURNING `+signInColumns, client, m.Environment, input.Password, input.EmailCode, input.OrganizationSSO, input.AllConnections, pq.Array(connections), input.Signup, input.Passkey)
 	if err != nil {
 		return hosted.SignIn{}, failure(err)
 	}

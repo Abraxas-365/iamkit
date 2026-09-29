@@ -132,15 +132,20 @@ var _ authentication.DeliveryConfigRepository = (*DeliveryConfigRepository)(nil)
 // latest-failure columns, which later successes leave in place. Attempts for
 // an unknown environment are ignored.
 func (r *DeliveryConfigRepository) RecordAttempt(ctx context.Context, environmentID identity.EnvironmentID, a authentication.Attempt) error {
-	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO delivery_activity AS d (environment_id, source, purpose, delivered, status, reason, latency_ms, attempted_at,
+	return recordAttempt(ctx, r.db, environmentID, "email", a)
+}
+
+// recordAttempt stores the latest attempt of one channel (email, sms).
+func recordAttempt(ctx context.Context, db sqlx.ExecerContext, environmentID identity.EnvironmentID, channel string, a authentication.Attempt) error {
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO delivery_activity AS d (environment_id, channel, source, purpose, delivered, status, reason, latency_ms, attempted_at,
 			failure_source, failure_purpose, failure_status, failure_reason, failed_at)
-		SELECT e.id, $2, $3, $4, $5, $6, $7, $8,
+		SELECT e.id, $9, $2, $3, $4, $5, $6, $7, $8,
 			CASE WHEN $4 THEN NULL ELSE $2 END, CASE WHEN $4 THEN NULL ELSE $3 END,
 			CASE WHEN $4 THEN NULL ELSE $5::int END, CASE WHEN $4 THEN NULL ELSE $6 END,
 			CASE WHEN $4 THEN NULL ELSE $8::timestamptz END
 		FROM environments e WHERE e.id = $1
-		ON CONFLICT (environment_id) DO UPDATE SET
+		ON CONFLICT (environment_id, channel) DO UPDATE SET
 			source = EXCLUDED.source, purpose = EXCLUDED.purpose, delivered = EXCLUDED.delivered,
 			status = EXCLUDED.status, reason = EXCLUDED.reason, latency_ms = EXCLUDED.latency_ms,
 			attempted_at = EXCLUDED.attempted_at,
@@ -149,7 +154,7 @@ func (r *DeliveryConfigRepository) RecordAttempt(ctx context.Context, environmen
 			failure_status  = CASE WHEN EXCLUDED.delivered THEN d.failure_status  ELSE EXCLUDED.failure_status END,
 			failure_reason  = CASE WHEN EXCLUDED.delivered THEN d.failure_reason  ELSE EXCLUDED.failure_reason END,
 			failed_at       = CASE WHEN EXCLUDED.delivered THEN d.failed_at       ELSE EXCLUDED.failed_at END`,
-		environmentID, a.Source, a.Purpose, a.Delivered, a.Status, a.Reason, a.LatencyMS, a.At)
+		environmentID, a.Source, a.Purpose, a.Delivered, a.Status, a.Reason, a.LatencyMS, a.At, channel)
 	if err != nil {
 		return errx.Wrap(err, "record delivery attempt", errx.TypeInternal)
 	}
@@ -158,6 +163,10 @@ func (r *DeliveryConfigRepository) RecordAttempt(ctx context.Context, environmen
 
 // Activity returns the latest attempt and the latest failure, if any.
 func (r *DeliveryConfigRepository) Activity(ctx context.Context, environmentID identity.EnvironmentID) (authentication.Activity, error) {
+	return activity(ctx, r.db, environmentID, "email")
+}
+
+func activity(ctx context.Context, db *sqlx.DB, environmentID identity.EnvironmentID, channel string) (authentication.Activity, error) {
 	var row struct {
 		Source         string         `db:"source"`
 		Purpose        string         `db:"purpose"`
@@ -172,9 +181,9 @@ func (r *DeliveryConfigRepository) Activity(ctx context.Context, environmentID i
 		FailureReason  sql.NullString `db:"failure_reason"`
 		FailedAt       sql.NullTime   `db:"failed_at"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT source, purpose, delivered, status, reason, latency_ms, attempted_at,
+	err := db.GetContext(ctx, &row, `SELECT source, purpose, delivered, status, reason, latency_ms, attempted_at,
 		failure_source, failure_purpose, failure_status, failure_reason, failed_at
-		FROM delivery_activity WHERE environment_id = $1`, environmentID)
+		FROM delivery_activity WHERE environment_id = $1 AND channel = $2`, environmentID, channel)
 	if err == sql.ErrNoRows {
 		return authentication.Activity{}, nil
 	}

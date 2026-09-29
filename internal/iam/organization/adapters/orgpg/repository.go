@@ -70,13 +70,15 @@ func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentI
 		AllowPassword   bool                    `db:"allow_password"`
 		AllowEmailCode  bool                    `db:"allow_email_code"`
 		AllowSocial     bool                    `db:"allow_social"`
+		AllowPasskey    bool                    `db:"allow_passkey"`
+		AllowedFactors  pq.StringArray          `db:"allowed_factors"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT id,name,active,metadata,mfa_required,mfa_for_federated,allow_password,allow_email_code,allow_social FROM organizations WHERE environment_id=$1 AND id=$2`, environment, id)
+	err := r.db.GetContext(ctx, &row, `SELECT id,name,active,metadata,mfa_required,mfa_for_federated,allow_password,allow_email_code,allow_social,allow_passkey,allowed_factors FROM organizations WHERE environment_id=$1 AND id=$2`, environment, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return organization.Organization{}, errx.NotFound("resource not found")
 	}
 	return organization.Organization{ID: row.ID, Name: row.Name, Active: row.Active, Metadata: json.RawMessage(row.Metadata), MFARequired: row.MFARequired, MFAForFederated: row.MFAForFederated,
-		AllowPassword: row.AllowPassword, AllowEmailCode: row.AllowEmailCode, AllowSocial: row.AllowSocial}, failure(err)
+		AllowPassword: row.AllowPassword, AllowEmailCode: row.AllowEmailCode, AllowSocial: row.AllowSocial, AllowPasskey: row.AllowPasskey, AllowedFactors: []string(row.AllowedFactors)}, failure(err)
 }
 func (r *Repository) UpdateMember(ctx context.Context, m organization.Mutation, org identity.OrganizationID, user identity.UserID, input organization.MemberUpdate) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -110,9 +112,14 @@ func (r *Repository) Update(ctx context.Context, m organization.Mutation, id ide
 		return failure(err)
 	}
 	defer tx.Rollback()
+	var factors any
+	if input.AllowedFactors != nil {
+		factors = pq.Array(input.AllowedFactors)
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE organizations SET name=coalesce($3,name),active=coalesce($4,active),metadata=coalesce($5::jsonb,metadata),mfa_required=coalesce($6,mfa_required),mfa_for_federated=coalesce($7,mfa_for_federated),
-		allow_password=coalesce($8,allow_password),allow_email_code=coalesce($9,allow_email_code),allow_social=coalesce($10,allow_social) WHERE environment_id=$1 AND id=$2`,
-		m.Environment, id, input.Name, input.Active, metadata, input.MFARequired, input.MFAForFederated, input.AllowPassword, input.AllowEmailCode, input.AllowSocial)
+		allow_password=coalesce($8,allow_password),allow_email_code=coalesce($9,allow_email_code),allow_social=coalesce($10,allow_social),allowed_factors=coalesce($11::text[],allowed_factors),
+		allow_passkey=coalesce($12,allow_passkey) WHERE environment_id=$1 AND id=$2`,
+		m.Environment, id, input.Name, input.Active, metadata, input.MFARequired, input.MFAForFederated, input.AllowPassword, input.AllowEmailCode, input.AllowSocial, factors, input.AllowPasskey)
 	if err != nil {
 		return conflict(err)
 	}

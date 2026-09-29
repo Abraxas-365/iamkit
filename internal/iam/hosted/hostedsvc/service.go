@@ -29,6 +29,7 @@ type Service struct {
 	second         hosted.SecondFactor
 	signIns        authentication.SignInPolicyQueries
 	signups        hosted.Signups
+	passkeys       hosted.Passkeys
 	now            func() time.Time
 }
 
@@ -41,15 +42,22 @@ func New(repository hosted.Repository, secrets hosted.Secrets, authorizations ho
 // (without it every method the client offers is shown).
 func (s *Service) SetSignInPolicies(p authentication.SignInPolicyQueries) { s.signIns = p }
 
+// SetPasskeys offers passkey sign-in (without it the pages never do).
+func (s *Service) SetPasskeys(passkeys hosted.Passkeys) { s.passkeys = passkeys }
+
 // SetSignups offers self-registration (without it the pages never do).
 func (s *Service) SetSignups(signups hosted.Signups) { s.signups = signups }
 
 // options are the client's sign-in options within the environment's
-// sign-in policy: what its pages offer.
+// sign-in policy: what its pages offer. A SAML sign-in has no OAuth client
+// (zero ID) and offers every method the policy allows.
 func (s *Service) options(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (hosted.SignIn, error) {
-	options, err := s.SignIn(ctx, environment, client)
-	if err != nil {
-		return options, err
+	options := hosted.DefaultSignIn(environment, client)
+	var err error
+	if !client.IsZero() {
+		if options, err = s.SignIn(ctx, environment, client); err != nil {
+			return options, err
+		}
 	}
 	policy := authentication.DefaultSignInPolicy()
 	if s.signIns != nil {
@@ -59,6 +67,7 @@ func (s *Service) options(ctx context.Context, environment identity.EnvironmentI
 	}
 	options = options.Within(policy)
 	options.Signup = options.Signup && s.signups != nil
+	options.Passkey = options.Passkey && s.passkeys != nil
 	return options, nil
 }
 
@@ -179,6 +188,30 @@ func passwordReset(o hosted.SignIn) bool { return o.PasswordReset }
 func emailCode(o hosted.SignIn) bool     { return o.EmailCode }
 func emailForm(o hosted.SignIn) bool     { return o.EmailForm() }
 func signup(o hosted.SignIn) bool        { return o.Signup }
+func passkey(o hosted.SignIn) bool       { return o.Passkey }
+
+// PasskeyOptions starts a passkey sign-in on the first page.
+func (s *Service) PasskeyOptions(ctx context.Context, r hosted.Request) (authentication.WebAuthnOptions, error) {
+	target, _, err := s.offered(ctx, r, passkey)
+	if err != nil {
+		return authentication.WebAuthnOptions{}, err
+	}
+	return s.passkeys.BeginPasskey(ctx, target.Environment)
+}
+
+// Passkey continues after a passkey: it verified the user on the key, so
+// the login counts as multi-factor.
+func (s *Service) Passkey(ctx context.Context, r hosted.Request, session string, credential []byte) (hosted.Result, error) {
+	target, _, err := s.offered(ctx, r, passkey)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	verified, err := s.authenticator.VerifyPasskey(ctx, target.Environment, session, credential)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	return s.result(ctx, r, target, verified)
+}
 
 // Signup emails a code confirming the address of a new account. Which
 // methods the account may use is the authentication module's decision; the
@@ -244,6 +277,9 @@ func (s *Service) Identify(ctx context.Context, r hosted.Request, email string) 
 		return hosted.Route{}, errx.Forbidden("this email cannot sign in to this application with single sign-on")
 	case !sso || !options.OrganizationSSO:
 		return hosted.Route{Method: federation.MethodPassword}, nil
+	case d.Provider == federation.ProviderLDAP:
+		// The directory checks the password here: no redirect.
+		return hosted.Route{Method: federation.ProviderLDAP, Connection: d.Connection}, nil
 	case !d.Required && (options.Password || options.EmailCode):
 		return hosted.Route{Method: federation.MethodPassword, Connection: d.Connection}, nil
 	}
@@ -322,6 +358,18 @@ func (s *Service) SSO(ctx context.Context, r hosted.Request, connection identity
 	return s.federation.StartHosted(ctx, target, connection, r.Ticket)
 }
 
+func (s *Service) Directory(ctx context.Context, r hosted.Request, connection identity.ConnectionID, email, password string) (hosted.Result, error) {
+	target, _, err := s.offered(ctx, r, func(o hosted.SignIn) bool { return o.OrganizationSSO })
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	verified, err := s.federation.DirectoryHosted(ctx, target.Environment, connection, email, password)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	return s.result(ctx, r, target, verified)
+}
+
 func (s *Service) Federated(ctx context.Context, r hosted.Request, verified authentication.Verified) (hosted.Result, error) {
 	target, err := s.pending(ctx, r)
 	if err != nil {
@@ -359,13 +407,15 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 	proven := authentication.HasMFA(verified.AMR)
 	if len(organizations) > 1 {
 		if s.second != nil && !proven && !verified.Federated() {
-			// Any organization will do: a user with a factor needs it in all.
-			req, err := s.second.Requirement(ctx, target.Boundary(organizations[0].ID), verified.User, false)
+			// Before the choice, the environment's rules apply: a user with a
+			// factor the environment accepts proves it once for every
+			// organization.
+			req, err := s.second.Requirement(ctx, target.Boundary(identity.OrganizationID{}), verified.User, false, verified.Methods())
 			if err != nil {
 				return hosted.Result{}, err
 			}
 			if req.Needed && !req.Enroll {
-				return hosted.Result{SecondFactor: true}, s.park(ctx, r, target, login)
+				return hosted.Result{SecondFactor: true, Factors: req.Factors}, s.park(ctx, r, target, login)
 			}
 		}
 		return hosted.Result{Organizations: organizations}, s.park(ctx, r, target, login)
@@ -373,7 +423,7 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 	organization := organizations[0].ID
 	login.Chosen = organization
 	if s.second != nil && !proven {
-		req, err := s.second.Requirement(ctx, target.Boundary(organization), verified.User, verified.FederatedFor(organization))
+		req, err := s.second.Requirement(ctx, target.Boundary(organization), verified.User, verified.FederatedFor(organization), verified.Methods())
 		if err != nil {
 			return hosted.Result{}, err
 		}
@@ -382,13 +432,9 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 				return hosted.Result{}, err
 			}
 			if !req.Enroll {
-				return hosted.Result{SecondFactor: true}, nil
+				return hosted.Result{SecondFactor: true, Factors: req.Factors}, nil
 			}
-			enrollment, err := s.second.Enrolling(ctx, target.Environment, verified.User)
-			if err != nil {
-				return hosted.Result{}, err
-			}
-			return hosted.Result{Enroll: &enrollment}, nil
+			return s.enrollment(ctx, target, verified.User, req)
 		}
 	}
 	if verified.PasswordExpired {
@@ -434,17 +480,50 @@ func (s *Service) Choose(ctx context.Context, r hosted.Request, organization ide
 	return s.step(ctx, r, target, login)
 }
 
-// enrolling reports whether the parked login is adding its first factor:
-// the chosen organization requires one the user does not have.
-func (s *Service) enrolling(ctx context.Context, target authentication.Target, login hosted.Login) (bool, error) {
-	if login.Chosen.IsZero() {
-		return false, nil
-	}
-	req, err := s.second.Requirement(ctx, target.Boundary(login.Chosen), login.Verified.User, login.Verified.FederatedFor(login.Chosen))
-	return req.Enroll, err
+// boundary is where the parked login's second factor is checked: the chosen
+// organization, or before the choice the environment alone.
+func boundary(target authentication.Target, login hosted.Login) authentication.Context {
+	return target.Boundary(login.Chosen)
 }
 
-func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, code string) (hosted.Result, error) {
+// requirement is the parked login's second-factor requirement.
+func (s *Service) requirement(ctx context.Context, target authentication.Target, login hosted.Login) (authentication.Requirement, error) {
+	federated := !login.Chosen.IsZero() && login.Verified.FederatedFor(login.Chosen)
+	return s.second.Requirement(ctx, boundary(target, login), login.Verified.User, federated, login.Verified.Methods())
+}
+
+// enrollment is the page of a login that must add a factor: an
+// authenticator app when allowed, and the offer of an emailed code.
+func (s *Service) enrollment(ctx context.Context, target authentication.Target, user identity.UserID, req authentication.Requirement) (hosted.Result, error) {
+	out := hosted.Result{EnrollEmail: slices.Contains(req.Factors, mfa.KindEmail)}
+	if slices.Contains(req.Factors, mfa.KindTOTP) {
+		enrollment, err := s.second.Enrolling(ctx, target.Environment, user)
+		if err != nil {
+			return hosted.Result{}, err
+		}
+		out.Enroll = &enrollment
+	}
+	if out.Enroll == nil && !out.EnrollEmail {
+		e := errx.Forbidden("no second factor this sign-in may add is allowed; contact your administrator")
+		e.Code = "FACTOR_NOT_ALLOWED"
+		return hosted.Result{}, e
+	}
+	return out, nil
+}
+
+// SecurityKey starts the security key prompt of the parked login.
+func (s *Service) SecurityKey(ctx context.Context, r hosted.Request) (authentication.WebAuthnOptions, error) {
+	if s.second == nil {
+		return authentication.WebAuthnOptions{}, errx.NotFound("multi-factor authentication is not enabled")
+	}
+	target, login, err := s.parked(ctx, r)
+	if err != nil {
+		return authentication.WebAuthnOptions{}, err
+	}
+	return s.second.AssertFor(ctx, boundary(target, login), login.Verified.User, login.Verified.Methods())
+}
+
+func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, proof authentication.Proof) (hosted.Result, error) {
 	if s.second == nil {
 		return hosted.Result{}, errx.NotFound("multi-factor authentication is not enabled")
 	}
@@ -456,7 +535,7 @@ func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, code strin
 	if authentication.HasMFA(login.Verified.AMR) {
 		return s.step(ctx, r, target, login)
 	}
-	enroll, err := s.enrolling(ctx, target, login)
+	req, err := s.requirement(ctx, target, login)
 	if err != nil {
 		return hosted.Result{}, err
 	}
@@ -472,7 +551,7 @@ func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, code strin
 		}
 		return hosted.Result{}, hosted.ErrLoginExpired()
 	}
-	v, err := s.second.Verify(ctx, target.Environment, login.Verified.User, code, enroll)
+	v, err := s.second.Verify(ctx, boundary(target, login), login.Verified.User, login.Verified.Methods(), proof, req.Enroll)
 	if err != nil {
 		return hosted.Result{}, err
 	}
@@ -484,22 +563,48 @@ func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, code strin
 	return s.step(ctx, r, target, login)
 }
 
-func (s *Service) Enrollment(ctx context.Context, r hosted.Request) (authentication.Enrollment, error) {
+func (s *Service) SendFactorCode(ctx context.Context, r hosted.Request, factor string) (hosted.Result, error) {
 	if s.second == nil {
-		return authentication.Enrollment{}, errx.NotFound("multi-factor authentication is not enabled")
+		return hosted.Result{}, errx.NotFound("multi-factor authentication is not enabled")
 	}
 	target, login, err := s.parked(ctx, r)
 	if err != nil {
-		return authentication.Enrollment{}, err
+		return hosted.Result{}, err
 	}
-	enroll, err := s.enrolling(ctx, target, login)
+	if authentication.HasMFA(login.Verified.AMR) {
+		return s.step(ctx, r, target, login)
+	}
+	req, err := s.requirement(ctx, target, login)
 	if err != nil {
-		return authentication.Enrollment{}, err
+		return hosted.Result{}, err
 	}
-	if !enroll {
-		return authentication.Enrollment{}, errx.Business("this sign-in does not need an authenticator")
+	if !req.Needed {
+		return s.step(ctx, r, target, login)
 	}
-	return s.second.Enrolling(ctx, target.Environment, login.Verified.User)
+	sent, err := s.second.Send(ctx, boundary(target, login), login.Verified.User, login.Verified.Methods(), factor, req.Enroll)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	// The code page: an enrolling login types the code on it too.
+	return hosted.Result{SecondFactor: true, Factors: req.Factors, Sent: &sent}, nil
+}
+
+func (s *Service) Enrollment(ctx context.Context, r hosted.Request) (hosted.Result, error) {
+	if s.second == nil {
+		return hosted.Result{}, errx.NotFound("multi-factor authentication is not enabled")
+	}
+	target, login, err := s.parked(ctx, r)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	req, err := s.requirement(ctx, target, login)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	if !req.Enroll {
+		return hosted.Result{}, errx.Business("this sign-in does not need to add a second factor")
+	}
+	return s.enrollment(ctx, target, login.Verified.User, req)
 }
 
 func (s *Service) Continue(ctx context.Context, r hosted.Request) (hosted.Result, error) {
@@ -522,7 +627,7 @@ func (s *Service) ChangePassword(ctx context.Context, r hosted.Request, secret s
 		return hosted.Result{}, errx.Validation("no password change is pending")
 	}
 	if s.second != nil && !authentication.HasMFA(login.Verified.AMR) {
-		req, err := s.second.Requirement(ctx, target.Boundary(login.Chosen), login.Verified.User, login.Verified.FederatedFor(login.Chosen))
+		req, err := s.requirement(ctx, target, login)
 		if err != nil {
 			return hosted.Result{}, err
 		}

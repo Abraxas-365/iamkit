@@ -21,20 +21,44 @@ type Commands interface {
 // SecondFactor is the multi-factor step of headless logins, implemented by
 // the mfa module. Nil disables MFA.
 type SecondFactor interface {
-	Requirement(ctx context.Context, boundary Context, user identity.UserID, federated bool) (Requirement, error)
+	// Requirement: amr are the first factor's method references (an
+	// emailed first factor rules out the email second factor).
+	Requirement(ctx context.Context, boundary Context, user identity.UserID, federated bool, amr []string) (Requirement, error)
 	// Begin parks the login until its second factor; passwordHash (a
 	// replacement for an expired password) is stored once it passes.
 	Begin(ctx context.Context, boundary Context, user identity.UserID, amr []string, enroll bool, passwordHash string) (string, error)
-	// Complete verifies the code of a pending login and runs issue before
+	// Complete verifies the proof of a pending login and runs issue before
 	// committing: when issue fails the verification rolls back.
-	Complete(ctx context.Context, token, code string, issue func(done Completed) error) (Completed, error)
+	Complete(ctx context.Context, token string, proof Proof, issue func(done Completed) error) (Completed, error)
 	Enroll(ctx context.Context, token string) (Enrollment, error)
+	// Challenge sends an email or SMS code for a pending login.
+	Challenge(ctx context.Context, token, factor string) (CodeSent, error)
+	// Assert starts a security key prompt for a pending login.
+	Assert(ctx context.Context, token string) (WebAuthnOptions, error)
 }
 
 // MFACommands finish a headless login that answered mfa_required.
 type MFACommands interface {
-	VerifyMFA(ctx context.Context, token, code string) (Issued, error)
+	VerifyMFA(ctx context.Context, token string, proof Proof) (Issued, error)
 	EnrollMFA(ctx context.Context, token string) (Enrollment, error)
+	// ChallengeMFA sends the code of an email or SMS factor (factor
+	// "email" or "sms").
+	ChallengeMFA(ctx context.Context, token, factor string) (CodeSent, error)
+	// AssertMFA starts the security key prompt of a pending login.
+	AssertMFA(ctx context.Context, token string) (WebAuthnOptions, error)
+}
+
+// Passkeys verify a passkey (the mfa module); nil disables passkey sign-in.
+type Passkeys interface {
+	BeginPasskey(ctx context.Context, environment identity.EnvironmentID) (WebAuthnOptions, error)
+	FinishPasskey(ctx context.Context, environment identity.EnvironmentID, session string, credential []byte) (identity.UserID, error)
+}
+
+// PasskeyCommands sign in headlessly with a passkey.
+type PasskeyCommands interface {
+	BeginPasskey(ctx context.Context, environment identity.EnvironmentID) (WebAuthnOptions, error)
+	// PasskeyLogin verifies the passkey and signs in to the boundary.
+	PasskeyLogin(ctx context.Context, boundary Context, session string, credential []byte) (Result, error)
 }
 
 // Authenticator splits login in two for the hosted pages: verify who the
@@ -43,6 +67,9 @@ type MFACommands interface {
 type Authenticator interface {
 	VerifyPassword(ctx context.Context, environment identity.EnvironmentID, email, password string) (Verified, error)
 	VerifyCode(ctx context.Context, environment identity.EnvironmentID, challenge identity.ChallengeID, code string) (Verified, error)
+	// VerifyPasskey verifies a passkey sign-in (the email comes from the
+	// account).
+	VerifyPasskey(ctx context.Context, environment identity.EnvironmentID, session string, credential []byte) (Verified, error)
 	// Organizations lists the organizations in which the user may use the
 	// target application and resource with the method they verified with
 	// (ErrMethodNotAllowed when only the method keeps them out).
@@ -135,6 +162,40 @@ type DeliveryConfigRepository interface {
 	// Activity returns the environment's recorded attempts (empty if none).
 	Activity(ctx context.Context, environment identity.EnvironmentID) (Activity, error)
 	// Audit writes an audit event for a console action.
+	Audit(ctx context.Context, m Mutation) error
+}
+
+// SMSDelivery sends one text message (Twilio, the customer's webhook).
+type SMSDelivery interface {
+	SendSMS(ctx context.Context, message SMS) error
+}
+
+// SMSCommands manages an environment's SMS provider; changes and test
+// sends are audited (sms.update, sms.delete, sms.test).
+type SMSCommands interface {
+	SetSMSConfig(ctx context.Context, m Mutation, input SMSConfigInput) error
+	DeleteSMSConfig(ctx context.Context, m Mutation) error
+	// TestSMS texts a test message and returns the attempt, delivered or not.
+	TestSMS(ctx context.Context, m Mutation, input SMSTestInput) (Attempt, error)
+	// SendSMS texts a code (purpose mfa or phone_verification) through the
+	// environment's provider and records the attempt.
+	SendSMS(ctx context.Context, environment identity.EnvironmentID, phone, purpose, code string) error
+}
+
+// SMSQueries reads an environment's SMS provider.
+type SMSQueries interface {
+	SMSConfig(ctx context.Context, environment identity.EnvironmentID) (SMSConfig, error)
+	SMSStatus(ctx context.Context, environment identity.EnvironmentID) (SMSStatus, error)
+}
+
+// SMSRepository stores SMS providers (secret sealed) and their activity.
+type SMSRepository interface {
+	GetSMSConfig(ctx context.Context, environment identity.EnvironmentID) (config SMSConfig, sealed string, err error)
+	// SetSMSConfig and DeleteSMSConfig audit m in the same transaction.
+	SetSMSConfig(ctx context.Context, m Mutation, input SMSConfigInput, sealed string) error
+	DeleteSMSConfig(ctx context.Context, m Mutation) error
+	RecordSMSAttempt(ctx context.Context, environment identity.EnvironmentID, attempt Attempt) error
+	SMSActivity(ctx context.Context, environment identity.EnvironmentID) (Activity, error)
 	Audit(ctx context.Context, m Mutation) error
 }
 
@@ -300,10 +361,13 @@ type Secrets interface {
 }
 
 type TokenIssuer interface {
-	Issue(token Token, audience string) (string, error)
-	KeyID() string
-	JWKS() any
+	Issue(ctx context.Context, token Token, audience string) (string, error)
+	JWKS(ctx context.Context) (any, error)
 	Machine(ctx context.Context, raw string) (string, error)
+	// MachineAccount issues the machine token of a service account that
+	// already authenticated (OAuth client_credentials): the same token
+	// Machine issues for its secret.
+	MachineAccount(ctx context.Context, account identity.AccountID) (string, error)
 }
 type TokenValidator interface {
 	Validate(ctx context.Context, raw string, audience string, environment identity.EnvironmentID) (Token, error)
@@ -312,13 +376,15 @@ type TokenValidator interface {
 	// where the token's own claims determine the environment scope.
 	ValidateSelf(ctx context.Context, raw string) (Token, error)
 }
+
+// TokenCodec signs with the environment's signing key (signing.Keyring)
+// and verifies by kid.
 type TokenCodec interface {
-	Sign(token Token) (string, error)
-	Verify(raw, audience string) (Token, error)
+	Sign(ctx context.Context, token Token) (string, error)
+	Verify(ctx context.Context, raw, audience string) (Token, error)
 	// VerifySelf checks signature, issuer, and expiry without audience enforcement.
-	VerifySelf(raw string) (Token, error)
-	KeyID() string
-	JWKS() any
+	VerifySelf(ctx context.Context, raw string) (Token, error)
+	JWKS(ctx context.Context) (any, error)
 }
 
 // OAuthTokens reports whether an OAuth-issued access token is still live.
@@ -336,6 +402,9 @@ type Repository interface {
 type Transaction interface {
 	// PasswordUser locks the active user signing in with a password.
 	PasswordUser(ctx context.Context, boundary Context, email string) (PasswordAccount, error)
+	// ActiveEmail is the address of an active user (passkey sign-in);
+	// Unauthorized when there is none.
+	ActiveEmail(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (string, error)
 	// SetLoginFailures records wrong passwords in a row and the lock they
 	// caused (nil clears it).
 	SetLoginFailures(ctx context.Context, user identity.UserID, failures int, lockedUntil *time.Time) error
@@ -378,6 +447,7 @@ type TokenRepository interface {
 	Current(ctx context.Context, token Token, environment identity.EnvironmentID) ([]string, error)
 	ActorActive(ctx context.Context, token Token) (bool, error)
 	Machine(ctx context.Context, hash []byte) (Token, string, error)
+	MachineAccount(ctx context.Context, account identity.AccountID) (Token, string, error)
 	Revoke(ctx context.Context, environment identity.EnvironmentID, session identity.SessionID) error
 	Profile(ctx context.Context, token Token) (Profile, error)
 	Organizations(ctx context.Context, token Token) ([]Organization, error)

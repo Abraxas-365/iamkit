@@ -25,6 +25,8 @@ type Deps struct {
 	SignInPolicies authentication.SignInPolicyQueries
 	// Signups offers self-registration (nil: never).
 	Signups hosted.Signups
+	// Passkeys offers passkey sign-in (nil: never).
+	Passkeys hosted.Passkeys
 	// Finish completes the OAuth authorization (oauthhttp.Handler.Finish).
 	Finish  hostedhttp.Finisher
 	ActorID func(*fiber.Ctx) string
@@ -44,6 +46,9 @@ func New(deps Deps) Module {
 	}
 	if deps.Signups != nil {
 		service.SetSignups(deps.Signups)
+	}
+	if deps.Passkeys != nil {
+		service.SetPasskeys(deps.Passkeys)
 	}
 	return Module{Flow: service, Commands: service, Queries: service, HTTP: hostedhttp.New(service, service, service, deps.Invitations, deps.Finish, deps.ActorID)}
 }

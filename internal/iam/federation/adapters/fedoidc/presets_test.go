@@ -44,6 +44,10 @@ type fakeIdP struct {
 	apple *ecdsa.PublicKey
 	// emails is GitHub's /user/emails answer.
 	emails string
+	// userinfo is an OAuth 2.0 provider's userinfo answer.
+	userinfo string
+	// bearer is the Authorization header of the last API request.
+	bearer string
 }
 
 func newIdP(t *testing.T) *fakeIdP {
@@ -107,10 +111,17 @@ func (f *fakeIdP) serve(w http.ResponseWriter, r *http.Request) {
 			client, _ = url.QueryUnescape(user)
 			f.secret, _ = url.QueryUnescape(password)
 		}
-		if host != "github.com" {
+		if host != "github.com" && host != "ghe.example.com" && host != "oauth.example.com" {
 			out["id_token"] = f.idToken(client)
 		}
 		_ = json.NewEncoder(w).Encode(out)
+	case host == "oauth.example.com" && path == "/me":
+		f.bearer = r.Header.Get("Authorization")
+		_, _ = w.Write([]byte(f.userinfo))
+	case host == "ghe.example.com" && path == "/api/v3/user":
+		_, _ = w.Write([]byte(`{"id":42,"login":"hubot","name":"Hubot"}`))
+	case host == "ghe.example.com" && path == "/api/v3/user/emails":
+		_, _ = w.Write([]byte(f.emails))
 	case host == "api.github.com" && path == "/user":
 		if r.Header.Get("Authorization") != "Bearer at" {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -383,5 +394,75 @@ func TestApple(t *testing.T) {
 	idp.apple = &other.PublicKey
 	if _, err = idp.provider().Verify(context.Background(), c, "code", "nonce-1", "v"); err == nil {
 		t.Fatal("secret signed with another key accepted")
+	}
+}
+
+func TestGitLab(t *testing.T) {
+	idp := newIdP(t)
+	c := connection(federation.ProviderGitLab, federation.Options{}, "secret")
+	if c.Issuer != federation.GitLabURL {
+		t.Fatalf("issuer = %q", c.Issuer)
+	}
+	idp.issuer = federation.GitLabURL
+	idp.claims = jwt.MapClaims{"sub": "7", "nonce": "nonce-1", "email": "ann@example.com", "email_verified": true, "name": "Ann"}
+	if q := authorizeURL(t, idp.provider(), c); q.Get("nonce") != "nonce-1" || q.Get("scope") != "openid profile email" {
+		t.Fatalf("authorize: %v", q)
+	}
+	claims, err := idp.provider().Verify(context.Background(), c, "code", "nonce-1", "v")
+	if err != nil || claims.Subject != "7" || !*claims.EmailVerified || claims.Issuer != federation.GitLabURL {
+		t.Fatalf("verify: %+v %v", claims, err)
+	}
+	self := connection(federation.ProviderGitLab, federation.Options{BaseURL: "https://git.example.com/"}, "secret")
+	if self.Issuer != "https://git.example.com" {
+		t.Fatalf("self-managed issuer = %q", self.Issuer)
+	}
+	idp.issuer = self.Issuer
+	if claims, err = idp.provider().Verify(context.Background(), self, "code", "nonce-1", "v"); err != nil || claims.Issuer != self.Issuer {
+		t.Fatalf("self-managed: %+v %v", claims, err)
+	}
+}
+
+func TestGitHubEnterprise(t *testing.T) {
+	idp := newIdP(t)
+	c := connection(federation.ProviderGitHubEnterprise, federation.Options{BaseURL: "https://ghe.example.com"}, "secret")
+	raw, err := idp.provider().Authorize(context.Background(), c, "state-1", "nonce-1", "verifier-verifier-verifier-verifier-verifier1")
+	if err != nil || !strings.HasPrefix(raw, "https://ghe.example.com/login/oauth/authorize?") {
+		t.Fatalf("authorize: %s %v", raw, err)
+	}
+	idp.emails = `[{"email":"hubot@example.com","primary":true,"verified":true}]`
+	claims, err := idp.provider().Verify(context.Background(), c, "code", "", "v")
+	if err != nil || claims.Subject != "42" || claims.Email != "hubot@example.com" || !*claims.EmailVerified || claims.Name != "Hubot" {
+		t.Fatalf("verify: %+v %v", claims, err)
+	}
+}
+
+func TestOAuth2(t *testing.T) {
+	idp := newIdP(t)
+	o := federation.Options{AuthorizeURL: "https://oauth.example.com/authorize", TokenURL: "https://oauth.example.com/token", UserinfoURL: "https://oauth.example.com/me",
+		Scopes: []string{"identify", "email"}, Claims: &federation.ClaimMapping{Subject: "data.id", Email: "data.email", EmailVerified: "data.verified", Name: "data.name"}}
+	c := connection(federation.ProviderOAuth2, o, "secret")
+	if c.Issuer != "https://oauth.example.com" {
+		t.Fatalf("issuer = %q", c.Issuer)
+	}
+	q := authorizeURL(t, idp.provider(), c)
+	if q.Get("nonce") != "" || q.Get("scope") != "identify email" || q.Get("code_challenge") == "" {
+		t.Fatalf("authorize: %v", q)
+	}
+	idp.userinfo = `{"data":{"id":12345678901234567890,"email":"ann@example.com","verified":true,"name":"Ann"}}`
+	claims, err := idp.provider().Verify(context.Background(), c, "code", "", "v")
+	if err != nil || claims.Subject != "12345678901234567890" || claims.Email != "ann@example.com" || !*claims.EmailVerified || claims.Name != "Ann" || idp.bearer != "Bearer at" {
+		t.Fatalf("verify: %+v %v", claims, err)
+	}
+	if idp.secret != "secret" || idp.form.Get("code_verifier") != "v" {
+		t.Fatalf("token request: %v", idp.form)
+	}
+	// Without an email_verified mapping the email never counts as verified.
+	c.Options.Claims = &federation.ClaimMapping{Subject: "data.id", Email: "data.email"}
+	if claims, err = idp.provider().Verify(context.Background(), c, "code", "", "v"); err != nil || claims.EmailVerified == nil || *claims.EmailVerified {
+		t.Fatalf("unmapped verification: %+v %v", claims, err)
+	}
+	idp.userinfo = `{"data":{"email":"ann@example.com"}}`
+	if _, err = idp.provider().Verify(context.Background(), c, "code", "", "v"); err == nil {
+		t.Fatal("identity without a subject accepted")
 	}
 }

@@ -24,6 +24,10 @@ func (s *Server) hostedRoutes(app *fiber.App) {
 		if method == fiber.MethodPost {
 			max = 30
 		}
+		if method == fiber.MethodPost && strings.HasPrefix(path, "/hosted/device") {
+			// User codes are short: guessing them is throttled harder.
+			max = 10
+		}
 		limit := limiter.New(limiter.Config{Max: max, Expiration: time.Minute, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }})
 		group.Add(method, strings.TrimPrefix(path, "/hosted"), limit, handler)
 	}
@@ -37,4 +41,20 @@ func hostedHeaders(c *fiber.Ctx) error {
 	c.Set("Strict-Transport-Security", "max-age=31536000")
 	c.Set("Content-Security-Policy", "default-src 'none'; base-uri 'none'; frame-ancestors 'none'")
 	return c.Next()
+}
+
+// samlRoutes mounts the SAML identity provider's public endpoints:
+// metadata and single sign-on (HTTP-Redirect and HTTP-POST bindings). SSO
+// only parks the request and redirects to the hosted sign-in, which has
+// its own limits.
+func (s *Server) samlRoutes(app *fiber.App) {
+	if s.SAML == nil {
+		return
+	}
+	group := app.Group("/saml/:environment", hostedHeaders)
+	tooMany := func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }
+	group.Get("/metadata", limiter.New(limiter.Config{Max: 60, Expiration: time.Minute, LimitReached: tooMany}), s.SAML.Metadata)
+	sso := limiter.New(limiter.Config{Max: 30, Expiration: time.Minute, LimitReached: tooMany})
+	group.Get("/sso", sso, s.SAML.SSO)
+	group.Post("/sso", sso, s.SAML.SSO)
 }

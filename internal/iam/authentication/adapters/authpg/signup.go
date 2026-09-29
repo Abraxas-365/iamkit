@@ -119,7 +119,7 @@ func (t *SignupTransaction) SSORequired(ctx context.Context, environment identit
 
 func (t *SignupTransaction) SignupMethods(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (authentication.Methods, error) {
 	var out authentication.Methods
-	err := t.tx.GetContext(ctx, &out, `SELECT allow_password,allow_email_code,allow_social FROM organizations WHERE environment_id=$1 AND id=$2 AND active`, environment, organization)
+	err := t.tx.GetContext(ctx, &out, `SELECT allow_password,allow_email_code,allow_social,allow_passkey AND 'webauthn'=ANY(allowed_factors) AS allow_passkey FROM organizations WHERE environment_id=$1 AND id=$2 AND active`, environment, organization)
 	if errors.Is(err, sql.ErrNoRows) {
 		return authentication.Methods{}, nil
 	}

@@ -2,6 +2,7 @@ package hostedsvc
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -49,6 +50,12 @@ func (f *fakeAuthenticator) VerifyPassword(_ context.Context, _ identity.Environ
 }
 func (f *fakeAuthenticator) VerifyCode(context.Context, identity.EnvironmentID, identity.ChallengeID, string) (authentication.Verified, error) {
 	return authentication.Verified{User: user, Method: authentication.MethodCode}, nil
+}
+func (f *fakeAuthenticator) VerifyPasskey(_ context.Context, _ identity.EnvironmentID, session string, _ []byte) (authentication.Verified, error) {
+	if session != "ik_wa_right" {
+		return authentication.Verified{}, errx.Unauthorized("the security key could not be verified")
+	}
+	return authentication.Verified{User: user, Email: "a@example.com", Method: authentication.MethodPasskey, AMR: authentication.PasskeyAMR()}, nil
 }
 func (f *fakeAuthenticator) Organizations(context.Context, authentication.Target, authentication.Verified) ([]authentication.Organization, error) {
 	return f.organizations, nil
@@ -133,22 +140,45 @@ type fakeSecondFactor struct {
 	enrolled bool
 	required map[identity.OrganizationID]bool
 	verified int
+	sent     int
+	asserted int
+	// enrollable are the kinds an enrolling login may add (nil: totp).
+	enrollable []string
 }
 
-func (f *fakeSecondFactor) Requirement(_ context.Context, b authentication.Context, _ identity.UserID, federated bool) (authentication.Requirement, error) {
+func (f *fakeSecondFactor) Requirement(_ context.Context, b authentication.Context, _ identity.UserID, federated bool, _ []string) (authentication.Requirement, error) {
 	if federated {
 		return authentication.Requirement{}, nil
 	}
 	if f.enrolled {
-		return authentication.Requirement{Needed: true, Factors: []string{"totp", "recovery"}}, nil
+		return authentication.Requirement{Needed: true, Factors: []string{"totp", "email", "recovery"}}, nil
 	}
 	if f.required[b.OrganizationID] {
-		return authentication.Requirement{Needed: true, Enroll: true}, nil
+		factors := f.enrollable
+		if factors == nil {
+			factors = []string{"totp"}
+		}
+		return authentication.Requirement{Needed: true, Enroll: true, Factors: factors}, nil
 	}
 	return authentication.Requirement{}, nil
 }
-func (f *fakeSecondFactor) Verify(_ context.Context, _ identity.EnvironmentID, _ identity.UserID, code string, enroll bool) (mfa.Verification, error) {
-	if code != "123456" {
+func (f *fakeSecondFactor) Send(_ context.Context, _ authentication.Context, _ identity.UserID, _ []string, factor string, _ bool) (authentication.CodeSent, error) {
+	if factor != "email" {
+		return authentication.CodeSent{}, errx.Business("factor not allowed")
+	}
+	f.sent++
+	return authentication.CodeSent{Factor: factor, Destination: "a•••@example.com"}, nil
+}
+func (f *fakeSecondFactor) AssertFor(context.Context, authentication.Context, identity.UserID, []string) (authentication.WebAuthnOptions, error) {
+	f.asserted++
+	return authentication.WebAuthnOptions{Session: "ik_wa_key", Options: []byte(`{"publicKey":{}}`)}, nil
+}
+func (f *fakeSecondFactor) Verify(_ context.Context, _ authentication.Context, _ identity.UserID, _ []string, proof authentication.Proof, enroll bool) (mfa.Verification, error) {
+	if proof.Session == "ik_wa_key" && string(proof.Credential) == `{"ok":true}` {
+		f.verified++
+		return mfa.Verification{Proof: mfa.ProofWebAuthn}, nil
+	}
+	if proof.Code != "123456" {
 		return mfa.Verification{}, errx.Unauthorized("invalid verification code")
 	}
 	f.verified++
@@ -170,6 +200,15 @@ type fakeFederation struct {
 	discovery   federation.Discovery
 	started     []authentication.Target
 	connections []federation.ConnectionSummary
+	directory   []string
+}
+
+func (f *fakeFederation) DirectoryHosted(_ context.Context, _ identity.EnvironmentID, _ identity.ConnectionID, email, password string) (authentication.Verified, error) {
+	f.directory = append(f.directory, email)
+	if password != "right" {
+		return authentication.Verified{}, errx.Unauthorized("invalid credentials")
+	}
+	return authentication.Verified{User: user, Email: email, Method: authentication.MethodSSO, Organization: orgA}, nil
 }
 
 func (f *fakeFederation) Discover(context.Context, identity.EnvironmentID, string) (federation.Discovery, error) {
@@ -314,6 +353,23 @@ func TestIdentifyRoutes(t *testing.T) {
 	}
 }
 
+func TestIdentifyRoutesDirectory(t *testing.T) {
+	connection := identity.NewConnectionID()
+	s, _, _, fed := setup(orgA, orgB)
+	fed.discovery = federation.Discovery{Method: federation.MethodSSO, Organization: &orgA, Connection: &connection, Provider: federation.ProviderLDAP}
+	route, err := s.Identify(context.Background(), request, "a@example.com")
+	if err != nil || route.Method != federation.ProviderLDAP || route.Connection == nil || route.Redirect != "" || len(fed.started) != 0 {
+		t.Fatalf("LDAP asks for the directory password: %+v %v", route, err)
+	}
+	if _, err = s.Directory(context.Background(), request, connection, "a@example.com", "wrong"); err == nil {
+		t.Fatal("wrong directory password must fail")
+	}
+	out, err := s.Directory(context.Background(), request, connection, "a@example.com", "right")
+	if err != nil || out.Login == nil || out.Login.Organization != orgA {
+		t.Fatalf("directory login signs in to its own organization only: %+v %v", out, err)
+	}
+}
+
 func TestHostedSecondFactorBeforeChooser(t *testing.T) {
 	second := &fakeSecondFactor{enrolled: true}
 	s, auth, repo := setupMFA(second, orgA, orgB)
@@ -328,11 +384,11 @@ func TestHostedSecondFactorBeforeChooser(t *testing.T) {
 		t.Fatal("no session before the second factor")
 	}
 	for range 5 {
-		if _, err = s.SecondFactor(context.Background(), request, "000000"); err == nil {
+		if _, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("000000")); err == nil {
 			t.Fatal("wrong code accepted")
 		}
 	}
-	if _, err = s.SecondFactor(context.Background(), request, "123456"); err == nil || len(repo.saved) != 0 {
+	if _, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("123456")); err == nil || len(repo.saved) != 0 {
 		t.Fatal("after 5 wrong codes the login must be dropped")
 	}
 
@@ -341,7 +397,7 @@ func TestHostedSecondFactorBeforeChooser(t *testing.T) {
 	if _, err = s.Password(context.Background(), request, "a@example.com", "right"); err != nil {
 		t.Fatal(err)
 	}
-	out, err = s.SecondFactor(context.Background(), request, "123456")
+	out, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("123456"))
 	if err != nil || len(out.Organizations) != 2 {
 		t.Fatalf("want chooser after code, got %+v %v", out, err)
 	}
@@ -361,7 +417,7 @@ func TestHostedExpiredPasswordAfterSecondFactor(t *testing.T) {
 	if _, err = s.ChangePassword(context.Background(), request, "a new password"); err == nil || len(auth.changed) != 0 {
 		t.Fatal("a password change before the second factor must be refused")
 	}
-	if out, err = s.SecondFactor(context.Background(), request, "123456"); err != nil || !out.PasswordChange {
+	if out, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("123456")); err != nil || !out.PasswordChange {
 		t.Fatalf("want password change after the code, got %+v %v", out, err)
 	}
 	if out, err = s.ChangePassword(context.Background(), request, "short"); err == nil || len(auth.issued) != 0 {
@@ -390,16 +446,61 @@ func TestHostedRequiredOrganizationEnrolls(t *testing.T) {
 	if err != nil || out.Enroll == nil || out.Enroll.Secret == "" {
 		t.Fatalf("want enrollment, got %+v %v", out, err)
 	}
-	if e, err := s.Enrollment(context.Background(), request); err != nil || e.URI == "" {
+	if e, err := s.Enrollment(context.Background(), request); err != nil || e.Enroll == nil || e.Enroll.URI == "" {
 		t.Fatalf("enrollment page: %+v %v", e, err)
 	}
-	out, err = s.SecondFactor(context.Background(), request, "123456")
+	out, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("123456"))
 	if err != nil || len(out.RecoveryCodes) == 0 || out.Login != nil {
 		t.Fatalf("want recovery codes, got %+v %v", out, err)
 	}
 	out, err = s.Continue(context.Background(), request)
 	if err != nil || out.Login == nil || len(auth.issued) != 1 || len(repo.saved) != 0 {
 		t.Fatalf("continue: %+v %v", out, err)
+	}
+}
+
+// Where only the email factor may be added, the enrollment page offers to
+// email a code, and that code enrolls the address.
+func TestHostedEnrollsEmailFactor(t *testing.T) {
+	second := &fakeSecondFactor{required: map[identity.OrganizationID]bool{orgA: true}, enrollable: []string{"email"}}
+	s, auth, _ := setupMFA(second, orgA)
+	out, err := s.Password(context.Background(), request, "a@example.com", "right")
+	if err != nil || out.Enroll != nil || !out.EnrollEmail {
+		t.Fatalf("want email enrollment offer, got %+v %v", out, err)
+	}
+	if e, err := s.Enrollment(context.Background(), request); err != nil || e.Enroll != nil || !e.EnrollEmail {
+		t.Fatalf("email-only enrollment page: %+v %v", e, err)
+	}
+	out, err = s.SendFactorCode(context.Background(), request, "email")
+	if err != nil || !out.SecondFactor || out.Sent == nil || second.sent != 1 {
+		t.Fatalf("send = %+v %v", out, err)
+	}
+	out, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("123456"))
+	if err != nil || len(out.RecoveryCodes) == 0 {
+		t.Fatalf("want recovery codes, got %+v %v", out, err)
+	}
+	if out, err = s.Continue(context.Background(), request); err != nil || out.Login == nil || len(auth.issued) != 1 {
+		t.Fatalf("continue: %+v %v", out, err)
+	}
+}
+
+// An enrolled user may ask for an emailed code on the second-factor page.
+func TestHostedSendsFactorCode(t *testing.T) {
+	second := &fakeSecondFactor{enrolled: true}
+	s, auth, _ := setupMFA(second, orgA)
+	out, err := s.Password(context.Background(), request, "a@example.com", "right")
+	if err != nil || !out.SecondFactor || !slices.Contains(out.Factors, "email") {
+		t.Fatalf("want second factor with email, got %+v %v", out, err)
+	}
+	if _, err := s.SendFactorCode(context.Background(), request, "sms"); err == nil {
+		t.Fatal("sms is not offered")
+	}
+	out, err = s.SendFactorCode(context.Background(), request, "email")
+	if err != nil || out.Sent == nil || out.Sent.Destination == "" {
+		t.Fatalf("send = %+v %v", out, err)
+	}
+	if out, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("123456")); err != nil || out.Login == nil || len(auth.issued) != 1 {
+		t.Fatalf("verify: %+v %v", out, err)
 	}
 }
 
@@ -640,5 +741,61 @@ func TestUILocales(t *testing.T) {
 		if got := uiLocales(oauth.Pending{Form: form}); got != want {
 			t.Fatalf("%q: got %q, want %q", form, got, want)
 		}
+	}
+}
+
+type fakePasskeys struct{ begun int }
+
+func (f *fakePasskeys) BeginPasskey(context.Context, identity.EnvironmentID) (authentication.WebAuthnOptions, error) {
+	f.begun++
+	return authentication.WebAuthnOptions{Session: "ik_wa_right"}, nil
+}
+
+// A passkey is multi-factor: even an enrolled user skips the second factor.
+func TestHostedPasskeySkipsSecondFactor(t *testing.T) {
+	second := &fakeSecondFactor{enrolled: true}
+	s, auth, _ := setupMFA(second, orgA)
+	if _, err := s.PasskeyOptions(context.Background(), request); err == nil {
+		t.Fatal("passkeys are not offered without the port")
+	}
+	passkeys := &fakePasskeys{}
+	s.SetPasskeys(passkeys)
+	if _, err := s.PasskeyOptions(context.Background(), request); err != nil || passkeys.begun != 1 {
+		t.Fatalf("options: %v", err)
+	}
+	if _, err := s.Passkey(context.Background(), request, "ik_wa_wrong", []byte(`{}`)); err == nil {
+		t.Fatal("wrong assertion accepted")
+	}
+	out, err := s.Passkey(context.Background(), request, "ik_wa_right", []byte(`{}`))
+	if err != nil || out.Login == nil || out.SecondFactor || len(auth.issued) != 1 || second.verified != 0 {
+		t.Fatalf("passkey signs in without a second factor: %+v %v", out, err)
+	}
+}
+
+// A client whose custom options leave passkeys out does not offer them.
+func TestHostedPasskeyClientOptOut(t *testing.T) {
+	s, _, repo, _ := setup(orgA)
+	s.SetPasskeys(&fakePasskeys{})
+	repo.signIn = &hosted.SignIn{Password: true}
+	if _, err := s.Passkey(context.Background(), request, "ik_wa_right", []byte(`{}`)); err == nil {
+		t.Fatal("passkey accepted for a client that does not offer it")
+	}
+}
+
+// The security key answers the parked login's second factor.
+func TestHostedSecurityKey(t *testing.T) {
+	second := &fakeSecondFactor{enrolled: true}
+	s, auth, _ := setupMFA(second, orgA)
+	out, err := s.Password(context.Background(), request, "a@example.com", "right")
+	if err != nil || !out.SecondFactor {
+		t.Fatalf("want second factor: %+v %v", out, err)
+	}
+	options, err := s.SecurityKey(context.Background(), request)
+	if err != nil || options.Session != "ik_wa_key" || second.asserted != 1 {
+		t.Fatalf("security key options: %+v %v", options, err)
+	}
+	out, err = s.SecondFactor(context.Background(), request, authentication.Proof{Session: options.Session, Credential: []byte(`{"ok":true}`)})
+	if err != nil || out.Login == nil || len(auth.issued) != 1 {
+		t.Fatalf("security key signs in: %+v %v", out, err)
 	}
 }

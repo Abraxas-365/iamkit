@@ -8,11 +8,17 @@ type Token struct {
 	SessionID     identity.SessionID  `json:"sid,omitempty"`
 	OAuthClientID identity.ClientID   `json:"oauth_client_id,omitempty"`
 	ActorID       identity.OperatorID `json:"actor_id,omitempty"`
+	// ActorAccount is the service account impersonating the user (token
+	// exchange); the JWT carries it as act.sub.
+	ActorAccount identity.AccountID `json:"actor_account_id,omitempty"`
 	// AMR lists how the session was authenticated (pwd, email, fed, otp, mfa).
 	AMR []string `json:"amr,omitempty"`
 	// AuthTime is when the session signed in (unix seconds); refreshes keep
 	// it, so it tells how fresh the proof of the user's credentials is.
-	AuthTime  int64           `json:"auth_time,omitempty"`
+	AuthTime int64 `json:"auth_time,omitempty"`
+	// Scopes are the OAuth scopes granted to an OAuth access token (scp
+	// claim); empty for identity-API tokens.
+	Scopes    []string        `json:"scp,omitempty"`
 	Subject   identity.UserID `json:"sub"`
 	Issuer    string          `json:"iss"`
 	Audience  []string        `json:"aud"`
@@ -21,6 +27,11 @@ type Token struct {
 	NotBefore int64           `json:"nbf"`
 	ExpiresAt int64           `json:"exp"`
 }
+
+// Impersonated reports whether someone other than the user acts in the
+// session (an operator or a service account).
+func (t Token) Impersonated() bool { return !t.ActorID.IsZero() || !t.ActorAccount.IsZero() }
+
 type Profile struct {
 	ID            identity.UserID         `json:"id" db:"id"`
 	Email         string                  `json:"email" db:"email"`

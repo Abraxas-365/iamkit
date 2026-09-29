@@ -1,0 +1,10 @@
+Subject: Your verification code for Acme
+
+Your verification code
+
+Enter this code to confirm it's you. It expires in 5 minutes.
+
+    12345678
+
+--
+If you didn't try to sign in, someone may know your password: change it.

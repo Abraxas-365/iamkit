@@ -47,6 +47,9 @@ type Connection struct {
 	LinkEmail          bool
 	SignupOrganization identity.OrganizationID
 	SignupGroup        identity.GroupID
+	// UpdateProfile refreshes a linked user's name (and verified email, see
+	// Profile) from the provider at every sign-in.
+	UpdateProfile bool
 }
 
 // Scoped reports whether the connection belongs to one organization.
@@ -66,8 +69,14 @@ func (c Connection) Validate() error {
 	if err := validOptions(c.Provider, c.Options); err != nil {
 		return err
 	}
-	if c.Scoped() && (c.Signup || c.LinkEmail) {
-		return errx.Validation("signup and link_email apply to environment connections; organization connections use jit_provisioning")
+	if c.Provider == ProviderSAML && !c.Scoped() {
+		return errx.Validation("SAML connections belong to an organization; organization_id is required")
+	}
+	if c.Provider == ProviderLDAP && !c.Scoped() {
+		return errx.Validation("LDAP connections belong to an organization; organization_id is required")
+	}
+	if c.Scoped() && c.Signup {
+		return errx.Validation("signup applies to environment connections; organization connections use jit_provisioning")
 	}
 	if c.Signup == c.SignupOrganization.IsZero() {
 		return errx.Validation("signup requires signup_organization_id, which only applies with signup")
@@ -99,6 +108,7 @@ type ConnectionInput struct {
 	LinkEmail          bool                    `json:"link_email"`
 	SignupOrganization identity.OrganizationID `json:"signup_organization_id"`
 	SignupGroup        identity.GroupID        `json:"signup_group_id"`
+	UpdateProfile      bool                    `json:"update_profile"`
 }
 
 // provider is the input's provider, oidc by default.
@@ -123,6 +133,40 @@ func (i ConnectionInput) Validate() error {
 	}
 	if err := validOptions(i.provider(), i.Options.Normalized()); err != nil {
 		return err
+	}
+	if i.provider() == ProviderSAML {
+		// The identity provider's metadata names its entity ID (the
+		// issuer); the service provider needs no client credentials.
+		if i.Issuer != "" || i.Client != "" || i.SecretEnv != "" || i.ClientSecret != "" {
+			return errx.Validation("SAML connections take options.metadata_url or options.metadata_xml instead of issuer, client_id and a secret")
+		}
+		if i.Organization.IsZero() {
+			return errx.Validation("SAML connections belong to an organization; organization_id is required")
+		}
+		if i.Enforcement != "" && i.Enforcement != EnforcementOptional && i.Enforcement != EnforcementEnforced {
+			return errx.Validation("enforcement must be optional or enforced")
+		}
+		return nil
+	}
+	if i.provider() == ProviderLDAP {
+		// The directory URL is the issuer and the user base DN the client
+		// ID; the service account's password is the only secret.
+		if i.Issuer != "" || i.Client != "" || i.SecretEnv != "" {
+			return errx.Validation("LDAP connections take options.url and options.user_base_dn instead of issuer, client_id and secret_env")
+		}
+		if i.Organization.IsZero() {
+			return errx.Validation("LDAP connections belong to an organization; organization_id is required")
+		}
+		if (i.Options.Normalized().BindDN == "") != (i.ClientSecret == "") {
+			return errx.Validation("options.bind_dn and client_secret (its password) go together; omit both for an anonymous search")
+		}
+		if len(i.ClientSecret) > MaxClientSecret {
+			return errx.Validation("client_secret is at most 4096 characters")
+		}
+		if i.Enforcement != "" && i.Enforcement != EnforcementOptional && i.Enforcement != EnforcementEnforced {
+			return errx.Validation("enforcement must be optional or enforced")
+		}
+		return nil
 	}
 	if i.provider() != ProviderOIDC && i.Issuer != "" && i.Issuer != i.issuer() {
 		return errx.Validation("issuer is set by the provider preset")
@@ -160,12 +204,15 @@ func (i ConnectionInput) Validate() error {
 // service seals ClientSecret separately.
 func (i ConnectionInput) Connection(environment identity.EnvironmentID) Connection {
 	c := Connection{Environment: environment, Organization: i.Organization, Name: strings.TrimSpace(i.Name), Issuer: i.issuer(), Client: strings.TrimSpace(i.Client), SecretEnv: i.SecretEnv, JIT: !i.Organization.IsZero(), JITGroup: i.JITGroup, Enforcement: i.Enforcement,
-		Provider: i.provider(), Options: i.Options.Normalized(), Signup: i.Signup, LinkEmail: i.LinkEmail, SignupOrganization: i.SignupOrganization, SignupGroup: i.SignupGroup}
+		Provider: i.provider(), Options: i.Options.Normalized(), Signup: i.Signup, LinkEmail: i.LinkEmail, SignupOrganization: i.SignupOrganization, SignupGroup: i.SignupGroup, UpdateProfile: i.UpdateProfile}
 	if i.JIT != nil {
 		c.JIT = *i.JIT
 	}
 	if c.Enforcement == "" {
 		c.Enforcement = EnforcementOptional
+	}
+	if c.Provider == ProviderLDAP {
+		c.Client = strings.ToLower(c.Options.UserBaseDN)
 	}
 	return c
 }
@@ -196,6 +243,7 @@ type ConnectionUpdate struct {
 	LinkEmail          *bool                    `json:"link_email"`
 	SignupOrganization *identity.OrganizationID `json:"signup_organization_id"`
 	SignupGroup        *identity.GroupID        `json:"signup_group_id"`
+	UpdateProfile      *bool                    `json:"update_profile"`
 }
 
 func (u ConnectionUpdate) Validate() error {
@@ -238,19 +286,42 @@ func (u ConnectionUpdate) Apply(c Connection) (Connection, error) {
 	if u.SignupGroup != nil {
 		c.SignupGroup = *u.SignupGroup
 	}
+	if u.UpdateProfile != nil {
+		c.UpdateProfile = *u.UpdateProfile
+	}
 	// Turning sign-up off drops where it signed users up to.
 	if u.Signup != nil && !*u.Signup {
 		c.SignupOrganization, c.SignupGroup = identity.OrganizationID{}, identity.GroupID{}
 	}
 	if u.Options != nil {
 		o := u.Options.Normalized()
-		if o.Tenant != c.Options.Tenant || o.Team != c.Options.Team {
-			return c, errx.Validation("the tenant and Apple team of a connection cannot change; create another connection")
+		if o.Tenant != c.Options.Tenant || o.Team != c.Options.Team || o.BaseURL != c.Options.BaseURL {
+			return c, errx.Validation("the tenant, Apple team and base URL of a connection cannot change; create another connection")
+		}
+		if c.Provider == ProviderOAuth2 && Preset(ProviderOAuth2, o) != c.Issuer {
+			return c, errx.Validation("the authorize_url of an OAuth 2.0 connection must stay on the same host; create another connection")
+		}
+		if c.Provider == ProviderLDAP && (Preset(ProviderLDAP, o) != c.Issuer || strings.ToLower(o.UserBaseDN) != c.Client) {
+			return c, errx.Validation("the directory host and user_base_dn of an LDAP connection cannot change; create another connection")
 		}
 		if o.Key != c.Options.Key && u.ClientSecret == nil {
 			return c, errx.Validation("a new Apple key_id needs its private key as client_secret")
 		}
 		c.Options = o
+	}
+	if c.Provider == ProviderSAML && u.ClientSecret != nil {
+		return c, errx.Validation("SAML connections have no client_secret")
+	}
+	if c.Provider == ProviderLDAP {
+		if c.Options.BindDN == "" && u.ClientSecret != nil {
+			return c, errx.Validation("an anonymous LDAP connection has no client_secret; set options.bind_dn with it")
+		}
+		if c.Options.BindDN != "" && c.Sealed == "" && u.ClientSecret == nil {
+			return c, errx.Validation("options.bind_dn needs its password as client_secret")
+		}
+		if c.Options.BindDN == "" {
+			c.Sealed = ""
+		}
 	}
 	return c, nil
 }
@@ -271,13 +342,20 @@ type Claims struct {
 	// for Microsoft the verified per-tenant issuer. Empty for GitHub, which
 	// has no ID token.
 	Issuer string
+	// Assertion is the ID of a SAML assertion and AssertionExpires when it
+	// stops being acceptable; the service records it against replays.
+	Assertion        string
+	AssertionExpires time.Time
 }
 
 // Admit decides whether an unlinked provider identity may be provisioned just
 // in time and returns its normalized email. The repository still requires the
 // email's domain to be verified by the connection's organization.
+//
+// Without JIT, LinkEmail still lets the identity sign in to the existing
+// account with that email (Provisioning.Create false).
 func (c Connection) Admit(claims Claims) (string, error) {
-	if !c.Scoped() || !c.JIT {
+	if !c.Scoped() || !c.JIT && !c.LinkEmail {
 		return "", errx.Unauthorized("external identity is not linked")
 	}
 	email, err := identity.Email(claims.Email)
@@ -288,6 +366,38 @@ func (c Connection) Admit(claims Claims) (string, error) {
 		return "", errx.Unauthorized("provider email is not verified")
 	}
 	return email, nil
+}
+
+// Profile refreshes a linked identity's user from the provider's claims on
+// sign-in (Connection.UpdateProfile). Email is set only when the provider
+// vouches for it (an environment connection's explicitly verified email, or
+// an organization connection's email on a domain the organization verified,
+// checked in the repository); it changes only passwordless accounts that no
+// SCIM directory manages, and only when no other account has it.
+type Profile struct {
+	Connection   identity.ConnectionID
+	Environment  identity.EnvironmentID
+	Organization identity.OrganizationID
+	Subject      string
+	Name         string
+	Email        string
+}
+
+// Profile returns the refresh the claims allow.
+func (c Connection) Profile(claims Claims) Profile {
+	p := Profile{Connection: c.ID, Environment: c.Environment, Organization: c.Organization, Subject: claims.Subject}
+	if name := strings.TrimSpace(claims.Name); len(name) <= 200 {
+		p.Name = name
+	}
+	email, err := identity.Email(claims.Email)
+	switch {
+	case err != nil:
+	case c.Scoped() && (claims.EmailVerified == nil || *claims.EmailVerified):
+		p.Email = email
+	case !c.Scoped() && claims.EmailVerified != nil && *claims.EmailVerified:
+		p.Email = email
+	}
+	return p
 }
 
 // ErrProviderUnavailable is returned when the identity provider cannot be
@@ -308,8 +418,11 @@ func (c Claims) DisplayName(email string) string {
 }
 
 // Provisioning links a provider identity on first login, adopting the user
-// with Email or creating one with ID User.
+// with Email or, when Create (JIT), creating one with ID User and making it
+// a member of Organization (and Group). Without Create only an existing
+// account is linked.
 type Provisioning struct {
+	Create       bool
 	Connection   identity.ConnectionID
 	Environment  identity.EnvironmentID
 	Organization identity.OrganizationID
@@ -329,6 +442,9 @@ type Discovery struct {
 	Organization *identity.OrganizationID `json:"organization_id,omitempty"`
 	Connection   *identity.ConnectionID   `json:"connection_id,omitempty"`
 	Required     bool                     `json:"required"`
+	// Provider is the connection's provider: "ldap" means the password is
+	// posted to /identity/v1/federation/ldap/login instead of a redirect.
+	Provider string `json:"provider,omitempty"`
 }
 
 // Discovery methods.
@@ -415,11 +531,13 @@ type ConnectionView struct {
 	Enforcement      string `json:"enforcement" db:"enforcement"`
 	Signup           bool   `json:"signup" db:"signup"`
 	LinkEmail        bool   `json:"link_email" db:"link_email"`
+	UpdateProfile    bool   `json:"update_profile" db:"update_profile"`
 	Linked           int    `json:"linked" db:"linked"`
 }
 
-// ConnectionDetail never exposes the secret. SecretSource is "env" or
-// "sealed"; SecretEnv is set only for the legacy source.
+// ConnectionDetail never exposes the secret. SecretSource is "env",
+// "sealed", or "none" (SAML, anonymous LDAP); SecretEnv is set only for the
+// legacy source.
 type ConnectionDetail struct {
 	ID                 identity.ConnectionID    `json:"id" db:"id"`
 	Organization       *identity.OrganizationID `json:"organization_id" db:"organization_id"`
@@ -439,10 +557,14 @@ type ConnectionDetail struct {
 	LinkEmail          bool                     `json:"link_email" db:"link_email"`
 	SignupOrganization *identity.OrganizationID `json:"signup_organization_id" db:"signup_organization_id"`
 	SignupGroup        *identity.GroupID        `json:"signup_group_id" db:"signup_group_id"`
-	// Callback is the redirect URI to register at the provider.
-	Callback string    `json:"callback_url" db:"-"`
-	Created  time.Time `json:"created_at" db:"created_at"`
-	Linked   int       `json:"linked" db:"linked"`
+	UpdateProfile      bool                     `json:"update_profile" db:"update_profile"`
+	// Callback is the redirect URI to register at the provider (for SAML the
+	// assertion consumer service).
+	Callback string `json:"callback_url" db:"-"`
+	// SAML is the service provider of a SAML connection.
+	SAML    *ServiceProvider `json:"saml,omitempty" db:"-"`
+	Created time.Time        `json:"created_at" db:"created_at"`
+	Linked  int              `json:"linked" db:"linked"`
 }
 type ExternalIdentityView struct {
 	ConnectionID identity.ConnectionID `json:"connection_id" db:"connection_id"`

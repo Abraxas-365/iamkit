@@ -3,6 +3,7 @@
 package bootstrap
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -13,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/console"
 	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -24,6 +26,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/authzmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedldap"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/fedmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted/hostedmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/impmodule"
@@ -42,8 +45,10 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/adapters/orghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/orgmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning/provmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/samlidp/samlmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/adapters/saccthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/sacctmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/signing/signingmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/adapters/userhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/usermodule"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -71,7 +76,19 @@ type options struct {
 	sso       *OperatorSSO
 	breaches  authentication.Breaches
 	noBreach  bool
+	origins   []string
+	ldapDial  fedldap.Dialer
 }
+
+// WithLDAPDialer replaces how LDAP directories are dialed (tests with a
+// loopback directory); production dials through the guarded dialer or
+// IAMKIT_LDAP_ALLOWED_HOSTS.
+func WithLDAPDialer(d fedldap.Dialer) Option { return func(o *options) { o.ldapDial = d } }
+
+// WithWebAuthnOrigins adds origins (besides the issuer's) that may run
+// security key and passkey ceremonies: custom sign-in UIs on subdomains of
+// the issuer host (IAMKIT_WEBAUTHN_ORIGINS, comma-separated).
+func WithWebAuthnOrigins(origins []string) Option { return func(o *options) { o.origins = origins } }
 
 // WithBreaches replaces the Have I Been Pwned breach check (nil disables
 // it), so tests never reach the internet.
@@ -87,8 +104,8 @@ func WithResolver(r organization.Resolver) Option { return func(o *options) { o.
 func WithSealer(s *cryptox.Sealer) Option { return func(o *options) { o.sealer = s } }
 
 // WithFederationTransport replaces the guarded transport used to reach
-// identity providers of sealed-secret connections, so tests can reach a
-// provider on a loopback address.
+// identity providers of sealed-secret connections and clients' jwks_uri
+// (private_key_jwt), so tests can reach them on a loopback address.
 func WithFederationTransport(t http.RoundTripper) Option {
 	return func(o *options) { o.transport = t }
 }
@@ -110,12 +127,14 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	}
 	managementModule := mgmtmodule.New(managementDeps)
 	s := &server.Server{Control: managementModule.HTTP, OperatorSSO: managementModule.SSOHTTP, Health: db.PingContext}
+	signingModule := signingmodule.New(signingmodule.Deps{DB: db, Key: key, Cipher: o.sealer, Sealing: o.sealer.Enabled, ActorID: server.OperatorID})
+	s.SigningKeys = signingModule.HTTP
 	// Built before authentication (its second factor); tokens are bound late.
-	mfaModule := mfamodule.New(mfamodule.Deps{DB: db, Cipher: o.sealer, ActorID: server.OperatorID, Validate: func(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
+	mfaModule := mfamodule.New(mfamodule.Deps{DB: db, Cipher: o.sealer, ActorID: server.OperatorID, Issuer: issuer, Origins: o.origins, Validate: func(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
 		return s.Tokens.Validate(c, environment, audience)
 	}})
 	s.Factors = mfaModule.HTTP
-	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor, Cipher: o.sealer, Breaches: o.breaches, ActorID: server.OperatorID, Mail: o.mail})
+	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Keys: signingModule.Keyring, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor, Passkeys: mfaModule.Passkeys, Cipher: o.sealer, Breaches: o.breaches, ActorID: server.OperatorID, Mail: o.mail})
 	s.Tokens = authenticationModule.Tokens
 	s.Auth = authenticationModule.HTTP
 	s.PasswordPolicy = authenticationModule.PasswordPoliciesHTTP
@@ -123,6 +142,8 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Signup = authenticationModule.SignupHTTP
 	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, server.OperatorID).
 		Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService)
+	s.SMS = authenticationModule.SMSHTTP
+	mfaModule.Deliver(authenticationModule.DeliveryService, authenticationModule.SMS)
 	userModule := usermodule.New(usermodule.Deps{DB: db, ActorID: server.OperatorID, PasswordPolicy: authenticationModule.PasswordPolicies})
 	s.Users = userModule.HTTP
 	organizationModule := orgmodule.New(orgmodule.Deps{DB: db, ActorID: server.OperatorID, Resolver: o.resolver})
@@ -135,21 +156,32 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	authorizationModule := authzmodule.New(authzmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Grants = authorizationModule.Grants
 	s.Authorization = authorizationModule.HTTP
-	federationModule := fedmodule.New(fedmodule.Deps{DB: db, Issuer: issuer, Cipher: o.sealer, Transport: o.transport, Sessions: authenticationModule.Sessions, ActorID: server.OperatorID, Respond: s.RespondLogin})
+	federationModule := fedmodule.New(fedmodule.Deps{DB: db, Issuer: issuer, Cipher: o.sealer, Keys: signingModule.Keyring, Transport: o.transport, LDAPAllowed: list(os.Getenv("IAMKIT_LDAP_ALLOWED_HOSTS")), LDAPDial: o.ldapDial, Sessions: authenticationModule.Sessions, ActorID: server.OperatorID, Respond: s.RespondLogin})
 	s.Federation = federationModule.HTTP
 	provisioningModule := provmodule.New(provmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.ProvisioningControl = provisioningModule.Control
 	s.Provisioning = provisioningModule.HTTP
 	applicationModule := appmodule.New(appmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Applications = applicationModule.HTTP
-	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Key: key, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Tokens: s.Tokens, ActorID: server.OperatorID})
+	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, Tokens: s.Tokens, ActorID: server.OperatorID})
 	s.OAuth = oauthModule.HTTP
-	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: oauthModule.Flows, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Finish: oauthModule.HTTP.Finish, ActorID: server.OperatorID})
+	s.LogoutDeliveries = oauthModule.Logouts
+	s.LogoutDispatcher = oauthModule.Dispatcher
+	s.Background = append(s.Background, func(ctx context.Context) { oauthModule.Dispatch(ctx, config.LogoutDispatchInterval) })
+	samlModule := samlmodule.New(samlmodule.Deps{DB: db, Keys: signingModule.Keyring, Issuer: issuer, ActorID: server.OperatorID})
+	s.SAML = samlModule.HTTP
+	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: tickets{oauth: oauthModule.Flows, saml: samlModule.Flows}, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Passkeys: authenticationModule.Passkeys, Finish: finisher(oauthModule.HTTP.Finish, samlModule.HTTP), ActorID: server.OperatorID})
 	s.Hosted = hostedModule.HTTP
+	samlModule.HTTP.PostForm(hostedModule.HTTP.PostForm)
 	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
+	oauthModule.HTTP.SignedOut(hostedModule.HTTP.SignedOut)
+	// Device authorization grant: devices poll /oauth/token, users approve
+	// at /hosted/device through the ordinary hosted login.
+	hostedModule.HTTP.Devices(oauthModule.Devices)
+	oauthModule.HTTP.Devices(oauthModule.Devices, hostedModule.HTTP.DeviceApproved)
 	// Rendered emails wear the environment's hosted login branding.
 	authenticationModule.Brand(branding{hostedModule.Queries})
-	serviceAccountModule := sacctmodule.New(sacctmodule.Deps{DB: db})
+	serviceAccountModule := sacctmodule.New(sacctmodule.Deps{DB: db, ActorID: server.OperatorID, Owner: server.Owner})
 	s.ServiceAccounts = serviceAccountModule.HTTP
 	s.Activity = managementModule.Activity
 	impersonationModule := impmodule.New(impmodule.Deps{DB: db, Tokens: s.Tokens})
@@ -168,10 +200,11 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Applications:    apphttp.New(applicationModule.Commands, applicationModule.Queries, actor),
 		Authorization:   authzhttp.New(authorizationModule.ResourceCommands, authorizationModule.ResourceQueries, actor),
 		Grants:          authzhttp.NewGrants(authorizationModule.GrantCommands, authorizationModule.GrantQueries, actor),
-		ServiceAccounts: saccthttp.New(serviceAccountModule.Commands, serviceAccountModule.Queries),
+		ServiceAccounts: saccthttp.New(serviceAccountModule.Commands, serviceAccountModule.Queries, actor, nil),
 		Factors:         mfaModule.HTTP.WithActor(actor),
 		Delivery: authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, actor).
 			Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService),
+		SMS: authhttp.NewSMSHandler(authenticationModule.SMS, authenticationModule.SMSQueries, actor),
 	}
 	return s
 }
@@ -243,7 +276,7 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		// Identity providers only redirect to HTTPS callbacks.
 		return nil, errx.Validation("operator SSO requires an HTTPS JWT_ISSUER")
 	}
-	s := New(db, key, strings.TrimSuffix(issuer, "/"), delivery, WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso))
+	s := New(db, key, strings.TrimSuffix(issuer, "/"), delivery, WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso), WithWebAuthnOrigins(list(os.Getenv("IAMKIT_WEBAUTHN_ORIGINS"))))
 	s.AllowedOrigins = os.Getenv("CORS_ALLOWED_ORIGINS")
 	if v := os.Getenv("RATE_LIMIT_PER_MINUTE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {

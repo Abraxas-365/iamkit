@@ -38,6 +38,28 @@ const (
 	ChallengeTTL = 5 * time.Minute
 )
 
+// Signing keys. A key an environment stops signing with keeps verifying
+// for SigningKeyRetireDelay: the longest token lifetime plus clock skew.
+// Instances reread published keys every SigningKeyCacheTTL (and on an
+// unknown kid, at most once per SigningKeyMissInterval).
+const (
+	SigningKeyRetireDelay  = 20 * time.Minute
+	SigningKeyCacheTTL     = 30 * time.Second
+	SigningKeyMissInterval = time.Second
+)
+
+// Client keys for private_key_jwt. A jwks_uri is read at most once per
+// ClientJWKSRefreshInterval (an unknown kid triggers a refetch), reused for
+// ClientJWKSCacheTTL, and must fit ClientJWKSMaxBytes. Assertions live at
+// most ClientAssertionMaxAge (their exp minus iat or now).
+const (
+	ClientJWKSCacheTTL        = time.Hour
+	ClientJWKSRefreshInterval = time.Minute
+	ClientJWKSMaxBytes        = 64 * 1024
+	ClientJWKSCacheEntries    = 1000
+	ClientAssertionMaxAge     = time.Hour
+)
+
 // OAuth 2.0 / OIDC lifespans (fosite).
 const (
 	OAuthAuthorizeCodeLifespan = 5 * time.Minute
@@ -52,6 +74,14 @@ const (
 	// provider (state row and browser binding cookie).
 	FederationStateTTL = 5 * time.Minute
 )
+
+// SAMLResponseMax bounds a SAML response posted to the assertion consumer
+// service (base64, before decoding).
+const SAMLResponseMax = 64 << 10
+
+// LogoutDispatchInterval is how often each replica looks for due
+// back-channel logout notifications.
+const LogoutDispatchInterval = 5 * time.Second
 
 // Multi-factor authentication.
 const (
@@ -80,6 +110,20 @@ const (
 	TOTPPeriod = 30 // seconds
 	TOTPDigits = 6
 	TOTPSkew   = 1 // steps accepted either side of now
+	// FactorCodeTTL is how long an emailed or texted second-factor (or
+	// phone verification) code stays valid.
+	FactorCodeTTL = 5 * time.Minute
+	// FactorCodeCooldown is the wait before another code is sent for the
+	// same factor; FactorCodesPerHour caps the codes one factor receives.
+	FactorCodeCooldown = 30 * time.Second
+	FactorCodesPerHour = 10
+	// WebAuthnCeremonyTTL is how long a security key or passkey prompt
+	// (registration or sign-in) may take.
+	WebAuthnCeremonyTTL = 5 * time.Minute
+	// WebAuthnKeys caps the security keys and passkeys of one user.
+	WebAuthnKeys = 20
+	// FactorNameMaxLength bounds the name users give a key.
+	FactorNameMaxLength = 64
 )
 
 // ExternalHTTPTimeout is the timeout for all outbound HTTP calls

@@ -3,6 +3,7 @@ package oauthsvc
 import (
 	"context"
 	"crypto/subtle"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,14 +18,24 @@ type Service struct {
 	repository oauth.Repository
 	secrets    oauth.Secrets
 	passwords  oauth.Passwords
+	hints      oauth.Hints
 }
 
-func New(r oauth.Repository, s oauth.Secrets, p oauth.Passwords) *Service { return &Service{r, s, p} }
+func New(r oauth.Repository, s oauth.Secrets, p oauth.Passwords, h oauth.Hints) *Service {
+	return &Service{r, s, p, h}
+}
 func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input oauth.Registration) (identity.ClientID, string, error) {
 	if err := input.Validate(); err != nil {
 		return identity.ClientID{}, "", err
 	}
+	input.ClientAuth = input.ClientAuth.WithDefaults(input.Public)
+	if input.AccessTokenFormat == "" {
+		input.AccessTokenFormat = oauth.TokenFormatJWT
+	}
 	if err := identity.ValidateRedirects(input.Redirects); err != nil {
+		return identity.ClientID{}, "", err
+	}
+	if err := validatePostLogout(input.PostLogoutRedirects); err != nil {
 		return identity.ClientID{}, "", err
 	}
 	raw := ""
@@ -57,7 +68,93 @@ func (s *Service) Update(ctx context.Context, m oauth.Mutation, id identity.Clie
 			return err
 		}
 	}
-	return s.repository.Update(ctx, m, id, input)
+	if input.PostLogoutRedirects != nil {
+		if err := validatePostLogout(*input.PostLogoutRedirects); err != nil {
+			return err
+		}
+	}
+	var auth *identity.ClientAuth
+	var current oauth.ClientView
+	if input.Authentication() || input.GrantTypes != nil || input.HostedLogin != nil || input.Redirects != nil {
+		var err error
+		if current, err = s.repository.Find(ctx, m.Environment, id); err != nil {
+			return err
+		}
+		if err = oauth.ValidateClientShape(update(current.GrantTypes, input.GrantTypes), update(current.HostedLogin, input.HostedLogin), update(current.Redirects, input.Redirects)); err != nil {
+			return err
+		}
+		if err = oauth.ValidateExchangeClient(update(current.GrantTypes, input.GrantTypes), current.Public); err != nil {
+			return err
+		}
+	}
+	if input.Authentication() {
+		next := input.Apply(current.ClientAuth)
+		if err := next.Validate(current.Public); err != nil {
+			return err
+		}
+		auth = &next
+	}
+	return s.repository.Update(ctx, m, id, input, auth)
+}
+
+// update is value changed to *next when given.
+func update[T any](value T, next *T) T {
+	if next != nil {
+		return *next
+	}
+	return value
+}
+
+// validatePostLogout checks post_logout_redirect_uris like redirect URIs.
+func validatePostLogout(values []string) error {
+	if identity.ValidateRedirects(values) != nil {
+		return errx.Validation("post_logout_redirect_uris must be absolute HTTPS URLs without credentials or fragments")
+	}
+	return nil
+}
+
+// Logout ends the session an ID token names and resolves where the
+// browser returns. A post_logout_redirect_uri needs a client (client_id
+// or the hint's audience) that registered it exactly.
+func (s *Service) Logout(ctx context.Context, input oauth.Logout) (string, identity.EnvironmentID, error) {
+	var hint oauth.IDTokenHint
+	var environment identity.EnvironmentID
+	if input.Hint != "" {
+		var err error
+		if hint, err = s.hints.Parse(ctx, input.Hint); err != nil {
+			return "", identity.EnvironmentID{}, err
+		}
+		if !input.Client.IsZero() && !hint.Names(input.Client) {
+			return "", identity.EnvironmentID{}, errx.Validation("client_id does not match id_token_hint")
+		}
+		if input.Client.IsZero() {
+			input.Client = hint.Client()
+		}
+		environment = hint.Environment
+	}
+	if input.Redirect != "" || (!input.Client.IsZero() && environment.IsZero()) {
+		if input.Client.IsZero() {
+			return "", identity.EnvironmentID{}, errx.Validation("post_logout_redirect_uri requires client_id or id_token_hint")
+		}
+		client, err := s.Client(ctx, input.Client)
+		if err != nil {
+			return "", identity.EnvironmentID{}, errx.Validation("unknown client_id")
+		}
+		if !environment.IsZero() && client.Environment != environment {
+			return "", identity.EnvironmentID{}, errx.Validation("client_id does not match id_token_hint")
+		}
+		environment = client.Environment
+		if input.Redirect != "" && !slices.Contains(client.PostLogoutRedirects, input.Redirect) {
+			return "", identity.EnvironmentID{}, oauth.ErrUnregisteredLogoutRedirect()
+		}
+	}
+	if !hint.Session.IsZero() {
+		m := oauth.Mutation{Environment: hint.Environment, Actor: hint.Subject.String(), Action: "oauth.logout", Target: hint.Session.String()}
+		if _, err := s.repository.EndSession(ctx, m, hint.Subject, hint.Session); err != nil {
+			return "", identity.EnvironmentID{}, err
+		}
+	}
+	return input.Back(), environment, nil
 }
 func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
 	if id.IsZero() {
@@ -79,6 +176,19 @@ func (s *Service) Client(ctx context.Context, id identity.ClientID) (*oauth.Clie
 		return nil, errx.Validation("invalid client")
 	}
 	environment, err := s.repository.Environment(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.repository.FindActive(ctx, environment, id)
+}
+
+// AccessTokenClient is the live client an opaque access token was issued
+// to (key: the stored signature hash).
+func (s *Service) AccessTokenClient(ctx context.Context, key string) (*oauth.Client, error) {
+	if key == "" {
+		return nil, errx.Unauthorized("invalid OAuth token")
+	}
+	environment, id, err := s.repository.AccessTokenClient(ctx, key)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +289,7 @@ func ValidateAuthorization(issuer string, client *oauth.Client, query map[string
 	return nil
 }
 func ValidateLogin(access authentication.Token, client *oauth.Client) error {
-	if !access.ActorID.IsZero() || access.Purpose != "application" || access.ApplicationID != client.Application || access.ResourceID != client.Resource {
+	if access.Impersonated() || access.Purpose != "application" || access.ApplicationID != client.Application || access.ResourceID != client.Resource {
 		return errx.Forbidden("login does not match client")
 	}
 	return nil

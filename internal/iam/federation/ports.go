@@ -2,6 +2,7 @@ package federation
 
 import (
 	"context"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -28,9 +29,22 @@ type Flows interface {
 	// connections. continuation is the authorization ticket to resume.
 	StartHosted(ctx context.Context, target authentication.Target, connection identity.ConnectionID, continuation string) (Start, error)
 	Callback(ctx context.Context, code, state, binding string) (Outcome, error)
+	// Assertion parks a SAML response posted to the assertion consumer
+	// service for its pending state (the RelayState) and returns the
+	// one-time handle the callback takes as its code.
+	Assertion(ctx context.Context, state, response string) (string, error)
+	// SAMLMetadata is the service provider metadata of an active SAML
+	// connection, to give its identity provider.
+	SAMLMetadata(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) ([]byte, error)
 	// EnvironmentConnections lists the active connections that serve the
 	// whole environment (social and workforce providers shown as buttons).
 	EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]ConnectionSummary, error)
+	// Directory signs in with a password an organization's LDAP directory
+	// checks (headless): a session, or the pending second factor.
+	Directory(ctx context.Context, boundary authentication.Context, connection identity.ConnectionID, email, password string) (authentication.Result, error)
+	// DirectoryHosted checks a directory password for the hosted pages and
+	// returns the verified user; the hosted journey issues the session.
+	DirectoryHosted(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, email, password string) (authentication.Verified, error)
 }
 
 type Repository interface {
@@ -51,6 +65,19 @@ type Repository interface {
 	EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]ConnectionSummary, error)
 	SaveState(ctx context.Context, hash []byte, s State) error
 	ConsumeState(ctx context.Context, stateHash, bindingHash []byte) (State, error)
+	// ParkAssertion keeps a SAML response posted for a pending state of a
+	// SAML connection under handleHash until the callback takes it; it fails
+	// with 401 when the state is unknown, consumed or expired.
+	ParkAssertion(ctx context.Context, stateHash, handleHash []byte, response string) error
+	// TakeAssertion returns and deletes the response parked for the state.
+	TakeAssertion(ctx context.Context, stateHash, handleHash []byte) (string, error)
+	// UseAssertion records a SAML assertion ID until it expires; it fails
+	// with 401 when the connection already accepted it (a replay).
+	UseAssertion(ctx context.Context, connection identity.ConnectionID, assertion string, expires time.Time) error
+	// Refresh updates the user linked to the profile's subject, if any, with
+	// the provider's name and email (see Profile), auditing a change as
+	// federation.profile_updated.
+	Refresh(ctx context.Context, p Profile) error
 	// LinkedUser returns an open transaction and the linked active user, or
 	// (nil, zero, nil) when the subject is not linked.
 	LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, Account, error)
@@ -70,16 +97,36 @@ type Repository interface {
 	Disable(ctx context.Context, m Mutation, connection identity.ConnectionID) error
 }
 
-// Provider talks to external OIDC providers. It resolves the connection's
-// client secret itself: sealed secrets are opened with the Cipher, legacy
-// secret_env references must match an approved deployment binding.
+// Provider talks to external identity providers: OIDC and OAuth 2.0
+// (fedoidc) and SAML 2.0 (fedsaml), routed by Connection.Provider. It
+// resolves the connection's client secret itself: sealed secrets are opened
+// with the Cipher, legacy secret_env references must match an approved
+// deployment binding.
 type Provider interface {
 	Approved(c Connection) bool
+	// Prepare completes a connection before it is stored: for SAML it
+	// fetches the metadata at Options.MetadataURL into Options.MetadataXML
+	// and sets the issuer to the identity provider's entity ID and the
+	// client ID to the service provider's entity ID.
+	Prepare(ctx context.Context, c Connection) (Connection, error)
 	Authorize(ctx context.Context, c Connection, state, nonce, verifier string) (string, error)
+	// Verify checks the provider's answer: an authorization code, or for
+	// SAML the base64 SAML response, which must answer the request made
+	// with nonce.
 	Verify(ctx context.Context, c Connection, code, nonce, verifier string) (Claims, error)
+	// Metadata is the SAML service provider metadata of a SAML connection.
+	Metadata(ctx context.Context, c Connection) ([]byte, error)
 	Verifier() string
 	// Callback is the redirect URI operators register with providers.
 	Callback() string
+}
+
+// Directory checks a password against an LDAP directory: it finds the
+// user the connection's filter names for email and binds as them. A wrong
+// password or unknown user is an unauthorized error; the directory owns
+// its own lockout.
+type Directory interface {
+	Authenticate(ctx context.Context, c Connection, email, password string) (Claims, error)
 }
 
 // Cipher seals client secrets for storage at rest.

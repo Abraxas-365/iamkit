@@ -14,6 +14,9 @@ type Input struct {
 	Resource    identity.ResourceID    `json:"resource_id"`
 	Permissions []string               `json:"permissions"`
 	ExpiresIn   *string                `json:"expires_in,omitempty"`
+	// ClientAuth is how the account authenticates at /oauth/token
+	// (client_credentials); client_secret_basic by default.
+	identity.ClientAuth
 }
 
 func (i Input) Validate() error {
@@ -29,7 +32,15 @@ func (i Input) Validate() error {
 	if err := identity.ValidatePermissions(i.Permissions, ""); err != nil {
 		return err
 	}
-	return nil
+	return i.ClientAuth.WithDefaults(false).Validate(false)
+}
+
+// Mutation is an audited change to a service account.
+type Mutation struct {
+	Environment identity.EnvironmentID
+	Actor       string
+	Action      string
+	Target      string
 }
 
 type Credential struct {
@@ -47,4 +58,8 @@ type Account struct {
 	Permissions     []string               `json:"permissions" db:"permissions"`
 	Expires         time.Time              `json:"expires_at" db:"expires_at"`
 	Revoked         *time.Time             `json:"revoked_at" db:"revoked_at"`
+	// CanImpersonate lets the account exchange a user id for that user's
+	// access token (token exchange); set only by workspace owners.
+	CanImpersonate bool `json:"can_impersonate" db:"can_impersonate"`
+	identity.ClientAuth
 }

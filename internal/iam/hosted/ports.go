@@ -59,25 +59,58 @@ type Flow interface {
 	// application answers ErrSignedUpNoAccess.
 	CompleteSignup(ctx context.Context, r Request, signup identity.ChallengeID, code string) (Result, error)
 	SSO(ctx context.Context, r Request, connection identity.ConnectionID) (federation.Start, error)
+	// Directory signs in with a password the organization's LDAP directory
+	// (Route.Method "ldap") checks; it continues like single sign-on.
+	Directory(ctx context.Context, r Request, connection identity.ConnectionID, email, password string) (Result, error)
 	// Federated continues after a hosted single sign-on callback.
 	Federated(ctx context.Context, r Request, verified authentication.Verified) (Result, error)
 	Choose(ctx context.Context, r Request, organization identity.OrganizationID) (Result, error)
-	// SecondFactor checks an authenticator or recovery code (or the first
-	// code of a new authenticator) for the parked login.
-	SecondFactor(ctx context.Context, r Request, code string) (Result, error)
-	// Enrollment returns the authenticator the parked login is adding.
-	Enrollment(ctx context.Context, r Request) (authentication.Enrollment, error)
+	// SecondFactor checks a second-factor or recovery code (or the first
+	// code of a new factor) for the parked login.
+	SecondFactor(ctx context.Context, r Request, proof authentication.Proof) (Result, error)
+	// SecurityKey starts the security key prompt of the parked login.
+	SecurityKey(ctx context.Context, r Request) (authentication.WebAuthnOptions, error)
+	// PasskeyOptions starts a passkey sign-in when the client offers it.
+	PasskeyOptions(ctx context.Context, r Request) (authentication.WebAuthnOptions, error)
+	// Passkey signs in with the browser's passkey assertion; a passkey is
+	// multi-factor already, so no second factor follows.
+	Passkey(ctx context.Context, r Request, session string, credential []byte) (Result, error)
+	// SendFactorCode emails or texts a code for the parked login's second
+	// factor (factor is email or sms); an enrolling login may email one to
+	// add its email address as a factor.
+	SendFactorCode(ctx context.Context, r Request, factor string) (Result, error)
+	// Enrollment returns what the parked login may add: an authenticator
+	// (Result.Enroll) and/or its email address (Result.EnrollEmail).
+	Enrollment(ctx context.Context, r Request) (Result, error)
 	// Continue finishes after the recovery codes were shown.
 	Continue(ctx context.Context, r Request) (Result, error)
 	// ChangePassword replaces the parked login's expired password.
 	ChangePassword(ctx context.Context, r Request, password string) (Result, error)
 }
 
-// SecondFactor is the part of the mfa module the hosted pages use.
+// SecondFactor is the part of the mfa module the hosted pages use. amr are
+// the login's method references so far.
 type SecondFactor interface {
-	Requirement(ctx context.Context, boundary authentication.Context, user identity.UserID, federated bool) (authentication.Requirement, error)
-	Verify(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, code string, enroll bool) (mfa.Verification, error)
+	Requirement(ctx context.Context, boundary authentication.Context, user identity.UserID, federated bool, amr []string) (authentication.Requirement, error)
+	Verify(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string, proof authentication.Proof, enroll bool) (mfa.Verification, error)
+	AssertFor(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string) (authentication.WebAuthnOptions, error)
+	Send(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string, factor string, enroll bool) (authentication.CodeSent, error)
 	Enrolling(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (authentication.Enrollment, error)
+}
+
+// Passkeys start passkey sign-ins (authentication.PasskeyCommands).
+type Passkeys interface {
+	BeginPasskey(ctx context.Context, environment identity.EnvironmentID) (authentication.WebAuthnOptions, error)
+}
+
+// Devices is the user side of the device authorization grant
+// (oauth.Devices): /hosted/device looks up a typed user code, then starts
+// the ordinary hosted login on a ticket that approves the device.
+type Devices interface {
+	DeviceRequest(ctx context.Context, userCode string) (oauth.DeviceRequest, error)
+	// StartDevice returns the authorization ticket and its browser binding.
+	StartDevice(ctx context.Context, userCode string) (string, string, error)
+	DenyDevice(ctx context.Context, userCode string) error
 }
 
 // Invitations is the invitation use cases the hosted accept page uses.
@@ -113,6 +146,7 @@ type Federation interface {
 	Discover(ctx context.Context, environment identity.EnvironmentID, email string) (federation.Discovery, error)
 	EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]federation.ConnectionSummary, error)
 	StartHosted(ctx context.Context, target authentication.Target, connection identity.ConnectionID, continuation string) (federation.Start, error)
+	DirectoryHosted(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, email, password string) (authentication.Verified, error)
 }
 
 type Repository interface {

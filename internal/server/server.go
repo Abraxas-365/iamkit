@@ -17,10 +17,13 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa/adapters/mfahttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/adapters/orghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning/adapters/provhttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/samlidp/adapters/samlhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/adapters/saccthttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/signing/adapters/signinghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/adapters/userhttp"
 	"github.com/Abraxas-365/iamkit/internal/server/apiauth"
 	"github.com/gofiber/fiber/v2"
@@ -44,6 +47,7 @@ type APIHandlerSet struct {
 	ServiceAccounts *saccthttp.Handler
 	Factors         *mfahttp.Handler
 	Delivery        *authhttp.DeliveryHandler
+	SMS             *authhttp.SMSHandler
 }
 
 type Server struct {
@@ -71,9 +75,21 @@ type Server struct {
 	Hosted              *hostedhttp.Handler
 	Users               *userhttp.Handler
 	Delivery            *authhttp.DeliveryHandler
+	SMS                 *authhttp.SMSHandler
 	PasswordPolicy      *authhttp.PasswordPolicyHandler
 	SignInPolicy        *authhttp.SignInPolicyHandler
 	Signup              *authhttp.SignupHandler
+	SigningKeys         *signinghttp.Handler
+	// SAML is the SAML identity provider (/saml/:environment/*) and its
+	// service provider management.
+	SAML *samlhttp.Handler
+	// LogoutDeliveries is the back-channel logout delivery log.
+	LogoutDeliveries *oauthhttp.Logouts
+	// LogoutDispatcher sends due back-channel logout notifications once
+	// (Start runs it periodically; tests call it directly).
+	LogoutDispatcher oauth.Dispatcher
+	// Background workers Start runs until its context ends.
+	Background []func(ctx context.Context)
 	// API routes (/api/v1/*) — JWT-based, permission-scoped.
 	API         *apiauth.Middleware
 	APIHandlers APIHandlerSet
@@ -91,6 +107,14 @@ type Server struct {
 	// Console is the embedded frontend filesystem (from internal/console).
 	// If nil, no SPA is served and clients must provide their own UI.
 	Console fs.FS
+}
+
+// Start runs the background workers (back-channel logout delivery) until
+// ctx ends. Every replica runs them; they coordinate through the database.
+func (s *Server) Start(ctx context.Context) {
+	for _, run := range s.Background {
+		go run(ctx)
+	}
 }
 
 // requestLogger logs every request with method, path, status, and latency.
@@ -169,6 +193,9 @@ func (s *Server) App() *fiber.App {
 	auth.Post("/federation/start", limiter.New(limiter.Config{Max: 20}), s.Federation.Start)
 	auth.Get("/federation/callback", limiter.New(limiter.Config{Max: 30}), s.Federation.Callback)
 	auth.Post("/federation/callback", limiter.New(limiter.Config{Max: 30}), s.Federation.CallbackForm)
+	auth.Post("/federation/saml/acs", limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.ACS)
+	auth.Get("/federation/saml/:environment/:connection/metadata", limiter.New(limiter.Config{Max: 60, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.SAMLMetadata)
+	auth.Post("/federation/ldap/login", limiter.New(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.DirectoryLogin)
 	auth.Post("/discover", limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.Discover)
 	if s.Invitations != nil {
 		auth.Post("/invitations/preview", limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Invitations.Preview)
@@ -184,11 +211,25 @@ func (s *Server) App() *fiber.App {
 		mfaLimit := limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }})
 		auth.Post("/mfa/verify", mfaLimit, s.Auth.VerifyMFA)
 		auth.Post("/mfa/enroll", mfaLimit, s.Auth.EnrollMFA)
+		// Each challenge emails or texts a code: a tighter per-address limit.
+		auth.Post("/mfa/challenge", limiter.New(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Auth.ChallengeMFA)
+		auth.Post("/mfa/webauthn", mfaLimit, s.Auth.AssertMFA)
 		s.Factors.RegisterSelf(auth, mfaLimit)
+		passkeyLimit := limiter.New(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }})
+		auth.Post("/passkeys/login/begin", passkeyLimit, s.Auth.BeginPasskey)
+		auth.Post("/passkeys/login/finish", passkeyLimit, s.Auth.FinishPasskey)
 	}
 	s.Provisioning.Register(app)
+	// Unauthenticated OIDC endpoints get per-IP limits; resource servers
+	// call introspection and userinfo often, so theirs are wider.
+	app.Use("/oauth/token", rateLimiter(rateLimit*5))
+	app.Use("/oauth/device_authorization", rateLimiter(rateLimit))
+	app.Use("/oauth/introspect", rateLimiter(rateLimit*5))
+	app.Use("/oauth/userinfo", rateLimiter(rateLimit*5))
+	app.Use("/oauth/end_session", rateLimiter(30))
 	s.OAuth.Register(app)
 	s.hostedRoutes(app)
+	s.samlRoutes(app)
 	s.apiRoutes(app, rateLimit)
 	s.spaRoutes(app, s.Console)
 	return app
