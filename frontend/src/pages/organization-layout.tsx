@@ -10,6 +10,7 @@ export interface Organization {
   id: string; name: string; active: boolean
   metadata?: Record<string, unknown> | null
   mfa_required: boolean; mfa_for_federated: boolean
+  allow_password: boolean; allow_email_code: boolean; allow_social: boolean
 }
 
 interface OrgContext { org: Organization; reload: () => void }

@@ -11,11 +11,19 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog, DataTable, DetailSection, EmptyState, FormDialog, Properties, SwitchField } from '@/components/library/patterns'
 import { CreateConnectionDialog, providerLabel } from './federation-connection-form'
 import { useOrganization } from './organization-layout'
+import { OrganizationPasswordRequirements } from './organization-password'
+
+const methods = [
+  ['allow_password', 'Password', 'Email and password, including password reset.'],
+  ['allow_email_code', 'Email code', 'A one-time code sent by email.'],
+  ['allow_social', 'Social', 'Environment connections such as Google or Microsoft.'],
+] as const
 
 /** OrganizationOverview holds the organization's settings: name,
- * metadata, MFA policy and activation. */
+ * metadata, MFA policy, sign-in methods, password requirements and
+ * activation. */
 export function OrganizationOverview() {
-  const { environment } = useParams()
+  const { project, environment } = useParams()
   const { org, reload } = useOrganization()
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
@@ -44,6 +52,14 @@ export function OrganizationOverview() {
         <SwitchField label="Also require it for SSO sign-ins" hint="By default the identity provider is trusted to have done its own MFA." checked={org.mfa_for_federated} disabled={!canWrite || !!saving} onCheckedChange={v => patch('mfa_for_federated', { mfa_for_federated: v }, v ? 'SSO sign-ins now need a second factor' : 'SSO sign-ins trust the identity provider')} />
       </div>
     </DetailSection>
+
+    <DetailSection title="Sign-in methods" description={<>Turn off methods the environment allows for members signing in to this organization; they cannot turn on what <Link className="text-primary hover:underline" to={`/projects/${project}/environments/${environment}/sign-in-policy`}>Sign-in methods</Link> turns off. The organization's own SSO is not affected.</>}>
+      <div className="space-y-4">
+        {methods.map(([key, label, hint]) => <SwitchField key={key} label={label} hint={hint} checked={org[key]} disabled={!canWrite || !!saving} onCheckedChange={v => patch(key, { [key]: v }, `${label} sign-in ${v ? 'allowed' : 'turned off'}`)} />)}
+      </div>
+    </DetailSection>
+
+    <OrganizationPasswordRequirements organization={org.id} canWrite={canWrite} />
 
     {canWrite && <DetailSection danger title={org.active ? 'Deactivate organization' : 'Reactivate organization'} description={org.active ? 'Members can no longer sign in to this organization and existing sessions stop refreshing. Nothing is deleted.' : 'Members can sign in to this organization again.'}>
       <Button variant={org.active ? 'destructive' : 'outline'} onClick={() => setToggle(true)}>{org.active ? <><Ban /> Deactivate</> : <><RotateCcw /> Reactivate</>}</Button>

@@ -150,7 +150,8 @@ it('chooses the sign-in methods of a client', async () => {
 })
 
 it('summarizes sign-in options', () => {
-  const s = { client_id: 'c1', password: true, email_code: false, organization_sso: false, all_connections: false, connection_ids: ['g1', 'x'], custom: true }
+  const s = { client_id: 'c1', password: true, email_code: false, organization_sso: false, all_connections: false, connection_ids: ['g1', 'x'], signup: true, custom: true }
   expect(summary(s, [{ id: 'g1', name: 'Google', provider: 'google', organization_id: null, active: true }])).toBe('Password · Google · Unknown connection')
-  expect(signInBody({ ...s, all_connections: true })).toMatchObject({ all_connections: true, connection_ids: [] })
+  expect(summary({ ...s, connection_ids: [], signup: false }, [])).toBe('Password · No sign-up')
+  expect(signInBody({ ...s, all_connections: true })).toMatchObject({ all_connections: true, connection_ids: [], signup: true })
 })

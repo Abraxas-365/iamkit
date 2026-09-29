@@ -34,7 +34,8 @@ beforeEach(() => {
           path === `${env}/users` ? page([{ id: 'u1', name: 'Alice', email: 'alice@example.com', active: true }]) :
             path === `${env}/users/u1/factors` ? factors :
               path === `${env}/organizations` ? page([{ id: 'org1', name: 'Acme' }]) :
-                path === `${env}/organizations/org1` ? { id: 'org1', name: 'Acme', active: true, mfa_required: true, mfa_for_federated: false } :
+                path === `${env}/organizations/org1` ? { id: 'org1', name: 'Acme', active: true, mfa_required: true, mfa_for_federated: false, allow_password: true, allow_email_code: true, allow_social: true } :
+                  path === `${env}/organizations/org1/password-policy` ? { min_length: 0, require_upper: false, require_lower: false, require_digit: false, require_symbol: false, max_age_days: 0, breach_check: false, custom: false } :
                   path === `${env}/users/u1` ? { id: 'u1', name: 'Alice', email: 'alice@example.com', active: true } :
                     path.startsWith(env) && !path.endsWith('/factors') ? page([]) : []
     return Response.json(data)

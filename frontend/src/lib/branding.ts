@@ -23,6 +23,7 @@ export const pages = [
   ['identify', 'Sign in'], ['password', 'Password'], ['code', 'Email code'], ['reset', 'Reset password'],
   ['organization', 'Choose organization'], ['mfa', 'Two-step verification'], ['enroll', 'Set up authenticator'],
   ['recovery', 'Recovery codes'], ['invite', 'Invitation'], ['message', 'Message'],
+  ['signup', 'Create account'], ['signup-code', 'Confirm email'],
 ] as const
 export type Page = typeof pages[number][0]
 

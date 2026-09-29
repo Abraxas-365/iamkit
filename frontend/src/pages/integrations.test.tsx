@@ -29,7 +29,7 @@ beforeEach(() => {
         path === '/projects/project1/environments' ? [{ id: 'env1', name: 'Production' }] :
           path === `${env}/oauth-clients` ? page([client]) :
             path === `${env}/oauth-clients/c1` ? client :
-              path === `${env}/login-settings/clients/c1/sign-in` ? { client_id: 'c1', password: true, email_code: false, organization_sso: true, all_connections: true, connection_ids: [], custom: true } :
+              path === `${env}/login-settings/clients/c1/sign-in` ? { client_id: 'c1', password: true, email_code: false, organization_sso: true, all_connections: true, connection_ids: [], signup: true, custom: true } :
                 path === `${env}/federation-connections` ? page(url.includes('scope=environment') ? [] : [connection]) :
                   path === `${env}/provisioning-credentials` ? page([token]) :
                     path === `${env}/applications` ? page([{ id: 'a1', name: 'Web' }]) :

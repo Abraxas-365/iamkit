@@ -9,11 +9,11 @@ import { providerLabel } from './federation-connection-form'
 
 export interface SignIn {
   client_id: string; password: boolean; email_code: boolean; organization_sso: boolean
-  all_connections: boolean; connection_ids: string[]; custom: boolean
+  all_connections: boolean; connection_ids: string[]; signup: boolean; custom: boolean
 }
 interface Connection { id: string; name: string; provider: string; organization_id: string | null; active: boolean }
 
-export const everyMethod = (client: string): SignIn => ({ client_id: client, password: true, email_code: true, organization_sso: true, all_connections: true, connection_ids: [], custom: false })
+export const everyMethod = (client: string): SignIn => ({ client_id: client, password: true, email_code: true, organization_sso: true, all_connections: true, connection_ids: [], signup: true, custom: false })
 
 // summary is a short description of what a client offers.
 export function summary(s: SignIn, connections: Connection[]): string {
@@ -24,13 +24,14 @@ export function summary(s: SignIn, connections: Connection[]): string {
   if (s.organization_sso) parts.push('Organization SSO')
   if (s.all_connections) parts.push('All social')
   else parts.push(...s.connection_ids.map(id => connections.find(c => c.id === id)?.name ?? 'Unknown connection'))
+  if (!s.signup) parts.push('No sign-up')
   return parts.join(' · ')
 }
 
 // signInBody is the PUT body: the listed connections only matter when not
 // every connection is offered.
 export function signInBody(s: SignIn) {
-  return { password: s.password, email_code: s.email_code, organization_sso: s.organization_sso, all_connections: s.all_connections, connection_ids: s.all_connections ? [] : s.connection_ids }
+  return { password: s.password, email_code: s.email_code, organization_sso: s.organization_sso, all_connections: s.all_connections, connection_ids: s.all_connections ? [] : s.connection_ids, signup: s.signup }
 }
 
 export function SignInDialog({ base, client, name, readOnly, onClose, onSaved }: { base: string; client: string; name: string; readOnly: boolean; onClose: () => void; onSaved: () => void }) {
@@ -48,7 +49,7 @@ export function SignInDialog({ base, client, name, readOnly, onClose, onSaved }:
   const set = (patch: Partial<SignIn>) => setValue(v => v ? { ...v, ...patch } : v)
   const none = value && !value.password && !value.email_code && !value.organization_sso && !value.all_connections && value.connection_ids.length === 0
   const toggle = (id: string) => value && set({ connection_ids: value.connection_ids.includes(id) ? value.connection_ids.filter(x => x !== id) : [...value.connection_ids, id] })
-  const box = (key: 'password' | 'email_code' | 'organization_sso', label: string, hint: string) => <label className="flex items-start gap-2 text-sm">
+  const box = (key: 'password' | 'email_code' | 'organization_sso' | 'signup', label: string, hint: string) => <label className="flex items-start gap-2 text-sm">
     <input type="checkbox" className="mt-0.5 accent-primary" checked={!!value?.[key]} disabled={busy || readOnly} onChange={e => set({ [key]: e.target.checked })} />
     <span><span className="font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
   </label>
@@ -81,6 +82,10 @@ export function SignInDialog({ base, client, name, readOnly, onClose, onSaved }:
               <span className="font-medium">{c.name}</span>{c.name !== providerLabel(c.provider) && <span className="text-xs text-muted-foreground">{providerLabel(c.provider)}</span>}
             </label>)}
           </div>}
+        </fieldset>
+        <fieldset className="space-y-3" disabled={busy || readOnly}>
+          <legend className="mb-2 text-sm font-medium">New accounts</legend>
+          {box('signup', 'Create account', 'Shown when sign-up is on under Sign-in methods and this page offers password or email code.')}
         </fieldset>
         {none && <p className="text-xs text-destructive">Offer at least one method.</p>}
         {error && <ErrorState error={error} />}
