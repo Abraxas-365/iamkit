@@ -270,6 +270,45 @@ func TestDeliveryEndpoints(t *testing.T) {
 	}
 }
 
+func TestSigningKeyRoutes(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		calls = append(calls, r.Method+" "+r.URL.Path+" "+string(b))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"kid":"k1","state":"next","public_jwk":{"kid":"k1"}}`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	key, err := env.CreateSigningKey(ctx)
+	if err != nil || key.ID != "k1" || key.State != "next" || len(key.PublicJWK) == 0 {
+		t.Fatalf("create = %+v %v", key, err)
+	}
+	env.SigningKeys(ctx)
+	env.SigningKey(ctx, "k1")
+	env.ActivateSigningKey(ctx, "k1")
+	env.RetireSigningKey(ctx, "k1", true)
+	if _, err = env.SigningKey(ctx, "../x"); err == nil {
+		t.Fatal("unsafe kid accepted")
+	}
+	want := []string{
+		"POST /management/v1/environments/env-1/signing-keys ",
+		"GET /management/v1/environments/env-1/signing-keys ",
+		"GET /management/v1/environments/env-1/signing-keys/k1 ",
+		"POST /management/v1/environments/env-1/signing-keys/k1/activate ",
+		"POST /management/v1/environments/env-1/signing-keys/k1/retire {\"force\":true}\n",
+	}
+	if len(calls) != len(want) {
+		t.Fatalf("calls = %q", calls)
+	}
+	for i := range want {
+		if calls[i] != want[i] {
+			t.Errorf("call[%d] = %q, want %q", i, calls[i], want[i])
+		}
+	}
+}
+
 func TestLoginSettingsLocale(t *testing.T) {
 	var bodies []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -288,5 +327,183 @@ func TestLoginSettingsLocale(t *testing.T) {
 	env.SetLoginSettings(context.Background(), LoginSettings{DisplayName: "Acme"})
 	if !strings.Contains(bodies[0], `"locale":"es"`) || strings.Contains(bodies[1], "locale") {
 		t.Fatalf("bodies = %v", bodies)
+	}
+}
+
+func TestClientAuthenticationRoutes(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+string(body))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":"sa-1","token_endpoint_auth_method":"private_key_jwt"}`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	out, err := env.SetServiceAccountAuthentication(ctx, "sa-1", ClientAuthentication{Method: AuthPrivateKeyJWT, JWKSURI: "https://keys.example/jwks"})
+	if err != nil || out.Method != AuthPrivateKeyJWT {
+		t.Fatalf("set = %+v %v", out, err)
+	}
+	method := AuthClientSecretPost
+	if err = env.UpdateOAuthClient(ctx, "c-1", OAuthClientPatch{TokenEndpointAuthMethod: &method}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = env.CreateOAuthClient(ctx, OAuthClient{ApplicationID: "a", ResourceID: "r", RedirectURIs: []string{"https://x"}, ClientAuthentication: ClientAuthentication{Method: AuthPrivateKeyJWT, JWKS: json.RawMessage(`{"keys":[]}`)}}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		`PUT /management/v1/environments/env-1/service-accounts/sa-1/authentication {"token_endpoint_auth_method":"private_key_jwt","jwks_uri":"https://keys.example/jwks"}`,
+		`PATCH /management/v1/environments/env-1/oauth-clients/c-1 {"token_endpoint_auth_method":"client_secret_post"}`,
+	}
+	for i, w := range want {
+		if strings.TrimSpace(got[i]) != w {
+			t.Fatalf("request %d = %s", i, got[i])
+		}
+	}
+	if !strings.Contains(got[2], `"token_endpoint_auth_method":"private_key_jwt","jwks":{"keys":[]}`) {
+		t.Fatalf("create = %s", got[2])
+	}
+	if _, err = env.SetServiceAccountImpersonation(ctx, "sa-1", true); err != nil {
+		t.Fatal(err)
+	}
+	if w := `PUT /management/v1/environments/env-1/service-accounts/sa-1/impersonation {"allowed":true}`; strings.TrimSpace(got[3]) != w {
+		t.Fatalf("impersonation = %s", got[3])
+	}
+}
+
+func TestAccessTokenFormat(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		got = append(got, strings.TrimSpace(string(body)))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":"c-1"}`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	if _, err := env.CreateOAuthClient(ctx, OAuthClient{ApplicationID: "a", ResourceID: "r", RedirectURIs: []string{"https://x"}, AccessTokenFormat: AccessTokenOpaque}); err != nil {
+		t.Fatal(err)
+	}
+	format := AccessTokenJWT
+	if err := env.UpdateOAuthClient(ctx, "c-1", OAuthClientPatch{AccessTokenFormat: &format}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got[0], `"access_token_format":"opaque"`) || got[1] != `{"access_token_format":"jwt"}` {
+		t.Fatalf("requests = %v", got)
+	}
+}
+
+func TestOAuthClientGrantTypes(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		got = append(got, strings.TrimSpace(string(body)))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":"c-1"}`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	if _, err := env.CreateOAuthClient(ctx, OAuthClient{ApplicationID: "a", ResourceID: "r", Public: true, HostedLogin: true, GrantTypes: []string{GrantDeviceCode, GrantRefreshToken}}); err != nil {
+		t.Fatal(err)
+	}
+	grants := []string{GrantAuthorizationCode, GrantDeviceCode}
+	if err := env.UpdateOAuthClient(ctx, "c-1", OAuthClientPatch{GrantTypes: &grants}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got[0], `"grant_types":["urn:ietf:params:oauth:grant-type:device_code","refresh_token"]`) || got[1] != `{"grant_types":["authorization_code","urn:ietf:params:oauth:grant-type:device_code"]}` {
+		t.Fatalf("requests = %v", got)
+	}
+}
+
+func TestFederationProviderOptionsWire(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		body = nil
+		_ = json.Unmarshal(raw, &body)
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "POST" {
+			w.WriteHeader(201)
+			_, _ = w.Write([]byte(`{"id":"conn-1"}`))
+			return
+		}
+		w.WriteHeader(204)
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	_, err := env.CreateFederation(ctx, Federation{Name: "Chat", Provider: ProviderOAuth2, ClientID: "c", ClientSecret: "s", UpdateProfile: true,
+		Options: &FederationOptions{AuthorizeURL: "https://p/a", TokenURL: "https://p/t", UserinfoURL: "https://p/me", Scopes: []string{"identify"},
+			Claims: &FederationClaimMap{Subject: "id", EmailVerified: "verified", Email: "email"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := body["options"].(map[string]any)
+	if body["update_profile"] != true || options["userinfo_url"] != "https://p/me" || options["claims"].(map[string]any)["email_verified"] != "verified" {
+		t.Fatalf("create body = %v", body)
+	}
+	off := false
+	if err := env.UpdateFederation(ctx, "conn-1", FederationPatch{UpdateProfile: &off}); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := body["update_profile"]; !ok || v != false {
+		t.Fatalf("patch body = %v", body)
+	}
+	_, err = env.CreateFederation(ctx, Federation{Name: "Okta", Provider: ProviderSAML, OrganizationID: "org-1",
+		Options: &FederationOptions{MetadataURL: "https://idp/m", NameIDFormat: NameIDTransient, Attributes: &SAMLAttributes{Subject: "uid"}, SignRequests: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	options = body["options"].(map[string]any)
+	if body["provider"] != "saml" || options["metadata_url"] != "https://idp/m" || options["name_id_format"] != "transient" || options["attributes"].(map[string]any)["subject"] != "uid" || options["sign_requests"] != true {
+		t.Fatalf("saml body = %v", body)
+	}
+	if _, ok := body["client_secret"]; ok {
+		t.Fatalf("saml body has a secret: %v", body)
+	}
+}
+
+func TestSAMLAppRoutes(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		calls = append(calls, r.Method+" "+r.URL.Path+" "+string(b))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":"sp1","entity_id":"https://wiki.example.com/saml","acs_urls":["https://wiki.example.com/acs"],"attributes":{"mail":"email"},"items":[]}`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	sp, err := env.CreateSAMLApp(ctx, CreateSAMLApp{Name: "Wiki", Application: "a", Resource: "r", EntityID: "https://wiki.example.com/saml", ACSURLs: []string{"https://wiki.example.com/acs"}})
+	if err != nil || sp.ID != "sp1" || sp.Attributes["mail"] != "email" {
+		t.Fatalf("create = %+v %v", sp, err)
+	}
+	format := "persistent"
+	env.SAMLIdentityProvider(ctx)
+	env.SAMLApps(ctx)
+	env.SAMLApp(ctx, "sp1")
+	env.UpdateSAMLApp(ctx, "sp1", UpdateSAMLApp{NameIDFormat: &format})
+	env.DeleteSAMLApp(ctx, "sp1")
+	if _, err = env.SAMLApp(ctx, "../x"); err == nil {
+		t.Fatal("unsafe id accepted")
+	}
+	want := []string{
+		"POST /management/v1/environments/env-1/saml/service-providers {\"name\":\"Wiki\",\"application_id\":\"a\",\"resource_id\":\"r\",\"entity_id\":\"https://wiki.example.com/saml\",\"acs_urls\":[\"https://wiki.example.com/acs\"]}\n",
+		"GET /management/v1/environments/env-1/saml/identity-provider ",
+		"GET /management/v1/environments/env-1/saml/service-providers ",
+		"GET /management/v1/environments/env-1/saml/service-providers/sp1 ",
+		"PATCH /management/v1/environments/env-1/saml/service-providers/sp1 {\"name_id_format\":\"persistent\"}\n",
+		"DELETE /management/v1/environments/env-1/saml/service-providers/sp1 ",
+	}
+	if len(calls) != len(want) {
+		t.Fatalf("calls = %q", calls)
+	}
+	for i := range want {
+		if calls[i] != want[i] {
+			t.Errorf("call[%d] = %q, want %q", i, calls[i], want[i])
+		}
 	}
 }

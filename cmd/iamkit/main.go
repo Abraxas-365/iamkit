@@ -135,6 +135,7 @@ func run() error {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	s.Start(ctx)
 	done := make(chan error, 1)
 	go func() { done <- app.Listen(":" + port) }()
 	slog.Info("server listening", "port", port)

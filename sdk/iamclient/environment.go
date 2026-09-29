@@ -88,17 +88,22 @@ type Organization struct {
 	// only; list results leave them false.
 	MFARequired     bool `json:"mfa_required,omitempty"`
 	MFAForFederated bool `json:"mfa_for_federated,omitempty"`
-	// AllowPassword, AllowEmailCode and AllowSocial narrow the
-	// environment's SignInPolicy for this organization (never widen it).
+	// AllowPassword, AllowEmailCode, AllowSocial and AllowPasskey narrow
+	// the environment's SignInPolicy for this organization (never widen it).
 	AllowPassword  bool `json:"allow_password,omitempty"`
 	AllowEmailCode bool `json:"allow_email_code,omitempty"`
 	AllowSocial    bool `json:"allow_social,omitempty"`
+	AllowPasskey   bool `json:"allow_passkey,omitempty"`
+	// AllowedFactors narrow the environment's allowed second factors.
+	AllowedFactors []string `json:"allowed_factors,omitempty"`
 }
 
-// Factor is a user's second factor.
+// Factor is a user's second factor. Kind is totp, email, sms or webauthn;
+// Name labels security keys and passkeys.
 type Factor struct {
 	ID          string     `json:"id"`
 	Kind        string     `json:"kind"`
+	Name        string     `json:"name,omitempty"`
 	ConfirmedAt *time.Time `json:"confirmed_at"`
 	LastUsedAt  *time.Time `json:"last_used_at"`
 	CreatedAt   time.Time  `json:"created_at"`
@@ -107,6 +112,8 @@ type Factor struct {
 type UserFactors struct {
 	Factors                []Factor `json:"factors"`
 	RecoveryCodesRemaining int      `json:"recovery_codes_remaining"`
+	// LockedUntil is set while wrong codes lock every factor of the user.
+	LockedUntil *time.Time `json:"locked_until,omitempty"`
 }
 
 type Membership struct {
@@ -239,6 +246,19 @@ type OrganizationMethods struct {
 	Password  *bool `json:"allow_password,omitempty"`
 	EmailCode *bool `json:"allow_email_code,omitempty"`
 	Social    *bool `json:"allow_social,omitempty"`
+	Passkey   *bool `json:"allow_passkey,omitempty"`
+}
+
+// OrganizationFactors narrows the environment's allowed second factors
+// for one organization (totp, webauthn, sms, email).
+type OrganizationFactors struct {
+	AllowedFactors []string `json:"allowed_factors"`
+}
+
+// SetOrganizationFactors changes the second factors an organization's
+// members may use; a user whose factors are all refused enrolls another.
+func (e Environment) SetOrganizationFactors(ctx context.Context, id string, input OrganizationFactors) error {
+	return e.operation(ctx, "PATCH", []string{"organizations", id}, input, nil)
 }
 
 // SetOrganizationMethods changes the sign-in methods an organization
@@ -673,12 +693,19 @@ type SignInPolicy struct {
 	AllowEmailCode bool `json:"allow_email_code"`
 	// AllowSocial covers environment connections (Google, Microsoft, ...).
 	AllowSocial bool `json:"allow_social"`
+	// AllowPasskey allows passkey sign-in (default true); it also needs
+	// "webauthn" in AllowedFactors. Nil keeps the stored value.
+	AllowPasskey *bool `json:"allow_passkey,omitempty"`
 	// AllowPasswordReset needs AllowPassword.
 	AllowPasswordReset bool `json:"allow_password_reset"`
 	// MFARequired and MFAForFederated apply to every organization on top of
 	// its own MFA policy.
 	MFARequired     bool `json:"mfa_required"`
 	MFAForFederated bool `json:"mfa_for_federated"`
+	// AllowedFactors are the second factors users may use: totp, webauthn,
+	// sms, email (default totp, webauthn — email and SMS codes are opt-in).
+	// Nil keeps the stored list.
+	AllowedFactors []string `json:"allowed_factors,omitempty"`
 	// AllowSignup lets people create their own account
 	// (authclient.Signup, "Create account" on the hosted pages); it needs
 	// SignupOrganizationID, the organization new accounts join, and
@@ -751,6 +778,83 @@ func (e Environment) DeliveryStatus(ctx context.Context) (DeliveryStatus, error)
 func (e Environment) TestDelivery(ctx context.Context, email string) (DeliveryAttempt, error) {
 	var out DeliveryAttempt
 	err := e.client.Do(ctx, "POST", e.path("delivery/test"), map[string]string{"email": email}, &out)
+	return out, err
+}
+
+// SMS providers.
+const (
+	SMSTwilio  = "twilio"
+	SMSWebhook = "webhook"
+)
+
+// SMSConfig is an environment's SMS provider (GET /sms). Secrets are
+// never returned; HasSecret says one is stored.
+type SMSConfig struct {
+	EnvironmentID       string `json:"environment_id"`
+	Provider            string `json:"provider"`
+	AccountSID          string `json:"account_sid,omitempty"`
+	FromNumber          string `json:"from_number,omitempty"`
+	MessagingServiceSID string `json:"messaging_service_sid,omitempty"`
+	WebhookURL          string `json:"webhook_url,omitempty"`
+	HasSecret           bool   `json:"has_secret"`
+	CreatedAt           string `json:"created_at"`
+	UpdatedAt           string `json:"updated_at"`
+}
+
+// SetSMSConfig replaces the SMS provider. Twilio needs AccountSID,
+// AuthToken and FromNumber or MessagingServiceSID; the webhook needs an
+// HTTPS WebhookURL and WebhookToken (bearer + Standard Webhooks
+// signature). A blank secret keeps the stored one when the provider does
+// not change.
+type SetSMSConfig struct {
+	Provider            string `json:"provider"`
+	AccountSID          string `json:"account_sid,omitempty"`
+	AuthToken           string `json:"auth_token,omitempty"`
+	FromNumber          string `json:"from_number,omitempty"`
+	MessagingServiceSID string `json:"messaging_service_sid,omitempty"`
+	WebhookURL          string `json:"webhook_url,omitempty"`
+	WebhookToken        string `json:"webhook_token,omitempty"`
+}
+
+// SMSStatus says whether the environment can text and its recent activity.
+type SMSStatus struct {
+	Configured  bool             `json:"configured"`
+	Provider    string           `json:"provider"`
+	LastAttempt *DeliveryAttempt `json:"last_attempt"`
+	LastFailure *DeliveryAttempt `json:"last_failure"`
+}
+
+// SMSConfig returns the SMS provider (apierror not found when none).
+func (e Environment) SMSConfig(ctx context.Context) (SMSConfig, error) {
+	var out SMSConfig
+	err := e.client.Do(ctx, "GET", e.path("sms"), nil, &out)
+	return out, err
+}
+
+// SetSMSConfig saves the SMS provider.
+func (e Environment) SetSMSConfig(ctx context.Context, input SetSMSConfig) (SMSConfig, error) {
+	var out SMSConfig
+	err := e.client.Do(ctx, "PUT", e.path("sms"), input, &out)
+	return out, err
+}
+
+// DeleteSMSConfig removes the SMS provider; SMS codes stop being sent.
+func (e Environment) DeleteSMSConfig(ctx context.Context) error {
+	return e.client.Do(ctx, "DELETE", e.path("sms"), nil, nil)
+}
+
+// SMSStatus returns whether SMS is configured and its recent activity.
+func (e Environment) SMSStatus(ctx context.Context) (SMSStatus, error) {
+	var out SMSStatus
+	err := e.client.Do(ctx, "GET", e.path("sms/status"), nil, &out)
+	return out, err
+}
+
+// TestSMS texts a message without a code to phone (E.164). A failed
+// delivery is returned as an attempt, not an error.
+func (e Environment) TestSMS(ctx context.Context, phone string) (DeliveryAttempt, error) {
+	var out DeliveryAttempt
+	err := e.client.Do(ctx, "POST", e.path("sms/test"), map[string]string{"phone": phone}, &out)
 	return out, err
 }
 
@@ -986,6 +1090,10 @@ type SignIn struct {
 	// Signup shows "Create account" when the environment allows sign-up
 	// (SignInPolicy.AllowSignup). Pass true to keep offering it.
 	Signup bool `json:"signup"`
+	// Passkey offers "Sign in with a passkey" (and passkey autofill) when
+	// the environment allows passkeys. Clients configured before passkeys
+	// existed keep false until changed.
+	Passkey bool `json:"passkey"`
 	// Read-only: false when the client offers every method by default.
 	Custom    bool       `json:"custom,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`

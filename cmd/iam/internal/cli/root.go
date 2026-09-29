@@ -63,6 +63,7 @@ Workspace-level commands (me, projects, environments, operators, keys) do not.`,
 	cmd.AddCommand(organizationsCmd())
 	cmd.AddCommand(groupsCmd())
 	cmd.AddCommand(applicationsCmd())
+	cmd.AddCommand(oauthClientsCmd())
 	cmd.AddCommand(resourcesCmd())
 	cmd.AddCommand(rolesCmd())
 	cmd.AddCommand(grantsCmd())
@@ -71,8 +72,11 @@ Workspace-level commands (me, projects, environments, operators, keys) do not.`,
 	cmd.AddCommand(sessionsCmd())
 	cmd.AddCommand(auditCmd())
 	cmd.AddCommand(deliveryCmd())
+	cmd.AddCommand(smsCmd())
 	cmd.AddCommand(passwordPolicyCmd())
 	cmd.AddCommand(signInPolicyCmd())
+	cmd.AddCommand(signingKeysCmd())
+	cmd.AddCommand(samlAppsCmd())
 	cmd.AddCommand(seedCmd())
 
 	return cmd

@@ -161,7 +161,7 @@ func sortedKeys(m map[string]any) []string {
 		"application_id", "application_name", "resource_id", "resource_name",
 		"organization_id", "organization_name", "user_id", "user_name",
 		"expires_at", "revoked_at", "created_at", "updated_at", "secret",
-		"otp_enabled", "email_verified", "metadata", "issuer", "client_id",
+		"otp_enabled", "email_verified", "phone", "phone_verified", "metadata", "issuer", "client_id",
 		"linked", "webhook_url"}
 	seen := map[string]bool{}
 	var result []string

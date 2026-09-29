@@ -2,6 +2,7 @@ package authclient
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -118,6 +119,7 @@ func TestAllIdentityPaths(t *testing.T) {
 	c.Organizations(ctx, "tok", "env", "aud")
 	c.AddMember(ctx, "tok", AddMemberRequest{})
 	c.Introspect(ctx, "tok", "iss", "aud", "env", "app", "res")
+	c.DirectoryLogin(ctx, LoginContext{}, "conn", "a@b.com", "pw")
 
 	expected := []string{
 		"POST /identity/v1/login",
@@ -131,6 +133,7 @@ func TestAllIdentityPaths(t *testing.T) {
 		"GET /identity/v1/organizations",
 		"POST /identity/v1/memberships",
 		"POST /identity/v1/introspect",
+		"POST /identity/v1/federation/ldap/login",
 	}
 	if len(paths) != len(expected) {
 		t.Fatalf("paths count %d != %d: %v", len(paths), len(expected), paths)
@@ -188,6 +191,86 @@ func TestMFAEndpoints(t *testing.T) {
 	}
 }
 
+func TestCodeFactorEndpoints(t *testing.T) {
+	var calls, bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(b))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"factor":"sms","destination":"+1•••21","expires_at":"2030-01-01T00:00:00Z","recovery_codes":["c1"]}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	ctx := context.Background()
+	if s, err := c.ChallengeMFA(ctx, "ik_mfa_x", "sms"); err != nil || s.Factor != "sms" || s.Destination == "" || s.ExpiresAt.IsZero() {
+		t.Fatalf("challenge = %+v %v", s, err)
+	}
+	c.StartEmailFactor(ctx, "tok", "env", "aud")
+	c.StartSMSFactor(ctx, "tok", "env", "aud", "+15551234567")
+	if codes, err := c.ConfirmFactor(ctx, "tok", "env", "aud", "sms", "123456"); err != nil || len(codes) != 1 {
+		t.Fatalf("confirm = %v %v", codes, err)
+	}
+	c.SendFactorCode(ctx, "tok", "env", "aud", "email")
+	c.RemoveFactor(ctx, "tok", "env", "aud", "sms", "123456")
+	want := []string{
+		"POST /identity/v1/mfa/challenge", "POST /identity/v1/me/factors/email", "POST /identity/v1/me/factors/sms",
+		"POST /identity/v1/me/factors/sms/confirm", "POST /identity/v1/me/factors/email/challenge", "DELETE /identity/v1/me/factors/sms",
+	}
+	if strings.Join(calls, ",") != strings.Join(want, ",") {
+		t.Fatalf("calls = %v", calls)
+	}
+	if !strings.Contains(bodies[0], `"factor":"sms"`) || !strings.Contains(bodies[2], `"phone":"+15551234567"`) {
+		t.Fatalf("bodies = %v", bodies)
+	}
+}
+
+func TestWebAuthnEndpoints(t *testing.T) {
+	var calls, bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(b))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"webauthn_session":"ik_wa_x","options":{"challenge":"abc"},"expires_at":"2030-01-01T00:00:00Z","factor":{"id":"f1","kind":"webauthn","name":"Key","passkey":true,"created_at":"2030-01-01T00:00:00Z"},"recovery_codes":["c1"],"access_token":"a"}`))
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	ctx := context.Background()
+	credential := json.RawMessage(`{"id":"cred"}`)
+	o, err := c.AssertMFA(ctx, "ik_mfa_x")
+	if err != nil || o.Session != "ik_wa_x" || string(o.Options) != `{"challenge":"abc"}` || o.ExpiresAt.IsZero() {
+		t.Fatalf("assert = %+v %v", o, err)
+	}
+	if pair, err := c.VerifyMFAWebAuthn(ctx, "ik_mfa_x", o.Session, credential); err != nil || pair.AccessToken != "a" {
+		t.Fatalf("verify = %+v %v", pair, err)
+	}
+	c.BeginPasskeyLogin(ctx, "env")
+	if pair, err := c.PasskeyLogin(ctx, LoginContext{EnvironmentID: "env"}, "ik_wa_x", credential); err != nil || pair.AccessToken != "a" {
+		t.Fatalf("passkey = %+v %v", pair, err)
+	}
+	c.StartWebAuthn(ctx, "tok", "env", "aud", "Key", true)
+	if reg, err := c.FinishWebAuthn(ctx, "tok", "env", "aud", "ik_wa_x", credential); err != nil || !reg.Factor.Passkey || len(reg.RecoveryCodes) != 1 {
+		t.Fatalf("finish = %+v %v", reg, err)
+	}
+	c.ProveWebAuthn(ctx, "tok", "env", "aud")
+	c.RenameWebAuthn(ctx, "tok", "env", "aud", "f1", "Desk")
+	c.RemoveWebAuthn(ctx, "tok", "env", "aud", "f1", WebAuthnProof{Session: "ik_wa_x", Credential: credential})
+	want := []string{
+		"POST /identity/v1/mfa/webauthn", "POST /identity/v1/mfa/verify", "POST /identity/v1/passkeys/login/begin", "POST /identity/v1/passkeys/login/finish",
+		"POST /identity/v1/me/factors/webauthn", "POST /identity/v1/me/factors/webauthn/confirm", "POST /identity/v1/me/factors/webauthn/challenge",
+		"PATCH /identity/v1/me/factors/webauthn/f1", "DELETE /identity/v1/me/factors/webauthn/f1",
+	}
+	if strings.Join(calls, ",") != strings.Join(want, ",") {
+		t.Fatalf("calls = %v", calls)
+	}
+	for i, fragment := range map[int]string{1: `"credential":{"id":"cred"}`, 3: `"environment_id":"env"`, 4: `"passkey":true`, 8: `"webauthn_session":"ik_wa_x"`} {
+		if !strings.Contains(bodies[i], fragment) {
+			t.Fatalf("body %d = %s", i, bodies[i])
+		}
+	}
+}
+
 func TestClaimsHasMFA(t *testing.T) {
 	if (Claims{AMR: []string{"pwd"}}).HasMFA() || !(Claims{AMR: []string{"pwd", "otp", "mfa"}}).HasMFA() {
 		t.Fatal("HasMFA")
@@ -242,5 +325,22 @@ func TestInitiateChallengeLocale(t *testing.T) {
 		if strings.TrimSpace(b) != want[i] {
 			t.Errorf("body[%d] = %s, want %s", i, b, want[i])
 		}
+	}
+}
+
+func TestDirectoryLogin(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"access_token":"a"}`))
+	}))
+	defer srv.Close()
+	pair, err := New(srv.URL).DirectoryLogin(context.Background(), LoginContext{EnvironmentID: "env", OrganizationID: "org"}, "conn", "a@b.com", "pw")
+	if err != nil || pair.AccessToken != "a" {
+		t.Fatalf("%+v %v", pair, err)
+	}
+	if body["environment_id"] != "env" || body["organization_id"] != "org" || body["connection_id"] != "conn" || body["email"] != "a@b.com" || body["password"] != "pw" {
+		t.Fatalf("body %v", body)
 	}
 }

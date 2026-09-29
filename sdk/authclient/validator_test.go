@@ -25,6 +25,15 @@ func TestTokenBoundaries(t *testing.T) {
 	if _, err = Validate(raw, &key.PublicKey, "https://iam.example", "billing", "prod", "web", "billing"); err != nil {
 		t.Fatal(err)
 	}
+	acted := c
+	acted.Act = &Actor{Subject: "svc-1"}
+	got, err := Validate(sign(acted), &key.PublicKey, "https://iam.example", "billing", "prod", "web", "billing")
+	if err != nil || got.Act == nil || got.Act.Subject != "svc-1" || !got.Impersonated() {
+		t.Fatalf("act claim = %+v %v", got, err)
+	}
+	if plain, _ := Validate(raw, &key.PublicKey, "https://iam.example", "billing", "prod", "web", "billing"); plain.Impersonated() {
+		t.Fatal("plain token impersonated")
+	}
 	for _, tc := range []struct{ issuer, audience, environment, application, resource string }{
 		{"wrong", "billing", "prod", "web", "billing"}, {"https://iam.example", "wrong", "prod", "web", "billing"}, {"https://iam.example", "billing", "dev", "web", "billing"}, {"https://iam.example", "billing", "prod", "mobile", "billing"}, {"https://iam.example", "billing", "prod", "web", "support"},
 	} {

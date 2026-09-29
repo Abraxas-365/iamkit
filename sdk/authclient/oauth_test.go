@@ -2,11 +2,16 @@ package authclient
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestNewOAuth(t *testing.T) {
@@ -57,3 +62,102 @@ func TestOAuthClient(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestOAuthOIDCEndpoints(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/oauth/userinfo":
+			if r.Header.Get("Authorization") != "Bearer good" {
+				w.WriteHeader(401)
+				json.NewEncoder(w).Encode(map[string]string{"error": "invalid_token"})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"sub": "u1", "email": "a@example.com", "email_verified": true, "environment_id": "e1"})
+		case "/oauth/introspect":
+			r.ParseForm()
+			if id, secret, ok := r.BasicAuth(); !ok || id != "client" || secret != "secret" {
+				t.Error("introspection client authentication")
+			}
+			json.NewEncoder(w).Encode(map[string]any{"active": r.Form.Get("token") == "good", "permissions": []string{"p"}})
+		}
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+	client := NewOAuth(srv.URL, "client", "secret")
+	info, err := client.UserInfo(ctx, "good")
+	if err != nil || info.Subject != "u1" || !info.EmailVerified || info.EnvironmentID != "e1" {
+		t.Fatalf("userinfo %+v %v", info, err)
+	}
+	var failure *OAuthError
+	if _, err = client.UserInfo(ctx, "bad"); !errors.As(err, &failure) || failure.Code != "invalid_token" || failure.HTTPStatus != 401 {
+		t.Fatalf("userinfo error %v", err)
+	}
+	got, err := client.Introspect(ctx, "good")
+	if err != nil || !got.Active || len(got.Permissions) != 1 {
+		t.Fatalf("introspect %+v %v", got, err)
+	}
+	if got, _ = client.Introspect(ctx, "bad"); got.Active {
+		t.Fatal("inactive token reported active")
+	}
+	if _, err = NewOAuth(srv.URL, "client", "").Introspect(ctx, "good"); !errors.As(err, &failure) || failure.Code != "invalid_client" {
+		t.Fatalf("public introspection %v", err)
+	}
+	logout := client.EndSessionURL("hint", "https://app.example/bye", "s")
+	if logout != srv.URL+"/oauth/end_session?client_id=client&id_token_hint=hint&post_logout_redirect_uri=https%3A%2F%2Fapp.example%2Fbye&state=s" {
+		t.Fatalf("end session URL %s", logout)
+	}
+}
+
+func TestClientCredentials(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jtis []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		if r.Form.Get("grant_type") != "client_credentials" || r.Form.Get("client_id") != "account" {
+			t.Errorf("form = %v", r.Form)
+		}
+		_, _, basic := r.BasicAuth()
+		switch r.Form.Get("client_assertion_type") {
+		case "":
+			if !basic && r.Form.Get("client_secret") != "ik_svc_x" {
+				t.Error("no secret")
+			}
+		default:
+			token, err := jwt.Parse(r.Form.Get("client_assertion"), func(tok *jwt.Token) (any, error) {
+				if tok.Header["kid"] != "k1" {
+					t.Errorf("kid = %v", tok.Header["kid"])
+				}
+				return &key.PublicKey, nil
+			}, jwt.WithValidMethods([]string{"ES256"}), jwt.WithAudience(srvURL(r)+"/oauth/token"), jwt.WithIssuer("account"), jwt.WithSubject("account"))
+			if err != nil || basic {
+				t.Errorf("assertion: %v", err)
+			}
+			jti, _ := token.Claims.(jwt.MapClaims)["jti"].(string)
+			jtis = append(jtis, jti)
+		}
+		json.NewEncoder(w).Encode(map[string]any{"access_token": "machine", "token_type": "Bearer", "expires_in": 900})
+	}))
+	defer srv.Close()
+	for _, c := range []*OAuthClient{
+		NewOAuth(srv.URL, "account", "ik_svc_x"),
+		NewOAuth(srv.URL, "account", "ik_svc_x", WithClientSecretPost()),
+		NewOAuth(srv.URL, "account", "", WithPrivateKeyJWT(key, "k1", "ES256")),
+		NewOAuth(srv.URL, "account", "", WithPrivateKeyJWT(key, "k1", "ES256")),
+	} {
+		out, err := c.ClientCredentials(context.Background())
+		if err != nil || out.AccessToken != "machine" {
+			t.Fatalf("ClientCredentials = %+v, %v", out, err)
+		}
+	}
+	if len(jtis) != 2 || jtis[0] == jtis[1] || jtis[0] == "" {
+		t.Fatalf("jtis = %v", jtis)
+	}
+	if _, err = NewOAuth(srv.URL, "account", "", WithPrivateKeyJWT(key, "k1", "HS999")).ClientCredentials(context.Background()); err == nil {
+		t.Fatal("unknown algorithm accepted")
+	}
+}
+
+func srvURL(r *http.Request) string { return "http://" + r.Host }

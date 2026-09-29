@@ -9,6 +9,7 @@ package authclient
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -91,19 +92,50 @@ type Enrollment struct {
 	URI      string `json:"otpauth_uri"`
 }
 
-// Factor is a second factor of the user (never its secret).
+// Factor is a second factor of the user (never its secret). Kind is totp,
+// email, sms or webauthn; Name labels security keys and passkeys.
 type Factor struct {
-	ID          string     `json:"id"`
-	Kind        string     `json:"kind"`
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+	Name string `json:"name,omitempty"`
+	// Passkey marks a WebAuthn factor that can also sign in on its own.
+	Passkey     bool       `json:"passkey,omitempty"`
+	Phone       string     `json:"phone,omitempty"`
 	ConfirmedAt *time.Time `json:"confirmed_at"`
 	LastUsedAt  *time.Time `json:"last_used_at"`
 	CreatedAt   time.Time  `json:"created_at"`
+}
+
+// CodeSent reports a code emailed or texted for an email or SMS factor:
+// Destination is masked (a•••@example.com, +1•••••••21).
+type CodeSent struct {
+	Factor      string    `json:"factor"`
+	Destination string    `json:"destination"`
+	ExpiresAt   time.Time `json:"expires_at"`
 }
 
 // Factors lists a user's second factors and remaining recovery codes.
 type Factors struct {
 	Factors                []Factor `json:"factors"`
 	RecoveryCodesRemaining int      `json:"recovery_codes_remaining"`
+	// LockedUntil is set while wrong codes lock every factor.
+	LockedUntil *time.Time `json:"locked_until,omitempty"`
+}
+
+// WebAuthnOptions starts a security key or passkey ceremony: pass Options
+// to navigator.credentials.create (registration) or .get (assertion), then
+// send the browser's PublicKeyCredential JSON back with Session.
+type WebAuthnOptions struct {
+	Session   string          `json:"webauthn_session"`
+	Options   json.RawMessage `json:"options"`
+	ExpiresAt time.Time       `json:"expires_at"`
+}
+
+// WebAuthnRegistration is a registered security key or passkey; the first
+// factor of the user also returns RecoveryCodes (shown once).
+type WebAuthnRegistration struct {
+	Factor        Factor   `json:"factor"`
+	RecoveryCodes []string `json:"recovery_codes,omitempty"`
 }
 
 type Challenge struct {
@@ -138,6 +170,10 @@ type Discovery struct {
 	OrganizationID string `json:"organization_id,omitempty"`
 	ConnectionID   string `json:"connection_id,omitempty"`
 	Required       bool   `json:"required"`
+	// Provider is "ldap" when the connection is the organization's LDAP
+	// directory: ask for the password and call DirectoryLogin instead of
+	// redirecting to StartSSO.
+	Provider string `json:"provider,omitempty"`
 }
 
 // InvitationPreview describes a pending invitation for an accept page.
@@ -238,6 +274,15 @@ func (c *Client) EnrollMFA(ctx context.Context, mfaToken string) (Enrollment, er
 	return out, err
 }
 
+// ChallengeMFA sends a code for a pending login's email or SMS factor
+// (factor "email" or "sms"); complete it with VerifyMFA. With
+// EnrollmentRequired and "email" allowed, it enrolls the email factor.
+func (c *Client) ChallengeMFA(ctx context.Context, mfaToken, factor string) (CodeSent, error) {
+	var out CodeSent
+	err := c.request(ctx, "/mfa/challenge", "", map[string]string{"mfa_token": mfaToken, "factor": factor}, &out)
+	return out, err
+}
+
 func selfBody(environment, audience, code string) map[string]string {
 	return map[string]string{"environment_id": environment, "audience": audience, "code": code}
 }
@@ -273,6 +318,48 @@ func (c *Client) RemoveTOTP(ctx context.Context, token, environment, audience, c
 	return c.requestMethod(ctx, "DELETE", "/me/factors/totp", token, selfBody(environment, audience, code), nil)
 }
 
+// StartEmailFactor emails a code to the account address; confirm it with
+// ConfirmFactor(…, "email", code).
+func (c *Client) StartEmailFactor(ctx context.Context, token, environment, audience string) (CodeSent, error) {
+	var out CodeSent
+	err := c.request(ctx, "/me/factors/email", token, selfBody(environment, audience, ""), &out)
+	return out, err
+}
+
+// StartSMSFactor texts a code to phone (E.164); confirm it with
+// ConfirmFactor(…, "sms", code), which also verifies the user's phone.
+func (c *Client) StartSMSFactor(ctx context.Context, token, environment, audience, phone string) (CodeSent, error) {
+	var out CodeSent
+	body := selfBody(environment, audience, "")
+	body["phone"] = phone
+	err := c.request(ctx, "/me/factors/sms", token, body, &out)
+	return out, err
+}
+
+// ConfirmFactor activates a started factor (kind totp, email or sms) with
+// its first code and returns the recovery codes (shown once).
+func (c *Client) ConfirmFactor(ctx context.Context, token, environment, audience, kind, code string) ([]string, error) {
+	var out struct {
+		Codes []string `json:"recovery_codes"`
+	}
+	err := c.request(ctx, "/me/factors/"+url.PathEscape(kind)+"/confirm", token, selfBody(environment, audience, code), &out)
+	return out.Codes, err
+}
+
+// SendFactorCode sends a code to the active email or SMS factor, to prove
+// possession before RemoveFactor or RegenerateRecoveryCodes.
+func (c *Client) SendFactorCode(ctx context.Context, token, environment, audience, kind string) (CodeSent, error) {
+	var out CodeSent
+	err := c.request(ctx, "/me/factors/"+url.PathEscape(kind)+"/challenge", token, selfBody(environment, audience, ""), &out)
+	return out, err
+}
+
+// RemoveFactor deletes the factor of kind; code (from any active factor or
+// a recovery code) proves possession.
+func (c *Client) RemoveFactor(ctx context.Context, token, environment, audience, kind, code string) error {
+	return c.requestMethod(ctx, "DELETE", "/me/factors/"+url.PathEscape(kind), token, selfBody(environment, audience, code), nil)
+}
+
 // RegenerateRecoveryCodes replaces the recovery codes; code proves possession.
 func (c *Client) RegenerateRecoveryCodes(ctx context.Context, token, environment, audience, code string) ([]string, error) {
 	var out struct {
@@ -280,6 +367,112 @@ func (c *Client) RegenerateRecoveryCodes(ctx context.Context, token, environment
 	}
 	err := c.request(ctx, "/me/factors/recovery-codes", token, selfBody(environment, audience, code), &out)
 	return out.Codes, err
+}
+
+// AssertMFA starts the security key prompt of a login that answered
+// MFARequired with "webauthn" among its Factors; complete it with
+// VerifyMFAWebAuthn.
+func (c *Client) AssertMFA(ctx context.Context, mfaToken string) (WebAuthnOptions, error) {
+	var out WebAuthnOptions
+	err := c.request(ctx, "/mfa/webauthn", "", map[string]string{"mfa_token": mfaToken}, &out)
+	return out, err
+}
+
+// VerifyMFAWebAuthn completes a pending login with the browser's assertion
+// (the PublicKeyCredential JSON) answering AssertMFA.
+func (c *Client) VerifyMFAWebAuthn(ctx context.Context, mfaToken, session string, credential json.RawMessage) (TokenPair, error) {
+	var out TokenPair
+	err := c.request(ctx, "/mfa/verify", "", map[string]any{"mfa_token": mfaToken, "webauthn_session": session, "credential": credential}, &out)
+	return out, err
+}
+
+// BeginPasskeyLogin starts a passkey sign-in in an environment (no email
+// first: the browser offers the user's passkeys).
+func (c *Client) BeginPasskeyLogin(ctx context.Context, environment string) (WebAuthnOptions, error) {
+	var out WebAuthnOptions
+	err := c.request(ctx, "/passkeys/login/begin", "", map[string]string{"environment_id": environment}, &out)
+	return out, err
+}
+
+// DirectoryLogin signs in with the password of the organization's LDAP
+// directory (Discovery.Provider "ldap"). It answers like Login, including
+// MFARequired.
+func (c *Client) DirectoryLogin(ctx context.Context, boundary LoginContext, connection, email, password string) (TokenPair, error) {
+	var out TokenPair
+	body := struct {
+		LoginContext
+		Connection string `json:"connection_id"`
+		Email      string `json:"email"`
+		Password   string `json:"password"`
+	}{boundary, connection, email, password}
+	err := c.request(ctx, "/federation/ldap/login", "", body, &out)
+	return out, err
+}
+
+// PasskeyLogin signs in with the browser's passkey assertion. A passkey
+// verified the user, so no second factor follows (amr hwk, user, mfa).
+func (c *Client) PasskeyLogin(ctx context.Context, boundary LoginContext, session string, credential json.RawMessage) (TokenPair, error) {
+	var out TokenPair
+	body := struct {
+		LoginContext
+		Session    string          `json:"webauthn_session"`
+		Credential json.RawMessage `json:"credential"`
+	}{boundary, session, credential}
+	err := c.request(ctx, "/passkeys/login/finish", "", body, &out)
+	return out, err
+}
+
+func webauthnBody(environment, audience string, extra map[string]any) map[string]any {
+	extra["environment_id"], extra["audience"] = environment, audience
+	return extra
+}
+
+// StartWebAuthn begins registering a security key (passkey false) or a
+// passkey that can also sign in on its own; finish with FinishWebAuthn.
+func (c *Client) StartWebAuthn(ctx context.Context, token, environment, audience, name string, passkey bool) (WebAuthnOptions, error) {
+	var out WebAuthnOptions
+	err := c.request(ctx, "/me/factors/webauthn", token, webauthnBody(environment, audience, map[string]any{"name": name, "passkey": passkey}), &out)
+	return out, err
+}
+
+// FinishWebAuthn stores the key from the browser's attestation answering
+// StartWebAuthn.
+func (c *Client) FinishWebAuthn(ctx context.Context, token, environment, audience, session string, credential json.RawMessage) (WebAuthnRegistration, error) {
+	var out WebAuthnRegistration
+	err := c.request(ctx, "/me/factors/webauthn/confirm", token, webauthnBody(environment, audience, map[string]any{"webauthn_session": session, "credential": credential}), &out)
+	return out, err
+}
+
+// ProveWebAuthn starts a key assertion that proves possession for
+// RemoveWebAuthn (a code from another factor works too).
+func (c *Client) ProveWebAuthn(ctx context.Context, token, environment, audience string) (WebAuthnOptions, error) {
+	var out WebAuthnOptions
+	err := c.request(ctx, "/me/factors/webauthn/challenge", token, webauthnBody(environment, audience, map[string]any{}), &out)
+	return out, err
+}
+
+// RenameWebAuthn renames one of the user's security keys or passkeys.
+func (c *Client) RenameWebAuthn(ctx context.Context, token, environment, audience, factor, name string) (Factor, error) {
+	var out Factor
+	err := c.requestMethod(ctx, "PATCH", "/me/factors/webauthn/"+url.PathEscape(factor), token, webauthnBody(environment, audience, map[string]any{"name": name}), &out)
+	return out, err
+}
+
+// WebAuthnProof proves possession for RemoveWebAuthn: a Code (any active
+// factor or a recovery code) or a key assertion (Session + Credential).
+type WebAuthnProof struct {
+	Code       string
+	Session    string
+	Credential json.RawMessage
+}
+
+// RemoveWebAuthn deletes one security key or passkey.
+func (c *Client) RemoveWebAuthn(ctx context.Context, token, environment, audience, factor string, proof WebAuthnProof) error {
+	body := map[string]any{"code": proof.Code}
+	if proof.Session != "" {
+		body["webauthn_session"], body["credential"] = proof.Session, proof.Credential
+	}
+	return c.requestMethod(ctx, "DELETE", "/me/factors/webauthn/"+url.PathEscape(factor), token, webauthnBody(environment, audience, body), nil)
 }
 
 // ── Challenges (OTP / email verification) ──

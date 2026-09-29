@@ -117,6 +117,7 @@ func usersUpdateCmd() *cobra.Command {
 	var name string
 	var active string
 	var otpEnabled string
+	var phone string
 	cmd := &cobra.Command{
 		Use:   "update USER_ID",
 		Short: "Update a user",
@@ -134,6 +135,9 @@ func usersUpdateCmd() *cobra.Command {
 			if cmd.Flags().Changed("otp") {
 				body["otp_enabled"] = strings.EqualFold(otpEnabled, "true")
 			}
+			if cmd.Flags().Changed("phone") {
+				body["phone"] = phone
+			}
 			_, err := c.patch(envPath()+"/users/"+args[0], body)
 			if err != nil {
 				return err
@@ -145,6 +149,7 @@ func usersUpdateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "New name")
 	cmd.Flags().StringVar(&active, "active", "", "true or false")
 	cmd.Flags().StringVar(&otpEnabled, "otp", "", "true or false")
+	cmd.Flags().StringVar(&phone, "phone", "", `Phone number in E.164, e.g. +14155550100 ("" clears it)`)
 	return cmd
 }
 

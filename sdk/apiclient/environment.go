@@ -42,6 +42,8 @@ type UpdateUser struct {
 	Name       *string        `json:"name,omitempty"`
 	Active     *bool          `json:"active,omitempty"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
+	// Phone sets the user's number in E.164 ("" clears it).
+	Phone *string `json:"phone,omitempty"`
 }
 
 type Organization struct {

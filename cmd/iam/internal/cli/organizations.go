@@ -82,15 +82,18 @@ func orgsCreateCmd() *cobra.Command {
 
 func orgsUpdateCmd() *cobra.Command {
 	var name string
-	var password, emailCode, social bool
+	var password, emailCode, social, passkey bool
+	var factors []string
 	cmd := &cobra.Command{
 		Use:   "update ORG_ID",
 		Short: "Update an organization",
-		Long: `Update an organization. --allow-password, --allow-email-code and
---allow-social narrow the sign-in methods the environment allows for this
-organization (they never widen it; see "iam sign-in-policy").`,
-		Example: `  iam organizations update ORG_ID --allow-password=false`,
-		Args:    cobra.ExactArgs(1),
+		Long: `Update an organization. --allow-password, --allow-email-code,
+--allow-social and --allow-passkey narrow the sign-in methods the environment allows for this
+organization (they never widen it; see "iam sign-in-policy").
+--allowed-factors narrows the environment's allowed second factors.`,
+		Example: `  iam organizations update ORG_ID --allow-password=false
+  iam organizations update ORG_ID --allowed-factors totp,webauthn`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
 			p := newPrinter()
@@ -99,10 +102,13 @@ organization (they never widen it; see "iam sign-in-policy").`,
 			if f.Changed("name") {
 				body["name"] = name
 			}
-			for flag, value := range map[string]bool{"allow-password": password, "allow-email-code": emailCode, "allow-social": social} {
+			for flag, value := range map[string]bool{"allow-password": password, "allow-email-code": emailCode, "allow-social": social, "allow-passkey": passkey} {
 				if f.Changed(flag) {
 					body[jsonName(flag)] = value
 				}
+			}
+			if f.Changed("allowed-factors") {
+				body["allowed_factors"] = factors
 			}
 			_, err := c.patch(envPath()+"/organizations/"+args[0], body)
 			if err != nil {
@@ -117,6 +123,8 @@ organization (they never widen it; see "iam sign-in-policy").`,
 	f.BoolVar(&password, "allow-password", true, "Allow password sign-in")
 	f.BoolVar(&emailCode, "allow-email-code", true, "Allow email-code sign-in")
 	f.BoolVar(&social, "allow-social", true, "Allow environment (social) connections")
+	f.BoolVar(&passkey, "allow-passkey", true, "Allow passkey sign-in")
+	f.StringSliceVar(&factors, "allowed-factors", nil, "Second factors members may use, within the environment's: totp, webauthn, sms, email")
 	return cmd
 }
 
