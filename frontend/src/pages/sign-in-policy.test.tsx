@@ -8,7 +8,7 @@ import App from '../App'
 
 const fetchMock = vi.fn()
 const env = '/environments/env1'
-const defaults = { allow_password: true, allow_email_code: true, allow_social: true, allow_password_reset: true, mfa_required: false, mfa_for_federated: false, allow_signup: false, signup_organization_id: '', signup_group_id: '', custom: false }
+const defaults = { allow_password: true, allow_email_code: true, allow_social: true, allow_passkey: true, allow_password_reset: true, mfa_required: false, mfa_for_federated: false, allow_signup: false, signup_organization_id: '', signup_group_id: '', allowed_factors: ['totp', 'webauthn'], custom: false }
 const noRequirements = { min_length: 0, require_upper: false, require_lower: false, require_digit: false, require_symbol: false, max_age_days: 0, breach_check: false, custom: false }
 let policy: Record<string, unknown>
 let requirements: Record<string, unknown>
@@ -37,7 +37,7 @@ beforeEach(() => {
       path === '/projects' ? [{ id: 'project1', name: 'Billing' }] :
         path === '/projects/project1/environments' ? [{ id: 'env1', name: 'Production' }] :
           path === `${env}/sign-in-policy` ? policy :
-            path === `${env}/organizations/org1` ? { id: 'org1', name: 'Acme', active: true, mfa_required: false, mfa_for_federated: false, allow_password: true, allow_email_code: true, allow_social: false } :
+            path === `${env}/organizations/org1` ? { id: 'org1', name: 'Acme', active: true, mfa_required: false, mfa_for_federated: false, allow_password: true, allow_email_code: true, allow_social: false, allow_passkey: true } :
               path === `${env}/organizations/org1/password-policy` ? requirements :
                 path === `${env}/organizations` ? page([{ id: 'org1', name: 'Acme', active: true }]) :
                   path.startsWith(env) ? page([]) : []
@@ -72,7 +72,23 @@ it('warns when only organization SSO remains', async () => {
   await u.click(await screen.findByRole('switch', { name: 'Password' }))
   await u.click(screen.getByRole('switch', { name: 'Email code' }))
   await u.click(screen.getByRole('switch', { name: 'Social connections' }))
+  expect(screen.queryByRole('note')).toBeNull() // passkeys still sign users in
+  await u.click(screen.getByRole('switch', { name: 'Passkeys' }))
   expect(screen.getByRole('note').textContent).toMatch(/Only organization SSO/)
+})
+
+it('ties passkeys to the security key factor', async () => {
+  const u = userEvent.setup()
+  open('sign-in-policy')
+  const passkeys = await screen.findByRole('switch', { name: 'Passkeys' }) as HTMLButtonElement
+  expect(passkeys.disabled).toBe(false)
+  await u.click(screen.getByRole('switch', { name: 'Security keys and passkeys' }))
+  expect(passkeys.disabled).toBe(true)
+  await u.click(screen.getByRole('switch', { name: 'Security keys and passkeys' }))
+  await u.click(passkeys)
+  await u.click(screen.getByRole('button', { name: 'Save methods' }))
+  const { custom: _custom, ...unchanged } = defaults
+  await waitFor(() => expect(calls).toEqual([{ method: 'PUT', path: `${env}/sign-in-policy`, body: { ...unchanged, allow_passkey: false } }]))
 })
 
 it('turns sign-up on into an organization', async () => {
@@ -90,6 +106,21 @@ it('turns sign-up on into an organization', async () => {
   await waitFor(() => expect(calls).toEqual([{ method: 'PUT', path: `${env}/sign-in-policy`, body: { ...unchanged, allow_signup: true, signup_organization_id: 'org1' } }]))
 })
 
+it('allows more second factors and keeps at least one', async () => {
+  const u = userEvent.setup()
+  open('sign-in-policy')
+  await u.click(await screen.findByRole('switch', { name: 'Code by text message (SMS)' }))
+  await u.click(screen.getByRole('switch', { name: 'Code by email' }))
+  expect(screen.getByText(/purpose/).textContent).toContain('a custom webhook must handle it')
+  await u.click(screen.getByRole('switch', { name: 'Authenticator app' }))
+  await u.click(screen.getByRole('switch', { name: 'Security keys and passkeys' }))
+  await u.click(screen.getByRole('switch', { name: 'Code by email' }))
+  expect((screen.getByRole('switch', { name: 'Code by text message (SMS)' }) as HTMLButtonElement).disabled).toBe(true)
+  await u.click(screen.getByRole('button', { name: 'Save methods' }))
+  const { custom: _custom, ...unchanged } = defaults
+  await waitFor(() => expect(calls).toEqual([{ method: 'PUT', path: `${env}/sign-in-policy`, body: { ...unchanged, allowed_factors: ['sms'] } }]))
+})
+
 it('is read-only for viewers', async () => {
   role = 'viewer'
   open('sign-in-policy')
@@ -104,6 +135,10 @@ it('narrows an organization\'s methods and tightens its passwords', async () => 
   expect(social.checked).toBe(false)
   await u.click(screen.getByRole('switch', { name: 'Password' }))
   await waitFor(() => expect(calls).toEqual([{ method: 'PATCH', path: `${env}/organizations/org1`, body: { allow_password: false } }]))
+  await u.click(screen.getByRole('switch', { name: 'Passkey' }))
+  await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'PATCH', path: `${env}/organizations/org1`, body: { allow_passkey: false } }))
+  await u.click(screen.getByRole('switch', { name: 'Code by email' }))
+  await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'PATCH', path: `${env}/organizations/org1`, body: { allowed_factors: ['totp', 'webauthn', 'sms'] } }))
 
   const length = await screen.findByLabelText('Minimum length')
   await u.clear(length); await u.type(length, '16')

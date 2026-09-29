@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
 import { message } from '@/lib/utils'
+import { FACTORS, toggleFactor } from '@/lib/factors'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog, DataTable, DetailSection, EmptyState, FormDialog, Properties, SwitchField } from '@/components/library/patterns'
@@ -17,6 +18,7 @@ const methods = [
   ['allow_password', 'Password', 'Email and password, including password reset.'],
   ['allow_email_code', 'Email code', 'A one-time code sent by email.'],
   ['allow_social', 'Social', 'Environment connections such as Google or Microsoft.'],
+  ['allow_passkey', 'Passkey', 'A passkey alone, without password or second factor. Needs security keys among the allowed factors.'],
 ] as const
 
 /** OrganizationOverview holds the organization's settings: name,
@@ -48,8 +50,17 @@ export function OrganizationOverview() {
 
     <DetailSection title="Multi-factor authentication" description="Applies to every member when they sign in to this organization.">
       <div className="space-y-4">
-        <SwitchField label="Require a second factor" hint="Password and email-code sign-ins need an authenticator app; members without one enroll while signing in." checked={org.mfa_required} disabled={!canWrite || !!saving} onCheckedChange={v => patch('mfa_required', { mfa_required: v }, v ? 'Second factor required' : 'Second factor no longer required')} />
+        <SwitchField label="Require a second factor" hint="Password and email-code sign-ins need a second factor; members without one enroll while signing in." checked={org.mfa_required} disabled={!canWrite || !!saving} onCheckedChange={v => patch('mfa_required', { mfa_required: v }, v ? 'Second factor required' : 'Second factor no longer required')} />
         <SwitchField label="Also require it for SSO sign-ins" hint="By default the identity provider is trusted to have done its own MFA." checked={org.mfa_for_federated} disabled={!canWrite || !!saving} onCheckedChange={v => patch('mfa_for_federated', { mfa_for_federated: v }, v ? 'SSO sign-ins now need a second factor' : 'SSO sign-ins trust the identity provider')} />
+        <div className="space-y-3 border-t pt-4">
+          <p className="text-sm font-medium">Accepted second factors</p>
+          <p className="text-xs text-muted-foreground">Narrows the environment's <Link className="text-primary hover:underline" to={`/projects/${project}/environments/${environment}/sign-in-policy`}>allowed factors</Link> for this organization; it cannot allow what the environment refuses.</p>
+          {FACTORS.map(f => {
+            const factors = org.allowed_factors ?? FACTORS.map(x => x.kind)
+            const on = factors.includes(f.kind)
+            return <SwitchField key={f.kind} label={f.label} hint={f.hint} checked={on} disabled={!canWrite || !!saving || (on && factors.length === 1)} onCheckedChange={v => patch(`factor-${f.kind}`, { allowed_factors: toggleFactor(factors, f.kind, v) }, `${f.label} ${v ? 'accepted' : 'no longer accepted'}`)} />
+          })}
+        </div>
       </div>
     </DetailSection>
 

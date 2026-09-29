@@ -22,7 +22,14 @@ it('describes action-style routes', () => {
 
 it('describes named events and keeps unknown ones as-is', () => {
   expect(describeAction('mfa.enrolled')).toBe('Second factor enrolled')
+  expect(describeAction('signing_key.activate')).toBe('Activated a signing key')
+  expect(describeAction('saml.assertion_issued')).toBe('Signed in to a SAML application')
+  expect(describeAction('oauth.backchannel_failed')).toBe('Back-channel logout delivery failed')
+  expect(describeAction('POST', `${env}/logout-deliveries/42/retry`)).toBe('Retried a logout delivery')
+  expect(describeAction('service_account.authentication')).toBe('Changed how a service account authenticates')
   expect(describeAction('federation.jit')).toBe('User signed up through federation')
-  expect(describeAction('federation.email')).toBe('User linked through federation')
+  expect(describeAction('federation.profile_updated')).toBe('Profile updated from the identity provider')
+  expect(describeAction('federation.email')).toBe('User linked by verified email through federation')
+  expect(describeAction('federation.other')).toBe('User linked through federation')
   expect(describeAction('something.new')).toBe('something.new')
 })

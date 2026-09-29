@@ -20,10 +20,14 @@ const smtpConfig = {
 const defaults = { subject: 'Your sign-in code for {{app_name}}', heading: 'Your sign-in code', body: 'Enter this code to sign in.', action: '', footer: 'If you did not ask for it, ignore this email.' }
 let templates: Record<string, { subject: string; heading: string; body: string; action: string; footer: string }>
 let branding: Record<string, unknown>
+let sms: Record<string, unknown> | null = null
+let smsAttempt: Record<string, unknown> | null = null
 
 beforeEach(() => {
   role = 'owner'
   config = null
+  sms = null
+  smsAttempt = null
   templates = {}
   branding = { environment_id: 'env1', display_name: 'Acme', logo_url: '', accent_color: '#2563eb', theme: { mode: 'dark', light: { primary: '#2563eb' } }, locale: 'fr' }
   putDelivery = () => new Response(null, { status: 204 })
@@ -34,6 +38,16 @@ beforeEach(() => {
   fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
     const path = url.replace('/management/v1', '').split('?')[0]
     const body = init.body ? JSON.parse(String(init.body)) : undefined
+    if (path.startsWith('/environments/env1/sms')) {
+      if (path.endsWith('/status')) return Response.json({ configured: !!sms, provider: sms?.provider ?? '', last_attempt: smsAttempt, last_failure: null })
+      if (path.endsWith('/test')) {
+        smsAttempt = { source: 'environment', purpose: 'test', delivered: true, latency_ms: 40, at: '2026-09-27T10:00:00Z' }
+        return Response.json(smsAttempt)
+      }
+      if (init.method === 'PUT') { sms = { provider: body.provider, account_sid: body.account_sid, from_number: body.from_number, webhook_url: body.webhook_url, has_secret: true, updated_at: '2026-09-27T10:00:00Z' }; return Response.json(sms) }
+      if (init.method === 'DELETE') { sms = null; return new Response(null, { status: 204 }) }
+      return sms ? Response.json(sms) : Response.json({ error: { message: 'SMS configuration not found' } }, { status: 404 })
+    }
     const template = path.match(/\/delivery\/templates\/(\w+)\/(\w+)$/)
     if (init.method === 'POST' && path === `${delivery}/test`) {
       return Response.json({ source: 'environment', purpose: 'test', delivered: false, status: 503, reason: 'webhook rejected the request', latency_ms: 12, at: '2026-09-27T10:00:00Z' })
@@ -79,8 +93,8 @@ it('shows the global fallback, every message type and a correct description', as
   await screen.findByText('Global fallback')
   expect(screen.getByText(/login codes, password resets, email verification and invitations/)).toBeTruthy()
   expect(screen.getByText('No deliveries yet.')).toBeTruthy()
-  for (const p of ['login', 'password_reset', 'email_verification', 'invitation', 'test']) expect(screen.getAllByText(p).length).toBeGreaterThan(0)
-  await userEvent.click(screen.getAllByRole('button', { name: 'Example' })[3])
+  for (const p of ['login', 'password_reset', 'email_verification', 'mfa', 'invitation', 'test']) expect(screen.getAllByText(p).length).toBeGreaterThan(0)
+  await userEvent.click(screen.getAllByRole('button', { name: 'Example' })[4])
   expect(screen.getByLabelText('invitation example payload').textContent).toContain('"expires_at"')
 })
 
@@ -360,4 +374,38 @@ it('lets viewers see templates without editing them', async () => {
   expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
   await waitFor(() => expect(screen.getByLabelText('Preview subject').textContent).toBe('Saved purpose=login&locale=en'), { timeout: 2000 })
   expect(calls('POST')).toEqual([])
+})
+
+// A syntactically valid fake, built at run time so secret scanners do not flag it.
+const twilioSID = 'AC' + '0123456789abcdef'.repeat(2)
+
+it('configures, tests and removes the SMS provider', async () => {
+  open()
+  await userEvent.click(await screen.findByRole('button', { name: /Configure SMS/ }))
+  await userEvent.type(screen.getByLabelText('Account SID'), twilioSID)
+  await userEvent.type(screen.getByLabelText('Auth token'), 'secret-token')
+  await userEvent.type(screen.getByLabelText('From number'), '+15550001111')
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await screen.findByText('Auth token stored')
+  const put = calls('PUT').find(c => c.url.endsWith('/sms'))!
+  expect(put.body).toEqual({ provider: 'twilio', account_sid: twilioSID, auth_token: 'secret-token', from_number: '+15550001111', messaging_service_sid: '' })
+
+  await userEvent.click(screen.getByRole('button', { name: /Send test SMS/ }))
+  await userEvent.type(screen.getByLabelText('Phone number'), '+15551234567')
+  await userEvent.click(screen.getByRole('button', { name: /^Send$/ }))
+  expect((await screen.findByRole('status')).textContent).toContain('Provider accepted the message')
+  expect(calls('POST').find(c => c.url.endsWith('/sms/test'))!.body).toEqual({ phone: '+15551234567' })
+  await userEvent.click(screen.getAllByRole('button', { name: 'Close' })[0])
+
+  await userEvent.click(await screen.findByRole('button', { name: /Remove/ }))
+  await userEvent.click(screen.getByRole('button', { name: 'Remove provider' }))
+  await screen.findByRole('button', { name: /Configure SMS/ })
+})
+
+it('hides SMS actions from viewers', async () => {
+  role = 'viewer'
+  sms = { provider: 'webhook', webhook_url: 'https://sms.acme.io', has_secret: true, updated_at: '2026-09-27T10:00:00Z' }
+  open()
+  await screen.findByText('https://sms.acme.io')
+  expect(screen.queryByRole('button', { name: /Send test SMS/ })).toBeNull()
 })

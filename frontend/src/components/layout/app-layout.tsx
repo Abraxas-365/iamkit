@@ -1,7 +1,7 @@
 import { Link, matchPath, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
-import { Activity, Bell, Blocks, Bot, Building2, ChevronRight, FolderKanban, Home, Globe, KeyRound, LayoutDashboard, Link2, ListChecks, Lock, LogIn, LogOut, Moon, Server, Settings, Shield, ShieldCheck, Sun, Tags, UserCog, Users } from 'lucide-react'
+import { Activity, AppWindow, Bell, Blocks, Bot, Building2, ChevronRight, FileKey, FolderKanban, Home, Globe, KeyRound, LayoutDashboard, Link2, ListChecks, Lock, LogIn, LogOut, Moon, Radio, Server, Settings, Shield, ShieldCheck, Sun, Tags, UserCog, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth'
 import { message } from '@/lib/utils'
@@ -16,9 +16,9 @@ export interface Named { id: string; name: string }
 type NavItem = readonly [path: string, label: string, icon: typeof Shield]
 const environmentNav: readonly (readonly [group: string, items: readonly NavItem[]])[] = [
   ['Users & access', [['users', 'Users', Users], ['organizations', 'Organizations', Building2], ['roles', 'Roles', Tags], ['grants', 'Grants', ShieldCheck]]],
-  ['Applications', [['applications', 'Applications', Blocks], ['resources', 'Resources & scopes', Shield], ['oauth-clients', 'OAuth clients', Link2], ['service-accounts', 'Service accounts', Bot]]],
+  ['Applications', [['applications', 'Applications', Blocks], ['resources', 'Resources & scopes', Shield], ['oauth-clients', 'OAuth clients', Link2], ['saml-apps', 'SAML applications', AppWindow], ['service-accounts', 'Service accounts', Bot], ['signing-keys', 'Signing keys', FileKey]]],
   ['Sign-in', [['hosted-login', 'Hosted login', LogIn], ['sign-in-policy', 'Sign-in methods', ListChecks], ['password-policy', 'Password policy', Lock], ['federation', 'Sign-in providers', Globe], ['provisioning', 'SCIM provisioning', Server], ['notifications', 'Notifications', Bell]]],
-  ['Monitoring', [['sessions', 'Sessions', KeyRound], ['audit-events', 'Audit events', Activity]]],
+  ['Monitoring', [['sessions', 'Sessions', KeyRound], ['audit-events', 'Audit events', Activity], ['logout-deliveries', 'Logout deliveries', Radio]]],
 ]
 const allNav = environmentNav.flatMap(([, items]) => items)
 const subpages: Record<string, [string, string]> = { 'role-assignments': ['roles', 'Assignments'] }

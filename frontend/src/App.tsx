@@ -5,6 +5,7 @@ import SetupPage from '@/pages/setup'
 import { OverviewPage, ProjectsPage } from '@/pages/projects'
 import EntitiesPage from '@/pages/entities'
 import ActivityPage from '@/pages/activity'
+import LogoutDeliveriesPage from '@/pages/logout-deliveries'
 import { KeysPage, SettingsPage } from '@/pages/settings'
 import OperatorsPage from '@/pages/operators'
 import { ServiceAccountsPage, FederationPage, OAuthClientsPage, ProvisioningPage } from '@/pages/integrations'
@@ -25,6 +26,8 @@ import OAuthClientDetailPage from '@/pages/oauth-client-detail'
 import BrandingEditorPage from '@/pages/branding-editor'
 import PasswordPolicyPage from '@/pages/password-policy'
 import SignInPolicyPage from '@/pages/sign-in-policy'
+import SigningKeysPage from '@/pages/signing-keys'
+import SAMLAppsPage from '@/pages/saml-apps'
 export default function App() {
   return <Routes>
     <Route path="/login" element={<LoginPage />} />
@@ -58,10 +61,13 @@ export default function App() {
         <Route path="hosted-login" element={<HostedLoginPage />} />
         <Route path="password-policy" element={<PasswordPolicyPage />} />
         <Route path="sign-in-policy" element={<SignInPolicyPage />} />
+        <Route path="signing-keys" element={<SigningKeysPage />} />
+        <Route path="saml-apps" element={<SAMLAppsPage />} />
         <Route path="hosted-login/default" element={<BrandingEditorPage key="default" />} />
         <Route path="hosted-login/clients/:clientId" element={<BrandingEditorPage />} />
         <Route path="sessions" element={<ActivityPage />} />
         <Route path="audit-events" element={<ActivityPage audit />} />
+        <Route path="logout-deliveries" element={<LogoutDeliveriesPage />} />
       </Route>
       <Route path="operators" element={<OperatorsPage />} />
       <Route path="keys" element={<KeysPage />} />

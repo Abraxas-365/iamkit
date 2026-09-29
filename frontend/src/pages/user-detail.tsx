@@ -13,9 +13,9 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, FormDialog, Properties, Status, Time } from '@/components/library/patterns'
 import { AssignRoleDialog } from '@/components/library/assign-role'
 
-interface User { id: string; name: string; email: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; metadata?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null }
+interface User { id: string; name: string; email: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null }
 interface Org { id: string; name: string; active: boolean }
-interface Factor { id: string; kind: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
+interface Factor { id: string; kind: string; name?: string; passkey?: boolean; phone?: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
 interface Session { id: string; organization_name: string; application_id: string; application_name: string; resource_name: string; expires_at: string; revoked_at: string | null }
 
@@ -66,6 +66,7 @@ export default function UserDetailPage() {
         ['Name', user.name],
         ['Email', <span className="inline-flex flex-wrap items-center gap-2">{user.email}{user.email_verified ? <Badge variant="secondary" className="bg-success/10 text-success">Verified</Badge> : <Badge variant="secondary">Not verified</Badge>}</span>],
         ['Email code sign-in', user.otp_enabled ? 'Allowed' : 'Off'],
+        ['Phone', user.phone ? <span className="inline-flex flex-wrap items-center gap-2">{user.phone}{user.phone_verified ? <Badge variant="secondary" className="bg-success/10 text-success">Verified</Badge> : <Badge variant="secondary">Not verified</Badge>}</span> : <span className="text-muted-foreground">None</span>],
         ['Metadata', metadata ? <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-2 font-mono text-xs">{metadata}</pre> : <span className="text-muted-foreground">None</span>],
       ]} />
     </DetailSection>
@@ -90,9 +91,10 @@ export default function UserDetailPage() {
     {editing && <FormDialog title="Edit user" description="Change the profile and sign-in options." fields={[
       { name: 'name', label: 'Name', value: user.name },
       { name: 'otp_enabled', label: 'Allow sign-in with an email code', type: 'checkbox', value: !!user.otp_enabled },
+      { name: 'phone', label: 'Phone', optional: true, value: user.phone ?? '', hint: 'International format, e.g. +14155550100. Changing it clears verification; an enrolled SMS factor keeps its number.' },
       { name: 'metadata', label: 'Metadata (JSON)', optional: true, value: user.metadata ? JSON.stringify(user.metadata) : '', hint: 'Arbitrary JSON object, e.g. {"team":"billing"}' },
     ]} onClose={() => setEditing(false)} submit={async values => {
-      const body: Record<string, unknown> = { name: values.name, otp_enabled: values.otp_enabled }
+      const body: Record<string, unknown> = { name: values.name, otp_enabled: values.otp_enabled, phone: String(values.phone ?? '') }
       if (values.metadata) {
         try { body.metadata = JSON.parse(String(values.metadata)) } catch { throw new Error('Metadata must be valid JSON') }
       } else body.metadata = {}
@@ -171,6 +173,16 @@ function OrgRoles({ console, org, roles, onRemove }: { console: string; org: Org
   </span>
 }
 
+function factorLabel(f: Factor) {
+  switch (f.kind) {
+    case 'totp': return 'Authenticator app (TOTP)'
+    case 'email': return 'Email code'
+    case 'sms': return `SMS code${f.phone ? ` · ${f.phone}` : ''}`
+    case 'webauthn': return `${f.passkey ? 'Passkey' : 'Security key'}${f.name ? ` · ${f.name}` : ''}`
+    default: return f.kind
+  }
+}
+
 function SecondFactors({ path, user, canWrite }: { path: string; user: User; canWrite: boolean }) {
   const [data, setData] = useState<Factors | null>(null)
   const [error, setError] = useState('')
@@ -182,7 +194,7 @@ function SecondFactors({ path, user, canWrite }: { path: string; user: User; can
     {error ? <ErrorState error={error} retry={load} /> : !data ? <Skeleton className="h-12" /> : <div className="space-y-3 text-sm">
       {data.factors.length === 0 ? <p className="text-muted-foreground">No second factor enrolled.</p> : <ul className="space-y-2">{data.factors.map(f => <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border p-3">
         <Smartphone className="size-4 text-muted-foreground" />
-        <span className="font-medium">{f.kind === 'totp' ? 'Authenticator app (TOTP)' : f.kind}</span>
+        <span className="font-medium">{factorLabel(f)}</span>
         {!f.confirmed_at && <Badge variant="secondary">Pending confirmation</Badge>}
         <span className="text-xs text-muted-foreground">Added <Time value={f.created_at} /> · Last used <Time value={f.last_used_at} /></span>
       </li>)}</ul>}

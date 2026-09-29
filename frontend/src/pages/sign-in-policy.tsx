@@ -8,23 +8,26 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog, DetailSection, ErrorState, PageHeader, SwitchField, Time } from '@/components/library/patterns'
 import { SearchSelect } from '@/components/ui/search-select'
+import { FACTORS, toggleFactor } from '@/lib/factors'
 
 /** GET/PUT /sign-in-policy (authentication.SignInPolicy). */
 export interface SignInPolicy {
   allow_password: boolean
   allow_email_code: boolean
   allow_social: boolean
+  allow_passkey: boolean
   allow_password_reset: boolean
   mfa_required: boolean
   mfa_for_federated: boolean
   allow_signup: boolean
   signup_organization_id: string
   signup_group_id: string
+  allowed_factors: string[]
   custom?: boolean
   updated_at?: string
 }
 
-type Flag = Exclude<keyof SignInPolicy, 'custom' | 'updated_at' | 'signup_organization_id' | 'signup_group_id'>
+type Flag = Exclude<keyof SignInPolicy, 'custom' | 'updated_at' | 'signup_organization_id' | 'signup_group_id' | 'allowed_factors'>
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id), inactive: item.active === false })
 
 const methods: { key: Flag; label: string; hint: string }[] = [
@@ -32,6 +35,7 @@ const methods: { key: Flag; label: string; hint: string }[] = [
   { key: 'allow_password_reset', label: 'Password reset', hint: '"Forgot password" by emailed code. Needs password sign-in.' },
   { key: 'allow_email_code', label: 'Email code', hint: 'A one-time code sent by email (passwordless).' },
   { key: 'allow_social', label: 'Social connections', hint: 'Environment connections such as Google or Microsoft, under Sign-in providers.' },
+  { key: 'allow_passkey', label: 'Passkeys', hint: 'Sign in with a passkey alone: no password, no second factor (the passkey verified the user). Needs security keys among the allowed second factors.' },
 ]
 const mfa: { key: Flag; label: string; hint: string }[] = [
   { key: 'mfa_required', label: 'Require a second factor everywhere', hint: 'Every organization, on top of its own MFA setting. Users without a factor enroll while signing in.' },
@@ -71,8 +75,10 @@ export default function SignInPolicyPage() {
     if (key === 'allow_password' && !value) next.allow_password_reset = false
     return next
   })
-  const changed = (Object.keys(draft) as (keyof SignInPolicy)[]).some(k => (draft[k] ?? '') !== (saved[k] ?? ''))
-  const none = !draft.allow_password && !draft.allow_email_code && !draft.allow_social
+  const changed = (Object.keys(draft) as (keyof SignInPolicy)[]).some(k => k === 'allowed_factors' ? (draft.allowed_factors ?? []).join() !== (saved.allowed_factors ?? []).join() : (draft[k] ?? '') !== (saved[k] ?? ''))
+  const factors = draft.allowed_factors ?? []
+  const passkeys = draft.allow_passkey && factors.includes('webauthn')
+  const none = !draft.allow_password && !draft.allow_email_code && !draft.allow_social && !passkeys
   const signupMethod = draft.allow_password || draft.allow_email_code
   const signupIncomplete = draft.allow_signup && (!draft.signup_organization_id || !signupMethod)
 
@@ -89,13 +95,22 @@ export default function SignInPolicyPage() {
     }}>
       <DetailSection title="Methods" description={saved.custom ? <>Custom policy{saved.updated_at && <>, updated <Time value={saved.updated_at} /></>}. Refused methods answer METHOD_NOT_ALLOWED before any account lookup.</> : 'The default: every method allowed.'}>
         <div className="space-y-3">
-          {methods.map(m => <SwitchField key={m.key} label={m.label} hint={m.hint} checked={draft[m.key]} disabled={!canWrite || busy || (m.key === 'allow_password_reset' && !draft.allow_password)} onCheckedChange={v => set(m.key, v)} />)}
+          {methods.map(m => <SwitchField key={m.key} label={m.label} hint={m.hint} checked={draft[m.key]} disabled={!canWrite || busy || (m.key === 'allow_password_reset' && !draft.allow_password) || (m.key === 'allow_passkey' && !factors.includes('webauthn'))} onCheckedChange={v => set(m.key, v)} />)}
           {none && <p role="note" className="text-sm text-muted-foreground">Only organization SSO connections will be able to sign users in.</p>}
         </div>
       </DetailSection>
       <DetailSection title="Multi-factor authentication" description="Environment-wide defaults; an organization can require more but not less.">
         <div className="space-y-3">
           {mfa.map(m => <SwitchField key={m.key} label={m.label} hint={m.hint} checked={draft[m.key]} disabled={!canWrite || busy} onCheckedChange={v => set(m.key, v)} />)}
+          <div className="space-y-3 border-t pt-4">
+            <p className="text-sm font-medium">Allowed second factors</p>
+            <p className="text-xs text-muted-foreground">Which factors users may enroll and sign in with. Organizations can narrow the list. A factor turned off here stops being accepted, even for users who already enrolled it.</p>
+            {FACTORS.map(f => {
+              const on = factors.includes(f.kind)
+              return <SwitchField key={f.kind} label={f.label} hint={f.hint} checked={on} disabled={!canWrite || busy || (on && factors.length === 1)} onCheckedChange={v => setDraft(d => d && ({ ...d, allowed_factors: toggleFactor(d.allowed_factors ?? [], f.kind, v) }))} />
+            })}
+            {factors.includes('email') && <p role="note" className="text-sm text-muted-foreground">Email codes use the environment's email delivery with purpose <code className="text-xs">mfa</code>; a custom webhook must handle it.</p>}
+          </div>
         </div>
       </DetailSection>
       <DetailSection title="Self sign-up" description="Let people create their own account from the hosted pages or POST /identity/v1/signup. They confirm their email with a code before the account exists.">
@@ -122,6 +137,6 @@ export default function SignInPolicyPage() {
         {saved.custom && <Button type="button" variant="outline" disabled={busy} onClick={() => setReset(true)}>Restore default</Button>}
       </div>}
     </form>
-    {reset && <ConfirmDialog title="Restore the default?" description="Every sign-in method is allowed again and the environment-wide second-factor requirement is turned off." confirmLabel="Restore default" onClose={() => setReset(false)} confirm={async () => { await api.delete(path); toast.success('Default sign-in methods restored'); load() }} />}
+    {reset && <ConfirmDialog title="Restore the default?" description="Every sign-in method is allowed again, the environment-wide second-factor requirement is turned off and the allowed factors go back to authenticator apps and security keys." confirmLabel="Restore default" onClose={() => setReset(false)} confirm={async () => { await api.delete(path); toast.success('Default sign-in methods restored'); load() }} />}
   </div>
 }

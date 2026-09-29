@@ -20,12 +20,20 @@ const nouns: Record<string, string> = {
   'oauth-clients': 'OAuth client', 'provisioning-credentials': 'SCIM credential', memberships: 'membership', members: 'member',
   groups: 'group', domains: 'domain', invitations: 'invitation', sessions: 'session', 'login-settings': 'hosted login settings',
   clients: 'client style', 'sign-in': 'sign-in methods', factors: 'second factors', identities: 'linked identity', 'mfa-policy': 'MFA policy',
-  verify: 'domain verification', resend: 'invitation', revoke: 'credential', links: 'application link', 'delivery-settings': 'notification settings',
+  verify: 'domain verification', resend: 'invitation', revoke: 'credential', 'logout-deliveries': 'logout delivery', links: 'application link', 'delivery-settings': 'notification settings',
 }
 const named: Record<string, string> = {
-  'federation.jit': 'User signed up through federation', 'invitation.accept': 'Invitation accepted',
+  'federation.jit': 'User signed up through federation', 'federation.email': 'User linked by verified email through federation',
+  'federation.profile_updated': 'Profile updated from the identity provider', 'invitation.accept': 'Invitation accepted',
   'mfa.enrolled': 'Second factor enrolled', 'mfa.removed': 'Second factor removed', 'mfa.recovery_regenerated': 'Recovery codes regenerated',
   'mfa.recovery_used': 'Recovery code used', 'mfa.reset': 'Second factors reset', 'mfa.locked': 'Second factor locked after failed attempts',
+  'mfa.clone_detected': 'Cloned security key refused',
+  'oauth.logout': 'Signed out of an application (OIDC logout)', 'oauth.backchannel_failed': 'Back-channel logout delivery failed', 'oauth.device_approved': 'Approved a device sign-in', 'oauth.token_exchanged': 'Exchanged a token for another resource', 'oauth.impersonated': 'A service account impersonated a user',
+  'service_account.authentication': 'Changed how a service account authenticates',
+  'service_account.impersonation': 'Changed whether a service account may impersonate users',
+  'signing_key.create': 'Created a signing key', 'signing_key.activate': 'Activated a signing key', 'signing_key.retire': 'Retired a signing key',
+  'saml_service_provider.create': 'Added a SAML application', 'saml_service_provider.update': 'Updated a SAML application', 'saml_service_provider.delete': 'Deleted a SAML application', 'saml.assertion_issued': 'Signed in to a SAML application',
+  'sms.update': 'Updated SMS delivery', 'sms.delete': 'Removed SMS delivery', 'sms.test': 'Sent a test SMS',
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i
 
@@ -44,6 +52,7 @@ export function describeAction(action: string, target = '') {
   if (last === 'verify') return 'Verified domain'
   if (last === 'resend') return 'Resent invitation'
   if (last === 'revoke') return 'Revoked credential'
+  if (last === 'retry' && rest.includes('logout-deliveries')) return 'Retried a logout delivery'
   if (last === 'reactivate') return 'Reactivated user'
   if (last === 'suspend') return 'Suspended user'
   if (last === 'force-verify') return 'Marked domain verified'

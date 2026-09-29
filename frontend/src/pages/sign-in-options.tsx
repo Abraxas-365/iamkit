@@ -9,11 +9,11 @@ import { providerLabel } from './federation-connection-form'
 
 export interface SignIn {
   client_id: string; password: boolean; email_code: boolean; organization_sso: boolean
-  all_connections: boolean; connection_ids: string[]; signup: boolean; custom: boolean
+  all_connections: boolean; connection_ids: string[]; signup: boolean; passkey: boolean; custom: boolean
 }
 interface Connection { id: string; name: string; provider: string; organization_id: string | null; active: boolean }
 
-export const everyMethod = (client: string): SignIn => ({ client_id: client, password: true, email_code: true, organization_sso: true, all_connections: true, connection_ids: [], signup: true, custom: false })
+export const everyMethod = (client: string): SignIn => ({ client_id: client, password: true, email_code: true, organization_sso: true, all_connections: true, connection_ids: [], signup: true, passkey: true, custom: false })
 
 // summary is a short description of what a client offers.
 export function summary(s: SignIn, connections: Connection[]): string {
@@ -22,6 +22,7 @@ export function summary(s: SignIn, connections: Connection[]): string {
   if (s.password) parts.push('Password')
   if (s.email_code) parts.push('Email code')
   if (s.organization_sso) parts.push('Organization SSO')
+  if (s.passkey) parts.push('Passkey')
   if (s.all_connections) parts.push('All social')
   else parts.push(...s.connection_ids.map(id => connections.find(c => c.id === id)?.name ?? 'Unknown connection'))
   if (!s.signup) parts.push('No sign-up')
@@ -31,7 +32,7 @@ export function summary(s: SignIn, connections: Connection[]): string {
 // signInBody is the PUT body: the listed connections only matter when not
 // every connection is offered.
 export function signInBody(s: SignIn) {
-  return { password: s.password, email_code: s.email_code, organization_sso: s.organization_sso, all_connections: s.all_connections, connection_ids: s.all_connections ? [] : s.connection_ids, signup: s.signup }
+  return { password: s.password, email_code: s.email_code, organization_sso: s.organization_sso, all_connections: s.all_connections, connection_ids: s.all_connections ? [] : s.connection_ids, signup: s.signup, passkey: s.passkey }
 }
 
 export function SignInDialog({ base, client, name, readOnly, onClose, onSaved }: { base: string; client: string; name: string; readOnly: boolean; onClose: () => void; onSaved: () => void }) {
@@ -47,9 +48,9 @@ export function SignInDialog({ base, client, name, readOnly, onClose, onSaved }:
   }, [base, client])
 
   const set = (patch: Partial<SignIn>) => setValue(v => v ? { ...v, ...patch } : v)
-  const none = value && !value.password && !value.email_code && !value.organization_sso && !value.all_connections && value.connection_ids.length === 0
+  const none = value && !value.password && !value.email_code && !value.organization_sso && !value.passkey && !value.all_connections && value.connection_ids.length === 0
   const toggle = (id: string) => value && set({ connection_ids: value.connection_ids.includes(id) ? value.connection_ids.filter(x => x !== id) : [...value.connection_ids, id] })
-  const box = (key: 'password' | 'email_code' | 'organization_sso' | 'signup', label: string, hint: string) => <label className="flex items-start gap-2 text-sm">
+  const box = (key: 'password' | 'email_code' | 'organization_sso' | 'passkey' | 'signup', label: string, hint: string) => <label className="flex items-start gap-2 text-sm">
     <input type="checkbox" className="mt-0.5 accent-primary" checked={!!value?.[key]} disabled={busy || readOnly} onChange={e => set({ [key]: e.target.checked })} />
     <span><span className="font-medium">{label}</span><span className="block text-xs text-muted-foreground">{hint}</span></span>
   </label>
@@ -68,6 +69,10 @@ export function SignInDialog({ base, client, name, readOnly, onClose, onSaved }:
           {box('password', 'Password', 'Including "Forgot password?".')}
           {box('email_code', 'Email code', 'A one-time code sent to the email.')}
           {box('organization_sso', 'Organization SSO', "Emails of an organization's verified domain continue with its identity provider. When off, members of organizations that enforce SSO cannot sign in to this client.")}
+        </fieldset>
+        <fieldset className="space-y-3" disabled={busy || readOnly}>
+          <legend className="mb-2 text-sm font-medium">Passkeys</legend>
+          {box('passkey', 'Sign in with a passkey', 'A button and browser autofill; no password or second factor. Needs passkeys allowed under Sign-in methods.')}
         </fieldset>
         <fieldset className="space-y-3" disabled={busy || readOnly}>
           <legend className="mb-2 text-sm font-medium">Social login buttons</legend>

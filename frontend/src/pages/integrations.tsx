@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, Ban, Bot, Building2, Globe, KeyRound, Link2, LogIn, Plus, Server } from 'lucide-react'
+import { ArrowRight, Ban, Bot, Building2, Globe, KeyRound, Link2, LogIn, Plus, Server, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -19,11 +19,12 @@ import { RowActions } from '@/components/ui/menu'
 import { ConfirmDialog, CopyField, CopyText, DataTable, DetailSection, EmptyState, EntityRef, FormDialog, PageHeader, RadioCards, Status, SwitchField, ErrorState, Time, selectClass, shortId, splitList } from '@/components/library/patterns'
 import type { Field } from '@/components/library/patterns'
 import { CreateConnectionDialog, providerLabel, type ConnectionKind } from './federation-connection-form'
+import { ClientAuthDialog, authSummary, type ClientAuth } from '@/components/library/client-auth'
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id) })
 
 // --- Service Accounts ---
-interface ServiceAccount { id: string; name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; permissions: string[]; expires_at: string; revoked_at: string | null }
+interface ServiceAccount extends ClientAuth { id: string; name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; permissions: string[]; expires_at: string; revoked_at: string | null; can_impersonate?: boolean }
 interface Credential { id: string; secret: string; expires_at: string }
 
 function ServiceAccountForm({ base, path, onClose, onCreated }: { base: string; path: string; onClose: () => void; onCreated: (cred: Credential) => void }) {
@@ -98,34 +99,43 @@ export function ServiceAccountsPage() {
   const list = usePaginatedList<ServiceAccount>(path)
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
+  const isOwner = principal?.role === 'owner'
   const [add, setAdd] = useState(false)
   const [revoke, setRevoke] = useState<ServiceAccount | null>(null)
+  const [impersonation, setImpersonation] = useState<ServiceAccount | null>(null)
+  const [auth, setAuth] = useState<ServiceAccount | null>(null)
   const [secret, setSecret] = useState<Credential | null>(null)
   const create = canWrite && <Button onClick={() => setAdd(true)}><Plus /> Create service account</Button>
 
   return <div className="space-y-6">
     <PageHeader title="Service accounts" description="Credentials for your backend services to call a resource without a user (client credentials)." actions={create} />
     <PaginationBar state={list} noun="service accounts" />
-    <DataTable columns={['Name', { header: 'Access', hideBelow: 'md' }, { header: 'Permissions', hideBelow: 'lg' }, { header: 'Expires', nowrap: true, hideBelow: 'sm' }, 'Status', ...(canWrite ? ['Actions'] : [])]}
+    <DataTable columns={['Name', { header: 'Access', hideBelow: 'md' }, { header: 'Permissions', hideBelow: 'lg' }, { header: 'Authentication', hideBelow: 'lg' }, { header: 'Expires', nowrap: true, hideBelow: 'sm' }, 'Status', ...(canWrite ? ['Actions'] : [])]}
       loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState icon={<Bot />} title="No service accounts yet" description="Create one for each backend service that calls your APIs on its own behalf. The secret is shown once." action={create} />}
       rows={list.data.map(sa => {
         const state = credentialState(sa)
         const cells: ReactNode[] = [
-          <EntityRef name={sa.name} secondary={<CopyText value={sa.id} short />} />,
+          <EntityRef name={sa.name} secondary={<span className="inline-flex items-center gap-2"><CopyText value={sa.id} short />{sa.can_impersonate && <Badge variant="outline">Can impersonate</Badge>}</span>} />,
           <EntityRef name={sa.application_name} id={sa.application_id} to={`${console}/applications/${sa.application_id}`} secondary={sa.resource_name ? `→ ${sa.resource_name}` : undefined} />,
           sa.permissions?.length ? <CollapsibleScopes key={sa.id} scopes={sa.permissions} /> : <span className="text-xs text-muted-foreground">—</span>,
+          <span className="text-xs text-muted-foreground">{authSummary(sa)}</span>,
           <Time value={sa.expires_at} />,
           <CredentialStatus state={state} />,
         ]
-        if (canWrite) cells.push(state === 'active' ? <RowActions label={`Actions for ${sa.name}`} actions={[{ label: 'Revoke', icon: <Ban />, destructive: true, onSelect: () => setRevoke(sa) }]} /> : null)
+        if (canWrite) cells.push(state === 'active' ? <RowActions label={`Actions for ${sa.name}`} actions={[{ label: 'Authentication', icon: <KeyRound />, onSelect: () => setAuth(sa) }, ...(isOwner ? [{ label: sa.can_impersonate ? 'Stop impersonation' : 'Allow impersonation', icon: <UserCog />, onSelect: () => setImpersonation(sa) }] : []), { label: 'Revoke', icon: <Ban />, destructive: true, onSelect: () => setRevoke(sa) }]} /> : null)
         return cells
       })} />
     {add && <ServiceAccountForm base={base} path={path} onClose={() => setAdd(false)} onCreated={cred => { setSecret(cred); list.reload() }} />}
+    {auth && <ClientAuthDialog title={`Authentication of ${auth.name}`} current={auth} onClose={() => setAuth(null)} save={async body => { await api.put(`${path}/${auth.id}/authentication`, body); list.reload() }} />}
+    {impersonation && <ConfirmDialog title={impersonation.can_impersonate ? `Stop ${impersonation.name} impersonating users?` : `Let ${impersonation.name} impersonate users?`}
+      description={impersonation.can_impersonate ? 'Sessions it opened as users end now, and it can no longer exchange a user ID for that user\'s token.' : 'It may exchange a user ID for that user\'s access token at /oauth/token (token exchange), with a reason. Every impersonation is audited. Only workspace owners can change this.'}
+      confirmLabel={impersonation.can_impersonate ? 'Stop impersonation' : 'Allow impersonation'} onClose={() => setImpersonation(null)}
+      confirm={async () => { const allowed = !impersonation.can_impersonate; await api.put(`${path}/${impersonation.id}/impersonation`, { allowed }); toast.success(allowed ? `${impersonation.name} may impersonate users` : `${impersonation.name} can no longer impersonate users`); list.reload() }} />}
     {revoke && <ConfirmDialog title={`Revoke ${revoke.name}?`} description="Services using this secret stop working immediately. This cannot be undone." confirmLabel="Revoke" onClose={() => setRevoke(null)} confirm={async () => { await api.delete(`${path}/${revoke.id}`); toast.success('Service account revoked'); list.reload() }} />}
     {secret && <SecretDialog title="Service account created" description="Copy the secret now — it is shown only once." onClose={() => setSecret(null)} confirm="I have saved the secret">
       <CopyField label="Client ID" value={secret.id} />
-      <CopyField label="Client secret" value={secret.secret} secret hint={<>Expires <Time value={secret.expires_at} />.</>} />
+      <CopyField label="Client secret" value={secret.secret} secret hint={<>Expires <Time value={secret.expires_at} />. Use it on POST /oauth/token (grant_type=client_credentials) or /identity/v1/machine-token.</>} />
     </SecretDialog>}
   </div>
 }
@@ -237,10 +247,20 @@ function ProviderMark({ provider }: { provider: string }) {
 }
 
 // --- OAuth Clients ---
-export interface OAuthClient { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; public: boolean; hosted_login: boolean; active: boolean }
+export interface OAuthClient extends ClientAuth { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; post_logout_redirect_uris?: string[] | null; public: boolean; hosted_login: boolean; active: boolean; access_token_format?: 'jwt' | 'opaque'; backchannel_logout_uri?: string; backchannel_logout_session_required?: boolean; grant_types?: string[] }
 export const signInModes = [
   { value: 'hosted', label: 'Hosted sign-in page', description: 'IAMKit shows the sign-in pages (branding, social login, MFA) and returns to your redirect URI.' },
   { value: 'custom', label: 'Your own sign-in UI', description: 'Your app renders the login form and completes the authorization with the ticket.' },
+]
+/** deviceGrant is the RFC 8628 device authorization grant type. */
+export const deviceGrant = 'urn:ietf:params:oauth:grant-type:device_code'
+/** exchangeGrant is the RFC 8693 token exchange grant type. */
+export const exchangeGrant = 'urn:ietf:params:oauth:grant-type:token-exchange'
+/** defaultGrants are the grants of clients created without grant_types. */
+export const defaultGrants = ['authorization_code', 'refresh_token']
+export const tokenFormats = [
+  { value: 'jwt', label: 'JWT', description: 'Signed tokens your APIs and the IAMKit SDKs validate locally with the JWKS.' },
+  { value: 'opaque', label: 'Opaque', description: 'Random handles that reveal nothing; resolved only with /oauth/introspect and /oauth/userinfo.' },
 ]
 export const clientTypes = [
   { value: 'public', label: 'Public', description: 'Browser or mobile app. No secret; PKCE protects the flow.' },

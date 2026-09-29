@@ -17,6 +17,7 @@ import { ConfirmDialog, ErrorState, PageHeader } from '@/components/library/patt
 import { DeliveryForm } from '@/components/delivery/delivery-form'
 import { PreviewDialog } from '@/components/delivery/preview-dialog'
 import { TemplatesCard } from '@/components/delivery/templates'
+import { SMSCard } from '@/components/delivery/sms'
 
 export type { Attempt } from '@/lib/delivery'
 
@@ -27,6 +28,7 @@ const PURPOSES = [
   { purpose: 'login', label: 'Login code', fields: ['email', 'purpose', 'code'], validity: '5 minutes, single use', example: { email: 'ada@example.com', purpose: 'login', code: '48213907' } },
   { purpose: 'password_reset', label: 'Password reset', fields: ['email', 'purpose', 'code'], validity: '5 minutes, single use', example: { email: 'ada@example.com', purpose: 'password_reset', code: '48213907' } },
   { purpose: 'email_verification', label: 'Email verification', fields: ['email', 'purpose', 'code'], validity: '5 minutes, single use', example: { email: 'ada@example.com', purpose: 'email_verification', code: '48213907' } },
+  { purpose: 'mfa', label: 'Second-factor code', fields: ['email', 'purpose', 'code'], validity: '5 minutes, single use; only when the email factor is allowed', example: { email: 'ada@example.com', purpose: 'mfa', code: '482139' } },
   {
     purpose: 'invitation', label: 'Invitation', fields: ['email', 'purpose', 'token', 'link', 'organization', 'inviter', 'expires_at'], validity: '7 days, single use',
     example: { email: 'ada@example.com', purpose: 'invitation', token: 'ik_inv_…', link: 'https://app.example.com/join?token=ik_inv_…', organization: 'Acme', inviter: 'owner@example.com', expires_at: '2026-10-04T12:00:00Z' },
@@ -177,6 +179,8 @@ export default function NotificationsPage() {
         </CardContent>
       </Card>
     </div>
+
+    <SMSCard environment={environment!} canWrite={canWrite} />
 
     <TemplatesCard path={path} brandPath={`/environments/${environment}/login-settings`} locales={locales} canWrite={canWrite} active={rendered(provider)} />
     {(provider === 'webhook' || provider === '') && <PurposesCard />}

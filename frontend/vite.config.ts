@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { readFileSync } from 'node:fs'
@@ -7,6 +8,7 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
+  test: { setupFiles: ['./src/test-setup.ts'] },
   server: {
     host: 'localhost',
     https: process.env.CONSOLE_TLS_CERT && process.env.CONSOLE_TLS_KEY ? {

@@ -56,6 +56,7 @@ it('patches only changed connection fields', () => {
   expect(connectionPatch(conn, { name: 'Acme', client_secret: 's', jit_provisioning: true, jit_group_id: 'g1', enforcement: 'optional' })).toEqual({ name: 'Acme', client_secret: 's', jit_group_id: 'g1', enforcement: 'optional' })
   expect(connectionPatch({ ...conn, jit_group_id: 'g1' }, { name: 'Acme Entra', client_secret: '', jit_provisioning: true, jit_group_id: '', enforcement: 'enforced' })).toEqual({ jit_group_id: '' })
   expect(connectionPatch({ ...conn, organization_id: null }, { name: 'Acme Entra', client_secret: '' })).toEqual({})
+  expect(connectionPatch(conn, { name: 'Acme Entra', client_secret: '', jit_provisioning: true, jit_group_id: '', enforcement: 'enforced', link_email: true })).toEqual({ link_email: true })
 })
 
 it('offers Google Workspace for organization SSO, limited to verified domains', async () => {
@@ -63,7 +64,7 @@ it('offers Google Workspace for organization SSO, limited to verified domains', 
   await userEvent.click(await screen.findByRole('button', { name: 'Add SSO connection' }))
   const dialog = await screen.findByRole('dialog', { name: 'Add SSO for Acme' })
   const options = [...dialog.querySelectorAll('button[aria-pressed]')].map(b => b.textContent)
-  expect(options).toEqual(['Microsoft Entra ID', 'Google Workspace', 'Other (OIDC)'])
+  expect(options).toEqual(['Microsoft Entra ID', 'Google Workspace', 'GitLab self-managed', 'Other (OIDC)', 'SAML 2.0', 'LDAP / AD'])
   expect(screen.getByText(/GitHub and Apple accounts are personal/)).toBeTruthy()
   await userEvent.click(screen.getByRole('button', { name: 'Google Workspace' }))
   // Pre-filled with the organization's verified domains only.

@@ -8,7 +8,7 @@ import App from '../App'
 
 const fetchMock = vi.fn()
 const env = '/environments/env1'
-let factors = { factors: [{ id: 'f1', kind: 'totp', confirmed_at: '2026-01-01T00:00:00Z', last_used_at: null, created_at: '2026-01-01T00:00:00Z' }], recovery_codes_remaining: 8 }
+let factors: { factors: Record<string, unknown>[]; recovery_codes_remaining: number } = { factors: [], recovery_codes_remaining: 0 }
 let role = 'owner'
 let orgFails = false
 
@@ -58,6 +58,14 @@ it('shows a user\'s second factors and resets them', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
   await waitFor(() => expect(calls('DELETE').some(c => c.url.endsWith('/users/u1/factors'))).toBe(true))
   await screen.findByText('No second factor enrolled.')
+})
+
+it('labels security keys and passkeys by name', async () => {
+  const at = '2026-01-01T00:00:00Z'
+  factors = { factors: [{ id: 'k1', kind: 'webauthn', name: 'YubiKey', confirmed_at: at, last_used_at: null, created_at: at }, { id: 'k2', kind: 'webauthn', name: 'Phone', passkey: true, confirmed_at: at, last_used_at: null, created_at: at }], recovery_codes_remaining: 10 }
+  open('users/u1')
+  expect(await screen.findByText('Security key · YubiKey')).toBeTruthy()
+  expect(screen.getByText('Passkey · Phone')).toBeTruthy()
 })
 
 it('edits an organization\'s MFA policy from its overview', async () => {

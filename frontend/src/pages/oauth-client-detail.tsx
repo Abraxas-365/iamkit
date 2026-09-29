@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Ban, Palette, Pencil } from 'lucide-react'
+import { Ban, Palette, Pencil, Radio } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { message } from '@/lib/utils'
 import { Button, buttonVariants } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TagInput } from '@/components/ui/tag-input'
-import { BackLink, ConfirmDialog, CopyField, DetailSection, EntityRef, ErrorState, PageHeader, Properties, RadioCards, Status } from '@/components/library/patterns'
+import { BackLink, ConfirmDialog, CopyField, DetailSection, EntityRef, ErrorState, PageHeader, Properties, RadioCards, Status, SwitchField } from '@/components/library/patterns'
 import { SignInDialog, summary, type SignIn } from './sign-in-options'
-import { signInModes, type OAuthClient } from './integrations'
+import { defaultGrants, deviceGrant, exchangeGrant, signInModes, tokenFormats, type OAuthClient } from './integrations'
+import { ClientAuthDialog, authSummary } from '@/components/library/client-auth'
 
 interface Connection { id: string; name: string; provider: string; organization_id: string | null; active: boolean }
 
@@ -29,13 +31,18 @@ export default function OAuthClientDetailPage() {
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [redirects, setRedirects] = useState<string[]>([])
+  const [editingLogout, setEditingLogout] = useState(false)
+  const [logoutURIs, setLogoutURIs] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [methods, setMethods] = useState(false)
   const [disable, setDisable] = useState(false)
+  const [auth, setAuth] = useState(false)
+  const [opaque, setOpaque] = useState(false)
+  const [editingBackchannel, setEditingBackchannel] = useState(false)
 
   const load = useCallback(() => {
     setError('')
-    api.get<OAuthClient>(path).then(c => { setClient(c); setRedirects(c.redirect_uris ?? []) }).catch(e => setError(message(e)))
+    api.get<OAuthClient>(path).then(c => { setClient(c); setRedirects(c.redirect_uris ?? []); setLogoutURIs(c.post_logout_redirect_uris ?? []) }).catch(e => setError(message(e)))
     api.get<SignIn>(`${base}/login-settings/clients/${clientId}/sign-in`).then(setSignIn).catch(() => setSignIn(null))
     api.get<{ items: Connection[] }>(`${base}/federation-connections?limit=100`).then(r => setConnections(r.items)).catch(() => setConnections([]))
   }, [path, base, clientId])
@@ -51,6 +58,11 @@ export default function OAuthClientDetailPage() {
     try { await api.patch(path, body); toast.success(done); load(); return true } catch (e) { toast.error(message(e)); return false } finally { setBusy(false) }
   }
   const name = client.application_name || 'OAuth client'
+  const grants = client.grant_types?.length ? client.grant_types : defaultGrants
+  const toggleGrant = (grant: string, on: boolean, done: string) => {
+    const next = on ? [...grants, grant] : grants.filter(g => g !== grant)
+    void save({ grant_types: next }, done)
+  }
 
   return <div className="space-y-6">
     {back}
@@ -61,10 +73,12 @@ export default function OAuthClientDetailPage() {
       <div className="space-y-4">
         <CopyField label="Client ID" value={client.id} />
         <Properties items={[
-          ['Client type', client.public ? 'Public — no secret, PKCE required' : 'Confidential — authenticates with its client secret (shown once at creation)'],
+          ['Client type', client.public ? 'Public — no secret, PKCE required' : client.token_endpoint_auth_method === 'private_key_jwt' ? 'Confidential — authenticates with a signed JWT (private_key_jwt)' : 'Confidential — authenticates with its client secret (shown once at creation)'],
+          ...(client.public ? [] : [['Token endpoint authentication', <span className="flex flex-wrap items-center gap-2">{authSummary(client)}{editable && <Button variant="outline" size="sm" onClick={() => setAuth(true)}><Pencil /> Change</Button>}</span>] as [string, React.ReactNode]]),
           ['Application', <EntityRef name={client.application_name} id={client.application_id} to={`${console}/applications/${client.application_id}`} />],
           ['Resource (audience)', <EntityRef name={client.resource_name} id={client.resource_id} />],
           ['Discovery URL', <code className="text-xs break-all">{`${window.location.origin}/.well-known/openid-configuration`}</code>],
+          ['Sign-out URL', <code className="text-xs break-all">{`${window.location.origin}/oauth/end_session`}</code>],
         ]} />
       </div>
     </DetailSection>
@@ -81,6 +95,22 @@ export default function OAuthClientDetailPage() {
           <Button type="submit" disabled={busy || redirects.length === 0}>{busy ? 'Saving…' : 'Save'}</Button>
         </div>
       </form> : <ul className="space-y-1.5">{(client.redirect_uris ?? []).map(u => <li key={u}><code className="text-xs break-all">{u}</code></li>)}</ul>}
+    </DetailSection>
+
+    <DetailSection title="Post-logout redirect URIs" description="Where /oauth/end_session may send users after signing out (post_logout_redirect_uri, exact match). Without one, IAMKit shows a signed-out page."
+      actions={editable && !editingLogout && <Button variant="outline" size="sm" aria-label="Edit post-logout redirect URIs" onClick={() => setEditingLogout(true)}><Pencil /> Edit</Button>}>
+      {editingLogout ? <form className="space-y-3" onSubmit={async e => {
+        e.preventDefault()
+        if (await save({ post_logout_redirect_uris: logoutURIs }, 'Post-logout redirect URIs saved')) setEditingLogout(false)
+      }}>
+        <TagInput name="post_logout_redirect_uris" defaultValue={client.post_logout_redirect_uris ?? []} onChange={setLogoutURIs} disabled={busy} placeholder="https://app.example.com/signed-out — press Enter" />
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={() => { setEditingLogout(false); setLogoutURIs(client.post_logout_redirect_uris ?? []) }}>Cancel</Button>
+          <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+        </div>
+      </form> : (client.post_logout_redirect_uris ?? []).length
+        ? <ul className="space-y-1.5">{(client.post_logout_redirect_uris ?? []).map(u => <li key={u}><code className="text-xs break-all">{u}</code></li>)}</ul>
+        : <p className="text-sm text-muted-foreground">None — users see IAMKit's signed-out page.</p>}
     </DetailSection>
 
     <DetailSection title="Sign-in experience" description="Who renders the login form when this client starts an authorization.">
@@ -102,10 +132,56 @@ export default function OAuthClientDetailPage() {
       </div>
     </DetailSection>
 
+    <DetailSection title="Grant types" description="How this client obtains tokens. Clients without a browser (TVs, CLIs, IoT) use the device flow: they show a short code the user enters at /hosted/device.">
+      <div className="space-y-3">
+        <SwitchField label="Authorization code" hint="Browser sign-in with PKCE through the redirect URIs above." checked={grants.includes('authorization_code')} disabled={!editable || busy}
+          onCheckedChange={on => toggleGrant('authorization_code', on, on ? 'Authorization code grant enabled' : 'Authorization code grant disabled')} />
+        <SwitchField label="Device authorization" hint={client.hosted_login ? 'RFC 8628: the device polls /oauth/token while the user approves it on another screen.' : 'Needs the hosted sign-in page — the user approves the device there.'} checked={grants.includes(deviceGrant)} disabled={!editable || busy || (!client.hosted_login && !grants.includes(deviceGrant))}
+          onCheckedChange={on => toggleGrant(deviceGrant, on, on ? 'Device authorization enabled' : 'Device authorization disabled')} />
+        <SwitchField label="Token exchange" hint={client.public ? 'Needs a confidential client — exchanging tokens requires client authentication.' : 'RFC 8693: your backend exchanges a user\'s access token for one scoped to another resource of this application.'} checked={grants.includes(exchangeGrant)} disabled={!editable || busy || (client.public && !grants.includes(exchangeGrant))}
+          onCheckedChange={on => toggleGrant(exchangeGrant, on, on ? 'Token exchange enabled' : 'Token exchange disabled')} />
+        <SwitchField label="Refresh tokens" hint="Issued when the offline_access scope is granted." checked={grants.includes('refresh_token')} disabled={!editable || busy}
+          onCheckedChange={on => toggleGrant('refresh_token', on, on ? 'Refresh tokens enabled' : 'Refresh tokens disabled')} />
+      </div>
+    </DetailSection>
+
+    <DetailSection title="Access tokens" description="The format of the access tokens this client receives. ID tokens are always signed JWTs.">
+      <RadioCards name="access_token_format" label="Access token format" value={client.access_token_format ?? 'jwt'} disabled={!editable || busy} options={tokenFormats}
+        hint={(client.access_token_format ?? 'jwt') === 'opaque' ? 'Opaque tokens are not accepted by /api/v1, /identity/v1 or SDK local validation — your APIs must call /oauth/introspect.' : undefined}
+        onChange={v => { if (v === 'opaque') setOpaque(true); else void save({ access_token_format: 'jwt' }, 'Now issuing JWT access tokens') }} />
+    </DetailSection>
+
+    <DetailSection title="Back-channel logout" description="IAMKit POSTs a signed logout_token (OpenID Connect Back-Channel Logout) to this URL whenever a session this client signed in ends — sign-out, revocation, suspension or deletion."
+      actions={editable && !editingBackchannel && <Button variant="outline" size="sm" aria-label="Edit back-channel logout" onClick={() => setEditingBackchannel(true)}><Pencil /> Edit</Button>}>
+      {editingBackchannel ? <form className="space-y-3" onSubmit={async e => {
+        e.preventDefault()
+        const data = new FormData(e.currentTarget)
+        const body = { backchannel_logout_uri: String(data.get('backchannel_logout_uri') ?? '').trim(), backchannel_logout_session_required: data.get('backchannel_logout_session_required') === 'on' }
+        if (await save(body, body.backchannel_logout_uri ? 'Back-channel logout saved' : 'Back-channel logout turned off')) setEditingBackchannel(false)
+      }}>
+        <label className="block space-y-1.5 text-sm font-medium" htmlFor="backchannel_logout_uri">Logout URL
+          <Input id="backchannel_logout_uri" name="backchannel_logout_uri" type="url" defaultValue={client.backchannel_logout_uri ?? ''} disabled={busy} placeholder="https://app.example.com/backchannel-logout — empty turns it off" />
+        </label>
+        <SwitchField name="backchannel_logout_session_required" label="Requires sid" hint="The logout token always carries the session ID (sid); this records that your app relies on it." defaultChecked={client.backchannel_logout_session_required} disabled={busy} />
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={() => setEditingBackchannel(false)}>Cancel</Button>
+          <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>
+        </div>
+      </form> : client.backchannel_logout_uri
+        ? <Properties items={[
+          ['Logout URL', <code className="text-xs break-all">{client.backchannel_logout_uri}</code>],
+          ['Requires sid', client.backchannel_logout_session_required ? 'Yes' : 'No'],
+          ['Deliveries', <Link className="inline-flex items-center gap-1 text-primary hover:underline" to={`${console}/logout-deliveries?client_id=${client.id}`}><Radio className="size-3.5" /> View delivery log</Link>],
+        ]} />
+        : <p className="text-sm text-muted-foreground">Off — the application is not told when sessions end.</p>}
+    </DetailSection>
+
     {editable && <DetailSection danger title="Danger zone" description="Disabling is permanent: the client can no longer sign users in. Existing sessions keep working until they expire.">
       <Button variant="destructive" onClick={() => setDisable(true)}><Ban /> Disable client</Button>
     </DetailSection>}
 
+    {auth && <ClientAuthDialog title="Token endpoint authentication" current={client} onClose={() => setAuth(false)} save={async body => { await api.patch(path, body); load() }} />}
+    {opaque && <ConfirmDialog title="Issue opaque access tokens?" description="New access tokens become opaque handles. The IAMKit APIs (/api/v1, /identity/v1) and the SDKs' local validation accept only JWTs, so your resource servers must call /oauth/introspect (or /oauth/userinfo) instead. Tokens already issued keep working." confirmLabel="Use opaque tokens" onClose={() => setOpaque(false)} confirm={async () => { await api.patch(path, { access_token_format: 'opaque' }); toast.success('Now issuing opaque access tokens'); load() }} />}
     {methods && <SignInDialog base={base} client={client.id} name={name} readOnly={!canWrite} onClose={() => setMethods(false)} onSaved={load} />}
     {disable && <ConfirmDialog title={`Disable ${name}?`} description="The application can no longer sign users in with this client. This cannot be undone." confirmLabel="Disable client" onClose={() => setDisable(false)} confirm={async () => { await api.delete(path); toast.success('OAuth client disabled'); load() }} />}
   </div>
