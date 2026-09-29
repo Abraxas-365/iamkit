@@ -591,7 +591,9 @@ A password that breaks the environment's password policy is
 `apierror.CodePasswordPolicy`; `apiErr.Rule()` names the rule (`apierror.RuleLength`,
 `RuleDigit`, `RuleBreached`, …) and `apiErr.Details["min_length"]` the minimum. An
 expired password is `apierror.CodePasswordChangeRequired`: repeat `Login` with
-`PasswordLogin.NewPassword` set.
+`PasswordLogin.NewPassword` set. A sign-in method the environment or
+organization turns off is `apierror.CodeMethodNotAllowed`, a disabled password
+reset `apierror.CodePasswordResetDisabled` (both 403).
 
 OAuth endpoints return `*authclient.OAuthError` instead:
 

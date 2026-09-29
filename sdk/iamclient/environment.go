@@ -84,10 +84,15 @@ type CreateUser struct {
 type Organization struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
-	// The MFA policy is filled by Organization(id) only; list results
-	// leave it false.
+	// The MFA policy and sign-in methods are filled by Organization(id)
+	// only; list results leave them false.
 	MFARequired     bool `json:"mfa_required,omitempty"`
 	MFAForFederated bool `json:"mfa_for_federated,omitempty"`
+	// AllowPassword, AllowEmailCode and AllowSocial narrow the
+	// environment's SignInPolicy for this organization (never widen it).
+	AllowPassword  bool `json:"allow_password,omitempty"`
+	AllowEmailCode bool `json:"allow_email_code,omitempty"`
+	AllowSocial    bool `json:"allow_social,omitempty"`
 }
 
 // Factor is a user's second factor.
@@ -224,6 +229,21 @@ type OrganizationMFA struct {
 
 // SetOrganizationMFA changes an organization's second-factor policy.
 func (e Environment) SetOrganizationMFA(ctx context.Context, id string, input OrganizationMFA) error {
+	return e.operation(ctx, "PATCH", []string{"organizations", id}, input, nil)
+}
+
+// OrganizationMethods narrows the sign-in methods the environment allows
+// for one organization; nil fields are left unchanged. The organization's
+// own SSO follows its enforcement instead.
+type OrganizationMethods struct {
+	Password  *bool `json:"allow_password,omitempty"`
+	EmailCode *bool `json:"allow_email_code,omitempty"`
+	Social    *bool `json:"allow_social,omitempty"`
+}
+
+// SetOrganizationMethods changes the sign-in methods an organization
+// accepts. Refused methods answer apierror CodeMethodNotAllowed.
+func (e Environment) SetOrganizationMethods(ctx context.Context, id string, input OrganizationMethods) error {
 	return e.operation(ctx, "PATCH", []string{"organizations", id}, input, nil)
 }
 
@@ -600,6 +620,100 @@ func (e Environment) DeletePasswordPolicy(ctx context.Context) error {
 	return e.client.Do(ctx, "DELETE", e.path("password-policy"), nil, nil)
 }
 
+// PasswordRequirements is what an organization adds to the environment's
+// PasswordPolicy for its members: it only tightens (the longer minimum,
+// every required class, the shorter expiry). Users are environment-wide, so
+// a member of several organizations meets all of them. Zero values keep the
+// environment's rule.
+type PasswordRequirements struct {
+	MinLength     int  `json:"min_length"` // 0 or 8-72
+	RequireUpper  bool `json:"require_upper"`
+	RequireLower  bool `json:"require_lower"`
+	RequireDigit  bool `json:"require_digit"`
+	RequireSymbol bool `json:"require_symbol"`
+	MaxAgeDays    int  `json:"max_age_days"`
+	BreachCheck   bool `json:"breach_check"`
+	// Custom is false when the organization adds nothing (read-only).
+	Custom    bool   `json:"custom,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+// OrganizationPasswordPolicy returns what the organization adds to the
+// environment's password policy.
+func (e Environment) OrganizationPasswordPolicy(ctx context.Context, organization string) (PasswordRequirements, error) {
+	var out PasswordRequirements
+	err := e.operation(ctx, "GET", []string{"organizations", organization, "password-policy"}, nil, &out)
+	return out, err
+}
+
+// SetOrganizationPasswordPolicy replaces the organization's requirements.
+// Audited as organization_password_policy.update.
+func (e Environment) SetOrganizationPasswordPolicy(ctx context.Context, organization string, input PasswordRequirements) (PasswordRequirements, error) {
+	input.Custom, input.UpdatedAt = false, ""
+	var out PasswordRequirements
+	err := e.operation(ctx, "PUT", []string{"organizations", organization, "password-policy"}, input, &out)
+	return out, err
+}
+
+// DeleteOrganizationPasswordPolicy drops the organization's requirements.
+// Audited as organization_password_policy.delete.
+func (e Environment) DeleteOrganizationPasswordPolicy(ctx context.Context, organization string) error {
+	return e.operation(ctx, "DELETE", []string{"organizations", organization, "password-policy"}, nil, nil)
+}
+
+// ── Sign-in policy ──
+
+// SignInPolicy is which sign-in methods an environment allows and its
+// default second-factor rules. Organizations narrow the methods
+// (SetOrganizationMethods); hosted applications narrow them further.
+// Organization single sign-on is not governed by it. Refusals answer
+// apierror CodeMethodNotAllowed / CodePasswordResetDisabled.
+type SignInPolicy struct {
+	AllowPassword  bool `json:"allow_password"`
+	AllowEmailCode bool `json:"allow_email_code"`
+	// AllowSocial covers environment connections (Google, Microsoft, ...).
+	AllowSocial bool `json:"allow_social"`
+	// AllowPasswordReset needs AllowPassword.
+	AllowPasswordReset bool `json:"allow_password_reset"`
+	// MFARequired and MFAForFederated apply to every organization on top of
+	// its own MFA policy.
+	MFARequired     bool `json:"mfa_required"`
+	MFAForFederated bool `json:"mfa_for_federated"`
+	// AllowSignup lets people create their own account
+	// (authclient.Signup, "Create account" on the hosted pages); it needs
+	// SignupOrganizationID, the organization new accounts join, and
+	// AllowPassword or AllowEmailCode. SignupGroupID is an optional
+	// operator-managed group of it.
+	AllowSignup          bool   `json:"allow_signup"`
+	SignupOrganizationID string `json:"signup_organization_id,omitempty"`
+	SignupGroupID        string `json:"signup_group_id,omitempty"`
+	// Custom is false for the built-in default (everything allowed).
+	Custom    bool   `json:"custom,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+// SignInPolicy returns the environment's policy, or the default.
+func (e Environment) SignInPolicy(ctx context.Context) (SignInPolicy, error) {
+	var out SignInPolicy
+	err := e.client.Do(ctx, "GET", e.path("sign-in-policy"), nil, &out)
+	return out, err
+}
+
+// SetSignInPolicy replaces the whole policy. Audited as
+// sign_in_policy.update.
+func (e Environment) SetSignInPolicy(ctx context.Context, input SignInPolicy) (SignInPolicy, error) {
+	input.Custom, input.UpdatedAt = false, ""
+	var out SignInPolicy
+	err := e.client.Do(ctx, "PUT", e.path("sign-in-policy"), input, &out)
+	return out, err
+}
+
+// DeleteSignInPolicy restores the default. Audited as
+// sign_in_policy.delete.
+func (e Environment) DeleteSignInPolicy(ctx context.Context) error {
+	return e.client.Do(ctx, "DELETE", e.path("sign-in-policy"), nil, nil)
+}
+
 // DeliveryAttempt is the outcome of one delivery. Reason is a fixed,
 // secret-free description; Status is the HTTP status of the webhook or
 // Resend API when it answered.
@@ -869,6 +983,9 @@ type SignIn struct {
 	OrganizationSSO bool     `json:"organization_sso"`
 	AllConnections  bool     `json:"all_connections"`
 	ConnectionIDs   []string `json:"connection_ids"`
+	// Signup shows "Create account" when the environment allows sign-up
+	// (SignInPolicy.AllowSignup). Pass true to keep offering it.
+	Signup bool `json:"signup"`
 	// Read-only: false when the client offers every method by default.
 	Custom    bool       `json:"custom,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`

@@ -13,11 +13,26 @@ func passwordPolicyCmd() *cobra.Command {
 		Use:     "password-policy",
 		Aliases: []string{"password"},
 		Short:   "Manage the environment's end-user password policy",
+		Long: `Manage the environment's end-user password policy. With --organization,
+manage what one organization adds for its members: it only tightens the
+environment's policy (longer minimum, extra character classes, shorter
+expiry, breach check). Users are environment-wide, so a member of several
+organizations meets all of them.`,
 	}
+	cmd.PersistentFlags().String("organization", "", "Organization ID: manage its requirements instead")
 	cmd.AddCommand(passwordPolicyGetCmd())
 	cmd.AddCommand(passwordPolicySetCmd())
 	cmd.AddCommand(passwordPolicyDeleteCmd())
 	return cmd
+}
+
+// passwordPolicyPath is the environment's policy, or the organization's
+// requirements with --organization.
+func passwordPolicyPath(cmd *cobra.Command) (path string, organization bool) {
+	if org, _ := cmd.Flags().GetString("organization"); org != "" {
+		return envPath() + "/organizations/" + org + "/password-policy", true
+	}
+	return envPath() + "/password-policy", false
 }
 
 func passwordPolicyGetCmd() *cobra.Command {
@@ -25,7 +40,8 @@ func passwordPolicyGetCmd() *cobra.Command {
 		Use:   "get",
 		Short: "Get the password policy (the default when none is saved)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			data, err := mustClient(cmd).get(envPath() + "/password-policy")
+			path, _ := passwordPolicyPath(cmd)
+			data, err := mustClient(cmd).get(path)
 			if err != nil {
 				return err
 			}
@@ -48,12 +64,20 @@ New passwords (user creation, invitations, resets, expiry) must follow it.
 --lockout-minutes (doubling per further lockout, up to 24 h; 0 never locks).
 --max-age-days makes users choose a new password at their next password
 sign-in (0 never expires). --breach-check rejects passwords found in Have I
-Been Pwned (k-anonymity; accepted when the service is unreachable).`,
+Been Pwned (k-anonymity; accepted when the service is unreachable).
+
+With --organization, 0 for --min-length / --max-age-days keeps the
+environment's value; lockout flags are environment-only.`,
 		Example: `  iam password-policy set --min-length 14 --require-digit --lockout-threshold 5
-  iam password-policy set --max-age-days 90 --breach-check`,
+  iam password-policy set --max-age-days 90 --breach-check
+  iam password-policy set --organization ORG_ID --min-length 16 --max-age-days 30`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
-			path := envPath() + "/password-policy"
+			path, organization := passwordPolicyPath(cmd)
+			f := cmd.Flags()
+			if organization && (f.Changed("lockout-threshold") || f.Changed("lockout-minutes")) {
+				return fmt.Errorf("lockout applies to the whole environment; drop --organization")
+			}
 			current, err := c.get(path)
 			if err != nil {
 				return err
@@ -64,7 +88,6 @@ Been Pwned (k-anonymity; accepted when the service is unreachable).`,
 			}
 			delete(body, "custom")
 			delete(body, "updated_at")
-			f := cmd.Flags()
 			for flag, value := range map[string]any{
 				"min-length": minLength, "max-age-days": maxAge, "lockout-threshold": threshold, "lockout-minutes": minutes,
 				"require-upper": upper, "require-lower": lower, "require-digit": digit, "require-symbol": symbol, "breach-check": breach,
@@ -102,8 +125,13 @@ func passwordPolicyDeleteCmd() *cobra.Command {
 		Use:   "delete",
 		Short: "Restore the default password policy",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if _, err := mustClient(cmd).delete(envPath() + "/password-policy"); err != nil {
+			path, organization := passwordPolicyPath(cmd)
+			if _, err := mustClient(cmd).delete(path); err != nil {
 				return err
+			}
+			if organization {
+				newPrinter().ok("Organization password requirements removed")
+				return nil
 			}
 			newPrinter().ok("Password policy restored to the default")
 			return nil

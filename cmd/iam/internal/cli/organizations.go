@@ -82,16 +82,27 @@ func orgsCreateCmd() *cobra.Command {
 
 func orgsUpdateCmd() *cobra.Command {
 	var name string
+	var password, emailCode, social bool
 	cmd := &cobra.Command{
 		Use:   "update ORG_ID",
 		Short: "Update an organization",
-		Args:  cobra.ExactArgs(1),
+		Long: `Update an organization. --allow-password, --allow-email-code and
+--allow-social narrow the sign-in methods the environment allows for this
+organization (they never widen it; see "iam sign-in-policy").`,
+		Example: `  iam organizations update ORG_ID --allow-password=false`,
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
 			p := newPrinter()
 			body := map[string]any{}
-			if cmd.Flags().Changed("name") {
+			f := cmd.Flags()
+			if f.Changed("name") {
 				body["name"] = name
+			}
+			for flag, value := range map[string]bool{"allow-password": password, "allow-email-code": emailCode, "allow-social": social} {
+				if f.Changed(flag) {
+					body[jsonName(flag)] = value
+				}
 			}
 			_, err := c.patch(envPath()+"/organizations/"+args[0], body)
 			if err != nil {
@@ -101,7 +112,11 @@ func orgsUpdateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", "New name")
+	f := cmd.Flags()
+	f.StringVar(&name, "name", "", "New name")
+	f.BoolVar(&password, "allow-password", true, "Allow password sign-in")
+	f.BoolVar(&emailCode, "allow-email-code", true, "Allow email-code sign-in")
+	f.BoolVar(&social, "allow-social", true, "Allow environment (social) connections")
 	return cmd
 }
 

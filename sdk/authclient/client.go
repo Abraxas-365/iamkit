@@ -314,6 +314,45 @@ func (c *Client) VerifyChallenge(ctx context.Context, input ChallengeVerificatio
 	return out, err
 }
 
+// ── Self-registration ──
+
+// SignupRequest asks for a new account. Password is optional when the
+// environment allows email codes (the account then signs in with them).
+// Locale is the email language, as in ChallengeRequest.
+type SignupRequest struct {
+	Environment string `json:"environment_id"`
+	Email       string `json:"email"`
+	Name        string `json:"name"`
+	Password    string `json:"password,omitempty"`
+	Locale      string `json:"locale,omitempty"`
+}
+
+// SignedUp is the account a completed sign-up created.
+type SignedUp struct {
+	UserID         string `json:"user_id"`
+	OrganizationID string `json:"organization_id"`
+	Email          string `json:"email"`
+}
+
+// Signup emails a code confirming the address. The answer is the same
+// whether or not the email already has an account (then nothing is sent).
+// Errors: apierror.CodeSignupDisabled (403), CodePasswordPolicy (400),
+// SSO_REQUIRED (403).
+func (c *Client) Signup(ctx context.Context, input SignupRequest) (Challenge, error) {
+	var out Challenge
+	err := c.request(ctx, "/signup", "", input, &out)
+	return out, err
+}
+
+// CompleteSignup creates the account once code is right. It does not sign
+// the user in. Errors: 401 for a wrong or expired code (five wrong codes end
+// the sign-up), apierror.CodeAccountExists (409).
+func (c *Client) CompleteSignup(ctx context.Context, environment, challengeID, code string) (SignedUp, error) {
+	var out SignedUp
+	err := c.request(ctx, "/signup/verify", "", map[string]string{"environment_id": environment, "challenge_id": challengeID, "code": code}, &out)
+	return out, err
+}
+
 // ── Federation (SSO) ──
 
 // Discover returns the login method for an email ("home realm discovery").

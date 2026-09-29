@@ -27,6 +27,22 @@ const (
 	RuleReused   = "reused"
 )
 
+// Sign-in policy error codes (HTTP 403): the environment or organization
+// does not allow the method, or the environment does not offer password
+// reset.
+const (
+	CodeMethodNotAllowed      = "METHOD_NOT_ALLOWED"
+	CodePasswordResetDisabled = "PASSWORD_RESET_DISABLED"
+)
+
+// Self-registration error codes: the environment does not offer sign-up
+// (HTTP 403), or the email got an account while the sign-up waited for its
+// code (HTTP 409).
+const (
+	CodeSignupDisabled = "SIGNUP_DISABLED"
+	CodeAccountExists  = "ACCOUNT_EXISTS"
+)
+
 // Rule returns the password policy rule a PASSWORD_POLICY error names, or "".
 func (e *Error) Rule() string {
 	rule, _ := e.Details["rule"].(string)

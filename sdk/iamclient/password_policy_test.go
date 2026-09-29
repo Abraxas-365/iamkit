@@ -63,3 +63,73 @@ func TestPasswordPolicyEndpoints(t *testing.T) {
 		t.Fatalf("body = %s", bodies[1])
 	}
 }
+
+func TestSignInPolicyEndpoints(t *testing.T) {
+	var calls, bodies []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		b, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, strings.TrimSpace(string(b)))
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == "DELETE" || r.Method == "PATCH":
+			w.WriteHeader(204)
+		case strings.HasSuffix(r.URL.Path, "/organizations/o1/password-policy"):
+			w.Write([]byte(`{"min_length":16,"max_age_days":30,"custom":true}`))
+		case r.URL.Path == "/management/v1/environments/env-1/login":
+			w.WriteHeader(403)
+			w.Write([]byte(`{"error":{"code":"METHOD_NOT_ALLOWED","message":"no","type":"AUTHORIZATION","http_status":403}}`))
+		default:
+			w.Write([]byte(`{"allow_password":false,"allow_email_code":true,"allow_social":true,"allow_password_reset":false,"mfa_required":true,"custom":true}`))
+		}
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+
+	policy, err := env.SignInPolicy(ctx)
+	if err != nil || policy.AllowPassword || !policy.AllowEmailCode || !policy.MFARequired || !policy.Custom {
+		t.Fatalf("policy = %+v %v", policy, err)
+	}
+	if _, err := env.SetSignInPolicy(ctx, policy); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.DeleteSignInPolicy(ctx); err != nil {
+		t.Fatal(err)
+	}
+	off := false
+	if err := env.SetOrganizationMethods(ctx, "o1", OrganizationMethods{Password: &off}); err != nil {
+		t.Fatal(err)
+	}
+	req, err := env.OrganizationPasswordPolicy(ctx, "o1")
+	if err != nil || req.MinLength != 16 || req.MaxAgeDays != 30 || !req.Custom {
+		t.Fatalf("requirements = %+v %v", req, err)
+	}
+	if _, err := env.SetOrganizationPasswordPolicy(ctx, "o1", req); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.DeleteOrganizationPasswordPolicy(ctx, "o1"); err != nil {
+		t.Fatal(err)
+	}
+	var apiErr *apierror.Error
+	if err := env.client.Do(ctx, "POST", env.path("login"), nil, nil); !errors.As(err, &apiErr) || apiErr.Code != apierror.CodeMethodNotAllowed {
+		t.Fatalf("error = %#v", err)
+	}
+
+	base := "/management/v1/environments/env-1/"
+	expected := []string{"GET " + base + "sign-in-policy", "PUT " + base + "sign-in-policy", "DELETE " + base + "sign-in-policy",
+		"PATCH " + base + "organizations/o1", "GET " + base + "organizations/o1/password-policy", "PUT " + base + "organizations/o1/password-policy",
+		"DELETE " + base + "organizations/o1/password-policy", "POST " + base + "login"}
+	if strings.Join(calls, "\n") != strings.Join(expected, "\n") {
+		t.Fatalf("calls:\n%s", strings.Join(calls, "\n"))
+	}
+	if want := `{"allow_password":false,"allow_email_code":true,"allow_social":true,"allow_password_reset":false,"mfa_required":true,"mfa_for_federated":false,"allow_signup":false}`; bodies[1] != want {
+		t.Fatalf("body = %s", bodies[1])
+	}
+	if bodies[3] != `{"allow_password":false}` {
+		t.Fatalf("methods body = %s", bodies[3])
+	}
+	if want := `{"min_length":16,"require_upper":false,"require_lower":false,"require_digit":false,"require_symbol":false,"max_age_days":30,"breach_check":false}`; bodies[5] != want {
+		t.Fatalf("requirements body = %s", bodies[5])
+	}
+}
