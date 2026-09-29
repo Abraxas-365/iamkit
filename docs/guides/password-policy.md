@@ -72,5 +72,39 @@ With `max_age_days` set, a correct but expired password is not enough:
 Email-code sign-ins are not subject to expiry, and a password reset restarts the
 clock.
 
+## Organization requirements
+
+Users belong to the environment, not to one organization: one account, one
+password, many memberships. An organization therefore cannot replace the
+environment's policy — it can only **add** requirements for its members:
+
+| Field | Effect |
+| --- | --- |
+| `min_length` | 0 keeps the environment's; otherwise 8–72, the longer applies |
+| `require_upper`, `require_lower`, `require_digit`, `require_symbol` | Added to the environment's rules |
+| `breach_check` | Turns the breach check on for members |
+| `max_age_days` | 0 keeps the environment's; otherwise the shorter expiry applies |
+
+Lockout stays environment-wide. A member's effective policy is the environment
+policy tightened by every organization they are an active member of, so a
+member of two organizations meets both. It applies to password resets,
+expired-password replacement and invitation acceptance into the organization;
+users outside it keep the environment policy.
+
+Existing passwords are not re-checked when requirements change; a shorter
+`max_age_days` makes members choose a new, compliant password at their next
+password sign-in once theirs is older.
+
+Manage it on the organization's console page (**Password requirements**), with
+`GET|PUT|DELETE /environments/:environment/organizations/:id/password-policy`
+(`GET` returns `custom: false` when the organization adds nothing; audited
+`organization_password_policy.update`/`.delete`),
+`iam password-policy get|set|delete --organization ORG_ID` or the SDK
+(`OrganizationPasswordPolicy`, `SetOrganizationPasswordPolicy`,
+`DeleteOrganizationPasswordPolicy`).
+
+Which methods users may sign in with (password at all, reset, email code,
+social) is the [sign-in methods](sign-in-methods.md) policy.
+
 Source: `internal/iam/authentication/password.go`, `authsvc/password.go`,
 `adapters/authhibp`, `adapters/authhttp/password.go`.

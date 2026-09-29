@@ -13,6 +13,11 @@ routes. Supply deadlines and never log token-pair values.
 - `PreviewInvitation(ctx, token)` and `AcceptInvitation(ctx, InvitationAcceptance{...})`
   for your invitation page; accepting does not sign in (see
   [invitations](../api/identity.md#invitations)).
+- `Signup(ctx, SignupRequest{...})` then `CompleteSignup(ctx, environment,
+  challengeID, code)` for your own sign-up page when the environment allows
+  [sign-up](../../guides/signup-and-onboarding.md#self-service-sign-up); the
+  account signs in next (errors `apierror.CodeSignupDisabled`,
+  `CodeAccountExists`).
 - `Profile`, `UpdateProfile`, `Organizations`, `Logout`, `AddMember`.
 - MFA: `Login` and `VerifyChallenge` succeed **without tokens** when a second
   factor is needed — check `MFARequired` before using `AccessToken` (then

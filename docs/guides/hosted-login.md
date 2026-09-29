@@ -134,7 +134,7 @@ returns `{"html": "…"}`: a page rendered with the saved style and sample data.
 `POST .../login-settings/preview` `{"page","scheme","settings"}` renders an
 unsaved style (validated like a save, stored nowhere; operators with write
 access). Pages: `identify`, `password`, `code`, `reset`, `organization`, `mfa`,
-`enroll`, `recovery`, `invite`, `message`. `scheme` may be either one whatever
+`enroll`, `recovery`, `invite`, `message`, `signup`, `signup-code`. `scheme` may be either one whatever
 the mode; `locale` (`?locale=` on `GET`) picks the language, by default the
 environment's.
 
@@ -171,6 +171,9 @@ PUT /management/v1/environments/ENV_UUID/login-settings/clients/CLIENT_UUID/sign
 - `all_connections`: every active environment connection, including ones
   added later; otherwise only `connection_ids` (active environment
   connections; organization connections are governed by `organization_sso`).
+- `signup`: the **Create account** link, when the environment allows
+  [sign-up](signup-and-onboarding.md#self-service-sign-up) (default `true`;
+  it also needs `password` or `email_code`).
 
 At least one method must stay on. The email field is shown when password,
 email code or organization SSO is on; with only social connections the page
@@ -185,6 +188,12 @@ is not for them.
 lists clients with their own, and `DELETE` returns a client to every method.
 These options only affect the hosted pages; they do not restrict the
 [identity API](password-login.md) your own UI calls.
+
+They narrow the environment's and the organization's
+[sign-in methods](sign-in-methods.md), which apply everywhere: a method the
+environment turns off is hidden on every client (and "Forgot password?"
+disappears when the environment turns reset off), and the organization
+chooser leaves out organizations that refuse the method used.
 
 ## Invitations
 

@@ -25,6 +25,11 @@ Passwords: `PasswordPolicy`, `SetPasswordPolicy` (replaces the whole policy),
 `DeletePasswordPolicy` and `UnlockUser` (also on `apiclient`, with
 `iam:users:write`); a rejected password is `apierror.CodePasswordPolicy` with
 `Rule()` naming the failed rule (see [password policy](../../guides/password-policy.md)).
+Organization password requirements: `OrganizationPasswordPolicy`,
+`SetOrganizationPasswordPolicy`, `DeleteOrganizationPasswordPolicy`.
+Sign-in methods: `SignInPolicy`, `SetSignInPolicy`, `DeleteSignInPolicy` and,
+per organization, `SetOrganizationMethods` (see
+[sign-in methods](../../guides/sign-in-methods.md)).
 
 For a list returning a page, a low-level pattern is:
 

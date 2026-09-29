@@ -73,7 +73,19 @@ saved), `PUT /password-policy` (the complete policy: `min_length`, `require_uppe
 `require_lower`, `require_digit`, `require_symbol`, `max_age_days`,
 `lockout_threshold`, `lockout_minutes`, `breach_check`; 200 saved policy) and
 `DELETE /password-policy` (204, back to the default), audited as
-`password_policy.update`/`password_policy.delete`.
+`password_policy.update`/`password_policy.delete`. An organization's additions
+use `GET|PUT|DELETE /organizations/:id/password-policy` (`min_length`,
+`require_*`, `max_age_days`, `breach_check`; 0/false keep the environment's;
+404 for an unknown organization), audited as
+`organization_password_policy.update`/`.delete`.
+
+The [sign-in methods](../../guides/sign-in-methods.md) policy uses
+`GET|PUT|DELETE /sign-in-policy` (`allow_password`, `allow_email_code`,
+`allow_social`, `allow_password_reset`, `mfa_required`, `mfa_for_federated`,
+`allow_signup`, `signup_organization_id`, `signup_group_id` — see
+[sign-up](../../guides/signup-and-onboarding.md#self-service-sign-up);
+`custom: false` for the default), audited as
+`sign_in_policy.update`/`sign_in_policy.delete`.
 
 Administrative inventories include `GET /sessions` (optional `user_id` filter), `DELETE /sessions/:id` and
 `GET /audit-events` under this prefix. Sessions carry display labels

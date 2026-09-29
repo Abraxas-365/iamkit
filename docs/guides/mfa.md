@@ -19,8 +19,11 @@ Per organization, `PATCH /management/v1/environments/$ENV/organizations/$ORG`:
 | SSO login | Only with `mfa_for_federated` (the identity provider is trusted by default, even for enrolled users) |
 | Service accounts, refresh | Never (refresh keeps the original session's `amr`) |
 
-The policy of the organization being signed in to applies. The console shows
-both switches in the organization edit dialog.
+The policy of the organization being signed in to applies, combined with the
+environment's [sign-in methods](sign-in-methods.md) policy: its `mfa_required`
+and `mfa_for_federated` apply to every organization (either one requiring it
+is enough). The console shows the organization's switches on its overview
+page and the environment's under **Sign-in → Sign-in methods**.
 
 ## Headless login
 

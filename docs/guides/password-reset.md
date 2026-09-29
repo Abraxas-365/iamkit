@@ -28,7 +28,11 @@ return the user to login. Full org/app/resource context is not required for rese
 Reset marks email verified, clears a [password lockout](password-policy.md#lockout),
 restarts password expiry, and password changes invalidate sessions/challenges;
 offline JWT consumers cannot observe revocation instantly. A password that breaks
-the policy answers 400 `PASSWORD_POLICY` with `details.rule`.
+the policy answers 400 `PASSWORD_POLICY` with `details.rule`; members of an
+organization with [password requirements](password-policy.md#organization-requirements)
+must meet those too. When the environment turns reset off
+([sign-in methods](sign-in-methods.md)), both calls answer 403
+`PASSWORD_RESET_DISABLED`.
 
 Codes expire in five minutes, are single-use and allow five failures. Resending
 supersedes the old same-purpose challenge. Never log codes or new passwords.

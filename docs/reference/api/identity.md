@@ -14,6 +14,8 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 | `POST /challenges` | `environment_id`, `email`, `purpose`, optional `locale` (email language, e.g. `es`; used when IAMKit writes the email) | 202 challenge response |
 | `POST /challenges/verify` | `environment_id`, `challenge_id`, `code`, `purpose`; full boundary for login; `password` for reset | Login: 200 pair; reset/verification: 204 |
 | `POST /discover` | `environment_id`, `email` | 200 `{method:"sso"\|"password",organization_id?,connection_id?,required}`; by email domain only; rate limited |
+| `POST /signup` | `environment_id`, `email`, `name`, `password?`, `locale?` | 202 challenge response, the same for existing accounts; 403 `SIGNUP_DISABLED`/`SSO_REQUIRED`; rate limited. See [sign-up](../../guides/signup-and-onboarding.md#self-service-sign-up) |
+| `POST /signup/verify` | `environment_id`, `challenge_id`, `code` | 201 `{user_id,organization_id,email}`; no session; 409 `ACCOUNT_EXISTS`; rate limited |
 | `POST /invitations/preview` | `token` | 200 [invitation preview](#invitations); 401 unknown, used, revoked or expired; rate limited |
 | `POST /invitations/accept` | `token`, `name?`, `password?` | 200 `{user_id,organization_id,email,sso_required,created}`; no session; rate limited |
 | `POST /federation/start` | boundary + `connection_id`; organization connections need their own `organization_id` | 200 `{authorization_url}` + binding cookie |
@@ -31,7 +33,7 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 | `POST /me/factors/recovery-codes` | Bearer user token; `environment_id`, `audience`, `code` | 200 `{recovery_codes}` |
 
 The membership endpoint uses the authenticated user's organization context; it
-is not unrestricted signup. Impersonated tokens cannot update self-service profiles.
+is not a sign-up. Impersonated tokens cannot update self-service profiles.
 Encode query values using `URLSearchParams`/`url.Values`, especially audiences.
 
 Token pair:

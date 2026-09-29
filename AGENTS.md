@@ -138,8 +138,21 @@ and `TemplateCommands`/`TemplateQueries`/`TemplateRepository` (email wording
 overrides per purpose × language, text only — `Copy` with `{{placeholders}}`,
 no HTML) and `PasswordPolicyCommands`/`PasswordPolicyQueries`/`PasswordPolicyRepository`
 (one end-user `PasswordPolicy` per environment, default when none is saved;
-user and invitation modules consume it through their own one-method
-`PasswordPolicy` port, wired in bootstrap). Its `authmail` SMTP/Resend/webhook adapters dial environment providers
+organizations add `PasswordRequirements` that only `Tighten` it — users are
+environment-wide, so `PasswordPolicies.MemberPolicy` applies every active
+membership's; user and invitation modules consume it through their own one-method
+`PasswordPolicy` port, wired in bootstrap) and
+`SignInPolicyCommands`/`SignInPolicyQueries`/`SignInPolicyRepository` (allowed
+methods per environment, narrowed by the organization's `allow_*` columns via
+`Transaction.OrganizationMethods`, checked by `authsvc.Service.allowed` before
+any account lookup → 403 `METHOD_NOT_ALLOWED`; its `mfa_required` is OR-ed into
+`mfapg.Policy`; its `allow_signup` + `signup_organization_id`/`signup_group_id`
+drive `SignupCommands` (`Signup` parks a `signups` row and emails an
+`email_verification` code, 202 whether or not the email has an account;
+`CompleteSignup` creates the verified user, membership and group membership in
+one `SignupTransaction.Join`, audited `user.signup`, no session — hosted
+`Flow.CompleteSignup` then continues through `hostedsvc.result`; per-client
+`client_sign_in.signup` hides the hosted link)). Its `authmail` SMTP/Resend/webhook adapters dial environment providers
 through `netx.GuardedDialer` (webhooks also sign requests per Standard
 Webhooks, `authmail.SignWebhook`); the deployment-wide provider (`EMAIL_PROVIDER`,
 read in `bootstrap/mail.go`) may reach private hosts; tests override both via
@@ -187,7 +200,7 @@ infrastructure concerns that should be swappable:
 | `Mailer` | invitation | Send invitation mail and build links; `invmail` adapts authentication delivery |
 | `Provider` | federation | OIDC provider discovery and credential approval |
 | `Flows` | federation | Browser login flows (`Discover`, `Start`, `StartHosted`, `Callback`, `EnvironmentConnections`), separate from Commands/Queries. `Callback` returns an `Outcome`: a session, or for hosted starts (`Continuation` = OAuth ticket) only the `Verified` identity |
-| `Authenticator` | authentication | Verify a credential without a session (`VerifyPassword`, `VerifyCode` → `Verified`), list accessible `Organizations`, then `Issue` the session once the organization is chosen (re-checks SSO enforcement) |
+| `Authenticator` | authentication | Verify a credential without a session (`VerifyPassword`, `VerifyCode` → `Verified`), list accessible `Organizations` (leaving out those whose methods refuse the `Verified.PolicyMethod()`), then `Issue` the session once the organization is chosen (re-checks SSO enforcement and the method) |
 | `Flow` | hosted | The hosted sign-in journey; consumes the `Authorizations` (pending OAuth ticket), `Challenges`, `Federation`, `Invitations` and `SecondFactor` ports declared in `hosted/ports.go` plus `authentication.Authenticator`. The parked `hosted.Login{Verified, Chosen, Attempts}` carries state between pages; `hostedsvc.step` orders: MFA first for an enrolled user with several organizations (non-SSO logins; a factor applies in all of them) → chooser → MFA/enrollment for the chosen organization → `Issue`. Second-factor tries are reserved atomically (`Repository.Attempt`) before the code is checked |
 | `SecondFactor` | authentication | Login-time MFA (`Requirement`, `Begin`, `Complete`, `Enroll`), implemented by `mfasvc` (`mfa.Logins`). `Login`/`VerifyChallenge` return `authentication.Result{Issued, MFA}`: `SignIn` commits the credential transaction, then either issues the session or parks a pending `ik_mfa_` login. `authhttp.Respond` renders either shape; federation receives it as the injected `Respond` closure |
 | `Logins` | mfa | Everything login flows need from mfa (headless pending logins + hosted `Verify`/`Enrolling` without a pending token) |
@@ -642,7 +655,9 @@ the same 401 and counts nothing. `user.Commands.Unlock` / a reset clears it.
 `PASSWORD_CHANGE_REQUIRED` until it gets `new_password`, whose hash waits on
 `mfa_logins.password_hash` when a second factor follows; hosted parks
 `hosted_logins.password_change` and asks last, after MFA. Email-code logins
-skip expiry.
+skip expiry. Expiry uses the member's effective policy (`Service.memberPolicy`:
+the shortest `max_age_days` of the environment and their organizations);
+existing passwords are never re-checked for composition.
 
 Operator console sessions store their sign-in `method` (`password`/`sso`)
 and `authenticated_at` on `operator_sessions`; `management.Principal`

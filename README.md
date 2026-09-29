@@ -323,6 +323,10 @@ existing password and configured email delivery. Your app supplies the UI.
 New passwords follow the environment's [password policy](docs/guides/password-policy.md)
 (default 12–72 bytes; optional composition rules and breached-password check),
 which can also lock accounts after repeated wrong passwords and expire old ones.
+Organizations can add stricter requirements for their members. The
+[sign-in methods](docs/guides/sign-in-methods.md) policy turns password,
+password reset, email code or social sign-in off per environment or
+organization.
 
 ## Model and capabilities
 
