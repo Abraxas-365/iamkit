@@ -125,6 +125,7 @@ func TestDescribe(t *testing.T) {
 		{ErrDeliveryNotConfigured(), 0, "no webhook configured"},
 		{DeliveryFailure(cause, CodeDeliveryTimeout), 0, "webhook did not respond in time"},
 		{DeliveryFailure(cause, CodeDeliveryUnreachable), 0, "webhook could not be reached"},
+		{DeliveryFailure(cause, CodeWebhookAddress), 0, "webhook address is not allowed"},
 		{ProviderRejected(422), 422, "email provider rejected the request"},
 		{ProviderRejected(0), 0, "email provider rejected the request"},
 		{DeliveryFailure(cause, CodeProviderAuth), 0, "email provider rejected the credentials"},

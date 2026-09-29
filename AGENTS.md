@@ -136,10 +136,13 @@ sealed-secret connections; tests replace it via
 (per-environment email delivery; secrets sealed with `Cipher`, never returned)
 and `TemplateCommands`/`TemplateQueries`/`TemplateRepository` (email wording
 overrides per purpose × language, text only — `Copy` with `{{placeholders}}`,
-no HTML). Its `authmail` SMTP/Resend adapters dial environment providers
-through `netx.GuardedDialer`; the deployment-wide provider (`EMAIL_PROVIDER`,
+no HTML). Its `authmail` SMTP/Resend/webhook adapters dial environment providers
+through `netx.GuardedDialer` (webhooks also sign requests per Standard
+Webhooks, `authmail.SignWebhook`); the deployment-wide provider (`EMAIL_PROVIDER`,
 read in `bootstrap/mail.go`) may reach private hosts; tests override both via
-`bootstrap.WithMail`. Management has
+`bootstrap.WithMail` (`Dial`, `ResendClient`, `WebhookClient`), and the
+development-only `IAMKIT_ALLOW_PRIVATE_DELIVERY` sets `Dial`/`WebhookClient`
+to unguarded ones (warning logged). Management has
 `ControlCommands`/`ControlQueries` and `ActivityCommands`/`ActivityQueries`.
 Method names still use standard verbs (`Create`, `List`, `Find`). When a
 single Queries/Repository interface manages multiple entity types, prefix the

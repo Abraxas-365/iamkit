@@ -17,6 +17,8 @@ result in the target topology; do not infer it from the presence of documentatio
   wrong environment and expired/revoked credential tests deny access.
 - [ ] Refresh replay and concurrent refresh behavior understood by app clients.
 - [ ] Mail/provider/SCIM flows tested for every integration actually enabled.
+- [ ] `IAMKIT_ALLOW_PRIVATE_DELIVERY` unset or `false` (it is development-only;
+  the server logs a warning at startup when it is on).
 - [ ] API tenant filtering and impersonation policy reviewed in business code.
 - [ ] Shared ingress abuse controls, capacity tests and alerts in place.
 - [ ] Upgrade/rollback compatibility and recovery objectives recorded.

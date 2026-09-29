@@ -2,12 +2,14 @@ package bootstrap
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
@@ -31,6 +33,17 @@ func mailFromEnv() (authentication.Delivery, authmodule.Mail, error) {
 	mail := authmodule.Mail{Locale: i18n.Match(raw)} // "es-MX" → "es"
 	if raw != "" && mail.Locale == "" {
 		return nil, mail, errx.Validation("EMAIL_LOCALE must be one of the available languages")
+	}
+	private, err := allowPrivateDelivery()
+	if err != nil {
+		return nil, mail, err
+	}
+	if private {
+		// Development only: environment webhooks and SMTP servers may be on
+		// loopback or a private network (reopens SSRF from delivery settings).
+		mail.Dial = (&net.Dialer{Timeout: config.ExternalHTTPTimeout}).DialContext
+		mail.WebhookClient = http.DefaultTransport
+		slog.Warn("IAMKIT_ALLOW_PRIVATE_DELIVERY is on: environment email webhooks and SMTP servers may reach localhost and private networks. Development only — never enable it in production")
 	}
 	port := 0
 	if v := strings.TrimSpace(os.Getenv("SMTP_PORT")); v != "" {
@@ -61,7 +74,8 @@ func mailFromEnv() (authentication.Delivery, authmodule.Mail, error) {
 		if input.WebhookURL == "" {
 			return nil, mail, nil
 		}
-		webhook := authmail.WebhookDelivery{URL: input.WebhookURL, Token: input.WebhookToken}
+		// The deployment's own webhook may reach private hosts.
+		webhook := authmail.WebhookDelivery{URL: input.WebhookURL, Token: input.WebhookToken, Transport: http.DefaultTransport}
 		if err := webhook.Validate(); err != nil {
 			return nil, mail, err
 		}
@@ -86,6 +100,20 @@ func mailFromEnv() (authentication.Delivery, authmodule.Mail, error) {
 	}
 	mail.Global = sender
 	return nil, mail, nil
+}
+
+// allowPrivateDelivery reads IAMKIT_ALLOW_PRIVATE_DELIVERY (a boolean,
+// default false).
+func allowPrivateDelivery() (bool, error) {
+	v := strings.TrimSpace(os.Getenv("IAMKIT_ALLOW_PRIVATE_DELIVERY"))
+	if v == "" {
+		return false, nil
+	}
+	on, err := strconv.ParseBool(v)
+	if err != nil {
+		return false, errx.Validation("IAMKIT_ALLOW_PRIVATE_DELIVERY must be true or false")
+	}
+	return on, nil
 }
 
 // envNames maps configuration fields to their environment variables.

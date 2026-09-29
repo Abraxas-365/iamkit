@@ -38,14 +38,15 @@ type Deps struct {
 
 // Mail configures rendered email: the deployment default language, the
 // deployment-wide SMTP/Resend sender (replacing Deps.Delivery), and test
-// overrides of how environment SMTP/Resend providers are reached (public
-// addresses only by default).
+// overrides of how environment SMTP/Resend/webhook endpoints are reached
+// (public addresses only by default).
 type Mail struct {
 	Locale         string
 	Global         *Sender
 	Dial           func(ctx context.Context, network, address string) (net.Conn, error)
 	ResendEndpoint string
 	ResendClient   http.RoundTripper
+	WebhookClient  http.RoundTripper
 }
 
 // Sender is a deployment-wide email provider IAMKit renders for.
@@ -103,7 +104,7 @@ func New(deps Deps) Module {
 	deliveryRepo := authpg.NewDeliveryConfigRepository(deps.DB)
 	factory := func(cfg authentication.DeliveryConfig, secret authentication.DeliverySecret) (authentication.Delivery, error) {
 		if cfg.Provider == authentication.ProviderWebhook {
-			return authmail.WebhookDelivery{URL: cfg.WebhookURL, Token: secret.WebhookToken}, nil
+			return authmail.WebhookDelivery{URL: cfg.WebhookURL, Token: secret.WebhookToken, Transport: deps.Mail.WebhookClient}, nil
 		}
 		plain := ""
 		if secret.Sealed != "" {

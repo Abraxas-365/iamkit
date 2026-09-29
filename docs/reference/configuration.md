@@ -13,6 +13,7 @@ containers after changes. Keep secrets outside source control and frontend build
 | `SERVER_PORT` | `8080` | Listening port; image healthcheck assumes 8080 |
 | `OIDC_HMAC_SECRET` | OAuth provider needs at least 32 bytes | Stable secret for OAuth; Compose templates require it explicitly |
 | `EMAIL_*`, `SMTP_*`, `RESEND_API_KEY` | Unset: no global email delivery | Deployment-wide email fallback; see [email](#email) |
+| `IAMKIT_ALLOW_PRIVATE_DELIVERY` | `false` | **Development only.** Lets environment email webhooks and SMTP servers reach localhost and private networks; see [private delivery addresses](#private-delivery-addresses-development-only) |
 | `FEDERATION_CREDENTIAL_BINDINGS` | No approved bindings when unset | JSON array of exact environment/issuer/client/secret-reference approvals |
 | `IAMKIT_PROVIDER_*` | As referenced by a binding | External provider client secret; server-only |
 | `IAMKIT_ENCRYPTION_KEY` | Unset: features storing secrets fail | Base64 of 32 bytes; encrypts stored secrets (organization SSO client secrets, SMTP passwords, Resend API keys). See [encryption key](#encryption-key) |
@@ -32,8 +33,8 @@ startup; an invalid one stops the server naming the variable.
 | Variable | Requirement/default | Behavior |
 | --- | --- | --- |
 | `EMAIL_PROVIDER` | `webhook` | `webhook`, `smtp` or `resend` |
-| `EMAIL_WEBHOOK_URL` | webhook: unset disables global fallback | Trusted HTTPS endpoint; no URL userinfo/fragment |
-| `EMAIL_WEBHOOK_TOKEN` | webhook | Sent as Bearer token |
+| `EMAIL_WEBHOOK_URL` | webhook: unset disables global fallback | Trusted HTTPS endpoint (HTTP on localhost/127.0.0.1); may be private; no URL userinfo/fragment |
+| `EMAIL_WEBHOOK_TOKEN` | webhook | Sent as Bearer token and used to [sign requests](webhooks.md#signature) |
 | `EMAIL_FROM` | smtp, resend: required | Sender address |
 | `EMAIL_FROM_NAME`, `EMAIL_REPLY_TO` | Optional | Sender name, Reply-To address |
 | `SMTP_HOST` | smtp: required | Host name or IP, no scheme or port; may be private |
@@ -46,6 +47,35 @@ startup; an invalid one stops the server naming the variable.
 Per-environment configurations are stored in PostgreSQL and managed through
 `/management/v1/environments/:environment/delivery`. Deleting one restores global
 fallback; unsetting global variables does not remove it.
+
+### Private delivery addresses (development only)
+
+Environment delivery settings are edited by operators, not by whoever runs the
+server, so by default IAMKit connects to an environment's webhook or SMTP server
+only on public addresses: loopback (`localhost`, `127.0.0.1`), private
+(`10.x`, `192.168.x`, …), link-local (including cloud metadata at
+`169.254.169.254`) and other reserved ranges are refused after DNS resolution,
+as `webhook address is not allowed` / `email provider address is not allowed`.
+This stops an operator from using "Send test" to make the server call internal
+services (SSRF). The global `EMAIL_*`/`SMTP_*` settings are not restricted.
+
+To test environment delivery against a receiver on your machine or a local
+Mailpit from the console, set:
+
+```dotenv
+IAMKIT_ALLOW_PRIVATE_DELIVERY=true
+```
+
+Accepted values are those of Go's `strconv.ParseBool` (`true`/`false`, `1`/`0`,
+…); anything else stops startup. When on, the server logs a warning at startup
+and environment webhooks and SMTP servers may reach any address. The Resend API
+endpoint is fixed and unaffected.
+
+> **Never enable it in production or on any deployment where operators are not
+> fully trusted with the server's network access.** It lets anyone who can edit
+> delivery settings send requests from the server to your internal network and
+> cloud metadata endpoint. For local testing without it, point the global
+> `EMAIL_WEBHOOK_URL` (or `SMTP_HOST`) at the local receiver instead.
 
 Provider example (replace values with approved registration data):
 

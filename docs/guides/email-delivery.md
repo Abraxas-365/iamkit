@@ -42,14 +42,16 @@ services:
 These are Compose override fragments; every variable is listed in the
 [configuration reference](../reference/configuration.md#email). Values are checked
 like an environment's configuration, so a typo stops startup with the variable
-named. The deployment's own SMTP server may be on a private network; environment
-SMTP/Resend configurations may not (see [containment](#containment)).
+named. The deployment's own SMTP server or webhook may be on a private network;
+environment SMTP/Resend/webhook configurations may not (see [containment](#containment)).
 
 ### Local development (Mailpit)
 
 To see IAMKit's emails without sending real mail, run a mail catcher such as
 [Mailpit](https://mailpit.axllent.org) and point the **global** provider at it
-(environment configurations refuse private addresses). IAMKit always verifies
+(environment configurations refuse private addresses unless
+[`IAMKIT_ALLOW_PRIVATE_DELIVERY`](#local-development-environment-delivery-settings)
+is set). IAMKit always verifies
 the server certificate and uses plaintext only for `localhost`/loopback hosts,
 so the catcher must be reachable on loopback:
 
@@ -76,7 +78,26 @@ A catcher on another host name (`SMTP_HOST=mailpit`) without a trusted
 certificate fails with `SMTP server rejected the message` (no STARTTLS) or
 `email provider could not be reached` (untrusted certificate).
 
-With a webhook, your handler must authenticate the bearer token, validate the
+### Local development: environment delivery settings
+
+The global provider covers most local testing. To also exercise an
+**environment's** own delivery settings (console → Notifications) against a
+local receiver or Mailpit, start IAMKit with the development-only flag:
+
+```dotenv
+IAMKIT_ALLOW_PRIVATE_DELIVERY=true
+```
+
+Then save, for example, an environment webhook of `http://localhost:9099/mail`
+or SMTP host `127.0.0.1` port `1025`, and use **Send test**. The server logs a
+warning while the flag is on. **Never set it in production**: it lets anyone who
+can edit delivery settings make the server call your internal network (see
+[containment](#containment) and the
+[configuration reference](../reference/configuration.md#private-delivery-addresses-development-only)).
+
+With a webhook, your handler must authenticate the request — the bearer token,
+or better the [signature](../reference/webhooks.md#signature), which also rejects
+replays — validate the
 payload, choose a safe template by purpose and deliver to the specified email.
 Treat codes as secrets: suppress bodies in application, proxy, tracing and error
 logs. Do not send management keys to the delivery service.
@@ -145,7 +166,7 @@ the API is `/management/v1/environments/ENV_UUID/delivery`:
 
   | Provider | Reasons |
   | --- | --- |
-  | webhook | `webhook rejected the request` (with `status`), `webhook did not respond in time`, `webhook could not be reached`, `no webhook configured`, `webhook URL is not allowed` |
+  | webhook | `webhook rejected the request` (with `status`), `webhook did not respond in time`, `webhook could not be reached`, `webhook address is not allowed`, `no webhook configured`, `webhook URL is not allowed` |
   | smtp, resend | `email provider rejected the credentials`, `email provider rejected the request` (Resend, with `status`), `SMTP server rejected the message`, `email provider did not respond in time`, `email provider could not be reached`, `email provider address is not allowed`, `stored credential could not be decrypted` |
   | any | `delivery failed` |
 
@@ -160,9 +181,8 @@ the API is `/management/v1/environments/ENV_UUID/delivery`:
 
 Changes are audited as `delivery.update` and `delivery.delete` (actor and
 environment; never an address or secret) — review them in **Audit events**.
-Scoped `/api/v1` delivery routes also exist (`iam:delivery:read` for `GET`,
-`iam:delivery:write` otherwise) but share the
-[scoped API blockers](../reference/api/scoped-iam.md#deployment-blockers).
+Scoped [`/api/v1` delivery routes](../reference/api/scoped-iam.md) also exist
+(`iam:delivery:read` for `GET`, `iam:delivery:write` otherwise).
 
 Rotating or unsetting the global configuration does not change environment
 overrides. To stop delivery, remove affected overrides **and** disable global
@@ -257,10 +277,15 @@ can be changed too (it saves `display_name`); the CLI has
 ## Containment
 
 Webhook URLs require HTTPS (HTTP only on localhost/127.0.0.1), without userinfo
-or fragment. Environment SMTP hosts and the Resend API are reached only on
-public addresses: private, loopback and link-local addresses are refused when
-connecting (after DNS resolution), reported as `email provider address is not
-allowed`. Restrict outbound network access and who may edit delivery
+or fragment. Environment webhooks, SMTP hosts and the Resend API are reached only
+on public addresses: private, loopback and link-local addresses are refused when
+connecting (after DNS resolution), reported as `webhook address is not allowed`
+or `email provider address is not allowed`. So an environment webhook on
+`localhost` passes validation but is refused at send time; use the global
+`EMAIL_WEBHOOK_URL` for a local receiver, or on a development machine set
+`IAMKIT_ALLOW_PRIVATE_DELIVERY=true` ([local development](#local-development-environment-delivery-settings);
+never in production — it removes this protection). (Before 2026-09-28 environment
+webhooks were not restricted this way.) Restrict outbound network access and who may edit delivery
 configuration. Stored secrets are sensitive database contents: back up the
 encryption key with the database and protect both.
 

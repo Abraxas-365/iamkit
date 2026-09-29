@@ -8,7 +8,7 @@ import (
 )
 
 var mailEnv = []string{"EMAIL_PROVIDER", "EMAIL_WEBHOOK_URL", "EMAIL_WEBHOOK_TOKEN", "EMAIL_FROM", "EMAIL_FROM_NAME", "EMAIL_REPLY_TO", "EMAIL_LOCALE",
-	"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_TLS", "RESEND_API_KEY"}
+	"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_TLS", "RESEND_API_KEY", "IAMKIT_ALLOW_PRIVATE_DELIVERY"}
 
 func setMailEnv(t *testing.T, env map[string]string) {
 	t.Helper()
@@ -84,11 +84,32 @@ func TestMailFromEnvErrors(t *testing.T) {
 		{with("EMAIL_FROM", ""), "EMAIL_FROM"},
 		{with("SMTP_USERNAME", "u"), "SMTP_PASSWORD"},
 		{map[string]string{"EMAIL_PROVIDER": "resend", "EMAIL_FROM": "no-reply@acme.io"}, "RESEND_API_KEY"},
+		{map[string]string{"IAMKIT_ALLOW_PRIVATE_DELIVERY": "maybe"}, "IAMKIT_ALLOW_PRIVATE_DELIVERY"},
 	} {
 		setMailEnv(t, tc.env)
 		_, _, err := mailFromEnv()
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("%v: got %v, want mention of %s", tc.env, err, tc.want)
 		}
+	}
+}
+
+// IAMKIT_ALLOW_PRIVATE_DELIVERY replaces the guarded dialer/transport of
+// environment webhooks and SMTP servers; off (the default) keeps them.
+func TestMailFromEnvAllowPrivate(t *testing.T) {
+	for v, on := range map[string]bool{"": false, "false": false, "0": false, "true": true, "1": true, "TRUE": true} {
+		setMailEnv(t, map[string]string{"IAMKIT_ALLOW_PRIVATE_DELIVERY": v})
+		_, mail, err := mailFromEnv()
+		if err != nil {
+			t.Fatalf("%q: %v", v, err)
+		}
+		if (mail.WebhookClient != nil) != on || (mail.Dial != nil) != on || mail.ResendClient != nil {
+			t.Fatalf("%q: webhook=%v dial=%v resend=%v, want private=%v", v, mail.WebhookClient != nil, mail.Dial != nil, mail.ResendClient != nil, on)
+		}
+	}
+	// Combined with a global provider, both apply.
+	setMailEnv(t, map[string]string{"IAMKIT_ALLOW_PRIVATE_DELIVERY": "true", "EMAIL_PROVIDER": "resend", "EMAIL_FROM": "no-reply@acme.io", "RESEND_API_KEY": "re_1"})
+	if _, mail, err := mailFromEnv(); err != nil || mail.Global == nil || mail.WebhookClient == nil {
+		t.Fatalf("with global: %v %+v", err, mail)
 	}
 }

@@ -9,15 +9,48 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Abraxas-365/iamkit/internal/bootstrap"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authmail"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authmodule"
 	"github.com/gofiber/fiber/v2"
 )
+
+// TestDeliveryWebhookGuarded: without the test transport, an environment
+// webhook on a private or loopback address is refused before any request
+// is sent, with a reason that does not reveal the address.
+func TestDeliveryWebhookGuarded(t *testing.T) {
+	var mu sync.Mutex
+	hit := false
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		hit = true
+		mu.Unlock()
+	}))
+	defer hook.Close()
+	e := newEnv(t)
+	for _, url := range []string{hook.URL + "/mail", strings.Replace(hook.URL, "127.0.0.1", "localhost", 1) + "/mail"} {
+		e.Must("PUT", e.Base+"/delivery", e.Owner, fiber.Map{"webhook_url": url, "webhook_token": "t"}, 204)
+		a := e.Must("POST", e.Base+"/delivery/test", e.Owner, fiber.Map{"email": "ops@example.com"}, 200).JSON
+		if a["delivered"] != false || a["status"] != nil || a["reason"] != "webhook address is not allowed" {
+			t.Fatalf("%s: %v", url, a)
+		}
+	}
+	// A real challenge through the refused webhook is still answered 202.
+	e.Must("POST", "/identity/v1/challenges", "", fiber.Map{"environment_id": e.EnvID, "email": e.AliceEmail, "purpose": "password_reset"}, 202)
+	mu.Lock()
+	defer mu.Unlock()
+	if hit {
+		t.Fatal("guarded webhook reached a loopback receiver")
+	}
+}
 
 // TestDeliveryStatusAndTest covers the effective delivery source, test
 // sends through the global and environment webhooks, recorded activity
 // (last attempt, sticky last failure), audit, permissions and rate limit.
 func TestDeliveryStatusAndTest(t *testing.T) {
-	e := newEnv(t)
+	// Environment webhooks are guarded; this receiver is on loopback.
+	e := newEnv(t, bootstrap.WithMail(authmodule.Mail{WebhookClient: http.DefaultTransport}))
 	status := func() map[string]any { return e.Must("GET", e.Base+"/delivery/status", e.Owner, nil, 200).JSON }
 
 	// No override yet: the harness global sender serves the environment.
@@ -47,12 +80,16 @@ func TestDeliveryStatusAndTest(t *testing.T) {
 
 	// Environment webhook: first rejecting, then accepting.
 	var mu sync.Mutex
-	code, bodies := 503, []string{}
+	code, bodies, signatures := 503, []string{}, []string{}
 	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		mu.Lock()
 		defer mu.Unlock()
 		bodies = append(bodies, string(b))
+		signatures = append(signatures, r.Header.Get("webhook-signature"))
+		if want := authmail.SignWebhook("t", r.Header.Get("webhook-id"), r.Header.Get("webhook-timestamp"), b); r.Header.Get("webhook-signature") != want {
+			signatures[len(signatures)-1] = "bad"
+		}
 		w.WriteHeader(code)
 		w.Write([]byte("internal secret detail"))
 	}))
@@ -68,6 +105,9 @@ func TestDeliveryStatusAndTest(t *testing.T) {
 	var sent authentication.Message
 	if len(bodies) != 1 || json.Unmarshal([]byte(bodies[0]), &sent) != nil || sent.Purpose != "test" || bodies[0] != `{"email":"ops@example.com","purpose":"test"}` {
 		t.Fatalf("webhook body = %v", bodies)
+	}
+	if len(signatures) != 1 || !strings.HasPrefix(signatures[0], "v1,") {
+		t.Fatalf("webhook signature = %v", signatures)
 	}
 	mu.Lock()
 	code = 204

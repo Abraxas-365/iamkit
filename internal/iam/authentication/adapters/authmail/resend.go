@@ -36,9 +36,11 @@ var _ authentication.Mailer = Resend{}
 // because they would hide the destination from the check. The transport is
 // shared by every environment so idle connections are reused, not leaked
 // per send.
-func GuardedResendTransport() http.RoundTripper { return guardedResend() }
+func GuardedResendTransport() http.RoundTripper { return guardedHTTP() }
 
-var guardedResend = sync.OnceValue(func() http.RoundTripper {
+// guardedHTTP is the shared guarded transport for environment Resend and
+// webhook endpoints.
+var guardedHTTP = sync.OnceValue(func() http.RoundTripper {
 	return &http.Transport{
 		DialContext:           netx.GuardedDialer().DialContext,
 		TLSHandshakeTimeout:   config.ExternalHTTPTimeout,

@@ -253,7 +253,7 @@ const (
 	CodeDeliveryTimeout     = "DELIVERY_TIMEOUT"
 	CodeDeliveryUnreachable = "DELIVERY_UNREACHABLE"
 	CodeDeliveryUnavailable = "DELIVERY_NOT_CONFIGURED"
-
+	CodeWebhookAddress      = "DELIVERY_WEBHOOK_ADDRESS"
 	// Email providers (SMTP, Resend).
 	CodeProviderRejected    = "DELIVERY_PROVIDER_REJECTED"
 	CodeProviderAuth        = "DELIVERY_PROVIDER_AUTH"
@@ -304,6 +304,7 @@ var reasons = map[string]string{
 	CodeDeliveryTimeout:     "webhook did not respond in time",
 	CodeDeliveryUnreachable: "webhook could not be reached",
 	CodeDeliveryUnavailable: "no webhook configured",
+	CodeWebhookAddress:      "webhook address is not allowed",
 	CodeProviderRejected:    "email provider rejected the request",
 	CodeProviderAuth:        "email provider rejected the credentials",
 	CodeProviderTimeout:     "email provider did not respond in time",
