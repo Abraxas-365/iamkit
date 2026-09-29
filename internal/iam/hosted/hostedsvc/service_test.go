@@ -38,13 +38,14 @@ func (f fakeAuthorizations) Pending(context.Context, string, string) (oauth.Pend
 type fakeAuthenticator struct {
 	organizations []authentication.Organization
 	issued        []authentication.Context
+	changed       []string
 }
 
 func (f *fakeAuthenticator) VerifyPassword(_ context.Context, _ identity.EnvironmentID, email, password string) (authentication.Verified, error) {
-	if password != "right" {
+	if password != "right" && password != "expired" {
 		return authentication.Verified{}, errx.Unauthorized("invalid credentials")
 	}
-	return authentication.Verified{User: user, Email: email, Method: authentication.MethodPassword}, nil
+	return authentication.Verified{User: user, Email: email, Method: authentication.MethodPassword, PasswordExpired: password == "expired"}, nil
 }
 func (f *fakeAuthenticator) VerifyCode(context.Context, identity.EnvironmentID, identity.ChallengeID, string) (authentication.Verified, error) {
 	return authentication.Verified{User: user, Method: authentication.MethodCode}, nil
@@ -55,6 +56,14 @@ func (f *fakeAuthenticator) Organizations(context.Context, authentication.Target
 func (f *fakeAuthenticator) Issue(_ context.Context, b authentication.Context, v authentication.Verified) (authentication.Issued, error) {
 	f.issued = append(f.issued, b)
 	return authentication.Issued{Context: b, User: v.User, Session: identity.NewSessionID()}, nil
+}
+func (f *fakeAuthenticator) ChangePassword(_ context.Context, _ identity.EnvironmentID, v authentication.Verified, password string) (authentication.Verified, error) {
+	if len(password) < 12 {
+		return v, authentication.PasswordRejected(authentication.RuleLength, 12)
+	}
+	f.changed = append(f.changed, password)
+	v.PasswordExpired = false
+	return v, nil
 }
 
 type fakeRepository struct {
@@ -339,6 +348,38 @@ func TestHostedSecondFactorBeforeChooser(t *testing.T) {
 	out, err = s.Choose(context.Background(), request, orgB)
 	if err != nil || out.Login == nil || len(auth.issued) != 1 {
 		t.Fatalf("choose after mfa: %+v %v", out, err)
+	}
+}
+
+func TestHostedExpiredPasswordAfterSecondFactor(t *testing.T) {
+	second := &fakeSecondFactor{enrolled: true}
+	s, auth, repo := setupMFA(second, orgA)
+	out, err := s.Password(context.Background(), request, "a@example.com", "expired")
+	if err != nil || !out.SecondFactor {
+		t.Fatalf("want second factor before the password change, got %+v %v", out, err)
+	}
+	if _, err = s.ChangePassword(context.Background(), request, "a new password"); err == nil || len(auth.changed) != 0 {
+		t.Fatal("a password change before the second factor must be refused")
+	}
+	if out, err = s.SecondFactor(context.Background(), request, "123456"); err != nil || !out.PasswordChange {
+		t.Fatalf("want password change after the code, got %+v %v", out, err)
+	}
+	if out, err = s.ChangePassword(context.Background(), request, "short"); err == nil || len(auth.issued) != 0 {
+		t.Fatalf("policy failure must keep the step: %+v %v", out, err)
+	}
+	out, err = s.ChangePassword(context.Background(), request, "a new password")
+	if err != nil || out.Login == nil || len(auth.issued) != 1 || len(auth.changed) != 1 || len(repo.saved) != 0 {
+		t.Fatalf("change: %+v %v issued=%d", out, err, len(auth.issued))
+	}
+}
+
+func TestHostedChangePasswordNeedsExpiry(t *testing.T) {
+	s, auth, _, _ := setup(orgA, orgB)
+	if _, err := s.Password(context.Background(), request, "a@example.com", "right"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ChangePassword(context.Background(), request, "a new password"); err == nil || len(auth.changed) != 0 {
+		t.Fatal("no change may happen when the password did not expire")
 	}
 }
 

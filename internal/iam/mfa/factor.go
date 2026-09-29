@@ -75,17 +75,9 @@ func Fresh(authTime int64, now time.Time) error {
 }
 
 // Lockout returns how long the factor locks after failures wrong codes in
-// a row, or 0: every lockThreshold failures lock it for base, doubled per
-// further round, up to max.
+// a row, or 0 (authentication.Lockout, shared with password logins).
 func Lockout(failures, threshold int, base, max time.Duration) time.Duration {
-	if threshold <= 0 || failures < threshold || failures%threshold != 0 {
-		return 0
-	}
-	d := base
-	for round := failures/threshold - 1; round > 0 && d < max; round-- {
-		d *= 2
-	}
-	return min(d, max)
+	return authentication.Lockout(failures, threshold, base, max)
 }
 
 // Summary is what a user or operator may see of a user's factors: never
@@ -151,6 +143,9 @@ type Pending struct {
 	Enroll   bool
 	Attempts int
 	Expires  time.Time
+	// PasswordHash replaces the user's expired password once the second
+	// factor passed; "" keeps it.
+	PasswordHash string
 }
 
 // Verification is a verified second factor: the proof used and, when the

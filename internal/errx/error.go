@@ -25,6 +25,10 @@ type Error struct {
 
 	// Err is the underlying error (not exported in JSON)
 	Err error `json:"-"`
+
+	// Public lets the HTTP layer send Details to the client; they are
+	// dropped otherwise. Set it only for details built from client input.
+	Public bool `json:"-"`
 }
 
 // Error implements the error interface
@@ -142,4 +146,3 @@ func typeToHTTPStatus(t Type) int {
 		return 500
 	}
 }
-

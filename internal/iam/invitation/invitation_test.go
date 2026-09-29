@@ -1,6 +1,7 @@
 package invitation
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestInputValidate(t *testing.T) {
 }
 
 func TestAcceptanceValidate(t *testing.T) {
-	for _, a := range []Acceptance{{Token: "x"}, {Token: TokenPrefix + "a", Password: "short"}} {
+	for _, a := range []Acceptance{{Token: "x"}, {Token: TokenPrefix + "a", Password: strings.Repeat("x", 73)}} {
 		if err := a.Validate(); err == nil {
 			t.Errorf("accepted %+v", a)
 		}

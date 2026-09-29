@@ -22,14 +22,36 @@ type testTransaction struct {
 	user                  identity.UserID
 	sso                   bool
 	committed, rolledBack bool
+	// account state for lockout/expiry tests
+	failures    int
+	lockedUntil *time.Time
+	changed     time.Time
+	newHash     string
+	audited     []string
 }
 
 func (t *testTransaction) SSORequired(context.Context, authentication.Context, string) (bool, error) {
 	return t.sso, nil
 }
 
-func (t *testTransaction) PasswordUser(context.Context, authentication.Context, string) (identity.UserID, string, error) {
-	return t.user, "hash", t.lookup
+func (t *testTransaction) PasswordUser(context.Context, authentication.Context, string) (authentication.PasswordAccount, error) {
+	changed := t.changed
+	if changed.IsZero() {
+		changed = time.Now()
+	}
+	return authentication.PasswordAccount{ID: t.user, Hash: "hash", Failures: t.failures, LockedUntil: t.lockedUntil, Changed: changed}, t.lookup
+}
+func (t *testTransaction) SetLoginFailures(_ context.Context, _ identity.UserID, failures int, until *time.Time) error {
+	t.failures, t.lockedUntil = failures, until
+	return nil
+}
+func (t *testTransaction) SetPassword(_ context.Context, _ identity.EnvironmentID, _ identity.UserID, hash string) error {
+	t.newHash, t.changed, t.failures, t.lockedUntil = hash, time.Now(), 0, nil
+	return nil
+}
+func (t *testTransaction) Audit(_ context.Context, m authentication.Mutation) error {
+	t.audited = append(t.audited, m.Action)
+	return nil
 }
 func (t *testTransaction) Refresh(context.Context, authentication.Context, []byte) (authentication.Session, error) {
 	return authentication.Session{ID: identity.MustParseSessionID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"), User: t.user, Expires: time.Now().Add(time.Hour)}, t.lookup
@@ -98,7 +120,7 @@ func TestLookupFailuresRemainInternal(t *testing.T) {
 			var err error
 			switch op {
 			case "login":
-				_, err = s.Login(context.Background(), testBoundary(), "user@example.com", "password")
+				_, err = s.Login(context.Background(), testBoundary(), "user@example.com", "password", "")
 			case "refresh":
 				_, err = s.Refresh(context.Background(), testBoundary(), "ik_refresh_test")
 			case "challenge":
@@ -140,7 +162,7 @@ func TestIssuedBoundaryIsCanonical(t *testing.T) {
 		var err error
 		if op == "login" {
 			var result authentication.Result
-			result, err = s.Login(context.Background(), b, "user@example.com", "password")
+			result, err = s.Login(context.Background(), b, "user@example.com", "password", "")
 			out = result.Issued
 		} else {
 			out, err = s.Refresh(context.Background(), b, "ik_refresh_test")
@@ -162,7 +184,7 @@ func TestEnforcedSSOBlocksPasswordLogin(t *testing.T) {
 		{sso: true, lookup: errx.Unauthorized("no such user")},
 	} {
 		s := New(testRepository{tx}, testPasswords{mismatch: true}, testSecrets{}, nil)
-		_, err := s.Login(context.Background(), testBoundary(), "user@example.com", "password")
+		_, err := s.Login(context.Background(), testBoundary(), "user@example.com", "password", "")
 		var e *errx.Error
 		if !errx.As(err, &e) || e.HTTPStatus != 403 || e.Code != "SSO_REQUIRED" {
 			t.Fatalf("want SSO_REQUIRED, got %v", err)

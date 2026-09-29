@@ -19,6 +19,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/application/adapters/apphttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/appmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhibp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
@@ -68,6 +69,14 @@ type options struct {
 	transport http.RoundTripper
 	mail      authmodule.Mail
 	sso       *OperatorSSO
+	breaches  authentication.Breaches
+	noBreach  bool
+}
+
+// WithBreaches replaces the Have I Been Pwned breach check (nil disables
+// it), so tests never reach the internet.
+func WithBreaches(b authentication.Breaches) Option {
+	return func(o *options) { o.breaches, o.noBreach = b, b == nil }
 }
 
 // WithResolver replaces the system DNS resolver used for domain verification.
@@ -92,30 +101,34 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	if o.sealer == nil {
 		o.sealer = &cryptox.Sealer{}
 	}
+	if o.breaches == nil && !o.noBreach {
+		o.breaches = authhibp.Breaches{}
+	}
 	managementDeps := mgmtmodule.Deps{DB: db}
 	if o.sso != nil {
 		managementDeps.SSO = &mgmtmodule.SSO{Settings: o.sso.Settings, Provider: newOperatorIdP(issuer, *o.sso)}
 	}
 	managementModule := mgmtmodule.New(managementDeps)
 	s := &server.Server{Control: managementModule.HTTP, OperatorSSO: managementModule.SSOHTTP, Health: db.PingContext}
-	userModule := usermodule.New(usermodule.Deps{DB: db, ActorID: server.OperatorID})
-	s.Users = userModule.HTTP
 	// Built before authentication (its second factor); tokens are bound late.
 	mfaModule := mfamodule.New(mfamodule.Deps{DB: db, Cipher: o.sealer, ActorID: server.OperatorID, Validate: func(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
 		return s.Tokens.Validate(c, environment, audience)
 	}})
 	s.Factors = mfaModule.HTTP
-	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor, Cipher: o.sealer, Mail: o.mail})
+	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Key: key, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor, Cipher: o.sealer, Breaches: o.breaches, ActorID: server.OperatorID, Mail: o.mail})
 	s.Tokens = authenticationModule.Tokens
 	s.Auth = authenticationModule.HTTP
+	s.PasswordPolicy = authenticationModule.PasswordPoliciesHTTP
 	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, server.OperatorID).
 		Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService)
+	userModule := usermodule.New(usermodule.Deps{DB: db, ActorID: server.OperatorID, PasswordPolicy: authenticationModule.PasswordPolicies})
+	s.Users = userModule.HTTP
 	organizationModule := orgmodule.New(orgmodule.Deps{DB: db, ActorID: server.OperatorID, Resolver: o.resolver})
 	s.Structure = organizationModule.Structure
 	s.Groups = organizationModule.Groups
 	s.Domains = organizationModule.Domains
 	s.Organizations = organizationModule.HTTP
-	invitationModule := invmodule.New(invmodule.Deps{DB: db, Delivery: authenticationModule.DeliveryService, ActorID: server.OperatorID})
+	invitationModule := invmodule.New(invmodule.Deps{DB: db, Delivery: authenticationModule.DeliveryService, ActorID: server.OperatorID, PasswordPolicy: authenticationModule.PasswordPolicies})
 	s.Invitations = invitationModule.HTTP
 	authorizationModule := authzmodule.New(authzmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Grants = authorizationModule.Grants

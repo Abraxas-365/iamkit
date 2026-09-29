@@ -32,6 +32,10 @@ type Deps struct {
 	IssueSession func(*fiber.Ctx, authentication.Issued) error
 	SecondFactor authentication.SecondFactor // nil disables MFA
 	Cipher       authentication.Cipher       // seals delivery secrets; nil refuses to store them
+	ActorID      func(*fiber.Ctx) string     // operator of management routes
+	// Breaches checks new passwords against known breaches when a policy
+	// asks; nil skips the check.
+	Breaches authentication.Breaches
 	// Mail configures how emails IAMKit renders are written and sent.
 	Mail Mail
 }
@@ -64,6 +68,10 @@ type Module struct {
 	HTTP            *authhttp.Handler
 	Sessions        federation.Sessions
 	DeliveryService *authsvc.DeliveryService
+	// PasswordPolicies is the environment password policy; its Queries
+	// include the check other modules run on new passwords.
+	PasswordPolicies     authentication.PasswordPolicyQueries
+	PasswordPoliciesHTTP *authhttp.PasswordPolicyHandler
 	// Brand sets where rendered emails read the environment's brand, once
 	// the module owning it is built.
 	Brand func(authentication.Branding)
@@ -101,6 +109,8 @@ func New(deps Deps) Module {
 	if deps.SecondFactor != nil {
 		service.SetSecondFactor(deps.SecondFactor)
 	}
+	policies := authsvc.NewPasswordPolicies(authpg.NewPasswordPolicyRepository(deps.DB), deps.Breaches)
+	service.SetPasswordPolicies(policies)
 	deliveryRepo := authpg.NewDeliveryConfigRepository(deps.DB)
 	factory := func(cfg authentication.DeliveryConfig, secret authentication.DeliverySecret) (authentication.Delivery, error) {
 		if cfg.Provider == authentication.ProviderWebhook {
@@ -137,6 +147,7 @@ func New(deps Deps) Module {
 	return Module{
 		Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens),
 		HTTP: authhttp.New(service, service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc,
+		PasswordPolicies: policies, PasswordPoliciesHTTP: authhttp.NewPasswordPolicyHandler(policies, policies, deps.ActorID),
 		Brand: func(b authentication.Branding) { branding.b.Store(&b) },
 	}
 }

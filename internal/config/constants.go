@@ -10,6 +10,17 @@ const (
 	PasswordMaxLength = 72
 )
 
+// Password lockout (per environment password policy): the default first
+// lock when an environment turns lockout on, and the longest one.
+const (
+	PasswordLockout    = 15 * time.Minute
+	PasswordLockoutMax = 24 * time.Hour
+)
+
+// BreachCheckTimeout bounds a breached-password lookup; a slower answer
+// lets the password through.
+const BreachCheckTimeout = 3 * time.Second
+
 // BcryptCost is the work-factor passed to bcrypt.GenerateFromPassword.
 const BcryptCost = 12
 

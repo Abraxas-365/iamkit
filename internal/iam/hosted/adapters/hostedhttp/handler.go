@@ -28,7 +28,7 @@ var files embed.FS
 
 var pages = func() map[string]*template.Template {
 	out := map[string]*template.Template{}
-	for _, name := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "invite", "message"} {
+	for _, name := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message"} {
 		t := template.Must(template.ParseFS(files, "templates/*.html"))
 		template.Must(t.New("content").Parse(`{{template "` + name + `/content" .}}`))
 		out[name] = t
@@ -96,6 +96,7 @@ func (h *Handler) Pages() map[string]fiber.Handler {
 		"POST /hosted/login/organization": h.organization,
 		"POST /hosted/login/mfa":          h.secondFactor,
 		"POST /hosted/login/mfa/continue": h.continueLogin,
+		"POST /hosted/login/password/new": h.changePassword,
 		"GET /hosted/invite":              h.invite,
 		"POST /hosted/invite":             h.accept,
 	}
@@ -182,6 +183,7 @@ var (
 		"SIGN_IN_METHOD_UNAVAILABLE": "hosted.error.method_unavailable",
 		"INVALID_CODE":               "hosted.error.mfa_code",
 		"MFA_LOCKED":                 "hosted.error.too_many",
+		"PASSWORD_CHANGE_REQUIRED":   "hosted.subtitle.password_expired",
 		"TOO_MANY_REQUESTS":          "hosted.error.too_many",
 		"ACCOUNT_EXISTS":             "hosted.error.account_exists",
 	}
@@ -207,6 +209,9 @@ var (
 func failed(c *fiber.Ctx, lang string, err error) (int, string) {
 	var e *errx.Error
 	if errx.As(err, &e) && e.HTTPStatus >= 400 && e.HTTPStatus < 500 {
+		if e.Code == authentication.CodePasswordPolicy {
+			return e.HTTPStatus, passwordProblem(lang, e)
+		}
 		if key, ok := problemCodes[e.Code]; ok {
 			return e.HTTPStatus, i18n.T(lang, key)
 		}
@@ -221,6 +226,16 @@ func failed(c *fiber.Ctx, lang string, err error) (int, string) {
 	}
 	slog.Error("hosted login", "path", c.Path(), "err", err)
 	return fiber.StatusInternalServerError, i18n.T(lang, "hosted.error.generic")
+}
+
+// passwordProblem says which password rule a new password broke.
+func passwordProblem(lang string, e *errx.Error) string {
+	rule, _ := e.Details["rule"].(string)
+	if rule == authentication.RuleLength {
+		minimum, _ := e.Details["min_length"].(int)
+		return i18n.T(lang, "hosted.error.password_between", minimum, config.PasswordMaxLength)
+	}
+	return i18n.T(lang, "hosted.error.password_"+rule)
 }
 
 func (h *Handler) request(c *fiber.Ctx) hosted.Request {
@@ -454,6 +469,20 @@ func (h *Handler) continueLogin(c *fiber.Ctx) error {
 	return h.result(c, v, result)
 }
 
+func (h *Handler) changePassword(c *fiber.Ctx) error {
+	r := h.request(c)
+	v, ok, err := h.base(c, r)
+	if !ok {
+		return err
+	}
+	result, err := h.flow.ChangePassword(c.Context(), r, c.FormValue("password"))
+	if err != nil {
+		v.Title, v.Subtitle = v.T("hosted.title.password_expired"), v.T("hosted.subtitle.password_expired")
+		return h.retry(c, v, "expired", err)
+	}
+	return h.result(c, v, result)
+}
+
 // result shows the next step or finishes the authorization.
 func (h *Handler) result(c *fiber.Ctx, v view, result hosted.Result) error {
 	switch {
@@ -467,6 +496,9 @@ func (h *Handler) result(c *fiber.Ctx, v view, result hosted.Result) error {
 	case len(result.RecoveryCodes) > 0:
 		v.Title, v.Subtitle, v.RecoveryCodes = v.T("hosted.title.recovery"), v.T("hosted.subtitle.recovery"), result.RecoveryCodes
 		return render(c, fiber.StatusOK, "recovery", v)
+	case result.PasswordChange:
+		v.Title, v.Subtitle = v.T("hosted.title.password_expired"), v.T("hosted.subtitle.password_expired")
+		return render(c, fiber.StatusOK, "expired", v)
 	}
 	v.Title, v.Subtitle, v.Organizations = v.T("hosted.title.organization"), v.T("hosted.subtitle.organization"), result.Organizations
 	return render(c, fiber.StatusOK, "organization", v)

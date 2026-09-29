@@ -36,6 +36,7 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	users.Patch("/:id", s.APIHandlers.Users.Update)
 	users.Delete("/:id", s.APIHandlers.Users.Suspend)
 	users.Delete("/:id/permanent", s.APIHandlers.Users.Delete)
+	users.Post("/:id/unlock", s.APIHandlers.Users.Unlock)
 	if s.APIHandlers.Factors != nil {
 		users.Get("/:id/factors", s.APIHandlers.Factors.Factors)
 		users.Delete("/:id/factors", s.APIHandlers.Factors.Reset)

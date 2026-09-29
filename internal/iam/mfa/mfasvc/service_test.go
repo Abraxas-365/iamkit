@@ -292,7 +292,7 @@ func TestPendingLoginAttemptsAndSingleUse(t *testing.T) {
 	secret, _ := enroll(t, s, now)
 	ctx := context.Background()
 	boundary := authentication.Context{EnvironmentID: env}
-	token, err := s.Begin(ctx, boundary, user, []string{"pwd"}, false)
+	token, err := s.Begin(ctx, boundary, user, []string{"pwd"}, false, "")
 	if err != nil || len(token) < 20 || token[:7] != "ik_mfa_" {
 		t.Fatalf("begin = %q %v", token, err)
 	}
@@ -312,7 +312,7 @@ func TestPendingLoginAttemptsAndSingleUse(t *testing.T) {
 		t.Fatal("exhausted pending login kept")
 	}
 
-	token, _ = s.Begin(ctx, boundary, user, []string{"pwd"}, false)
+	token, _ = s.Begin(ctx, boundary, user, []string{"pwd"}, false, "")
 	done, err := s.Complete(ctx, token, code(t, secret, *now), nil)
 	if err != nil || done.User != user || len(done.AMR) != 3 || done.AMR[0] != "pwd" || done.AMR[2] != "mfa" {
 		t.Fatalf("complete = %+v %v", done, err)
@@ -327,7 +327,7 @@ func TestPendingLoginAttemptsAndSingleUse(t *testing.T) {
 func TestCompleteRollsBackWhenIssueFails(t *testing.T) {
 	s, repo, now := setup(t)
 	ctx := context.Background()
-	token, _ := s.Begin(ctx, authentication.Context{EnvironmentID: env}, user, []string{"pwd"}, true)
+	token, _ := s.Begin(ctx, authentication.Context{EnvironmentID: env}, user, []string{"pwd"}, true, "")
 	e, err := s.Enroll(ctx, token)
 	if err != nil {
 		t.Fatal(err)
@@ -355,7 +355,7 @@ func TestLockoutSpansLogins(t *testing.T) {
 	boundary := authentication.Context{EnvironmentID: env}
 	for i := 0; i < config.MFAFailures-1; i++ {
 		if i%2 == 0 {
-			token, _ := s.Begin(ctx, boundary, user, []string{"pwd"}, false)
+			token, _ := s.Begin(ctx, boundary, user, []string{"pwd"}, false, "")
 			if _, err := s.Complete(ctx, token, "000000", nil); status(err) != 401 {
 				t.Fatalf("wrong %d = %v", i, err)
 			}
@@ -376,7 +376,7 @@ func TestLockoutSpansLogins(t *testing.T) {
 	if _, err := s.Verify(ctx, env, user, code(t, secret, *now), false); status(err) != 429 {
 		t.Fatalf("locked verify = %v", err)
 	}
-	token, _ := s.Begin(ctx, boundary, user, []string{"pwd"}, false)
+	token, _ := s.Begin(ctx, boundary, user, []string{"pwd"}, false, "")
 	if _, err := s.Complete(ctx, token, code(t, secret, *now), nil); status(err) != 429 {
 		t.Fatalf("locked complete = %v", err)
 	}
@@ -401,7 +401,7 @@ func TestLockoutDuration(t *testing.T) {
 func TestEnrollRefusesExhaustedLogin(t *testing.T) {
 	s, _, _ := setup(t)
 	ctx := context.Background()
-	token, _ := s.Begin(ctx, authentication.Context{EnvironmentID: env}, user, []string{"pwd"}, true)
+	token, _ := s.Begin(ctx, authentication.Context{EnvironmentID: env}, user, []string{"pwd"}, true, "")
 	if _, err := s.Enroll(ctx, token); err != nil {
 		t.Fatal(err)
 	}
@@ -417,11 +417,11 @@ func TestPendingEnrollment(t *testing.T) {
 	s, _, now := setup(t)
 	ctx := context.Background()
 	boundary := authentication.Context{EnvironmentID: env}
-	plainLogin, _ := s.Begin(ctx, boundary, user, []string{"pwd"}, false)
+	plainLogin, _ := s.Begin(ctx, boundary, user, []string{"pwd"}, false, "")
 	if _, err := s.Enroll(ctx, plainLogin); status(err) != 422 {
 		t.Fatalf("enroll on a non-enrolling login = %v", err)
 	}
-	token, _ := s.Begin(ctx, boundary, user, []string{"email"}, true)
+	token, _ := s.Begin(ctx, boundary, user, []string{"email"}, true, "")
 	e, err := s.Enroll(ctx, token)
 	if err != nil || e.Secret == "" {
 		t.Fatalf("enroll = %+v %v", e, err)

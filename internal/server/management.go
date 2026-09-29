@@ -31,4 +31,7 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	if s.Delivery != nil {
 		s.Delivery.Register(e)
 	}
+	if s.PasswordPolicy != nil {
+		s.PasswordPolicy.Register(e)
+	}
 }

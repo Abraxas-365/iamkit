@@ -71,6 +71,7 @@ type Server struct {
 	Hosted              *hostedhttp.Handler
 	Users               *userhttp.Handler
 	Delivery            *authhttp.DeliveryHandler
+	PasswordPolicy      *authhttp.PasswordPolicyHandler
 
 	// API routes (/api/v1/*) — JWT-based, permission-scoped.
 	API         *apiauth.Middleware

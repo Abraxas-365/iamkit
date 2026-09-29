@@ -14,6 +14,8 @@ import (
 type Deps struct {
 	DB      *sqlx.DB
 	ActorID func(*fiber.Ctx) string
+	// PasswordPolicy checks new passwords; nil checks only the length.
+	PasswordPolicy user.PasswordPolicy
 }
 type Module struct {
 	Commands user.Commands
@@ -23,5 +25,8 @@ type Module struct {
 
 func New(deps Deps) Module {
 	service := usersvc.New(userpg.New(deps.DB), authbcrypt.Hasher{})
+	if deps.PasswordPolicy != nil {
+		service.SetPasswordPolicy(deps.PasswordPolicy)
+	}
 	return Module{Commands: service, Queries: service, HTTP: userhttp.New(service, service, deps.ActorID)}
 }

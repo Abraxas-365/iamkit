@@ -56,12 +56,12 @@ func (s *Service) Requirement(ctx context.Context, boundary authentication.Conte
 	return policy.Requirement(federated), nil
 }
 
-func (s *Service) Begin(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string, enroll bool) (string, error) {
+func (s *Service) Begin(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string, enroll bool, passwordHash string) (string, error) {
 	raw, hash, err := s.secrets.Generate("ik_mfa_")
 	if err != nil {
 		return "", err
 	}
-	err = s.repository.SavePending(ctx, hash, mfa.Pending{Boundary: boundary, User: user, AMR: amr, Enroll: enroll, Expires: s.now().Add(config.MFALoginTTL)})
+	err = s.repository.SavePending(ctx, hash, mfa.Pending{Boundary: boundary, User: user, AMR: amr, Enroll: enroll, Expires: s.now().Add(config.MFALoginTTL), PasswordHash: passwordHash})
 	return raw, err
 }
 
@@ -140,7 +140,7 @@ func (s *Service) Complete(ctx context.Context, token, code string, issue func(d
 	if err = tx.DeletePending(ctx, hash); err != nil {
 		return authentication.Completed{}, err
 	}
-	done := authentication.Completed{Boundary: p.Boundary, User: p.User, AMR: append(append([]string{}, p.AMR...), mfa.AMR(v.Proof)...), RecoveryCodes: v.RecoveryCodes}
+	done := authentication.Completed{Boundary: p.Boundary, User: p.User, AMR: append(append([]string{}, p.AMR...), mfa.AMR(v.Proof)...), RecoveryCodes: v.RecoveryCodes, PasswordHash: p.PasswordHash}
 	if issue != nil {
 		// issue commits its own session transaction while this one (and a
 		// pooled connection) stays open. Should the commit below then fail,

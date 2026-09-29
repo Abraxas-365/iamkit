@@ -85,7 +85,7 @@
 <label for="code">{{.T "hosted.form.code"}}</label>
 <input id="code" type="text" name="code" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="one-time-code" required autofocus>
 <label for="password">{{.T "hosted.form.new_password"}}</label>
-<input id="password" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" required>
+<input id="password" type="password" name="password" minlength="8" maxlength="72" autocomplete="new-password" required>
 <button type="submit">{{.T "hosted.form.set_password"}}</button>
 </form>
 <form method="get" action="/hosted/login">
@@ -142,6 +142,19 @@
 </form>
 {{end}}
 
+{{define "expired/content"}}
+<form method="post" action="/hosted/login/password/new">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<label for="password">{{.T "hosted.form.new_password"}}</label>
+<input id="password" type="password" name="password" minlength="8" maxlength="72" autocomplete="new-password" required autofocus>
+<button type="submit">{{.T "hosted.form.set_password"}}</button>
+</form>
+<form method="get" action="/hosted/login">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<button type="submit" class="link">{{.T "hosted.form.start_over"}}</button>
+</form>
+{{end}}
+
 {{define "invite/content"}}
 {{if .Invite}}
 <form method="post" action="/hosted/invite">
@@ -151,7 +164,7 @@
 <input id="name" type="text" name="name" maxlength="200" autocomplete="name" autofocus>
 {{if .Invite.PasswordRequired}}
 <label for="password">{{.T "hosted.form.password"}}</label>
-<input id="password" type="password" name="password" minlength="12" maxlength="72" autocomplete="new-password" required>
+<input id="password" type="password" name="password" minlength="8" maxlength="72" autocomplete="new-password" required>
 {{end}}
 <button type="submit">{{.T "hosted.form.accept"}}</button>
 </form>

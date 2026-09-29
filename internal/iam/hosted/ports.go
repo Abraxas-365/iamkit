@@ -63,6 +63,8 @@ type Flow interface {
 	Enrollment(ctx context.Context, r Request) (authentication.Enrollment, error)
 	// Continue finishes after the recovery codes were shown.
 	Continue(ctx context.Context, r Request) (Result, error)
+	// ChangePassword replaces the parked login's expired password.
+	ChangePassword(ctx context.Context, r Request, password string) (Result, error)
 }
 
 // SecondFactor is the part of the mfa module the hosted pages use.

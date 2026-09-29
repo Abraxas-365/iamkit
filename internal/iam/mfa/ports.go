@@ -15,8 +15,8 @@ type Logins interface {
 	// needs a second factor.
 	Requirement(ctx context.Context, boundary authentication.Context, user identity.UserID, federated bool) (authentication.Requirement, error)
 	// Begin parks a headless login until its second factor and returns the
-	// ik_mfa_ token.
-	Begin(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string, enroll bool) (string, error)
+	// ik_mfa_ token; passwordHash replaces an expired password once it passes.
+	Begin(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string, enroll bool, passwordHash string) (string, error)
 	// Complete verifies a code (TOTP or recovery) for a pending login and
 	// consumes it. The first TOTP code of an enrolling login confirms the
 	// factor and returns recovery codes. issue (the session) runs before the

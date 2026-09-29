@@ -153,8 +153,10 @@ func (a *Acceptance) Validate() error {
 	if len(a.Name) > 200 {
 		return errx.Validation("name must be at most 200 characters")
 	}
-	if a.Password != "" && (len(a.Password) < config.PasswordMinLength || len(a.Password) > config.PasswordMaxLength) {
-		return errx.Validation("password must be 12-72 characters long")
+	// The environment's password policy sets the minimum (service); 72
+	// bytes is bcrypt's limit.
+	if len(a.Password) > config.PasswordMaxLength {
+		return errx.Validation("password must be at most 72 characters long")
 	}
 	return nil
 }

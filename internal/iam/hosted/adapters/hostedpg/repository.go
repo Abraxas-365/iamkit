@@ -32,31 +32,32 @@ func (r *Repository) SaveLogin(ctx context.Context, hash []byte, environment ide
 	v := l.Verified
 	// Re-saving the same user's login (a step, or the first factor again on
 	// this ticket) never lowers the second-factor attempts already spent.
-	_, err := r.db.ExecContext(ctx, `INSERT INTO hosted_logins(ticket_hash,environment_id,user_id,email,method,organization_id,expires_at,amr,chosen_organization_id,mfa_attempts) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-		ON CONFLICT (ticket_hash) DO UPDATE SET environment_id=EXCLUDED.environment_id, user_id=EXCLUDED.user_id, email=EXCLUDED.email, method=EXCLUDED.method, organization_id=EXCLUDED.organization_id, expires_at=EXCLUDED.expires_at, amr=EXCLUDED.amr, chosen_organization_id=EXCLUDED.chosen_organization_id,
+	_, err := r.db.ExecContext(ctx, `INSERT INTO hosted_logins(ticket_hash,environment_id,user_id,email,method,organization_id,expires_at,amr,chosen_organization_id,mfa_attempts,password_change) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		ON CONFLICT (ticket_hash) DO UPDATE SET environment_id=EXCLUDED.environment_id, user_id=EXCLUDED.user_id, email=EXCLUDED.email, method=EXCLUDED.method, organization_id=EXCLUDED.organization_id, expires_at=EXCLUDED.expires_at, amr=EXCLUDED.amr, chosen_organization_id=EXCLUDED.chosen_organization_id, password_change=EXCLUDED.password_change,
 		mfa_attempts=CASE WHEN hosted_logins.user_id=EXCLUDED.user_id THEN GREATEST(hosted_logins.mfa_attempts,EXCLUDED.mfa_attempts) ELSE EXCLUDED.mfa_attempts END`,
-		hash, environment, v.User, v.Email, v.Method, v.Organization, expires, pq.StringArray(append([]string{}, v.AMR...)), l.Chosen, l.Attempts)
+		hash, environment, v.User, v.Email, v.Method, v.Organization, expires, pq.StringArray(append([]string{}, v.AMR...)), l.Chosen, l.Attempts, v.PasswordExpired)
 	return failure(err)
 }
 
 func (r *Repository) Login(ctx context.Context, hash []byte, environment identity.EnvironmentID) (hosted.Login, error) {
 	var row struct {
-		User         identity.UserID         `db:"user_id"`
-		Email        string                  `db:"email"`
-		Method       string                  `db:"method"`
-		Organization identity.OrganizationID `db:"organization_id"`
-		AMR          pq.StringArray          `db:"amr"`
-		Chosen       identity.OrganizationID `db:"chosen_organization_id"`
-		Attempts     int                     `db:"mfa_attempts"`
+		User           identity.UserID         `db:"user_id"`
+		Email          string                  `db:"email"`
+		Method         string                  `db:"method"`
+		Organization   identity.OrganizationID `db:"organization_id"`
+		AMR            pq.StringArray          `db:"amr"`
+		Chosen         identity.OrganizationID `db:"chosen_organization_id"`
+		Attempts       int                     `db:"mfa_attempts"`
+		PasswordChange bool                    `db:"password_change"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT user_id,email,method,organization_id,amr,chosen_organization_id,mfa_attempts FROM hosted_logins WHERE ticket_hash=$1 AND environment_id=$2 AND expires_at>now()`, hash, environment)
+	err := r.db.GetContext(ctx, &row, `SELECT user_id,email,method,organization_id,amr,chosen_organization_id,mfa_attempts,password_change FROM hosted_logins WHERE ticket_hash=$1 AND environment_id=$2 AND expires_at>now()`, hash, environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		return hosted.Login{}, hosted.ErrLoginExpired()
 	}
 	if err != nil {
 		return hosted.Login{}, failure(err)
 	}
-	return hosted.Login{Verified: authentication.Verified{User: row.User, Email: row.Email, Method: row.Method, Organization: row.Organization, AMR: []string(row.AMR)}, Chosen: row.Chosen, Attempts: row.Attempts}, nil
+	return hosted.Login{Verified: authentication.Verified{User: row.User, Email: row.Email, Method: row.Method, Organization: row.Organization, AMR: []string(row.AMR), PasswordExpired: row.PasswordChange}, Chosen: row.Chosen, Attempts: row.Attempts}, nil
 }
 
 func (r *Repository) Attempt(ctx context.Context, hash []byte, limit int) (bool, error) {

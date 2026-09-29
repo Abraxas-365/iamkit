@@ -56,7 +56,9 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	// Never serialize causes or internal details, including wrapped database errors.
 	public := *custom
 	public.Err = nil
-	public.Details = nil
+	if !custom.Public || custom.HTTPStatus >= 500 {
+		public.Details = nil
+	}
 	if public.HTTPStatus >= 500 {
 		public.Message = http.StatusText(public.HTTPStatus)
 	}

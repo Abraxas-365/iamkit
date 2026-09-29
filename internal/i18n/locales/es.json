@@ -56,6 +56,8 @@
   "hosted.subtitle.enroll": "Tu organización requiere una app de autenticación. Escanea el código y luego ingresa el código de 6 dígitos que muestra.",
   "hosted.title.recovery": "Guarda tus códigos de recuperación",
   "hosted.subtitle.recovery": "Cada código te permite iniciar sesión una vez si pierdes tu autenticador. No se volverán a mostrar.",
+  "hosted.title.password_expired": "Elige una nueva contraseña",
+  "hosted.subtitle.password_expired": "Tu contraseña expiró. Elige una nueva para continuar.",
   "hosted.title.expired": "Inicio de sesión vencido",
   "hosted.expired": "Este enlace de inicio de sesión venció. Vuelve a la aplicación e inténtalo de nuevo.",
 
@@ -110,6 +112,13 @@
   "hosted.error.account_exists": "Ya existe una cuenta con este correo. Inicia sesión con ella.",
   "hosted.error.login_expired": "Tu inicio de sesión tardó demasiado. Inicia sesión de nuevo.",
   "hosted.error.password_length": "La contraseña debe tener entre 12 y 72 caracteres.",
+  "hosted.error.password_between": "La contraseña debe tener entre %d y %d caracteres.",
+  "hosted.error.password_upper": "Incluye una letra mayúscula.",
+  "hosted.error.password_lower": "Incluye una letra minúscula.",
+  "hosted.error.password_digit": "Incluye un dígito.",
+  "hosted.error.password_symbol": "Incluye un símbolo.",
+  "hosted.error.password_breached": "Esta contraseña aparece en una filtración de datos conocida. Elige otra.",
+  "hosted.error.password_reused": "Elige una contraseña distinta de la actual.",
   "hosted.error.password_required": "Ingresa una contraseña.",
   "hosted.error.email": "Ingresa un correo electrónico válido.",
   "hosted.error.provider_email": "Tu proveedor de identidad no compartió un correo verificado."

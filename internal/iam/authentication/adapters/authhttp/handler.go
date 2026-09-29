@@ -34,11 +34,13 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		authentication.Context
 		Email    string `json:"email"`
 		Password string `json:"password"`
+		// NewPassword replaces an expired password (PASSWORD_CHANGE_REQUIRED).
+		NewPassword string `json:"new_password"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Login(c.Context(), input.Context, input.Email, input.Password)
+	out, err := h.commands.Login(c.Context(), input.Context, input.Email, input.Password, input.NewPassword)
 	if err != nil {
 		return err
 	}

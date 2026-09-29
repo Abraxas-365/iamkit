@@ -56,6 +56,8 @@
   "hosted.subtitle.enroll": "Your organization requires an authenticator app. Scan the code, then enter the 6-digit code it shows.",
   "hosted.title.recovery": "Save your recovery codes",
   "hosted.subtitle.recovery": "Each code signs you in once if you lose your authenticator. They will not be shown again.",
+  "hosted.title.password_expired": "Choose a new password",
+  "hosted.subtitle.password_expired": "Your password has expired. Choose a new one to continue.",
   "hosted.title.expired": "Sign-in expired",
   "hosted.expired": "This sign-in link has expired. Go back to the application and try again.",
 
@@ -110,6 +112,13 @@
   "hosted.error.account_exists": "An account with this email already exists. Sign in with it.",
   "hosted.error.login_expired": "Your sign-in took too long. Sign in again.",
   "hosted.error.password_length": "The password must be 12 to 72 characters long.",
+  "hosted.error.password_between": "The password must be %d to %d characters long.",
+  "hosted.error.password_upper": "Include an uppercase letter.",
+  "hosted.error.password_lower": "Include a lowercase letter.",
+  "hosted.error.password_digit": "Include a digit.",
+  "hosted.error.password_symbol": "Include a symbol.",
+  "hosted.error.password_breached": "This password appears in a known data breach. Choose another.",
+  "hosted.error.password_reused": "Choose a password different from your current one.",
   "hosted.error.password_required": "Enter a password.",
   "hosted.error.email": "Enter a valid email address.",
   "hosted.error.provider_email": "Your identity provider did not share a verified email address."

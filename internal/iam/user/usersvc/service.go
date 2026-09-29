@@ -3,6 +3,7 @@ package usersvc
 import (
 	"context"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -12,11 +13,16 @@ import (
 type Service struct {
 	repository user.Repository
 	passwords  user.PasswordHasher
+	policy     user.PasswordPolicy // nil checks only the length
 }
 
 func New(repository user.Repository, passwords user.PasswordHasher) *Service {
 	return &Service{repository: repository, passwords: passwords}
 }
+
+// SetPasswordPolicy makes new passwords follow the environment's policy.
+func (s *Service) SetPasswordPolicy(p user.PasswordPolicy) { s.policy = p }
+
 func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input user.Create) (identity.UserID, error) {
 	if err := input.Validate(); err != nil {
 		return identity.UserID{}, err
@@ -28,6 +34,9 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	input.Email = email
 	var hash string
 	if input.Password != "" {
+		if err = s.checkPassword(ctx, environment, input.Password); err != nil {
+			return identity.UserID{}, err
+		}
 		hash, err = s.passwords.Hash(input.Password)
 		if err != nil {
 			return identity.UserID{}, err
@@ -35,6 +44,16 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	}
 	input.Password = ""
 	return s.repository.Create(ctx, environment, input, hash)
+}
+
+func (s *Service) checkPassword(ctx context.Context, environment identity.EnvironmentID, password string) error {
+	if s.policy != nil {
+		return s.policy.CheckPassword(ctx, environment, password)
+	}
+	if len(password) < config.PasswordMinLength {
+		return errx.Validation("password must be 12-72 characters long")
+	}
+	return nil
 }
 func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[user.User], error) {
 	return s.repository.List(ctx, environment, page)
@@ -65,6 +84,13 @@ func (s *Service) Delete(ctx context.Context, m user.Mutation, id identity.UserI
 		return errx.NotFound("resource not found")
 	}
 	return s.repository.Delete(ctx, m, id)
+}
+func (s *Service) Unlock(ctx context.Context, m user.Mutation, id identity.UserID) error {
+	if id.IsZero() {
+		return errx.NotFound("resource not found")
+	}
+	m.Action = user.ActionUnlocked
+	return s.repository.Unlock(ctx, m, id)
 }
 
 var _ user.Commands = (*Service)(nil)

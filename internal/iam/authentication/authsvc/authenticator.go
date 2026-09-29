@@ -3,6 +3,7 @@ package authsvc
 import (
 	"context"
 	"crypto/subtle"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -21,6 +22,10 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 	if err != nil || environment.IsZero() || len(password) > config.PasswordMaxLength {
 		return authentication.Verified{}, invalidCredentials()
 	}
+	policy, err := s.policy(ctx, environment)
+	if err != nil {
+		return authentication.Verified{}, err
+	}
 	tx, err := s.repository.Begin(ctx)
 	if err != nil {
 		return authentication.Verified{}, err
@@ -29,16 +34,53 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 	if err = requireNoSSO(ctx, tx, authentication.Context{EnvironmentID: environment}, email); err != nil {
 		return authentication.Verified{}, err
 	}
-	user, hash, lookup := tx.PasswordUser(ctx, authentication.Context{EnvironmentID: environment}, email)
+	account, lookup := tx.PasswordUser(ctx, authentication.Context{EnvironmentID: environment}, email)
 	// Compare always runs (dummy hash when unknown) so timing is uniform.
-	matches := s.passwords.Compare(hash, password)
+	matches := s.passwords.Compare(account.Hash, password)
 	if lookup != nil {
 		return authentication.Verified{}, credentialFailure(lookup)
 	}
-	if !matches {
-		return authentication.Verified{}, invalidCredentials()
+	if err = s.checkPassword(ctx, tx, environment, policy, account, matches); err != nil {
+		return authentication.Verified{}, credentialFailure(err)
 	}
-	return authentication.Verified{User: user, Email: email, Method: authentication.MethodPassword}, nil
+	if err = tx.Commit(); err != nil {
+		return authentication.Verified{}, err
+	}
+	return authentication.Verified{User: account.ID, Email: email, Method: authentication.MethodPassword,
+		PasswordExpired: policy.Expired(account.Changed, time.Now())}, nil
+}
+
+// ChangePassword replaces the expired password of a verified login. The
+// new one must follow the policy and differ from the current one.
+func (s *Service) ChangePassword(ctx context.Context, environment identity.EnvironmentID, verified authentication.Verified, password string) (authentication.Verified, error) {
+	if !verified.PasswordExpired || verified.User.IsZero() || environment.IsZero() {
+		return verified, errx.Validation("no password change is pending")
+	}
+	policy, err := s.policy(ctx, environment)
+	if err != nil {
+		return verified, err
+	}
+	tx, err := s.repository.Begin(ctx)
+	if err != nil {
+		return verified, err
+	}
+	defer tx.Rollback()
+	account, err := tx.PasswordUser(ctx, authentication.Context{EnvironmentID: environment}, verified.Email)
+	if err != nil || account.ID != verified.User {
+		return verified, invalidCredentials()
+	}
+	hash, err := s.newPassword(ctx, policy, account.Hash, password)
+	if err != nil {
+		return verified, err
+	}
+	if err = tx.SetPassword(ctx, environment, verified.User, hash); err != nil {
+		return verified, err
+	}
+	if err = tx.Commit(); err != nil {
+		return verified, err
+	}
+	verified.PasswordExpired = false
+	return verified, nil
 }
 
 // VerifyCode consumes a login challenge without creating a session.
@@ -99,6 +141,9 @@ func (s *Service) Issue(ctx context.Context, boundary authentication.Context, ve
 	}
 	if verified.User.IsZero() {
 		return authentication.Issued{}, invalidCredentials()
+	}
+	if verified.PasswordExpired {
+		return authentication.Issued{}, authentication.ErrPasswordChangeRequired()
 	}
 	if !verified.Organization.IsZero() && verified.Organization != boundary.OrganizationID {
 		return authentication.Issued{}, errx.Forbidden("signed in with another organization's single sign-on")

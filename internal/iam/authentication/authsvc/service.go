@@ -21,6 +21,7 @@ type Service struct {
 	delivery    authentication.Delivery
 	deliverySvc *DeliveryService
 	second      authentication.SecondFactor
+	policies    *PasswordPolicies
 }
 
 func New(repository authentication.Repository, passwords authentication.Passwords, secrets authentication.Secrets, delivery authentication.Delivery) *Service {
@@ -28,16 +29,24 @@ func New(repository authentication.Repository, passwords authentication.Password
 }
 func (s *Service) SetDeliveryService(ds *DeliveryService) { s.deliverySvc = ds }
 
+// SetPasswordPolicies applies environment password policies (without them
+// every environment uses the default).
+func (s *Service) SetPasswordPolicies(p *PasswordPolicies) { s.policies = p }
+
 // SetSecondFactor enables multi-factor authentication of logins.
 func (s *Service) SetSecondFactor(second authentication.SecondFactor) { s.second = second }
 
 var _ authentication.MFACommands = (*Service)(nil)
 
-func (s *Service) Login(ctx context.Context, boundary authentication.Context, email, password string) (authentication.Result, error) {
+func (s *Service) Login(ctx context.Context, boundary authentication.Context, email, password, newPassword string) (authentication.Result, error) {
 	var out authentication.Result
 	email, err := identity.Email(email)
 	if err != nil || boundary.Validate() != nil || len(password) > config.PasswordMaxLength {
 		return out, invalidCredentials()
+	}
+	policy, err := s.policy(ctx, boundary.EnvironmentID)
+	if err != nil {
+		return out, err
 	}
 	tx, err := s.repository.Begin(ctx)
 	if err != nil {
@@ -49,24 +58,42 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 	if err = requireNoSSO(ctx, tx, boundary, email); err != nil {
 		return out, err
 	}
-	user, hash, lookup := tx.PasswordUser(ctx, boundary, email)
+	account, lookup := tx.PasswordUser(ctx, boundary, email)
 	// Compare always runs (dummy hash when unknown) so timing is uniform.
-	matches := s.passwords.Compare(hash, password)
+	matches := s.passwords.Compare(account.Hash, password)
 	if lookup != nil {
 		return out, credentialFailure(lookup)
 	}
-	if !matches {
-		return out, invalidCredentials()
+	if err = s.checkPassword(ctx, tx, boundary.EnvironmentID, policy, account, matches); err != nil {
+		return out, credentialFailure(err)
 	}
-	out, err = s.SignIn(ctx, tx, boundary, user, authentication.MethodPassword)
+	var hash string
+	if policy.Expired(account.Changed, time.Now()) {
+		if newPassword == "" {
+			return out, commitThen(tx, authentication.ErrPasswordChangeRequired())
+		}
+		if hash, err = s.newPassword(ctx, policy, account.Hash, newPassword); err != nil {
+			return out, commitThen(tx, err)
+		}
+	}
+	out, err = s.signIn(ctx, tx, boundary, account.ID, authentication.MethodPassword, false, hash)
 	return out, credentialFailure(err)
+}
+
+// commitThen keeps what tx recorded (a cleared failure count) and returns
+// err.
+func commitThen(tx authentication.Transaction, err error) error {
+	if cerr := tx.Commit(); cerr != nil {
+		return cerr
+	}
+	return err
 }
 
 // SignIn finishes a login whose first factor passed: it checks access to
 // the boundary, then either parks the login for its second factor or
 // creates the session. tx is committed or left for the caller to roll back.
 func (s *Service) SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string) (authentication.Result, error) {
-	return s.signIn(ctx, tx, boundary, user, method, false)
+	return s.signIn(ctx, tx, boundary, user, method, false, "")
 }
 
 // SignInFederated finishes a headless single sign-on. Only an
@@ -79,10 +106,13 @@ func (s *Service) SignInFederated(ctx context.Context, tx authentication.Transac
 			return authentication.Result{}, err
 		}
 	}
-	return s.signIn(ctx, tx, boundary, user, authentication.MethodSSO, organizationSSO)
+	return s.signIn(ctx, tx, boundary, user, authentication.MethodSSO, organizationSSO, "")
 }
 
-func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string, federated bool) (authentication.Result, error) {
+// signIn finishes the login. passwordHash replaces an expired password: in
+// tx before the session (so a refused session keeps the old one), or once
+// the second factor passed.
+func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string, federated bool, passwordHash string) (authentication.Result, error) {
 	amr := []string{authentication.MethodAMR(method)}
 	if s.second != nil {
 		// Access first, so the MFA answer never reveals a membership the
@@ -100,11 +130,16 @@ func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, bou
 			if err = tx.Commit(); err != nil {
 				return authentication.Result{}, err
 			}
-			token, err := s.second.Begin(ctx, boundary, user, amr, req.Enroll)
+			token, err := s.second.Begin(ctx, boundary, user, amr, req.Enroll, passwordHash)
 			if err != nil {
 				return authentication.Result{}, err
 			}
 			return authentication.Result{MFA: &authentication.MFA{Token: token, Factors: req.Factors, EnrollmentRequired: req.Enroll}}, nil
+		}
+	}
+	if passwordHash != "" {
+		if err := tx.SetPassword(ctx, boundary.EnvironmentID, user, passwordHash); err != nil {
+			return authentication.Result{}, err
 		}
 	}
 	issued, err := s.NewSession(ctx, tx, boundary, user, amr)
@@ -126,6 +161,11 @@ func (s *Service) VerifyMFA(ctx context.Context, token, code string) (authentica
 			return err
 		}
 		defer tx.Rollback()
+		if done.PasswordHash != "" {
+			if err = tx.SetPassword(ctx, done.Boundary.EnvironmentID, done.User, done.PasswordHash); err != nil {
+				return err
+			}
+		}
 		out, err = s.NewSession(ctx, tx, done.Boundary, done.User, done.AMR)
 		return credentialFailure(err)
 	})
@@ -316,11 +356,13 @@ func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.C
 	var hash string
 	var err error
 	if purpose == "password_reset" {
-		if len(password) < config.PasswordMinLength || len(password) > config.PasswordMaxLength {
-			return out, errx.Validation("12-72 byte password required")
-		}
-		hash, err = s.passwords.Hash(password)
+		// Checked before the transaction: the breach check must not hold row
+		// locks. A reset has no current password to compare against.
+		policy, err := s.policy(ctx, boundary.EnvironmentID)
 		if err != nil {
+			return out, err
+		}
+		if hash, err = s.newPassword(ctx, policy, "", password); err != nil {
 			return out, err
 		}
 	}

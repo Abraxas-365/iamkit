@@ -29,6 +29,7 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Patch("/users/:id", h.Update)
 	r.Delete("/users/:id", h.Suspend)
 	r.Delete("/users/:id/permanent", h.Delete)
+	r.Post("/users/:id/unlock", h.Unlock)
 }
 func (h *Handler) Create(c *fiber.Ctx) error {
 	var input user.Create
@@ -101,6 +102,17 @@ func (h *Handler) Delete(c *fiber.Ctx) error {
 	}
 	m := user.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
 	if err := h.commands.Delete(c.Context(), m, id); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
+}
+func (h *Handler) Unlock(c *fiber.Ctx) error {
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	m := user.Mutation{Environment: env(c), Actor: h.actor(c), Target: c.Path()}
+	if err := h.commands.Unlock(c.Context(), m, id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

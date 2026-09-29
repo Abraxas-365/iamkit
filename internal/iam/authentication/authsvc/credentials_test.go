@@ -27,7 +27,7 @@ func TestLoginCredentialFailuresAreIndistinguishable(t *testing.T) {
 	var want string
 	for name, c := range cases {
 		s := New(testRepository{c.tx}, c.passwords, testSecrets{}, nil)
-		_, err := s.Login(context.Background(), testBoundary(), c.email, "password")
+		_, err := s.Login(context.Background(), testBoundary(), c.email, "password", "")
 		var e *errx.Error
 		if !errors.As(err, &e) || e.Type != errx.TypeAuthorization {
 			t.Fatalf("%s: want authorization error, got %v", name, err)
@@ -38,8 +38,8 @@ func TestLoginCredentialFailuresAreIndistinguishable(t *testing.T) {
 		if e.Message != want {
 			t.Errorf("%s: message %q differs from %q", name, e.Message, want)
 		}
-		if c.tx.committed {
-			t.Errorf("%s: failed login committed", name)
+		if c.tx.committed != (name == "wrong password") {
+			t.Errorf("%s: committed=%v (only a wrong password is counted)", name, c.tx.committed)
 		}
 	}
 }
@@ -48,7 +48,7 @@ func TestLoginPassesThroughInternalResolveErrors(t *testing.T) {
 	failure := errx.Internal("database unavailable")
 	tx := &testTransaction{user: identity.MustParseUserID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"), resolve: failure}
 	s := New(testRepository{tx}, testPasswords{}, testSecrets{}, nil)
-	if _, err := s.Login(context.Background(), testBoundary(), "user@example.com", "password"); !errors.Is(err, failure) {
+	if _, err := s.Login(context.Background(), testBoundary(), "user@example.com", "password", ""); !errors.Is(err, failure) {
 		t.Fatalf("lost internal error: %v", err)
 	}
 }

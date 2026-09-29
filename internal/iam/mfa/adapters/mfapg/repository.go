@@ -114,8 +114,8 @@ func (r *Repository) SaveUnconfirmed(ctx context.Context, environment identity.E
 // SavePending stores a pending login and sweeps expired ones.
 func (r *Repository) SavePending(ctx context.Context, hash []byte, p mfa.Pending) error {
 	_, err := r.db.ExecContext(ctx, `WITH sweep AS (DELETE FROM mfa_logins WHERE expires_at<now())
-		INSERT INTO mfa_logins(token_hash,environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		hash, p.Boundary.EnvironmentID, p.Boundary.OrganizationID, p.Boundary.ApplicationID, p.Boundary.ResourceID, p.User, pq.StringArray(p.AMR), p.Enroll, p.Expires)
+		INSERT INTO mfa_logins(token_hash,environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,expires_at,password_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		hash, p.Boundary.EnvironmentID, p.Boundary.OrganizationID, p.Boundary.ApplicationID, p.Boundary.ResourceID, p.User, pq.StringArray(p.AMR), p.Enroll, p.Expires, p.PasswordHash)
 	return failure(err)
 }
 
@@ -192,15 +192,16 @@ func (t *Transaction) Pending(ctx context.Context, hash []byte) (mfa.Pending, er
 		Enroll       bool                    `db:"enroll"`
 		Attempts     int                     `db:"attempts"`
 		Expires      time.Time               `db:"expires_at"`
+		PasswordHash string                  `db:"password_hash"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,attempts,expires_at FROM mfa_logins WHERE token_hash=$1 AND expires_at>now() FOR UPDATE`, hash)
+	err := t.tx.GetContext(ctx, &row, `SELECT environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,attempts,expires_at,password_hash FROM mfa_logins WHERE token_hash=$1 AND expires_at>now() FOR UPDATE`, hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return mfa.Pending{}, errx.Unauthorized("sign in again")
 	}
 	if err != nil {
 		return mfa.Pending{}, failure(err)
 	}
-	return mfa.Pending{Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, User: row.User, AMR: []string(row.AMR), Enroll: row.Enroll, Attempts: row.Attempts, Expires: row.Expires}, nil
+	return mfa.Pending{Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, User: row.User, AMR: []string(row.AMR), Enroll: row.Enroll, Attempts: row.Attempts, Expires: row.Expires, PasswordHash: row.PasswordHash}, nil
 }
 
 func (t *Transaction) FailPending(ctx context.Context, hash []byte) error {

@@ -3,6 +3,7 @@ package user
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -17,7 +18,15 @@ type User struct {
 	EmailVerified bool            `json:"email_verified" db:"email_verified"`
 	OTPEnabled    bool            `json:"otp_enabled" db:"otp_enabled"`
 	Metadata      json.RawMessage `json:"metadata" db:"metadata"`
+	// FailedLogins counts wrong passwords in a row; LockedUntil is set while
+	// the password policy locks the account (POST .../unlock clears both).
+	FailedLogins int        `json:"failed_logins" db:"failed_logins"`
+	LockedUntil  *time.Time `json:"locked_until,omitempty" db:"locked_until"`
 }
+
+// ActionUnlocked is the audit action of clearing a user's lockout.
+const ActionUnlocked = "user.unlocked"
+
 type Create struct {
 	Email      string `json:"email"`
 	Name       string `json:"name"`
@@ -29,8 +38,10 @@ func (c Create) Validate() error {
 	if strings.TrimSpace(c.Name) == "" {
 		return errx.Validation("user name is required")
 	}
-	if c.Password != "" && (len(c.Password) < config.PasswordMinLength || len(c.Password) > config.PasswordMaxLength) {
-		return errx.Validation("password must be 12-72 characters long")
+	// The environment's password policy sets the minimum (service); 72
+	// bytes is bcrypt's limit.
+	if len(c.Password) > config.PasswordMaxLength {
+		return errx.Validation("password must be at most 72 characters long")
 	}
 	return nil
 }

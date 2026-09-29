@@ -17,6 +17,7 @@ type Service struct {
 	repository invitation.Repository
 	secrets    invitation.Secrets
 	passwords  invitation.Passwords
+	policy     invitation.PasswordPolicy // nil checks only the length
 	mailer     invitation.Mailer
 	now        invitation.Clock
 }
@@ -26,6 +27,20 @@ func New(r invitation.Repository, s invitation.Secrets, p invitation.Passwords, 
 		now = time.Now
 	}
 	return &Service{repository: r, secrets: s, passwords: p, mailer: m, now: now}
+}
+
+// SetPasswordPolicy makes new accounts' passwords follow the environment's
+// policy.
+func (s *Service) SetPasswordPolicy(p invitation.PasswordPolicy) { s.policy = p }
+
+func (s *Service) checkPassword(ctx context.Context, environment identity.EnvironmentID, password string) error {
+	if s.policy != nil {
+		return s.policy.CheckPassword(ctx, environment, password)
+	}
+	if len(password) < config.PasswordMinLength {
+		return errx.Validation("password must be 12-72 characters long")
+	}
+	return nil
 }
 
 var _ invitation.Commands = (*Service)(nil)
@@ -218,6 +233,9 @@ func (s *Service) Accept(ctx context.Context, input invitation.Acceptance) (invi
 		case !t.SSORequired && input.Password == "":
 			return invitation.Accepted{}, errx.Validation("password is required")
 		case input.Password != "":
+			if err = s.checkPassword(ctx, t.Environment, input.Password); err != nil {
+				return invitation.Accepted{}, err
+			}
 			if j.PasswordHash, err = s.passwords.Hash(input.Password); err != nil {
 				return invitation.Accepted{}, err
 			}

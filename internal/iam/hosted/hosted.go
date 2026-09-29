@@ -54,6 +54,8 @@ type Result struct {
 	Login         *oauth.Login
 	// SecondFactor asks for an authenticator or recovery code.
 	SecondFactor bool
+	// PasswordChange asks for a new password: the current one expired.
+	PasswordChange bool
 	// Enroll asks the user to add an authenticator the organization requires.
 	Enroll *authentication.Enrollment
 	// RecoveryCodes are shown once after enrolling; the user then continues.

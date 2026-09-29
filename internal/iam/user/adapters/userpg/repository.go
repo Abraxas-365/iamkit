@@ -57,8 +57,31 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.UserID) (user.User, error) {
 	var row user.User
-	err := r.db.GetContext(ctx, &row, `SELECT id,email,name,active,email_verified,otp_enabled,metadata FROM users WHERE environment_id=$1 AND id=$2`, environment, id)
+	err := r.db.GetContext(ctx, &row, `SELECT id,email,name,active,email_verified,otp_enabled,metadata,failed_logins,CASE WHEN locked_until>now() THEN locked_until END AS locked_until FROM users WHERE environment_id=$1 AND id=$2`, environment, id)
 	return row, failure(err, "find user")
+}
+
+// Unlock clears the wrong-password count and lockout, audited.
+func (r *Repository) Unlock(ctx context.Context, m user.Mutation, id identity.UserID) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err, "unlock user")
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `UPDATE users SET failed_logins=0,locked_until=NULL WHERE environment_id=$1 AND id=$2`, m.Environment, id)
+	if err != nil {
+		return failure(err, "unlock user")
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		if err != nil {
+			return failure(err, "unlock user")
+		}
+		return errx.NotFound("resource not found")
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+		return failure(err, "audit user unlock")
+	}
+	return failure(tx.Commit(), "commit user unlock")
 }
 func (r *Repository) Update(ctx context.Context, m user.Mutation, id identity.UserID, input user.Update) error {
 	tx, err := r.db.BeginTxx(ctx, nil)

@@ -8,7 +8,9 @@ import (
 )
 
 type Commands interface {
-	Login(ctx context.Context, boundary Context, email, password string) (Result, error)
+	// Login signs in with a password. An expired password answers
+	// ErrPasswordChangeRequired unless newPassword replaces it.
+	Login(ctx context.Context, boundary Context, email, password, newPassword string) (Result, error)
 	Refresh(ctx context.Context, boundary Context, token string) (Issued, error)
 	// InitiateChallenge emails a code when the address is eligible; locale
 	// is the requested email language ("" = the environment default).
@@ -20,7 +22,9 @@ type Commands interface {
 // the mfa module. Nil disables MFA.
 type SecondFactor interface {
 	Requirement(ctx context.Context, boundary Context, user identity.UserID, federated bool) (Requirement, error)
-	Begin(ctx context.Context, boundary Context, user identity.UserID, amr []string, enroll bool) (string, error)
+	// Begin parks the login until its second factor; passwordHash (a
+	// replacement for an expired password) is stored once it passes.
+	Begin(ctx context.Context, boundary Context, user identity.UserID, amr []string, enroll bool, passwordHash string) (string, error)
 	// Complete verifies the code of a pending login and runs issue before
 	// committing: when issue fails the verification rolls back.
 	Complete(ctx context.Context, token, code string, issue func(done Completed) error) (Completed, error)
@@ -43,8 +47,12 @@ type Authenticator interface {
 	// target application and resource.
 	Organizations(ctx context.Context, target Target, user identity.UserID) ([]Organization, error)
 	// Issue creates the session; password and code logins are refused where
-	// the organization enforces SSO.
+	// the organization enforces SSO, and a verified login whose password
+	// expired is refused until ChangePassword.
 	Issue(ctx context.Context, boundary Context, verified Verified) (Issued, error)
+	// ChangePassword replaces the expired password of a verified login
+	// (after any second factor) and returns it cleared.
+	ChangePassword(ctx context.Context, environment identity.EnvironmentID, verified Verified, password string) (Verified, error)
 }
 
 type SessionCommands interface {
@@ -161,6 +169,38 @@ type Passwords interface {
 	Hash(password string) (string, error)
 	Compare(hash, password string) bool
 }
+
+// PasswordPolicyCommands manage an environment's password policy; every
+// change is audited.
+type PasswordPolicyCommands interface {
+	SetPasswordPolicy(ctx context.Context, m Mutation, input PasswordPolicy) (PasswordPolicy, error)
+	// DeletePasswordPolicy returns the environment to the default policy.
+	DeletePasswordPolicy(ctx context.Context, m Mutation) error
+}
+
+// PasswordPolicyQueries read an environment's password policy.
+type PasswordPolicyQueries interface {
+	// PasswordPolicy is the effective policy (Custom false for the default).
+	PasswordPolicy(ctx context.Context, environment identity.EnvironmentID) (PasswordPolicy, error)
+	// CheckPassword applies the environment's policy to a new password,
+	// breach check included.
+	CheckPassword(ctx context.Context, environment identity.EnvironmentID, password string) error
+}
+
+// PasswordPolicyRepository stores password policies; writes audit m in the
+// same transaction.
+type PasswordPolicyRepository interface {
+	// GetPasswordPolicy returns the saved policy; NotFound when there is none.
+	GetPasswordPolicy(ctx context.Context, environment identity.EnvironmentID) (PasswordPolicy, error)
+	SetPasswordPolicy(ctx context.Context, m Mutation, input PasswordPolicy) error
+	DeletePasswordPolicy(ctx context.Context, m Mutation) error
+}
+
+// Breaches reports whether a password appears in known data breaches.
+// Errors mean the answer is unknown; callers let the password through.
+type Breaches interface {
+	Breached(ctx context.Context, password string) (bool, error)
+}
 type Secrets interface {
 	Generate(prefix string) (string, []byte, error)
 	Hash(raw string) []byte
@@ -202,7 +242,15 @@ type Repository interface {
 	Begin(ctx context.Context) (Transaction, error)
 }
 type Transaction interface {
-	PasswordUser(ctx context.Context, boundary Context, email string) (identity.UserID, string, error)
+	// PasswordUser locks the active user signing in with a password.
+	PasswordUser(ctx context.Context, boundary Context, email string) (PasswordAccount, error)
+	// SetLoginFailures records wrong passwords in a row and the lock they
+	// caused (nil clears it).
+	SetLoginFailures(ctx context.Context, user identity.UserID, failures int, lockedUntil *time.Time) error
+	// SetPassword stores a new password hash, restarts its age and clears
+	// the lockout.
+	SetPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, hash string) error
+	Audit(ctx context.Context, m Mutation) error
 	// SSORequired reports whether the boundary organization requires SSO for
 	// the email: it has an active enforced connection, has verified the
 	// email's domain, and the email's user has no sso_bypass membership.
@@ -224,6 +272,8 @@ type Transaction interface {
 	CreateChallenge(ctx context.Context, challenge identity.ChallengeID, user identity.UserID, purpose string, environment identity.EnvironmentID, hash []byte) error
 	Challenge(ctx context.Context, challenge identity.ChallengeID, user identity.UserID, purpose string) (Challenge, error)
 	FailChallenge(ctx context.Context, challenge identity.ChallengeID) error
+	// CompleteChallenge consumes the challenge and verifies the email; a
+	// password reset also stores password (a hash) like SetPassword.
 	CompleteChallenge(ctx context.Context, challenge identity.ChallengeID, user identity.UserID, purpose string, environment identity.EnvironmentID, password string) error
 	Commit() error
 	Rollback() error

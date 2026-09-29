@@ -44,13 +44,21 @@ func credentialError(err error) error {
 }
 func (t *Transaction) Commit() error   { return failure(t.tx.Commit()) }
 func (t *Transaction) Rollback() error { return t.tx.Rollback() }
-func (t *Transaction) PasswordUser(ctx context.Context, b authentication.Context, email string) (identity.UserID, string, error) {
-	var row struct {
-		ID   identity.UserID `db:"id"`
-		Hash string          `db:"password_hash"`
-	}
-	err := t.tx.GetContext(ctx, &row, `SELECT id,password_hash FROM users WHERE environment_id=$1 AND email=$2 AND active FOR UPDATE`, b.EnvironmentID, email)
-	return row.ID, row.Hash, credentialError(err)
+func (t *Transaction) PasswordUser(ctx context.Context, b authentication.Context, email string) (authentication.PasswordAccount, error) {
+	var row authentication.PasswordAccount
+	err := t.tx.GetContext(ctx, &row, `SELECT id,password_hash,failed_logins,locked_until,password_changed_at FROM users WHERE environment_id=$1 AND email=$2 AND active FOR UPDATE`, b.EnvironmentID, email)
+	return row, credentialError(err)
+}
+func (t *Transaction) SetLoginFailures(ctx context.Context, user identity.UserID, failures int, lockedUntil *time.Time) error {
+	_, err := t.tx.ExecContext(ctx, `UPDATE users SET failed_logins=$2,locked_until=$3 WHERE id=$1`, user, failures, lockedUntil)
+	return failure(err)
+}
+func (t *Transaction) SetPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, hash string) error {
+	_, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,password_changed_at=now(),failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash)
+	return failure(err)
+}
+func (t *Transaction) Audit(ctx context.Context, m authentication.Mutation) error {
+	return audit(ctx, t.tx, m)
 }
 func (t *Transaction) SSORequired(ctx context.Context, b authentication.Context, email string) (bool, error) {
 	var required bool
@@ -172,7 +180,9 @@ func (t *Transaction) FailChallenge(ctx context.Context, id identity.ChallengeID
 }
 func (t *Transaction) CompleteChallenge(ctx context.Context, id identity.ChallengeID, user identity.UserID, purpose string, environment identity.EnvironmentID, hash string) error {
 	if purpose == "password_reset" {
-		if _, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,email_verified=true WHERE id=$1 AND environment_id=$2`, user, environment, hash); err != nil {
+		// A reset proves the mailbox: it also lifts a lockout and restarts
+		// the password's age.
+		if _, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,email_verified=true,password_changed_at=now(),failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash); err != nil {
 			return failure(err)
 		}
 	} else {

@@ -324,6 +324,10 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 			return hosted.Result{Enroll: &enrollment}, nil
 		}
 	}
+	if verified.PasswordExpired {
+		// Last, after any second factor: a password alone never sets a new one.
+		return hosted.Result{PasswordChange: true}, s.park(ctx, r, target, login)
+	}
 	issued, err := s.authenticator.Issue(ctx, target.Boundary(organization), verified)
 	if err != nil {
 		return hosted.Result{}, err
@@ -433,6 +437,33 @@ func (s *Service) Enrollment(ctx context.Context, r hosted.Request) (authenticat
 
 func (s *Service) Continue(ctx context.Context, r hosted.Request) (hosted.Result, error) {
 	target, login, err := s.parked(ctx, r)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	return s.step(ctx, r, target, login)
+}
+
+// ChangePassword replaces the parked login's expired password. step only
+// asks once the organization is chosen and any second factor passed; a
+// direct post is held to the same.
+func (s *Service) ChangePassword(ctx context.Context, r hosted.Request, secret string) (hosted.Result, error) {
+	target, login, err := s.parked(ctx, r)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	if !login.Verified.PasswordExpired || login.Chosen.IsZero() {
+		return hosted.Result{}, errx.Validation("no password change is pending")
+	}
+	if s.second != nil && !authentication.HasMFA(login.Verified.AMR) {
+		req, err := s.second.Requirement(ctx, target.Boundary(login.Chosen), login.Verified.User, login.Verified.FederatedFor(login.Chosen))
+		if err != nil {
+			return hosted.Result{}, err
+		}
+		if req.Needed {
+			return hosted.Result{}, errx.Forbidden("a second factor is required")
+		}
+	}
+	login.Verified, err = s.authenticator.ChangePassword(ctx, target.Environment, login.Verified, secret)
 	if err != nil {
 		return hosted.Result{}, err
 	}

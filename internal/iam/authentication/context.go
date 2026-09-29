@@ -92,6 +92,9 @@ type Completed struct {
 	User          identity.UserID
 	AMR           []string
 	RecoveryCodes []string
+	// PasswordHash replaces the user's expired password now that the
+	// second factor passed; "" keeps it.
+	PasswordHash string
 }
 
 // Enrollment is a TOTP authenticator to add during a login.
@@ -141,6 +144,9 @@ type Verified struct {
 	Organization identity.OrganizationID
 	// AMR holds the second-factor references proven so far (otp, mfa).
 	AMR []string
+	// PasswordExpired holds the session back until the user chose a new
+	// password (Authenticator.ChangePassword).
+	PasswordExpired bool
 }
 
 // Federated reports whether the user signed in with an organization's own

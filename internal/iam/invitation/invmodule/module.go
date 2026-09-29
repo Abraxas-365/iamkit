@@ -19,6 +19,9 @@ type Deps struct {
 	// the token in the response).
 	Delivery invmail.Sender
 	ActorID  func(*fiber.Ctx) string
+	// PasswordPolicy checks new accounts' passwords; nil checks only the
+	// length.
+	PasswordPolicy invitation.PasswordPolicy
 }
 
 type Module struct {
@@ -33,5 +36,8 @@ func New(deps Deps) Module {
 		mailer = invmail.Mailer{Sender: deps.Delivery}
 	}
 	service := invsvc.New(invpg.New(deps.DB), mgmtsecret.Generator{}, authbcrypt.Hasher{}, mailer, nil)
+	if deps.PasswordPolicy != nil {
+		service.SetPasswordPolicy(deps.PasswordPolicy)
+	}
 	return Module{Commands: service, Queries: service, HTTP: invhttp.New(service, service, deps.ActorID)}
 }
