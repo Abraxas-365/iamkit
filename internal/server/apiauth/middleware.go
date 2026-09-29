@@ -34,13 +34,18 @@ func (m *Middleware) Authenticate(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.Unauthorized("invalid or expired token")
 	}
-	if env := c.Params("environment"); env != "" {
-		envID, parseErr := identity.ParseEnvironmentID(env)
-		if parseErr != nil || envID != token.EnvironmentID {
-			return errx.Forbidden("token not scoped to this environment")
-		}
-	}
 	c.Locals(tokenKey{}, token)
+	return c.Next()
+}
+
+// Scope refuses a token on another environment's routes. It must be mounted
+// on the group that declares the :environment parameter — Authenticate runs
+// on /api/v1, where that parameter is not yet bound.
+func Scope(c *fiber.Ctx) error {
+	env, err := identity.ParseEnvironmentID(c.Params("environment"))
+	if err != nil || env != Token(c).EnvironmentID {
+		return errx.Forbidden("token not scoped to this environment")
+	}
 	return c.Next()
 }
 

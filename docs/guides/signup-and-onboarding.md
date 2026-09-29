@@ -8,10 +8,9 @@ IAMKit; do not let the frontend choose privileged organization IDs or grants.
 
 Use `X-API-Key` on `/management/v1/environments/ENV_UUID` from a trusted operator
 backend. This credential is workspace-wide; your backend must restrict requested
-environments, organizations and grants. The alternative JWT `/api/v1` surface has
-[environment and permission-routing blockers](../reference/api/scoped-iam.md#deployment-blockers)
-and must not be treated as an isolated provisioning boundary until corrected.
-Do not grant extra permissions to work around its routing errors.
+environments, organizations and grants. The alternative JWT
+[`/api/v1` surface](../reference/api/scoped-iam.md) is limited to one environment
+and the IAM permissions of its service account; grant only the families you use.
 
 ## Orchestrate
 

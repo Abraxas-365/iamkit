@@ -21,9 +21,10 @@ unpublished registry artifact or third-party account.
 - Reviewer checked operational commands/security contracts against source;
   owner-recovery side effects and explicit restore archive were corrected.
 - Final source-contract review identified scoped API environment-check bypass
-  and overlapping permission middleware. These are documented blockers, **not
-  fixed by this pass**; smoke tests exercise management onboarding, not scoped IAM.
-  Delivery override/fallback and user list/detail contracts were corrected.
+  and overlapping permission middleware. Fixed on 2026-09-28 and covered by
+  `tests/e2e/scoped_api_test.go` (cross-environment rejection, least permission
+  per route family). Delivery override/fallback and user list/detail contracts
+  were corrected.
 
 ## Reproducible checks
 

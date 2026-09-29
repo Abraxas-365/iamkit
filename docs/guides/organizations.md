@@ -1,8 +1,8 @@
 # Organizations and membership lifecycle
 
 An organization is a tenant/business boundary within an environment. Add users
-through management on a trusted backend. The alternative scoped IAM API has
-[routing blockers](../reference/api/scoped-iam.md#deployment-blockers). Adding a
+through management on a trusted backend, or through the
+[scoped IAM API](../reference/api/scoped-iam.md) with `iam:members:write`. Adding a
 membership does not assign invoice permissions; grant those separately.
 
 1. Create organization and capture its ID.

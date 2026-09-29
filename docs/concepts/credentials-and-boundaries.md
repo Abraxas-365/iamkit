@@ -18,10 +18,10 @@ service and provisioning credentials support explicit lifetimes; see
 [configuration](../reference/configuration.md), never infer lifetime from a prefix.
 
 Keep long-lived credentials in server secret storage. IDs and OAuth public client
-IDs are not secrets. Management API keys are not environment-limited. The
-alternative JWT IAM API has [routing blockers](../reference/api/scoped-iam.md#deployment-blockers);
-do not rely on it for environment isolation until corrected and tested. Users
-with IAM permissions are also privileged.
+IDs are not secrets. Management API keys are not environment-limited. Tokens for
+the [JWT IAM API](../reference/api/scoped-iam.md) are limited to their environment,
+but within it IAM permissions are environment-wide, so users and service accounts
+with IAM permissions are privileged.
 
 Never send raw service keys to ordinary API routes. Exchange them first. Never
 accept an OIDC ID token where an access token is required.

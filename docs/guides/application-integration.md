@@ -6,8 +6,7 @@ Your browser owns forms; your backend owns signup/tenant policy; IAMKit owns
 identity state and scoped sessions; your API enforces access to business data.
 The diagram's management-key path is one integration option. The current backend
 also exposes [permission-scoped IAM endpoints](../reference/api/scoped-iam.md) for
-service-account/user JWTs, but [routing blockers](../reference/api/scoped-iam.md#deployment-blockers)
-currently prevent relying on their environment isolation. Keep that API restricted.
+service-account/user JWTs, limited to the token's environment and IAM permissions.
 
 ## Recommended sequence
 

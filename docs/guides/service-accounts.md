@@ -23,13 +23,12 @@ service credential; rotate the credential before its expiry.
 
 ## Backend user provisioning
 
-The built-in IAM resource is intended for selected administration through
-`/api/v1`, using a dedicated app binding and explicit IAM permissions. However,
-[current routing blockers](../reference/api/scoped-iam.md#deployment-blockers)
-prevent relying on environment isolation and independent route permissions. Keep
-that API restricted until corrected and regression-tested; do not expand grants
-to work around unexpected permission errors. The onboarding example instead
-uses a deliberately workspace-wide operator key on a trusted backend.
+The built-in IAM resource is for selected administration through
+[`/api/v1`](../reference/api/scoped-iam.md), using a dedicated app binding and
+explicit IAM permissions. The token only works in its own environment and only on
+the route families its permissions name; grant the smallest set you need. The
+onboarding example instead uses a deliberately workspace-wide operator key on a
+trusted backend.
 
 This differs from a machine token for Invoices API. A resource-bound business
 token is not a management key and cannot call `/management/v1`. See

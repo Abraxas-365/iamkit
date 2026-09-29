@@ -4,13 +4,6 @@ Self-host authentication and tenant-aware authorization while your application
 owns onboarding, UI and business data. Start with one working application, then
 choose the login methods and operational controls you need.
 
-## Known integration blocker
-
-The JWT-based `/api/v1` management surface has
-[environment and permission-routing blockers](reference/api/scoped-iam.md#deployment-blockers).
-Keep it restricted until corrected and tested. The onboarding tutorial uses the
-separate workspace-operator management API; its credential is intentionally broad.
-
 ## Start here
 
 1. [Overview and responsibilities](start/overview.md)

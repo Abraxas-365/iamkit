@@ -21,10 +21,8 @@ A management key is **not** a service-account token. Management credentials act
 with a workspace operator's authority and must never reach a browser. Selected
 IAM operations are also available through the [permission-scoped IAM API](../reference/api/scoped-iam.md):
 a service account with IAM permissions can manage users/memberships there, but
-cannot use the workspace management API. **Current scoped-route environment and
-permission enforcement has blockers:** keep that surface restricted until the
-[documented routing issues](../reference/api/scoped-iam.md#deployment-blockers)
-are fixed and tested; do not use it as an isolation boundary.
+cannot use the workspace management API. Scoped tokens are limited to their own
+environment and to the route families their IAM permissions name.
 
 ## What you operate
 

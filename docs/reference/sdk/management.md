@@ -45,6 +45,5 @@ Never pass raw `ik_svc_` credentials to `apiclient`.
 
 Management authority is workspace-wide. Scoped IAM writes require explicit IAM
 permissions and still deserve privileged-backend isolation. Neither client belongs
-in browser code. **The backend currently has environment and permission-routing
-blockers on `/api/v1`; the SDK does not compensate for them.** See
-[scoped-route blockers](../api/scoped-iam.md#deployment-blockers) before enabling it.
+in browser code. See the [scoped IAM API](../api/scoped-iam.md) for the permission
+each route family needs.

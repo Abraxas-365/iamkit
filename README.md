@@ -57,9 +57,8 @@ IAMKit separates **administration** from **authentication**:
 
 **A service account is not a workspace operator credential.** It exchanges its
 secret for a machine JWT. With explicit built-in IAM resource permissions, that
-JWT can administer selected entities through the [scoped IAM API](docs/reference/api/scoped-iam.md).
-That API currently has [environment and permission-routing blockers](docs/reference/api/scoped-iam.md#deployment-blockers):
-keep it restricted until fixed and tested; do not rely on it for environment isolation.
+JWT can administer selected entities of its own environment through the
+[scoped IAM API](docs/reference/api/scoped-iam.md).
 It cannot replace workspace/federation/OAuth administration through `/management/v1`.
 Management keys belong to workspace operators and carry workspace-wide authority.
 Never expose either secret in browser code or build an unrestricted public proxy.

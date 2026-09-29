@@ -4,26 +4,28 @@
 `Authorization: Bearer …`, unlike the management API's `X-API-Key`. Raw
 `ik_mgmt_`, `ik_svc_` and `ik_scim_` credentials are rejected here.
 
-## Deployment blockers
+## Isolation
 
-**Do not rely on this API for environment-isolated administration in the current
-routing implementation.** Source review found that authentication runs on
-`/api/v1` before `:environment` is available; its conditional environment check
-is skipped. A token authorized in one environment can reach another environment's
-handlers. Also, empty-prefix permission middleware applies to later route
-families, requiring additional permissions beyond the intended table below.
-Do not broaden grants to work around those unexpected 403 responses.
+Every route under `/api/v1/environments/:environment` requires the token's
+environment to equal the path environment (`403 token not scoped to this
+environment` otherwise, including a malformed ID), and each route family requires
+exactly its own permission pair below — no other family's permission is needed.
+`tests/e2e/scoped_api_test.go` covers cross-environment rejection on every route
+family and least-permission access per family.
 
-Keep `/api/v1` inaccessible to untrusted callers until route scoping is corrected
-and cross-environment/least-permission regression tests pass. The documented
-onboarding tutorial uses workspace-operator `/management/v1` authority instead;
-that key is deliberately workspace-wide and must remain on a trusted backend.
-These findings are from source review, not a live exploit reproduction.
+Before 2026-09-28 neither held: the environment check ran on `/api/v1` before
+`:environment` was bound, so it was skipped, and some permission checks applied to
+later route families. If you ran an earlier build with this API exposed, review
+audit events for actors from another environment, and remove permissions granted
+only to work around the old 403s.
 
-The intended setup is an application binding to the built-in IAM resource and a
+These are environment-wide administrative permissions, not organization-limited
+ones: a token with `iam:users:write` can change any user of its environment.
+Keep such tokens on trusted backends.
+
+The setup is an application binding to the built-in IAM resource and a
 service account with selected IAM permissions. Its credential is exchanged at
-`/identity/v1/machine-token` for a JWT. These are administrative capabilities, not
-organization-limited permissions; this setup does not resolve the blockers above.
+`/identity/v1/machine-token` for a JWT.
 
 Every environment has an IAM resource with prefix `iam` and audience
 `urn:iamkit:environment:ENV_UUID`. Discover its ID through the resources list;
@@ -32,10 +34,7 @@ do not create a second resource or guess its UUID.
 ## Route families
 
 Request/response bodies are shared with the corresponding management handlers.
-The table lists intended permissions, **not currently sufficient credentials**
-for all routes. GET/HEAD select read; mutations select write. For example, grants
-also encounter member/resource/role checks, and service accounts encounter those
-plus grant checks because of middleware registration order.
+GET/HEAD select the read permission; mutations select write.
 
 | Routes | Permissions |
 | --- | --- |
@@ -53,9 +52,8 @@ There are no workspace/operator, federation, OAuth-client or SCIM-credential
 administration routes in this API family. Application DELETE is not registered
 here; use PATCH `active:false` with the appropriate authority.
 
-The middleware validates JWTs online, but that does not repair path-environment
-or route-permission scoping. After fixes, test missing permissions and cross-environment
-rejection before enabling this API. Grants/roles/service-account writes can delegate
+The middleware validates JWTs online (revoked sessions and removed permissions stop
+working immediately). Grants/roles/service-account writes can delegate
 access; never expose them as an unrestricted browser signup proxy.
 
 See [service accounts](../../guides/service-accounts.md) and

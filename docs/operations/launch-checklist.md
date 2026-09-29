@@ -10,9 +10,9 @@ result in the target topology; do not infer it from the presence of documentatio
 - [ ] Explicit bootstrap or controlled bootstrap-log handling; recovery access tested.
 - [ ] HTTPS issuer and callbacks match; console cookies and CSRF work.
 - [ ] CORS/proxy trust allowlists verified; management exposure deliberately restricted.
-- [ ] Before enabling `/api/v1`, fix the [known scoped-routing blockers](../reference/api/scoped-iam.md#deployment-blockers)
-  and pass cross-environment and least-permission regression tests. Until then,
-  restrict that API; passing ordinary login tests does not validate its isolation.
+- [ ] If `/api/v1` is enabled, grant each service account only the
+  [IAM permission families](../reference/api/scoped-iam.md) it uses; builds before
+  2026-09-28 did not enforce its environment scope (see its Isolation section).
 - [ ] Provisioning/login/introspection succeed; missing permission, wrong tenant,
   wrong environment and expired/revoked credential tests deny access.
 - [ ] Refresh replay and concurrent refresh behavior understood by app clients.

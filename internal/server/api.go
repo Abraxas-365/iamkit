@@ -14,12 +14,19 @@ import (
 // e.Group("", check): Fiber runs a prefix-less group's middleware for every
 // later route under the environment, so its permission check would also
 // guard unrelated routes (e.g. delivery would demand iam:members:read).
+// For the same reason /organizations and /applications use guarded: a
+// prefix group there would also demand iam:orgs:* / iam:apps:* on the
+// member (/organizations/:organization/…) and resource
+// (/applications/:application/resources) routes registered after them.
+//
+// apiauth.Scope sits on the group that binds :environment; Authenticate
+// runs on /api/v1, before that parameter exists.
 func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	if s.API == nil {
 		return
 	}
 	api := app.Group("/api/v1", s.API.Authenticate, rateLimiter(rateLimit))
-	e := api.Group("/environments/:environment")
+	e := api.Group("/environments/:environment", apiauth.Scope)
 
 	// Users
 	users := e.Group("/users", apiauth.ReadWrite(authorization.PermUsersRead, authorization.PermUsersWrite))
@@ -35,11 +42,11 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	}
 
 	// Organizations
-	orgs := e.Group("/organizations", apiauth.ReadWrite(authorization.PermOrgsRead, authorization.PermOrgsWrite))
-	orgs.Post("/", s.APIHandlers.Organizations.Create)
-	orgs.Get("/", s.APIHandlers.Organizations.List)
-	orgs.Get("/:id", s.APIHandlers.Organizations.Find)
-	orgs.Patch("/:id", s.APIHandlers.Organizations.Update)
+	orgs := guarded(e, apiauth.ReadWrite(authorization.PermOrgsRead, authorization.PermOrgsWrite))
+	orgs.Post("/organizations", s.APIHandlers.Organizations.Create)
+	orgs.Get("/organizations", s.APIHandlers.Organizations.List)
+	orgs.Get("/organizations/:id", s.APIHandlers.Organizations.Find)
+	orgs.Patch("/organizations/:id", s.APIHandlers.Organizations.Update)
 
 	// Members
 	members := guarded(e, apiauth.ReadWrite(authorization.PermMembersRead, authorization.PermMembersWrite))
@@ -66,11 +73,11 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	}
 
 	// Applications
-	apps := e.Group("/applications", apiauth.ReadWrite(authorization.PermAppsRead, authorization.PermAppsWrite))
-	apps.Post("/", s.APIHandlers.Applications.Create)
-	apps.Get("/", s.APIHandlers.Applications.List)
-	apps.Get("/:id", s.APIHandlers.Applications.Find)
-	apps.Patch("/:id", s.APIHandlers.Applications.Update)
+	apps := guarded(e, apiauth.ReadWrite(authorization.PermAppsRead, authorization.PermAppsWrite))
+	apps.Post("/applications", s.APIHandlers.Applications.Create)
+	apps.Get("/applications", s.APIHandlers.Applications.List)
+	apps.Get("/applications/:id", s.APIHandlers.Applications.Find)
+	apps.Patch("/applications/:id", s.APIHandlers.Applications.Update)
 
 	// Resources
 	res := guarded(e, apiauth.ReadWrite(authorization.PermResourcesRead, authorization.PermResourcesWrite))

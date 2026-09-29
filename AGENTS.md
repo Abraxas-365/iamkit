@@ -596,9 +596,13 @@ session, err := identity.ParseSessionID(claims.SessionID)
 ```
 
 **`apiauth` middleware** (`internal/server/apiauth/`) validates JWTs and
-sets `identity.EnvironmentID` on the Fiber context. `apiauth.Environment(c)`
-returns a typed ID. The middleware compares the JWT's environment against the
-path parameter — both are typed, so mismatches are caught at compile time.
+stores the token on the Fiber context; `apiauth.Environment(c)` returns its
+typed environment. `apiauth.Scope` compares that environment with the
+`:environment` path parameter and must sit on the group that binds it
+(`/environments/:environment`) — on `/api/v1` the parameter is still empty.
+Route families that share a path prefix with another family use `guarded`
+(per-route checks), not a prefix group, so one family's permission check never
+runs for another's routes (`tests/e2e/scoped_api_test.go`).
 
 **`amr`** (authentication methods) is stored on `sessions.amr`, copied onto
 every access token issued for the session (including refreshes) and onto OIDC
