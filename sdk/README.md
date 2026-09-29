@@ -587,6 +587,12 @@ if errors.As(err, &apiErr) {
 }
 ```
 
+A password that breaks the environment's password policy is
+`apierror.CodePasswordPolicy`; `apiErr.Rule()` names the rule (`apierror.RuleLength`,
+`RuleDigit`, `RuleBreached`, …) and `apiErr.Details["min_length"]` the minimum. An
+expired password is `apierror.CodePasswordChangeRequired`: repeat `Login` with
+`PasswordLogin.NewPassword` set.
+
 OAuth endpoints return `*authclient.OAuthError` instead:
 
 ```go

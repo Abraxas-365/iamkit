@@ -8,6 +8,29 @@ type Error struct {
 	Message    string `json:"message"`
 	Type       string `json:"type"`
 	HTTPStatus int    `json:"http_status"`
+	// Details carries machine-readable context for some client errors, e.g.
+	// PASSWORD_POLICY: {"rule": "length", "min_length": 12}.
+	Details map[string]any `json:"details,omitempty"`
+}
+
+// Password error codes and the rules a PASSWORD_POLICY error reports.
+const (
+	CodePasswordPolicy         = "PASSWORD_POLICY"
+	CodePasswordChangeRequired = "PASSWORD_CHANGE_REQUIRED"
+
+	RuleLength   = "length"
+	RuleUpper    = "upper"
+	RuleLower    = "lower"
+	RuleDigit    = "digit"
+	RuleSymbol   = "symbol"
+	RuleBreached = "breached"
+	RuleReused   = "reused"
+)
+
+// Rule returns the password policy rule a PASSWORD_POLICY error names, or "".
+func (e *Error) Rule() string {
+	rule, _ := e.Details["rule"].(string)
+	return rule
 }
 
 func (e *Error) Error() string {

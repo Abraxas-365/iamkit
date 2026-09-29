@@ -71,6 +71,7 @@ Workspace-level commands (me, projects, environments, operators, keys) do not.`,
 	cmd.AddCommand(sessionsCmd())
 	cmd.AddCommand(auditCmd())
 	cmd.AddCommand(deliveryCmd())
+	cmd.AddCommand(passwordPolicyCmd())
 	cmd.AddCommand(seedCmd())
 
 	return cmd

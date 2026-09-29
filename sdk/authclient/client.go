@@ -55,6 +55,12 @@ type PasswordLogin struct {
 	LoginContext
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	// NewPassword replaces an expired password. Login answers
+	// apierror.CodePasswordChangeRequired (403) when the environment's
+	// password policy says the password is too old; send the same login
+	// again with NewPassword set. With a second factor the new password is
+	// saved once VerifyMFA succeeds.
+	NewPassword string `json:"new_password,omitempty"`
 }
 
 // TokenPair is a login answer. When MFARequired is set there are no tokens

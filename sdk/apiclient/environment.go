@@ -129,6 +129,12 @@ func (e Environment) SuspendUser(ctx context.Context, id string) error {
 	return e.client.Do(ctx, "DELETE", e.path("users", id), nil, nil)
 }
 
+// UnlockUser clears a user's wrong-password count and lockout; requires
+// iam:users:write.
+func (e Environment) UnlockUser(ctx context.Context, id string) error {
+	return e.client.Do(ctx, "POST", e.path("users", id, "unlock"), nil, nil)
+}
+
 // ── Organizations ──
 
 func (e Environment) CreateOrganization(ctx context.Context, name string) (Created, error) {

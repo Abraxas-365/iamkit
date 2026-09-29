@@ -184,6 +184,11 @@ func (e Environment) SuspendUser(ctx context.Context, id string) error {
 	return e.operation(ctx, "DELETE", []string{"users", id}, nil, nil)
 }
 
+// UnlockUser clears a user's wrong-password count and lockout.
+func (e Environment) UnlockUser(ctx context.Context, id string) error {
+	return e.operation(ctx, "POST", []string{"users", id, "unlock"}, nil, nil)
+}
+
 // ── Organizations ──
 
 func (e Environment) CreateOrganization(ctx context.Context, name string) (Created, error) {
@@ -544,6 +549,55 @@ func (e Environment) SetDeliveryConfig(ctx context.Context, input SetDeliveryCon
 // to the global sender (EMAIL_PROVIDER and related settings).
 func (e Environment) DeleteDeliveryConfig(ctx context.Context) error {
 	return e.client.Do(ctx, "DELETE", e.path("delivery"), nil, nil)
+}
+
+// ── Password policy ──
+
+// PasswordPolicy governs end-user passwords in an environment. New passwords
+// (user creation, invitations, resets, expiry) must satisfy it; rejections
+// are apierror CodePasswordPolicy with Rule() naming the failed rule.
+type PasswordPolicy struct {
+	MinLength     int  `json:"min_length"` // 8-72 bytes
+	RequireUpper  bool `json:"require_upper"`
+	RequireLower  bool `json:"require_lower"`
+	RequireDigit  bool `json:"require_digit"`
+	RequireSymbol bool `json:"require_symbol"`
+	// MaxAgeDays: older passwords must be replaced at the next password
+	// sign-in (CodePasswordChangeRequired). 0 never expires.
+	MaxAgeDays int `json:"max_age_days"`
+	// LockoutThreshold wrong passwords in a row lock the account for
+	// LockoutMinutes, doubling per further lockout up to 24 h. 0 never locks.
+	LockoutThreshold int `json:"lockout_threshold"`
+	LockoutMinutes   int `json:"lockout_minutes"`
+	// BreachCheck rejects passwords found in Have I Been Pwned (k-anonymity);
+	// they are accepted when the service is unreachable.
+	BreachCheck bool `json:"breach_check"`
+	// Custom is false for the built-in default (read-only).
+	Custom    bool   `json:"custom,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
+}
+
+// PasswordPolicy returns the environment's policy, or the default when none
+// is saved.
+func (e Environment) PasswordPolicy(ctx context.Context) (PasswordPolicy, error) {
+	var out PasswordPolicy
+	err := e.client.Do(ctx, "GET", e.path("password-policy"), nil, &out)
+	return out, err
+}
+
+// SetPasswordPolicy replaces the whole policy (Custom and UpdatedAt are
+// ignored). Audited as password_policy.update.
+func (e Environment) SetPasswordPolicy(ctx context.Context, input PasswordPolicy) (PasswordPolicy, error) {
+	input.Custom, input.UpdatedAt = false, ""
+	var out PasswordPolicy
+	err := e.client.Do(ctx, "PUT", e.path("password-policy"), input, &out)
+	return out, err
+}
+
+// DeletePasswordPolicy restores the default policy. Audited as
+// password_policy.delete.
+func (e Environment) DeletePasswordPolicy(ctx context.Context) error {
+	return e.client.Do(ctx, "DELETE", e.path("password-policy"), nil, nil)
 }
 
 // DeliveryAttempt is the outcome of one delivery. Reason is a fixed,

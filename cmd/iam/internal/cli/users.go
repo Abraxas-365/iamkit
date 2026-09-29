@@ -17,7 +17,24 @@ func usersCmd() *cobra.Command {
 	cmd.AddCommand(usersCreateCmd())
 	cmd.AddCommand(usersUpdateCmd())
 	cmd.AddCommand(usersSuspendCmd())
+	cmd.AddCommand(usersUnlockCmd())
 	return cmd
+}
+
+func usersUnlockCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "unlock USER_ID",
+		Short: "Clear a user's wrong-password count and lockout",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c := mustClient(cmd)
+			if _, err := c.post(envPath()+"/users/"+args[0]+"/unlock", nil); err != nil {
+				return err
+			}
+			newPrinter().ok("User unlocked: " + args[0])
+			return nil
+		},
+	}
 }
 
 func usersListCmd() *cobra.Command {

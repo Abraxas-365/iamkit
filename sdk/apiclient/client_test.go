@@ -108,6 +108,7 @@ func TestAllAPIPaths(t *testing.T) {
 	env.User(ctx, "u1")
 	env.UpdateUser(ctx, "u1", UpdateUser{})
 	env.SuspendUser(ctx, "u1")
+	env.UnlockUser(ctx, "u1")
 
 	// Organizations
 	env.CreateOrganization(ctx, "Acme")
@@ -174,6 +175,7 @@ func TestAllAPIPaths(t *testing.T) {
 		"GET /api/v1/environments/env-1/users/u1",
 		"PATCH /api/v1/environments/env-1/users/u1",
 		"DELETE /api/v1/environments/env-1/users/u1",
+		"POST /api/v1/environments/env-1/users/u1/unlock",
 		// Organizations
 		"POST /api/v1/environments/env-1/organizations",
 		"GET /api/v1/environments/env-1/organizations",
