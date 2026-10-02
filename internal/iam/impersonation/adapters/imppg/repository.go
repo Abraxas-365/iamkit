@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation"
 	"github.com/jmoiron/sqlx"
 )
@@ -43,7 +45,8 @@ func (r *Repository) Create(ctx context.Context, t impersonation.Target) (authen
 	if err != nil {
 		return access, failure(err)
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,'impersonate',$3)`, t.Context.EnvironmentID, t.Actor, t.Session)
+	err = eventpg.AuditWith(ctx, tx, t.Context.EnvironmentID, t.Actor.String(), "impersonate", t.Session.String(),
+		map[string]any{"user_id": t.User.String(), "organization_id": t.Context.OrganizationID.String(), "reason": t.Reason})
 	if err != nil {
 		return access, failure(err)
 	}

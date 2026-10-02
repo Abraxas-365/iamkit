@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -69,7 +70,7 @@ func (r *Repository) Audit(ctx context.Context, environment identity.Environment
 		return query.Paginated[management.AuditEvent]{}, failure(err)
 	}
 	out := []management.AuditEvent{}
-	sel := fmt.Sprintf(`SELECT e.id,e.actor_id,e.action,e.target_id,e.created_at,
+	sel := fmt.Sprintf(`SELECT e.id,e.actor_id,e.action,e.target_id,e.created_at,e.actor_kind,e.organization_id,
 		COALESCE((SELECT email FROM operators WHERE id=e.actor_id),(SELECT email FROM users WHERE id=e.actor_id AND environment_id=e.environment_id),(SELECT name FROM service_accounts WHERE id=e.actor_id AND environment_id=e.environment_id),'') AS actor_label,
 		%s AS target_label
 		FROM (SELECT * %s ORDER BY id DESC LIMIT %d OFFSET %d) e
@@ -97,8 +98,7 @@ func (r *Repository) RevokeSession(ctx context.Context, environment identity.Env
 	if n == 0 {
 		return errx.NotFound("resource not found")
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, environment, actor, action, target)
-	if err != nil {
+	if err = eventpg.Audit(ctx, tx, environment, actor, action, target); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())

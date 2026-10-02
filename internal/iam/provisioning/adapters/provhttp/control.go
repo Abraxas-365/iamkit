@@ -34,7 +34,7 @@ func (h *Control) issue(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Issue(c.Context(), h.mutation(c), input)
+	out, err := h.commands.Issue(c.UserContext(), h.mutation(c), input)
 	if err != nil {
 		return err
 	}
@@ -45,7 +45,7 @@ func (h *Control) revoke(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	if err := h.commands.Revoke(c.Context(), h.mutation(c), id); err != nil {
+	if err := h.commands.Revoke(c.UserContext(), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -55,13 +55,13 @@ func (h *Control) link(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.commands.Link(c.Context(), h.mutation(c), input); err != nil {
+	if err := h.commands.Link(c.UserContext(), h.mutation(c), input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 func (h *Control) credentials(c *fiber.Ctx) error {
-	out, err := h.queries.Credentials(c.Context(), envParam(c))
+	out, err := h.queries.Credentials(c.UserContext(), envParam(c))
 	if err != nil {
 		return err
 	}

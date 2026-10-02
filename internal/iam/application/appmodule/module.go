@@ -14,6 +14,8 @@ import (
 type Deps struct {
 	DB      *sqlx.DB
 	ActorID func(*fiber.Ctx) string
+	// Quota enforces the applications limit (nil: none).
+	Quota application.Quota
 }
 
 type Module struct {
@@ -24,6 +26,9 @@ type Module struct {
 
 func New(deps Deps) Module {
 	service := appsvc.New(apppg.New(deps.DB))
+	if deps.Quota != nil {
+		service.SetQuota(deps.Quota)
+	}
 	return Module{
 		Commands: service,
 		Queries:  service,

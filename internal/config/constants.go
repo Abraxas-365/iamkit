@@ -79,9 +79,76 @@ const (
 // service (base64, before decoding).
 const SAMLResponseMax = 64 << 10
 
+// EventRetention is how long the event log keeps events unless
+// IAMKIT_EVENT_RETENTION says otherwise.
+const EventRetention = 90 * 24 * time.Hour
+
 // LogoutDispatchInterval is how often each replica looks for due
 // back-channel logout notifications.
 const LogoutDispatchInterval = 5 * time.Second
+
+// Event webhooks (event_subscriptions, migration 046).
+const (
+	// EventWebhookInterval is how often each replica looks for due
+	// deliveries.
+	EventWebhookInterval = 2 * time.Second
+	// EventWebhookRetryBase doubles per failed attempt up to
+	// EventWebhookRetryMax; a delivery is given up once its next attempt
+	// would fall past EventWebhookRetryWindow after it was queued.
+	EventWebhookRetryBase   = 15 * time.Second
+	EventWebhookRetryMax    = time.Hour
+	EventWebhookRetryWindow = 24 * time.Hour
+	// EventWebhookDisableAfter of failures without a success disables a
+	// subscription.
+	EventWebhookDisableAfter = 3 * 24 * time.Hour
+	// EventWebhookSecretOverlap is how long a rotated secret keeps signing.
+	EventWebhookSecretOverlap = 24 * time.Hour
+	// EventWebhookMaxPayload caps a delivery body; larger event data is
+	// replaced by {"truncated": true}.
+	EventWebhookMaxPayload = 64 << 10
+	// ActionTimeout is a target's default timeout (100 ms to
+	// ActionMaxTimeout); ActionMaxResponse caps the body read from it and
+	// ActionMaxClaims the encoded claims it may add to a token.
+	ActionTimeout     = 5 * time.Second
+	ActionMaxTimeout  = 10 * time.Second
+	ActionMaxResponse = 64 << 10
+	ActionMaxClaims   = 4 << 10
+	// ActionBreakerFailures consecutive failures of a target open its
+	// circuit for ActionBreakerOpen: calls are skipped (and count as
+	// failures) until it elapses.
+	ActionBreakerFailures = 5
+	ActionBreakerOpen     = 30 * time.Second
+	// ActionCallRetention keeps the recent-calls log.
+	ActionCallRetention = 7 * 24 * time.Hour
+	// EventDeliveryRetention keeps finished deliveries visible to operators.
+	EventDeliveryRetention = 7 * 24 * time.Hour
+)
+
+// Shared cache (REDIS_URL, internal/cache): copies of hot reads, deleted
+// by the writer; an entry another write races past lives at most its TTL.
+const (
+	// CacheTTL bounds feature overrides and action bindings.
+	CacheTTL = 30 * time.Second
+	// OIDCDiscoveryCacheTTL bounds identity providers' discovery documents.
+	OIDCDiscoveryCacheTTL = 15 * time.Minute
+)
+
+// Usage and limits (internal/iam/usage).
+const (
+	// UsageFlushInterval is how often each replica writes the counts it
+	// keeps in memory (tokens, emails, SMS, action calls, API requests).
+	UsageFlushInterval = 30 * time.Second
+	// UsageLimitCacheTTL is how long a replica reuses an environment's
+	// limits; another replica's change applies within it.
+	UsageLimitCacheTTL = 30 * time.Second
+	// UsageRollupSettle leaves events this young to a later round, so
+	// transactions still committing lower ids are not skipped.
+	UsageRollupSettle = time.Minute
+	// UsageRollupBatch is the events read per rollup round.
+	UsageRollupBatch = 5000
+	// UsageRetention keeps daily usage rows.
+	UsageRetention = 400 * 24 * time.Hour
+)
 
 // Multi-factor authentication.
 const (
@@ -132,3 +199,7 @@ const ExternalHTTPTimeout = 10 * time.Second
 
 // CORSMaxAge is the preflight cache duration in seconds.
 const CORSMaxAge = 3600
+
+// ClientOriginCacheTTL is how long an answer about an OAuth client's
+// allowed origin is reused: a removed origin stops working within it.
+const ClientOriginCacheTTL = time.Minute

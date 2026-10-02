@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // style is a branding row of login_settings or client_login_settings.
@@ -23,11 +25,22 @@ type style struct {
 	AccentColor string                 `db:"accent_color"`
 	Theme       []byte                 `db:"theme"`
 	Locale      *string                `db:"locale"`
+	Languages   pq.StringArray         `db:"languages"`
+	Legal       []byte                 `db:"legal"`
 	UpdatedAt   *time.Time             `db:"updated_at"`
 }
 
 func (s style) settings() (hosted.Settings, error) {
-	out := hosted.Settings{Environment: s.Environment, Client: s.Client, DisplayName: s.DisplayName, LogoURL: s.LogoURL, AccentColor: s.AccentColor, Locale: s.Locale, UpdatedAt: s.UpdatedAt}
+	out := hosted.Settings{Environment: s.Environment, Client: s.Client, DisplayName: s.DisplayName, LogoURL: s.LogoURL, AccentColor: s.AccentColor, Locale: s.Locale, Languages: []string(s.Languages), UpdatedAt: s.UpdatedAt}
+	if out.Languages == nil {
+		out.Languages = []string{}
+	}
+	out.Legal = &hosted.Legal{}
+	if len(s.Legal) > 0 {
+		if err := json.Unmarshal(s.Legal, out.Legal); err != nil {
+			return hosted.Settings{}, errx.Wrap(err, "decode hosted legal links", errx.TypeInternal)
+		}
+	}
 	if len(s.Theme) > 0 {
 		if err := json.Unmarshal(s.Theme, &out.Theme); err != nil {
 			return hosted.Settings{}, errx.Wrap(err, "decode hosted theme", errx.TypeInternal)
@@ -45,16 +58,36 @@ func theme(s hosted.Settings) ([]byte, error) {
 }
 
 const (
-	defaultColumns = `environment_id,NULL::uuid AS client_id,display_name,logo_url,accent_color,theme,locale,updated_at`
-	clientColumns  = `environment_id,client_id,display_name,logo_url,accent_color,theme,NULL::text AS locale,updated_at`
+	defaultColumns = `environment_id,NULL::uuid AS client_id,display_name,logo_url,accent_color,theme,locale,languages,legal,updated_at`
+	clientColumns  = `environment_id,client_id,display_name,logo_url,accent_color,theme,locale,'{}'::text[] AS languages,legal,updated_at`
 )
+
+// legal encodes optional legal links (nil keeps the stored ones).
+func legal(in *hosted.Legal) (any, error) {
+	if in == nil {
+		return nil, nil
+	}
+	out, err := json.Marshal(in)
+	if err != nil {
+		return nil, errx.Wrap(err, "encode hosted legal links", errx.TypeInternal)
+	}
+	return string(out), nil
+}
+
+// languages encodes an optional language list (nil keeps the stored one).
+func languages(in []string) any {
+	if in == nil {
+		return nil
+	}
+	return pq.StringArray(in)
+}
 
 func (r *Repository) Settings(ctx context.Context, environment identity.EnvironmentID) (hosted.Settings, error) {
 	var row style
 	err := r.db.GetContext(ctx, &row, `SELECT `+defaultColumns+` FROM login_settings WHERE environment_id=$1`, environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		unset := ""
-		return hosted.Settings{Environment: environment, Locale: &unset}, nil
+		return hosted.Settings{Environment: environment, Locale: &unset, Languages: []string{}, Legal: &hosted.Legal{}}, nil
 	}
 	if err != nil {
 		return hosted.Settings{}, failure(err)
@@ -67,15 +100,19 @@ func (r *Repository) SaveSettings(ctx context.Context, m hosted.Mutation, input 
 	if err != nil {
 		return hosted.Settings{}, err
 	}
+	links, err := legal(input.Legal)
+	if err != nil {
+		return hosted.Settings{}, err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return hosted.Settings{}, failure(err)
 	}
 	defer tx.Rollback()
 	var row style
-	err = tx.GetContext(ctx, &row, `INSERT INTO login_settings(environment_id,display_name,logo_url,accent_color,theme,locale) VALUES($1,$2,$3,$4,$5,COALESCE($6,''))
-		ON CONFLICT (environment_id) DO UPDATE SET display_name=EXCLUDED.display_name, logo_url=EXCLUDED.logo_url, accent_color=EXCLUDED.accent_color, theme=EXCLUDED.theme, locale=COALESCE($6,login_settings.locale), updated_at=now()
-		RETURNING `+defaultColumns, m.Environment, input.DisplayName, input.LogoURL, input.AccentColor, encoded, input.Locale)
+	err = tx.GetContext(ctx, &row, `INSERT INTO login_settings(environment_id,display_name,logo_url,accent_color,theme,locale,languages,legal) VALUES($1,$2,$3,$4,$5,COALESCE($6,''),COALESCE($7::text[],'{}'),COALESCE($8::jsonb,'{}'))
+		ON CONFLICT (environment_id) DO UPDATE SET display_name=EXCLUDED.display_name, logo_url=EXCLUDED.logo_url, accent_color=EXCLUDED.accent_color, theme=EXCLUDED.theme, locale=COALESCE($6,login_settings.locale), languages=COALESCE($7::text[],login_settings.languages), legal=COALESCE($8::jsonb,login_settings.legal), updated_at=now()
+		RETURNING `+defaultColumns, m.Environment, input.DisplayName, input.LogoURL, input.AccentColor, encoded, input.Locale, languages(input.Languages), links)
 	if err != nil {
 		return hosted.Settings{}, failure(err)
 	}
@@ -125,6 +162,10 @@ func (r *Repository) SaveClientSettings(ctx context.Context, m hosted.Mutation, 
 	if err != nil {
 		return hosted.Settings{}, err
 	}
+	links, err := legal(input.Legal)
+	if err != nil {
+		return hosted.Settings{}, err
+	}
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return hosted.Settings{}, failure(err)
@@ -138,9 +179,9 @@ func (r *Repository) SaveClientSettings(ctx context.Context, m hosted.Mutation, 
 		return hosted.Settings{}, errx.NotFound("oauth client not found")
 	}
 	var row style
-	err = tx.GetContext(ctx, &row, `INSERT INTO client_login_settings(client_id,environment_id,display_name,logo_url,accent_color,theme) VALUES($1,$2,$3,$4,$5,$6)
-		ON CONFLICT (client_id) DO UPDATE SET display_name=EXCLUDED.display_name, logo_url=EXCLUDED.logo_url, accent_color=EXCLUDED.accent_color, theme=EXCLUDED.theme, updated_at=now()
-		RETURNING `+clientColumns, client, m.Environment, input.DisplayName, input.LogoURL, input.AccentColor, encoded)
+	err = tx.GetContext(ctx, &row, `INSERT INTO client_login_settings(client_id,environment_id,display_name,logo_url,accent_color,theme,locale,legal) VALUES($1,$2,$3,$4,$5,$6,COALESCE($7,''),COALESCE($8::jsonb,'{}'))
+		ON CONFLICT (client_id) DO UPDATE SET display_name=EXCLUDED.display_name, logo_url=EXCLUDED.logo_url, accent_color=EXCLUDED.accent_color, theme=EXCLUDED.theme, locale=COALESCE($7,client_login_settings.locale), legal=COALESCE($8::jsonb,client_login_settings.legal), updated_at=now()
+		RETURNING `+clientColumns, client, m.Environment, input.DisplayName, input.LogoURL, input.AccentColor, encoded, input.Locale, links)
 	if err != nil {
 		return hosted.Settings{}, failure(err)
 	}
@@ -175,6 +216,5 @@ func (r *Repository) DeleteClientSettings(ctx context.Context, m hosted.Mutation
 }
 
 func audit(ctx context.Context, tx sqlx.ExecerContext, m hosted.Mutation) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
-	return failure(err)
+	return failure(eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target))
 }

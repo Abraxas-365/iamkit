@@ -38,6 +38,7 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	if err := validatePostLogout(input.PostLogoutRedirects); err != nil {
 		return identity.ClientID{}, "", err
 	}
+	input.AllowedOrigins, _ = oauth.Origins(input.AllowedOrigins) // checked by Validate
 	raw := ""
 	hash := []byte{}
 	var err error
@@ -73,13 +74,16 @@ func (s *Service) Update(ctx context.Context, m oauth.Mutation, id identity.Clie
 			return err
 		}
 	}
+	if input.AllowedOrigins != nil {
+		origins, _ := oauth.Origins(*input.AllowedOrigins) // checked by Validate
+		input.AllowedOrigins = &origins
+	}
 	var auth *identity.ClientAuth
-	var current oauth.ClientView
+	current, err := s.editable(ctx, m.Environment, id)
+	if err != nil {
+		return err
+	}
 	if input.Authentication() || input.GrantTypes != nil || input.HostedLogin != nil || input.Redirects != nil {
-		var err error
-		if current, err = s.repository.Find(ctx, m.Environment, id); err != nil {
-			return err
-		}
 		if err = oauth.ValidateClientShape(update(current.GrantTypes, input.GrantTypes), update(current.HostedLogin, input.HostedLogin), update(current.Redirects, input.Redirects)); err != nil {
 			return err
 		}
@@ -160,7 +164,23 @@ func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id identity.Cli
 	if id.IsZero() {
 		return errx.Validation("invalid client")
 	}
+	if _, err := s.editable(ctx, m.Environment, id); err != nil {
+		return err
+	}
 	return s.repository.Disable(ctx, m, id)
+}
+
+// editable finds a client operators may change: not one IAMKit registers
+// itself (the organization admin portal's, turned on and off on its own).
+func (s *Service) editable(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID) (oauth.ClientView, error) {
+	current, err := s.repository.Find(ctx, environment, id)
+	if err != nil {
+		return current, err
+	}
+	if current.System != "" {
+		return current, errx.Conflict("this client is managed by IAMKit; use the organization admin portal settings")
+	}
+	return current, nil
 }
 func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, filter oauth.ClientFilter, page query.Pagination) (query.Paginated[oauth.ClientView], error) {
 	return s.repository.List(ctx, environment, filter, page)
@@ -170,6 +190,16 @@ func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, 
 		return oauth.ClientView{}, errx.Validation("invalid client")
 	}
 	return s.repository.Find(ctx, environment, id)
+}
+
+// OriginAllowed reports whether a live client allows origin; a value that
+// is not a valid origin never is.
+func (s *Service) OriginAllowed(ctx context.Context, origin string) (bool, error) {
+	normalized, err := oauth.Origins([]string{origin})
+	if err != nil {
+		return false, nil
+	}
+	return s.repository.OriginAllowed(ctx, normalized[0])
 }
 func (s *Service) Client(ctx context.Context, id identity.ClientID) (*oauth.Client, error) {
 	if id.IsZero() {
@@ -286,7 +316,8 @@ func ValidateAuthorization(issuer string, client *oauth.Client, query map[string
 	if !exact || get("response_type") != "code" || get("code_challenge_method") != "S256" || get("code_challenge") == "" || get("state") == "" || get("nonce") == "" || (get("response_mode") != "" && get("response_mode") != "query") {
 		return errx.Validation("code, exact redirect, S256, state and nonce required")
 	}
-	return nil
+	_, err := oauth.OrganizationHint(query)
+	return err
 }
 func ValidateLogin(access authentication.Token, client *oauth.Client) error {
 	if access.Impersonated() || access.Purpose != "application" || access.ApplicationID != client.Application || access.ResourceID != client.Resource {

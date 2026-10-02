@@ -24,11 +24,14 @@ type SessionCommands interface {
 	// existing one; without one, the caller needs a recent sign-in (or a
 	// management key). Other sessions end; the calling one stays.
 	SetPassword(ctx context.Context, p Principal, current, password string) error
+	// SetPreferences replaces the caller's console settings.
+	SetPreferences(ctx context.Context, p Principal, input Preferences) error
 }
 
-// SessionQueries reads the caller's own sign-in state.
+// SessionQueries reads the caller's own sign-in state and settings.
 type SessionQueries interface {
 	PasswordStatus(ctx context.Context, p Principal) (PasswordStatus, error)
+	Preferences(ctx context.Context, p Principal) (Preferences, error)
 }
 
 // SSOFlows is operator single sign-on through the providers the deployment
@@ -105,6 +108,8 @@ type SessionRepository interface {
 	// session of the operator except keep (zero: all), in one transaction.
 	SetPassword(ctx context.Context, operator identity.OperatorID, hash string, mustChange bool, keep identity.SessionID) error
 	ResetPassword(ctx context.Context, operator identity.OperatorID) error
+	Preferences(ctx context.Context, operator identity.OperatorID) (Preferences, error)
+	SetPreferences(ctx context.Context, operator identity.OperatorID, input Preferences) error
 }
 
 type SSORepository interface {

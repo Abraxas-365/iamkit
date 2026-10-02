@@ -7,7 +7,9 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -112,7 +114,7 @@ func (r *DeliveryConfigRepository) DeleteDeliveryConfig(ctx context.Context, m a
 }
 
 func audit(ctx context.Context, tx sqlx.ExecerContext, m authentication.Mutation) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
+	err := eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target)
 	if err != nil {
 		return errx.Wrap(err, "audit delivery", errx.TypeInternal)
 	}
@@ -155,6 +157,7 @@ func recordAttempt(ctx context.Context, db sqlx.ExecerContext, environmentID ide
 			failure_reason  = CASE WHEN EXCLUDED.delivered THEN d.failure_reason  ELSE EXCLUDED.failure_reason END,
 			failed_at       = CASE WHEN EXCLUDED.delivered THEN d.failed_at       ELSE EXCLUDED.failed_at END`,
 		environmentID, a.Source, a.Purpose, a.Delivered, a.Status, a.Reason, a.LatencyMS, a.At, channel)
+	telemetry.Delivery(ctx, channel, a.Source, a.Purpose, a.Delivered, time.Duration(a.LatencyMS)*time.Millisecond)
 	if err != nil {
 		return errx.Wrap(err, "record delivery attempt", errx.TypeInternal)
 	}

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/signing"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -39,8 +40,7 @@ func conflict(err error) error {
 }
 
 func audit(ctx context.Context, tx *sqlx.Tx, m signing.Mutation) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
-	return failure(err)
+	return failure(eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target))
 }
 
 // change runs fn and the audit row in one transaction.

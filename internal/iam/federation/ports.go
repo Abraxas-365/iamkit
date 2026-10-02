@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -23,12 +24,16 @@ type Queries interface {
 }
 type Flows interface {
 	Discover(ctx context.Context, environment identity.EnvironmentID, email string) (Discovery, error)
-	Start(ctx context.Context, boundary authentication.Context, connection identity.ConnectionID) (Start, error)
+	Start(ctx context.Context, boundary authentication.Context, connection identity.ConnectionID, back Return) (Start, error)
 	// StartHosted starts a login for the hosted pages: the organization is
 	// the connection's own, or chosen after the callback for environment
 	// connections. continuation is the authorization ticket to resume.
 	StartHosted(ctx context.Context, target authentication.Target, connection identity.ConnectionID, continuation string) (Start, error)
 	Callback(ctx context.Context, code, state, binding string) (Outcome, error)
+	// Redeem signs in with the result a callback handed to a custom
+	// sign-in UI (Return), given the verifier of the start's challenge: a
+	// session, or the pending second factor.
+	Redeem(ctx context.Context, result, verifier string) (authentication.Result, error)
 	// Assertion parks a SAML response posted to the assertion consumer
 	// service for its pending state (the RelayState) and returns the
 	// one-time handle the callback takes as its code.
@@ -65,6 +70,18 @@ type Repository interface {
 	EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]ConnectionSummary, error)
 	SaveState(ctx context.Context, hash []byte, s State) error
 	ConsumeState(ctx context.Context, stateHash, bindingHash []byte) (State, error)
+	// ReturnAllowed reports whether an active OAuth client of the
+	// application lists origin in its allowed_origins.
+	ReturnAllowed(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, origin string) (bool, error)
+	// ParkResult keeps a verified headless sign-in for a custom sign-in UI
+	// under handleHash for ResultTTL.
+	ParkResult(ctx context.Context, handleHash []byte, r Result) error
+	// TakeResult returns and deletes a parked result (401 when unknown or
+	// expired).
+	TakeResult(ctx context.Context, handleHash []byte) (Result, error)
+	// ActiveUser returns an open transaction and the active user, locked
+	// (401 when the user is gone or inactive).
+	ActiveUser(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (authentication.Transaction, Account, error)
 	// ParkAssertion keeps a SAML response posted for a pending state of a
 	// SAML connection under handleHash until the callback takes it; it fails
 	// with 401 when the state is unknown, consumed or expired.
@@ -92,6 +109,8 @@ type Repository interface {
 	Join(ctx context.Context, j Joining) error
 	// ActiveOrganization reports whether the organization exists and is active.
 	ActiveOrganization(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (bool, error)
+	// HasUser reports whether a user of the environment has the email.
+	HasUser(ctx context.Context, environment identity.EnvironmentID, email string) (bool, error)
 	Link(ctx context.Context, m Mutation, connection identity.ConnectionID, user identity.UserID, subject string) error
 	Unlink(ctx context.Context, m Mutation, connection identity.ConnectionID, user identity.UserID) error
 	Disable(ctx context.Context, m Mutation, connection identity.ConnectionID) error
@@ -144,4 +163,18 @@ type Sessions interface {
 	// organization SSO satisfies SSO enforcement for email and stands in for
 	// the organization's second factor.
 	SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, email string, organizationSSO bool) (authentication.Result, error)
+}
+
+// Actions runs the environment's hooks (action.Runner): post_federation on
+// every federated sign-in, pre_registration before a first sign-in may
+// create a user.
+type Actions interface {
+	Run(ctx context.Context, environment identity.EnvironmentID, condition string, build func() action.Input) (action.Result, error)
+}
+
+// Quota admits a creation within the environment's limits (usage.Commands):
+// limit usage.LimitUsers before a first sign-in creates a user → 422
+// QUOTA_EXCEEDED.
+type Quota interface {
+	Admit(ctx context.Context, environment identity.EnvironmentID, limit string) error
 }

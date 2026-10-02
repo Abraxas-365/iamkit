@@ -209,7 +209,7 @@ func TestHostedLoginJourney(t *testing.T) {
 	if pw.Status != 200 || !strings.Contains(pw.Body, `name="password"`) || pw.field("email") != e.AliceEmail {
 		t.Fatalf("identify: %d %s", pw.Status, pw.Body)
 	}
-	if r := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {"wrong password!!"}}); r.Status != 401 || !strings.Contains(r.Body, "Incorrect email or password.") {
+	if r := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {"wrong password!!"}}); r.Status != 401 || !strings.Contains(r.Body, "Incorrect email, username or password.") {
 		t.Fatalf("wrong password: %d %s", r.Status, r.Body)
 	}
 	tokens := b.exchange(client, b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}}))
@@ -225,12 +225,33 @@ func TestHostedLoginJourney(t *testing.T) {
 		t.Fatalf("reused ticket: %d", p.Status)
 	}
 
+	// A username goes straight to the password page, known or not.
+	e.Must("PATCH", e.Base+"/users/"+e.Alice, e.Owner, fiber.Map{"username": "alice"}, 204)
+	b = e.browser()
+	tk = b.authorize(client).field("ticket")
+	unknownName := b.post("/hosted/login/identify", url.Values{"ticket": {tk}, "email": {"nobody.here"}})
+	byName := b.post("/hosted/login/identify", url.Values{"ticket": {tk}, "email": {"Alice"}})
+	if byName.Status != 200 || unknownName.Status != 200 || !strings.Contains(byName.Body, `name="password"`) || !strings.Contains(unknownName.Body, `name="password"`) {
+		t.Fatalf("identify by username: %d %d %s", byName.Status, unknownName.Status, byName.Body)
+	}
+	if r := b.post("/hosted/login/identify", url.Values{"ticket": {tk}, "email": {"a b"}}); r.Status != 400 || !strings.Contains(r.Body, "Enter a valid email address or username.") {
+		t.Fatalf("invalid login: %d", r.Status)
+	}
+	if r := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {"nobody.here"}, "password": {e.Pass}}); r.Status != 401 {
+		t.Fatalf("unknown username: %d", r.Status)
+	}
+	tokens = b.exchange(client, b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {"Alice"}, "password": {e.Pass}}))
+	if claims(t, tokens["access_token"].(string))["sub"] != e.Alice {
+		t.Fatal("hosted username login signed in someone else")
+	}
+
 	// Several organizations: choose one; no session exists before.
 	other := e.ID("POST", e.Base+"/organizations", fiber.Map{"name": "Beta"})
 	e.Join(other, e.Alice)
 	e.Grant(other, e.Alice, e.Res, "invoices:write")
 	noAccess := e.ID("POST", e.Base+"/organizations", fiber.Map{"name": "Gamma"})
 	e.Join(noAccess, e.Alice)
+	e.Must("PATCH", e.Base+"/users/"+e.Alice, e.Owner, fiber.Map{"avatar_url": "https://cdn.example/alice.png"}, 204)
 	b = e.browser()
 	tk = b.authorize(client).field("ticket")
 	var before int
@@ -239,6 +260,9 @@ func TestHostedLoginJourney(t *testing.T) {
 	orgs := choose.fields("organization_id")
 	if choose.Status != 200 || len(orgs) != 2 || !contains(orgs, e.Org) || !contains(orgs, other) || strings.Contains(choose.Body, "Gamma") {
 		t.Fatalf("choose page: %d %v %s", choose.Status, orgs, choose.Body)
+	}
+	if !strings.Contains(choose.Body, `src="https://cdn.example/alice.png"`) || !strings.Contains(choose.Body, e.AliceEmail) {
+		t.Fatalf("the chooser shows who signs in: %s", choose.Body)
 	}
 	var after int
 	e.DB.Get(&after, `SELECT count(*) FROM sessions WHERE user_id=$1`, e.Alice)

@@ -28,6 +28,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/signing"
 	"github.com/Abraxas-365/iamkit/internal/netx"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 	"github.com/crewjam/saml"
 	xrv "github.com/mattermost/xml-roundtrip-validator"
 	dsig "github.com/russellhaering/goxmldsig"
@@ -78,7 +79,7 @@ func (p Provider) fetch(ctx context.Context, address string) (string, error) {
 	if transport == nil {
 		transport = &http.Transport{DialContext: netx.GuardedDialer().DialContext, TLSHandshakeTimeout: config.ExternalHTTPTimeout, ResponseHeaderTimeout: config.ExternalHTTPTimeout}
 	}
-	client := &http.Client{Transport: transport, Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := &http.Client{Transport: telemetry.Transport(transport), Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
 		return "", errx.Validation("options.metadata_url is not a valid URL")

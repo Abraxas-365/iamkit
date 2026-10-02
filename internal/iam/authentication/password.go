@@ -156,6 +156,7 @@ func Lockout(failures, threshold int, base, max time.Duration) time.Duration {
 // PasswordAccount is the password state of an account signing in.
 type PasswordAccount struct {
 	ID          identity.UserID `db:"id"`
+	Email       string          `db:"email"`
 	Hash        string          `db:"password_hash"`
 	Failures    int             `db:"failed_logins"`
 	LockedUntil *time.Time      `db:"locked_until"`

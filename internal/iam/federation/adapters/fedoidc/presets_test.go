@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/cache/cachememory"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/golang-jwt/jwt/v5"
@@ -48,6 +49,8 @@ type fakeIdP struct {
 	userinfo string
 	// bearer is the Authorization header of the last API request.
 	bearer string
+	// discoveries counts discovery document requests.
+	discoveries int
 }
 
 func newIdP(t *testing.T) *fakeIdP {
@@ -83,6 +86,7 @@ func (f *fakeIdP) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	switch {
 	case strings.HasSuffix(path, "/.well-known/openid-configuration"):
+		f.discoveries++
 		issuer := "https://" + host + strings.TrimSuffix(path, "/.well-known/openid-configuration")
 		if host == "login.microsoftonline.com" {
 			// Microsoft's multi-tenant metadata names a templated issuer.
@@ -464,5 +468,38 @@ func TestOAuth2(t *testing.T) {
 	idp.userinfo = `{"data":{"email":"ann@example.com"}}`
 	if _, err = idp.provider().Verify(context.Background(), c, "code", "", "v"); err == nil {
 		t.Fatal("identity without a subject accepted")
+	}
+}
+
+func TestDiscoveryCache(t *testing.T) {
+	idp := newIdP(t)
+	provider := idp.provider()
+	provider.Discovery = cachememory.New()
+	c := connection(federation.ProviderGoogle, federation.Options{}, "secret")
+	authorizeURL(t, provider, c)
+	authorizeURL(t, provider, c)
+	idp.issuer = "https://accounts.google.com"
+	idp.claims = jwt.MapClaims{"sub": "g-1", "nonce": "nonce-1", "email": "ann@gmail.com", "email_verified": true}
+	if claims, err := provider.Verify(context.Background(), c, "code", "nonce-1", "v"); err != nil || claims.Subject != "g-1" {
+		t.Fatalf("verify through the cached document: %+v %v", claims, err)
+	}
+	idp.issuer = "https://evil.example"
+	if _, err := provider.Verify(context.Background(), c, "code", "nonce-1", "v"); err == nil {
+		t.Fatal("wrong issuer accepted with a cached document")
+	}
+	if idp.discoveries != 1 {
+		t.Fatalf("discovery fetched %d times, want 1", idp.discoveries)
+	}
+	// Microsoft's templated issuer still verifies per tenant from the cache.
+	m := connection(federation.ProviderMicrosoft, federation.Options{Tenant: federation.TenantCommon}, "secret")
+	idp.issuer = MicrosoftIssuer(federation.ConsumerTenant)
+	idp.claims = jwt.MapClaims{"sub": "m-1", "nonce": "nonce-1", "tid": federation.ConsumerTenant, "email": "ann@outlook.com"}
+	for range 2 {
+		if _, err := provider.Verify(context.Background(), m, "code", "nonce-1", "v"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if idp.discoveries != 2 {
+		t.Fatalf("discovery fetched %d times, want 2", idp.discoveries)
 	}
 }

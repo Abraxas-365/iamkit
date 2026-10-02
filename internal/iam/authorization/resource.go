@@ -13,10 +13,21 @@ type Resource struct {
 	Prefix      string              `json:"prefix"`
 	Audience    string              `json:"audience"`
 	Permissions []string            `json:"permissions"`
+	// OwnerOrganization and RequireGrant: see ResourceAccess.
+	OwnerOrganization *identity.OrganizationID `json:"owner_organization_id"`
+	RequireGrant      bool                     `json:"require_grant"`
+}
+
+// Access is the resource's ownership and grant requirement.
+func (r Resource) Access() ResourceAccess {
+	return ResourceAccess{OwnerOrganization: r.OwnerOrganization, RequireGrant: r.RequireGrant}
 }
 
 // Validate checks the structural invariants Resource owns.
 func (r Resource) Validate() error {
+	if err := r.Access().Validate(); err != nil {
+		return err
+	}
 	if strings.TrimSpace(r.Name) == "" {
 		return errx.Validation("resource name is required")
 	}

@@ -64,6 +64,63 @@ func Phone(value string) (string, error) {
 	return out, nil
 }
 
+// UsernameMaxLength bounds usernames.
+const UsernameMaxLength = 64
+
+// Username normalizes an optional username: lowercase, 3 to 64 letters,
+// digits, ".", "_" or "-", starting with a letter or digit. It never
+// contains "@", so a login input is an email exactly when it has one.
+// "" means none.
+func Username(value string) (string, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return "", nil
+	}
+	valid := len(value) >= 3 && len(value) <= UsernameMaxLength && isAlnum(value[0])
+	for i := 0; valid && i < len(value); i++ {
+		c := value[i]
+		valid = isAlnum(c) || c == '.' || c == '_' || c == '-'
+	}
+	if !valid {
+		return "", errx.Validation("username must be 3 to 64 letters, digits, dots, dashes or underscores, starting with a letter or digit")
+	}
+	return value, nil
+}
+
+func isAlnum(c byte) bool { return c >= 'a' && c <= 'z' || c >= '0' && c <= '9' }
+
+// Login splits what a user typed to sign in into a normalized email or
+// username (exactly one is set).
+func Login(value string) (email, username string, err error) {
+	if strings.Contains(value, "@") {
+		email, err = Email(value)
+		return email, "", err
+	}
+	username, err = Username(value)
+	if err == nil && username == "" {
+		err = errx.Validation("email or username is required")
+	}
+	return "", username, err
+}
+
+// AvatarMaxLength bounds an avatar URL.
+const AvatarMaxLength = 2048
+
+// AvatarURL normalizes a user's avatar: "" (none) or an https URL with a
+// host and no credentials, at most AvatarMaxLength bytes. Hosted pages and
+// the console load it as an image, so no other scheme is accepted.
+func AvatarURL(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || len(value) > AvatarMaxLength {
+		return "", errx.Validation("avatar_url must be an https URL of at most 2048 characters")
+	}
+	return value, nil
+}
+
 // FactorKinds are the second-factor kinds, in the order they are offered.
 var FactorKinds = []string{"totp", "webauthn", "sms", "email"}
 

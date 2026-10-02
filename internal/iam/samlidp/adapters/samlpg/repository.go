@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/samlidp"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -78,8 +79,7 @@ func (r row) provider() (samlidp.ServiceProvider, error) {
 }
 
 func audit(ctx context.Context, tx *sqlx.Tx, m samlidp.Mutation) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
-	return failure(err)
+	return failure(eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target))
 }
 
 // change runs one statement that must touch a row, and its audit event.
@@ -240,7 +240,7 @@ func (r *Repository) ConsumeRequest(ctx context.Context, m samlidp.Mutation, tic
 
 func (r *Repository) Subject(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (samlidp.Subject, error) {
 	var out samlidp.Subject
-	err := r.db.QueryRowxContext(ctx, `SELECT email, name FROM users WHERE environment_id=$1 AND id=$2 AND active`, environment, user).Scan(&out.Email, &out.Name)
+	err := r.db.QueryRowxContext(ctx, `SELECT email, name FROM users WHERE environment_id=$1 AND id=$2 AND active AND kind='human'`, environment, user).Scan(&out.Email, &out.Name)
 	if errors.Is(err, sql.ErrNoRows) {
 		return samlidp.Subject{}, errx.Unauthorized("invalid session context")
 	}

@@ -23,3 +23,9 @@ type Repository interface {
 	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Application], error)
 	Update(ctx context.Context, m Mutation, application identity.ApplicationID, input Update) error
 }
+
+// Quota admits a creation within the environment's limits (usage.Commands):
+// limit usage.LimitApplications → 422 QUOTA_EXCEEDED.
+type Quota interface {
+	Admit(ctx context.Context, environment identity.EnvironmentID, limit string) error
+}

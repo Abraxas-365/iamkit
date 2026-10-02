@@ -59,10 +59,21 @@ func (u Update) Validate() error {
 		return errx.Validation("organization name is required")
 	}
 	if u.AllowedFactors != nil {
-		return identity.ValidateFactors("allowed_factors", u.AllowedFactors)
+		if err := identity.ValidateFactors("allowed_factors", u.AllowedFactors); err != nil {
+			return err
+		}
+	}
+	if len(u.Metadata) > 0 && strings.TrimSpace(string(u.Metadata)) != "null" {
+		return identity.ValidateMetadata(u.Metadata)
 	}
 	return nil
 }
+
+// Audit actions of organization metadata changes.
+const (
+	ActionMetadataSet     = "organization.metadata_set"
+	ActionMetadataDeleted = "organization.metadata_deleted"
+)
 
 type Mutation struct {
 	Environment identity.EnvironmentID

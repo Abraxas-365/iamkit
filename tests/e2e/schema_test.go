@@ -2,7 +2,9 @@ package e2e_test
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -350,6 +352,12 @@ func TestSchemaDeliveryProviders(t *testing.T) {
 	}
 	expectSQL(t, db, "locale", okSQL, `UPDATE login_settings SET locale='es' WHERE environment_id=$1`, f.envA)
 	expectSQL(t, db, "long locale", checkSQL, `UPDATE login_settings SET locale=repeat('x',17) WHERE environment_id=$1`, f.envA)
+	// 048: enabled languages (empty = all), bounded.
+	if n := count(t, db, `SELECT count(*) FROM login_settings WHERE languages='{}'`); n != 1 {
+		t.Fatalf("languages default: %d", n)
+	}
+	expectSQL(t, db, "languages", okSQL, `UPDATE login_settings SET languages='{es,en}' WHERE environment_id=$1`, f.envA)
+	expectSQL(t, db, "too many languages", checkSQL, `UPDATE login_settings SET languages=array_fill('en'::text, ARRAY[65]) WHERE environment_id=$1`, f.envA)
 }
 
 // TestSchemaEmailTemplates covers 013: one row per environment, purpose and
@@ -371,4 +379,181 @@ func TestSchemaEmailTemplates(t *testing.T) {
 	expectSQL(t, db, "long body", checkSQL, insert, f.envA, "test", "en", "", strings.Repeat("x", 2001), "")
 	expectSQL(t, db, "max body in characters", okSQL, insert, f.envA, "test", "en", "", strings.Repeat("é", 2000), "")
 	expectSQL(t, db, "unknown environment", foreignSQL, insert, "00000000-0000-4000-8000-000000000000", "login", "en", "x", "", "")
+}
+
+// TestOrgAdministrationBackfill replays 038's data changes on rows shaped
+// like an earlier release: IAM resources gain the iam:org:* permissions and
+// built-in roles (a custom role with a built-in name is renamed), users
+// with exactly one membership are homed there, and existing audit events
+// get their actor kind and organization.
+func TestOrgAdministrationBackfill(t *testing.T) {
+	db := freshDB(t)
+	f := newSchemaFixture(t, db)
+	iam, custom, shared, account := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO resources(id,environment_id,name,prefix,audience,permissions) VALUES($1,$2,'IAMKit','iam','urn:iam',ARRAY['iam:users:read'])`, []any{iam, f.envA}},
+		{`INSERT INTO roles(id,environment_id,resource_id,name,permissions) VALUES($1,$2,$3,'Organization owner',ARRAY['iam:users:read'])`, []any{custom, f.envA, iam}},
+		{`INSERT INTO users(id,environment_id,email,name,password_hash) VALUES($1,$2,'s@example.com','S','x')`, []any{shared, f.envA}},
+		{`INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3),($1,$4,$3)`, []any{f.envA, f.orgA, shared, f.orgA2}},
+		{`INSERT INTO service_accounts(id,environment_id,application_id,resource_id,name,secret_hash,expires_at) VALUES($1,$2,$3,$4,'bot','\x01',now()+interval '1 day')`, []any{account, f.envA, f.app, f.res}},
+		{`INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,'PATCH','/management/v1/environments/x/organizations/'||$3),($1,$4,'user.deactivated','u'),($1,$5,'POST','/x')`, []any{f.envA, f.userA, f.orgA, account, uuid.NewString()}},
+		{`UPDATE audit_events SET actor_kind='operator', organization_id=NULL`, nil},
+		{`UPDATE users SET home_organization_id=NULL`, nil},
+	} {
+		if _, err := db.Exec(q.sql, q.args...); err != nil {
+			t.Fatalf("fixture %q: %v", q.sql, err)
+		}
+	}
+	raw, err := os.ReadFile("../../migrations/038_org_administration.up.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range strings.Split(string(raw), ";\n") {
+		var lines []string
+		for _, line := range strings.Split(statement, "\n") {
+			if !strings.HasPrefix(strings.TrimSpace(line), "--") {
+				lines = append(lines, line)
+			}
+		}
+		statement = strings.TrimSpace(strings.Join(lines, "\n"))
+		if strings.HasPrefix(statement, "UPDATE ") || strings.HasPrefix(statement, "INSERT INTO ") {
+			if _, err := db.Exec(statement); err != nil {
+				t.Fatalf("backfill %q: %v", statement, err)
+			}
+		}
+	}
+	if n := count(t, db, `SELECT cardinality(permissions) FROM resources WHERE id=$1`, iam); n != 12 {
+		t.Fatalf("IAM permissions: %d", n)
+	}
+	if n := count(t, db, `SELECT count(*) FROM resources WHERE id=$1 AND 'iam:org:read' = ANY(permissions)`, f.res); n != 0 {
+		t.Fatal("non-IAM resource changed")
+	}
+	if n := count(t, db, `SELECT count(*) FROM roles WHERE resource_id=$1 AND system_role IS NOT NULL`, iam); n != 4 {
+		t.Fatalf("built-in roles: %d", n)
+	}
+	if n := count(t, db, `SELECT count(*) FROM roles WHERE id=$1 AND name='Organization owner (custom)' AND system_role IS NULL`, custom); n != 1 {
+		t.Fatal("custom role with a built-in name not renamed")
+	}
+	if n := count(t, db, `SELECT count(*) FROM users WHERE id=$1 AND home_organization_id=$2`, f.userA, f.orgA); n != 1 {
+		t.Fatal("single-membership user not homed")
+	}
+	if n := count(t, db, `SELECT count(*) FROM users WHERE id=$1 AND home_organization_id=$2`, f.userB, f.orgB); n != 1 {
+		t.Fatal("user of another environment not homed")
+	}
+	if n := count(t, db, `SELECT count(*) FROM users WHERE id=$1 AND home_organization_id IS NULL`, shared); n != 1 {
+		t.Fatal("multi-membership user homed")
+	}
+	if n := count(t, db, `SELECT count(*) FROM audit_events WHERE actor_id=$1 AND actor_kind='user' AND organization_id=$2`, f.userA, f.orgA); n != 1 {
+		t.Fatal("user event not backfilled")
+	}
+	if n := count(t, db, `SELECT count(*) FROM audit_events WHERE actor_id=$1 AND actor_kind='service_account' AND organization_id IS NULL`, account); n != 1 {
+		t.Fatal("service account event not backfilled")
+	}
+	if n := count(t, db, `SELECT count(*) FROM audit_events WHERE action='POST' AND actor_kind='operator'`); n != 1 {
+		t.Fatal("operator event changed")
+	}
+}
+
+// replayBackfill re-runs the UPDATE/INSERT statements of a migration.
+func replayBackfill(t *testing.T, db *sqlx.DB, file string) {
+	t.Helper()
+	raw, err := os.ReadFile("../../migrations/" + file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range strings.Split(string(raw), ";\n") {
+		var lines []string
+		for _, line := range strings.Split(statement, "\n") {
+			if !strings.HasPrefix(strings.TrimSpace(line), "--") {
+				lines = append(lines, line)
+			}
+		}
+		statement = strings.TrimSpace(strings.Join(lines, "\n"))
+		if strings.HasPrefix(statement, "UPDATE ") || strings.HasPrefix(statement, "INSERT INTO ") {
+			if _, err := db.Exec(statement); err != nil {
+				t.Fatalf("backfill %q: %v", statement, err)
+			}
+		}
+	}
+}
+
+// TestSchemaResourceGrants covers 039: ownership and grant constraints,
+// effective_grants unchanged unless require_grant, and the backfill.
+func TestSchemaResourceGrants(t *testing.T) {
+	db := freshDB(t)
+	f := newSchemaFixture(t, db)
+	iam, reader, writer, custom := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{`INSERT INTO resources(id,environment_id,name,prefix,audience,permissions) VALUES($1,$2,'IAMKit','iam','urn:iam',ARRAY['iam:users:read','iam:org:read'])`, []any{iam, f.envA}},
+		{`INSERT INTO roles(id,environment_id,resource_id,name,permissions) VALUES($1,$2,$3,'Resource manager',ARRAY['iam:users:read'])`, []any{custom, f.envA, iam}},
+		{`UPDATE resources SET permissions=ARRAY['api:read','api:write'] WHERE id=$1`, []any{f.res}},
+		{`INSERT INTO roles(id,environment_id,resource_id,name,permissions) VALUES($1,$3,$4,'reader',ARRAY['api:read']),($2,$3,$4,'writer',ARRAY['api:write'])`, []any{reader, writer, f.envA, f.res}},
+		{`INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, []any{f.envA, f.orgA2, f.userA}},
+		{`INSERT INTO role_assignments(environment_id,organization_id,user_id,resource_id,role_id) VALUES($1,$2,$3,$4,$5),($1,$2,$3,$4,$6),($1,$7,$3,$4,$5)`, []any{f.envA, f.orgA, f.userA, f.res, reader, writer, f.orgA2}},
+	} {
+		if _, err := db.Exec(q.sql, q.args...); err != nil {
+			t.Fatalf("fixture %q: %v", q.sql, err)
+		}
+	}
+	view := func() string {
+		var out string
+		if err := db.Get(&out, `SELECT coalesce(string_agg(organization_id::text||':'||array_to_string(ARRAY(SELECT unnest(permissions) ORDER BY 1),','), ' ' ORDER BY organization_id), '') FROM effective_grants WHERE resource_id=$1`, f.res); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	open := view()
+	expectSQL(t, db, "owner of another environment", foreignSQL, `UPDATE resources SET owner_organization_id=$2 WHERE id=$1`, f.res, f.orgB)
+	expectSQL(t, db, "owned IAM resource", checkSQL, `UPDATE resources SET owner_organization_id=$2 WHERE id=$1`, iam, f.orgA)
+	expectSQL(t, db, "IAM resource requiring grants", checkSQL, `UPDATE resources SET require_grant=true WHERE id=$1`, iam)
+	expectSQL(t, db, "owner", okSQL, `UPDATE resources SET owner_organization_id=$2 WHERE id=$1`, f.res, f.orgA2)
+	if got := view(); got != open {
+		t.Fatalf("owning changed effective_grants: %q, was %q", got, open)
+	}
+	expectSQL(t, db, "grant to another environment", foreignSQL, `INSERT INTO resource_grants(id,environment_id,resource_id,organization_id) VALUES($1,$2,$3,$4)`, uuid.NewString(), f.envA, f.res, f.orgB)
+	expectSQL(t, db, "grant", okSQL, `INSERT INTO resource_grants(id,environment_id,resource_id,organization_id,role_ids) VALUES($1,$2,$3,$4,ARRAY[$5]::uuid[])`, uuid.NewString(), f.envA, f.res, f.orgA, reader)
+	expectSQL(t, db, "second grant", uniqueSQL, `INSERT INTO resource_grants(id,environment_id,resource_id,organization_id) VALUES($1,$2,$3,$4)`, uuid.NewString(), f.envA, f.res, f.orgA)
+	if got := view(); got != open {
+		t.Fatalf("a grant changed effective_grants without require_grant: %q, was %q", got, open)
+	}
+	expectSQL(t, db, "require grant", okSQL, `UPDATE resources SET require_grant=true WHERE id=$1`, f.res)
+	// orgA holds only the reader role; orgA2 owns the resource.
+	want := []string{f.orgA + ":api:read", f.orgA2 + ":api:read"}
+	sort.Strings(want)
+	if got := view(); got != strings.Join(want, " ") {
+		t.Fatalf("effective_grants with require_grant = %q, want %q", got, want)
+	}
+	expectSQL(t, db, "disown", okSQL, `UPDATE resources SET owner_organization_id=NULL WHERE id=$1`, f.res)
+	if got := view(); got != f.orgA+":api:read" {
+		t.Fatalf("effective_grants without the owner = %q", got)
+	}
+	spare := uuid.NewString()
+	expectSQL(t, db, "spare organization", okSQL, `INSERT INTO organizations(id,environment_id,name) VALUES($1,$2,'Spare')`, spare, f.envA)
+	expectSQL(t, db, "spare grant", okSQL, `INSERT INTO resource_grants(id,environment_id,resource_id,organization_id) VALUES($1,$2,$3,$4)`, uuid.NewString(), f.envA, f.res, spare)
+	expectSQL(t, db, "drop organization", okSQL, `DELETE FROM organizations WHERE id=$1`, spare)
+	if n := count(t, db, `SELECT count(*) FROM resource_grants WHERE organization_id=$1`, spare); n != 0 {
+		t.Fatalf("grants survived their organization: %d", n)
+	}
+
+	// Backfill: IAM catalog, built-in roles, custom role renamed.
+	replayBackfill(t, db, "039_resource_grants.up.sql")
+	if n := count(t, db, `SELECT count(*) FROM resources WHERE id=$1 AND 'iam:org:resources:write' = ANY(permissions)`, iam); n != 1 {
+		t.Fatal("IAM catalog lacks iam:org:resources:write")
+	}
+	if n := count(t, db, `SELECT count(*) FROM roles WHERE resource_id=$1 AND system_role='org_resource_manager' AND name='Resource manager'`, iam); n != 1 {
+		t.Fatal("resource manager role not created")
+	}
+	if n := count(t, db, `SELECT count(*) FROM roles WHERE id=$1 AND name='Resource manager (custom)'`, custom); n != 1 {
+		t.Fatal("custom role with the built-in name not renamed")
+	}
+	replayBackfill(t, db, "039_resource_grants.up.sql")
+	if n := count(t, db, `SELECT count(*) FROM roles WHERE resource_id=$1 AND system_role='org_resource_manager'`, iam); n != 1 {
+		t.Fatalf("backfill not idempotent: %d resource manager roles", n)
+	}
 }

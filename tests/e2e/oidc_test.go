@@ -14,7 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func oidcJourney(t *testing.T, app *fiber.App, call func(string, string, string, any, int) map[string]any, owner, base, env, org, client, resource string) {
+func oidcJourney(t *testing.T, app *App, call func(string, string, string, any, int) map[string]any, owner, base, env, org, client, resource string) {
 	t.Setenv("OIDC_HMAC_SECRET", strings.Repeat("s", 32))
 	registered := call("POST", base+"/oauth-clients", owner, fiber.Map{"application_id": client, "resource_id": resource, "redirect_uris": []string{"https://app.example/callback"}, "public": true}, 201)
 	clientID := registered["client_id"].(string)

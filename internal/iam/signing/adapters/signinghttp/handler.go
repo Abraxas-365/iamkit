@@ -39,7 +39,7 @@ func (h *Handler) mutation(c *fiber.Ctx) signing.Mutation {
 }
 
 func (h *Handler) list(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
+	out, err := h.queries.List(c.UserContext(), env(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -47,7 +47,7 @@ func (h *Handler) list(c *fiber.Ctx) error {
 }
 
 func (h *Handler) find(c *fiber.Ctx) error {
-	out, err := h.queries.Find(c.Context(), env(c), c.Params("kid"))
+	out, err := h.queries.Find(c.UserContext(), env(c), c.Params("kid"))
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func (h *Handler) find(c *fiber.Ctx) error {
 }
 
 func (h *Handler) create(c *fiber.Ctx) error {
-	out, err := h.commands.Create(c.Context(), h.mutation(c))
+	out, err := h.commands.Create(c.UserContext(), h.mutation(c))
 	if err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 }
 
 func (h *Handler) activate(c *fiber.Ctx) error {
-	out, err := h.commands.Activate(c.Context(), h.mutation(c), c.Params("kid"))
+	out, err := h.commands.Activate(c.UserContext(), h.mutation(c), c.Params("kid"))
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func (h *Handler) retire(c *fiber.Ctx) error {
 			return errx.Validation("invalid request")
 		}
 	}
-	out, err := h.commands.Retire(c.Context(), h.mutation(c), c.Params("kid"), input)
+	out, err := h.commands.Retire(c.UserContext(), h.mutation(c), c.Params("kid"), input)
 	if err != nil {
 		return err
 	}

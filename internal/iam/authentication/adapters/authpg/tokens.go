@@ -6,7 +6,10 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
@@ -64,7 +67,7 @@ func (r *Repository) Revoke(ctx context.Context, environment identity.Environmen
 }
 func (r *Repository) Profile(ctx context.Context, t authentication.Token) (authentication.Profile, error) {
 	out := authentication.Profile{}
-	err := r.db.GetContext(ctx, &out, `SELECT u.id,u.email,u.name,u.email_verified,u.environment_id,$2::uuid AS organization_id,$3::uuid AS actor_id FROM users u WHERE u.id=$1`, t.Subject, t.OrganizationID, t.ActorID)
+	err := r.db.GetContext(ctx, &out, `SELECT u.id,coalesce(u.email,'') AS email,u.name,coalesce(u.username,'') AS username,u.avatar_url,u.email_verified,u.phone,u.phone_verified,u.environment_id,$2::uuid AS organization_id,$3::uuid AS actor_id FROM users u WHERE u.id=$1`, t.Subject, t.OrganizationID, t.ActorID)
 	return out, failure(err)
 }
 func (r *Repository) Organizations(ctx context.Context, t authentication.Token) ([]authentication.Organization, error) {
@@ -73,37 +76,39 @@ func (r *Repository) Organizations(ctx context.Context, t authentication.Token) 
 	return out, failure(err)
 }
 
-// UpdateProfile sets the token subject's display name.
-func (r *Repository) UpdateProfile(ctx context.Context, t authentication.Token, name string) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE users SET name=$3 WHERE id=$1 AND environment_id=$2`, t.Subject, t.EnvironmentID, name)
+// UpdateProfile sets the token subject's display name and avatar.
+func (r *Repository) UpdateProfile(ctx context.Context, t authentication.Token, input authentication.ProfileUpdate) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE users SET name=coalesce($3,name),avatar_url=coalesce($4,avatar_url) WHERE id=$1 AND environment_id=$2`, t.Subject, t.EnvironmentID, input.Name, input.AvatarURL)
 	return failure(err)
 }
 
 // AddMember adds user to the token's organization when the caller (t.Subject)
 // holds iam:members:write there.
 func (r *Repository) AddMember(ctx context.Context, t authentication.Token, user identity.UserID) error {
-	res, err := r.db.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id)
 SELECT $1,$2,$3 WHERE EXISTS(
   SELECT 1 FROM effective_grants eg
   JOIN resources res ON res.id=eg.resource_id AND res.environment_id=eg.environment_id AND res.prefix='iam'
   WHERE eg.environment_id=$1 AND eg.organization_id=$2 AND eg.user_id=$4
   AND 'iam:members:write' = ANY(eg.permissions)
 )`, t.EnvironmentID, t.OrganizationID, user, t.Subject)
-	if err != nil {
-		var pg *pq.Error
-		if errors.As(err, &pg) && pg.Code.Class() == "23" {
-			return errx.Conflict("membership exists or user is outside environment")
+		if err != nil {
+			var pg *pq.Error
+			if errors.As(err, &pg) && pg.Code.Class() == "23" {
+				return errx.Conflict("membership exists or user is outside environment")
+			}
+			return failure(err)
 		}
-		return failure(err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return failure(err)
-	}
-	if n == 0 {
-		return errx.Forbidden("insufficient permissions")
-	}
-	return nil
+		n, err := res.RowsAffected()
+		if err != nil {
+			return failure(err)
+		}
+		if n == 0 {
+			return errx.Forbidden("insufficient permissions")
+		}
+		return eventpg.Membership(ctx, tx, t.EnvironmentID, t.Subject.String(), event.MembershipCreated, t.OrganizationID, user)
+	})
 }
 
 var _ authentication.TokenRepository = (*Repository)(nil)

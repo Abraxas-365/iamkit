@@ -18,7 +18,11 @@ type brand struct {
 	Header, LogoInHeader                  bool
 	FooterText                            string
 	Links                                 []hosted.Link
-	Vars                                  template.CSS
+	// Legal are the policy links of the sign-in and sign-up pages.
+	Legal hosted.Legal
+	Vars  template.CSS
+	// FontSrc is the CSP font-src the page's fonts need ("" for none).
+	FontSrc string
 }
 
 // Default palettes; an empty dark primary follows the light one (the brand
@@ -77,6 +81,12 @@ func brandOf(s hosted.Settings, force string) brand {
 		css.WriteString(":root{" + schemeVars(lightScheme) + "}")
 	}
 	css.WriteString(backdrop(t))
+	faces, sources := fontFaces(t)
+	css.WriteString(faces)
+	b.FontSrc = sources
+	if s.Legal != nil {
+		b.Legal = *s.Legal
+	}
 	b.Vars = template.CSS(css.String())
 	return b
 }

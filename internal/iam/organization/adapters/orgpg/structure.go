@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
-	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -27,7 +29,7 @@ var structureQueries = map[organization.StructureView]string{
 	organization.Descendants:  `WITH RECURSIVE tree AS(SELECT id,parent_id,name,kind,0 depth FROM org_units WHERE environment_id=$1 AND organization_id=$2 AND id=$3 UNION ALL SELECT u.id,u.parent_id,u.name,u.kind,t.depth+1 FROM org_units u JOIN tree t ON u.parent_id=t.id WHERE u.environment_id=$1 AND u.organization_id=$2) SELECT coalesce(json_agg(t),'[]') FROM (SELECT * FROM tree WHERE depth>0 ORDER BY depth,id)t`,
 	organization.Tree:         `WITH RECURSIVE tree AS(SELECT id,parent_id,name,kind,ARRAY[id] path FROM org_units WHERE environment_id=$1 AND organization_id=$2 AND parent_id IS NULL UNION ALL SELECT u.id,u.parent_id,u.name,u.kind,t.path||u.id FROM org_units u JOIN tree t ON u.parent_id=t.id WHERE u.environment_id=$1 AND u.organization_id=$2) SELECT coalesce(json_agg(t),'[]') FROM(SELECT * FROM tree ORDER BY path)t`,
 	organization.DeleteImpact: `WITH RECURSIVE tree AS(SELECT id FROM org_units WHERE environment_id=$1 AND organization_id=$2 AND id=$3 UNION ALL SELECT u.id FROM org_units u JOIN tree t ON u.parent_id=t.id WHERE u.environment_id=$1 AND u.organization_id=$2) SELECT json_build_object('has_children',(SELECT count(*)>1 FROM tree),'affected_user_ids',(SELECT coalesce(json_agg(user_id),'[]') FROM memberships WHERE environment_id=$1 AND organization_id=$2 AND org_unit_id IN(SELECT id FROM tree)),'assignment_ids',(SELECT coalesce(json_agg(id),'[]') FROM position_assignments WHERE environment_id=$1 AND organization_id=$2 AND org_unit_id IN(SELECT id FROM tree)))`,
-	organization.Chart:        `SELECT coalesce(json_agg(t),'[]') FROM(SELECT m.user_id,m.manager_id,m.org_unit_id,coalesce(m.display_name,u.name) AS name,u.email FROM memberships m JOIN users u ON u.id=m.user_id AND u.environment_id=m.environment_id WHERE m.environment_id=$1 AND m.organization_id=$2 AND m.active ORDER BY m.user_id)t`,
+	organization.Chart:        `SELECT coalesce(json_agg(t),'[]') FROM(SELECT m.user_id,m.manager_id,m.org_unit_id,coalesce(m.display_name,u.name) AS name,coalesce(u.email,'') AS email FROM memberships m JOIN users u ON u.id=m.user_id AND u.environment_id=m.environment_id WHERE m.environment_id=$1 AND m.organization_id=$2 AND m.active ORDER BY m.user_id)t`,
 }
 
 func (r *Repository) View(ctx context.Context, b organization.Boundary, view organization.StructureView, id string) (json.RawMessage, error) {
@@ -48,8 +50,7 @@ func (r *Repository) View(ctx context.Context, b organization.Boundary, view org
 	return json.RawMessage(raw), failure(err)
 }
 func audit(ctx context.Context, tx *sqlx.Tx, m organization.Mutation) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
-	return failure(err)
+	return failure(eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target))
 }
 func (r *Repository) mutate(ctx context.Context, m organization.Mutation, query string, args ...any) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -154,8 +155,13 @@ func (r *Repository) SetProfile(ctx context.Context, b organization.Boundary, m 
 	return failure(tx.Commit())
 }
 func (r *Repository) CreatePosition(ctx context.Context, b organization.Boundary, id identity.PositionID, input organization.Position) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO positions(id,environment_id,organization_id,name,code) VALUES($1,$2,$3,$4,$5)`, id, b.Environment, b.Organization, input.Name, input.Code)
-	return conflict(err)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO positions(id,environment_id,organization_id,name,code) VALUES($1,$2,$3,$4,$5)`, id, b.Environment, b.Organization, input.Name, input.Code); err != nil {
+			return conflict(err)
+		}
+		return eventpg.Record(ctx, tx, b.Environment, event.PositionCreated, event.Subject{Kind: "position", ID: id.String()},
+			map[string]any{"organization_id": b.Organization.String()})
+	})
 }
 func (r *Repository) UpdatePosition(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.PositionID, input organization.Position) error {
 	return r.mutate(ctx, m, `UPDATE positions SET name=$4,code=$5 WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, b.Environment, b.Organization, id, input.Name, input.Code)
@@ -164,8 +170,13 @@ func (r *Repository) DeletePosition(ctx context.Context, b organization.Boundary
 	return r.mutate(ctx, m, `DELETE FROM positions WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, b.Environment, b.Organization, id)
 }
 func (r *Repository) AssignPosition(ctx context.Context, b organization.Boundary, id identity.AssignmentID, input organization.Assignment) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO position_assignments(id,environment_id,organization_id,position_id,user_id,org_unit_id) VALUES($1,$2,$3,$4,$5,$6)`, id, b.Environment, b.Organization, input.Position, input.User, input.Unit)
-	return conflict(err)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO position_assignments(id,environment_id,organization_id,position_id,user_id,org_unit_id) VALUES($1,$2,$3,$4,$5,$6)`, id, b.Environment, b.Organization, input.Position, input.User, input.Unit); err != nil {
+			return conflict(err)
+		}
+		return eventpg.Record(ctx, tx, b.Environment, event.PositionAssigned, event.Subject{Kind: "position_assignment", ID: id.String()},
+			map[string]any{"organization_id": b.Organization.String(), "position_id": input.Position.String(), "user_id": input.User.String()})
+	})
 }
 func (r *Repository) DeleteAssignment(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.AssignmentID) error {
 	return r.mutate(ctx, m, `DELETE FROM position_assignments WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, b.Environment, b.Organization, id)

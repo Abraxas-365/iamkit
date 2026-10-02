@@ -173,7 +173,7 @@ func (r *Repository) ListGroupMembers(ctx context.Context, b organization.Bounda
 		return query.Paginated[organization.GroupMemberView]{}, failure(err)
 	}
 	out := []organization.GroupMemberView{}
-	sel := fmt.Sprintf(`SELECT gm.user_id,coalesce(m.display_name,u.name) AS user_name,u.email AS user_email,(m.active AND u.active) AS active,gm.created_at %s ORDER BY lower(u.email) LIMIT %d OFFSET %d`, base, page.Limit, page.Offset)
+	sel := fmt.Sprintf(`SELECT gm.user_id,coalesce(m.display_name,u.name) AS user_name,coalesce(u.email,'') AS user_email,(m.active AND u.active) AS active,gm.created_at %s ORDER BY lower(u.email) NULLS LAST, gm.user_id LIMIT %d OFFSET %d`, base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &out, sel, args...); err != nil {
 		return query.Paginated[organization.GroupMemberView]{}, failure(err)
 	}

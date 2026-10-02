@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -15,7 +16,7 @@ func TestEmailTemplates(t *testing.T) {
 	path := e.Base + "/delivery/templates"
 
 	grid := e.Must("GET", path, e.Owner, nil, 200).JSON["items"].([]any)
-	if len(grid) != 12 { // 6 purposes (incl. mfa) × 2 languages
+	if len(grid) != 6*len(i18n.Codes()) { // 6 purposes (incl. mfa) × every language
 		t.Fatalf("grid = %d items", len(grid))
 	}
 	for _, item := range grid {
@@ -64,7 +65,7 @@ func TestEmailTemplates(t *testing.T) {
 		}
 	}
 	e.Must("PUT", path+"/welcome/es", e.Owner, fiber.Map{"subject": "x"}, 400)
-	e.Must("PUT", path+"/login/fr", e.Owner, fiber.Map{"subject": "x"}, 400)
+	e.Must("PUT", path+"/login/eo", e.Owner, fiber.Map{"subject": "x"}, 400)
 	e.Must("GET", path+"/login/es-MX", e.Owner, nil, 400)
 
 	// The saved wording is what previews (and sends) use; a draft overrides it.

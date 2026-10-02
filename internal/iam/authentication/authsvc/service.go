@@ -10,6 +10,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/i18n"
+	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -25,7 +26,15 @@ type Service struct {
 	policies    *PasswordPolicies
 	signIns     *SignInPolicies
 	signups     authentication.SignupRepository
+	actions     authentication.Actions
+	usage       authentication.Usage
 }
+
+// SetActions runs the environment's sign-in and signup hooks.
+func (s *Service) SetActions(actions authentication.Actions) { s.actions = actions }
+
+// SetUsage enforces the users limit on signups.
+func (s *Service) SetUsage(u authentication.Usage) { s.usage = u }
 
 func New(repository authentication.Repository, passwords authentication.Passwords, secrets authentication.Secrets, delivery authentication.Delivery) *Service {
 	return &Service{repository: repository, passwords: passwords, secrets: secrets, delivery: delivery}
@@ -48,9 +57,9 @@ func (s *Service) SetSecondFactor(second authentication.SecondFactor) { s.second
 
 var _ authentication.MFACommands = (*Service)(nil)
 
-func (s *Service) Login(ctx context.Context, boundary authentication.Context, email, password, newPassword string) (authentication.Result, error) {
+func (s *Service) Login(ctx context.Context, boundary authentication.Context, login, password, newPassword string) (authentication.Result, error) {
 	var out authentication.Result
-	email, err := identity.Email(email)
+	email, username, err := identity.Login(login)
 	if err != nil || boundary.Validate() != nil || len(password) > config.PasswordMaxLength {
 		return out, invalidCredentials()
 	}
@@ -71,7 +80,7 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 	if err = requireNoSSO(ctx, tx, boundary, email); err != nil {
 		return out, err
 	}
-	account, lookup := tx.PasswordUser(ctx, boundary, email)
+	account, lookup := tx.PasswordUser(ctx, boundary, email+username)
 	// Compare always runs (dummy hash when unknown) so timing is uniform.
 	matches := s.passwords.Compare(account.Hash, password)
 	if lookup != nil {
@@ -79,6 +88,9 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, em
 	}
 	if err = s.checkPassword(ctx, tx, boundary.EnvironmentID, policy, account, matches); err != nil {
 		return out, credentialFailure(err)
+	}
+	if err = requireNoSSOAfter(ctx, tx, boundary, username, account.Email); err != nil {
+		return out, err
 	}
 	// Expiry and new passwords follow the user's organizations too; lockout
 	// (above) only the environment.
@@ -238,9 +250,23 @@ func credentialFailure(err error) error {
 	return err
 }
 
+// requireNoSSOAfter enforces SSO for a username login once the password
+// matched: before, SSO_REQUIRED would reveal that the username exists. An
+// email login (username "") was checked before the lookup.
+func requireNoSSOAfter(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, username, email string) error {
+	if username == "" {
+		return nil
+	}
+	return requireNoSSO(ctx, tx, boundary, email)
+}
+
 // requireNoSSO rejects password and email-code login where the boundary
 // organization enforces SSO. Clients find the connection with /discover.
+// An empty email (a username login, checked later) passes.
 func requireNoSSO(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, email string) error {
+	if email == "" {
+		return nil
+	}
 	required, err := tx.SSORequired(ctx, boundary, email)
 	if err != nil {
 		return err
@@ -270,6 +296,9 @@ func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction,
 		return out, err
 	}
 	out.Access = access
+	if err = s.preSignIn(ctx, tx, boundary, user, amr); err != nil {
+		return out, err
+	}
 	expires := now.Add(config.SessionTTL)
 	if err = tx.CreateSession(ctx, boundary, user, sessionID, now, expires, amr); err != nil {
 		return out, err
@@ -279,6 +308,21 @@ func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction,
 		return out, err
 	}
 	return out, tx.Commit()
+}
+
+// preSignIn runs function:pre_sign_in, which may refuse the session.
+func (s *Service) preSignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, amr []string) error {
+	if s.actions == nil {
+		return nil
+	}
+	_, err := s.actions.Run(ctx, boundary.EnvironmentID, action.PreSignIn, func() action.Input {
+		in := action.Input{Organization: &boundary.OrganizationID, Application: &boundary.ApplicationID, Method: amr, User: &action.UserInput{ID: &user}}
+		if profile, err := tx.ActiveProfile(ctx, boundary.EnvironmentID, user); err == nil {
+			in.User.Email, in.User.Name, in.User.Username = profile.Email, profile.Name, profile.Username
+		}
+		return in
+	})
+	return err
 }
 
 func (s *Service) saveRefresh(ctx context.Context, tx authentication.Transaction, user identity.UserID, session identity.SessionID, expires time.Time) (string, error) {
@@ -333,8 +377,8 @@ func (s *Service) Refresh(ctx context.Context, boundary authentication.Context, 
 	return out, tx.Commit()
 }
 
-func (s *Service) InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose, locale string) (identity.ChallengeID, error) {
-	email, err := identity.Email(email)
+func (s *Service) InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, login, purpose, locale string) (identity.ChallengeID, error) {
+	email, username, err := identity.Login(login)
 	if err != nil || environment.IsZero() || (purpose != "login" && purpose != "password_reset" && purpose != "email_verification") {
 		return identity.ChallengeID{}, errx.Validation("invalid challenge request")
 	}
@@ -360,7 +404,8 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 		return identity.ChallengeID{}, err
 	}
 	defer tx.Rollback()
-	user, err := tx.EligibleChallengeUser(ctx, environment, email, purpose)
+	// A username's code goes to the account's email.
+	user, email, err := tx.EligibleChallengeUser(ctx, environment, email+username, purpose)
 	if err != nil {
 		return identity.ChallengeID{}, err
 	}

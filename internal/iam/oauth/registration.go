@@ -31,6 +31,12 @@ type ClientView struct {
 	BackchannelLogoutSessionRequired bool   `json:"backchannel_logout_session_required"`
 	// GrantTypes are the grants the client may use at the token endpoint.
 	GrantTypes []string `json:"grant_types"`
+	// AllowedOrigins may call the browser-facing endpoints with CORS
+	// (custom sign-in UIs, single-page applications).
+	AllowedOrigins []string `json:"allowed_origins"`
+	// System names a client IAMKit registers itself ("org_admin": the
+	// hosted organization admin portal); operators cannot change those.
+	System string `json:"system,omitempty"`
 	identity.ClientAuth
 }
 
@@ -53,6 +59,9 @@ type Registration struct {
 	// device grant needs hosted_login. A client without authorization_code
 	// needs no redirect URIs.
 	GrantTypes []string `json:"grant_types"`
+	// AllowedOrigins are browser origins (scheme://host[:port]) allowed to
+	// call /identity/v1 and the browser-facing /oauth endpoints with CORS.
+	AllowedOrigins []string `json:"allowed_origins"`
 	// ClientAuth defaults to none (public) or client_secret_basic.
 	identity.ClientAuth
 }
@@ -70,6 +79,8 @@ type ClientUpdate struct {
 	// GrantTypes replaces the client's grants (checked with its hosted
 	// login setting and redirect URIs by the service).
 	GrantTypes *[]string `json:"grant_types"`
+	// AllowedOrigins replaces the client's allowed origins.
+	AllowedOrigins *[]string `json:"allowed_origins"`
 	// Client authentication: a changed method replaces the keys (jwks and
 	// jwks_uri are cleared unless given).
 	AuthMethod *string          `json:"token_endpoint_auth_method"`
@@ -111,8 +122,8 @@ func (u ClientUpdate) Apply(current identity.ClientAuth) identity.ClientAuth {
 }
 
 func (u ClientUpdate) Validate() error {
-	if u.HostedLogin == nil && u.Redirects == nil && u.PostLogoutRedirects == nil && u.AccessTokenFormat == nil && u.BackchannelLogoutURI == nil && u.BackchannelLogoutSessionRequired == nil && u.GrantTypes == nil && !u.Authentication() {
-		return errx.Validation("hosted_login, redirect_uris, post_logout_redirect_uris, access_token_format, backchannel_logout_uri, grant_types or token_endpoint_auth_method is required")
+	if u.HostedLogin == nil && u.Redirects == nil && u.PostLogoutRedirects == nil && u.AccessTokenFormat == nil && u.BackchannelLogoutURI == nil && u.BackchannelLogoutSessionRequired == nil && u.GrantTypes == nil && u.AllowedOrigins == nil && !u.Authentication() {
+		return errx.Validation("hosted_login, redirect_uris, post_logout_redirect_uris, access_token_format, backchannel_logout_uri, grant_types, allowed_origins or token_endpoint_auth_method is required")
 	}
 	if u.BackchannelLogoutURI != nil {
 		if err := ValidateBackchannelURI(*u.BackchannelLogoutURI); err != nil {
@@ -121,6 +132,11 @@ func (u ClientUpdate) Validate() error {
 	}
 	if u.AccessTokenFormat != nil {
 		if err := ValidateTokenFormat(*u.AccessTokenFormat); err != nil {
+			return err
+		}
+	}
+	if u.AllowedOrigins != nil {
+		if _, err := Origins(*u.AllowedOrigins); err != nil {
 			return err
 		}
 	}
@@ -172,6 +188,9 @@ func (r Registration) Validate() error {
 		}
 	}
 	if err := ValidateBackchannelURI(r.BackchannelLogoutURI); err != nil {
+		return err
+	}
+	if _, err := Origins(r.AllowedOrigins); err != nil {
 		return err
 	}
 	return r.ClientAuth.WithDefaults(r.Public).Validate(r.Public)

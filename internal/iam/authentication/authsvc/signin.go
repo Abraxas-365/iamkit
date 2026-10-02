@@ -35,7 +35,7 @@ func (p *SignInPolicies) SignInPolicy(ctx context.Context, environment identity.
 }
 
 func (p *SignInPolicies) SetSignInPolicy(ctx context.Context, m authentication.Mutation, input authentication.SignInPolicy) (authentication.SignInPolicy, error) {
-	if input.AllowedFactors == nil || input.AllowPasskey == nil {
+	if input.AllowedFactors == nil || input.AllowPasskey == nil || input.RequireTerms == nil {
 		current, err := p.SignInPolicy(ctx, m.Environment)
 		if err != nil {
 			return authentication.SignInPolicy{}, err
@@ -46,6 +46,10 @@ func (p *SignInPolicies) SetSignInPolicy(ctx context.Context, m authentication.M
 		if input.AllowPasskey == nil {
 			passkey := current.PasskeyAllowed()
 			input.AllowPasskey = &passkey
+		}
+		if input.RequireTerms == nil {
+			terms := current.TermsRequired()
+			input.RequireTerms = &terms
 		}
 	}
 	if err := input.Validate(); err != nil {

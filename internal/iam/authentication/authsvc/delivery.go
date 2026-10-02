@@ -10,6 +10,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
@@ -29,7 +30,12 @@ type DeliveryService struct {
 	now       func() time.Time
 	// globalProvider names the global delivery's provider for status.
 	globalProvider string
+	// usage meters sends (nil: none).
+	usage authentication.Usage
 }
+
+// SetUsage enforces emails_per_day on Send and counts delivered emails.
+func (s *DeliveryService) SetUsage(u authentication.Usage) { s.usage = u }
 
 var _ authentication.DeliveryConfigCommands = (*DeliveryService)(nil)
 var _ authentication.DeliveryConfigQueries = (*DeliveryService)(nil)
@@ -234,6 +240,11 @@ func (s *DeliveryService) Preview(ctx context.Context, environmentID identity.En
 // Send delivers through the environment's webhook, falling back to the
 // global one, and records the outcome for the console.
 func (s *DeliveryService) Send(ctx context.Context, environmentID identity.EnvironmentID, m authentication.Message) error {
+	if s.usage != nil {
+		if err := s.usage.Admit(ctx, environmentID, usage.LimitEmails); err != nil {
+			return err
+		}
+	}
 	_, err := s.deliver(ctx, environmentID, m)
 	return err
 }
@@ -283,6 +294,8 @@ func (s *DeliveryService) deliver(ctx context.Context, environmentID identity.En
 	attempt := authentication.Attempt{Source: source, Purpose: m.Purpose, Delivered: err == nil, LatencyMS: int(s.now().Sub(start).Milliseconds()), At: start.UTC()}
 	if err != nil {
 		attempt.Status, attempt.Reason = authentication.Describe(err)
+	} else if s.usage != nil {
+		s.usage.Count(ctx, environmentID, usage.MetricEmails, 1)
 	}
 	// Best effort: recording must never fail a delivery.
 	if recordErr := s.repo.RecordAttempt(context.WithoutCancel(ctx), environmentID, attempt); recordErr != nil {

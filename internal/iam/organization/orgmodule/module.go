@@ -16,6 +16,10 @@ type Deps struct {
 	ActorID func(*fiber.Ctx) string
 	// Resolver verifies domain TXT records; nil uses the system DNS resolver.
 	Resolver organization.Resolver
+	// Actions runs request:membership.create hooks (nil: none).
+	Actions organization.Actions
+	// Quota enforces the organizations limit (nil: none).
+	Quota organization.Quota
 }
 type Module struct {
 	Commands          organization.Commands
@@ -35,6 +39,12 @@ type Module struct {
 func New(deps Deps) Module {
 	repository := orgpg.New(deps.DB)
 	service := orgsvc.New(repository)
+	if deps.Actions != nil {
+		service.SetActions(deps.Actions)
+	}
+	if deps.Quota != nil {
+		service.SetQuota(deps.Quota)
+	}
 	structure := orgsvc.NewStructure(repository)
 	groups := orgsvc.NewGroups(repository)
 	resolver := deps.Resolver

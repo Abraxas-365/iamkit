@@ -64,10 +64,34 @@ type Handler struct {
 	finish      Finisher
 	actor       func(*fiber.Ctx) string
 	devices     hosted.Devices
+	// texts are the custom sign-in texts (nil: the catalog's words).
+	texts struct {
+		commands hosted.TextCommands
+		queries  hosted.TextQueries
+	}
 }
 
 func New(flow hosted.Flow, commands hosted.Commands, queries hosted.Queries, invitations hosted.Invitations, finish Finisher, actor func(*fiber.Ctx) string) *Handler {
 	return &Handler{flow: flow, commands: commands, queries: queries, invitations: invitations, finish: finish, actor: actor}
+}
+
+// Texts serves the custom sign-in texts and words the pages with them.
+func (h *Handler) Texts(commands hosted.TextCommands, queries hosted.TextQueries) {
+	h.texts.commands, h.texts.queries = commands, queries
+}
+
+// word sets v's custom texts for scope in v's language; a failed read
+// keeps the catalog's words (logged) instead of failing the page.
+func (h *Handler) word(c *fiber.Ctx, v *view, environment identity.EnvironmentID, scope hosted.TextScope) {
+	if h.texts.queries == nil || environment.IsZero() {
+		return
+	}
+	texts, err := h.texts.queries.Wording(c.UserContext(), environment, scope, v.Lang)
+	if err != nil {
+		slog.Warn("hosted login: custom texts unavailable", "path", c.Path(), "err", err)
+		return
+	}
+	v.Texts = texts
 }
 
 // RegisterManagement serves the branding under /environments/:environment:
@@ -83,10 +107,14 @@ func (h *Handler) RegisterManagement(e fiber.Router) {
 	e.Get("/login-settings/clients/:client/sign-in", h.signIn)
 	e.Put("/login-settings/clients/:client/sign-in", h.saveSignIn)
 	e.Delete("/login-settings/clients/:client/sign-in", h.deleteSignIn)
+	e.Get("/login-settings/organizations/:organization", h.organizationStyle)
+	e.Put("/login-settings/organizations/:organization", h.saveOrganizationStyle)
+	e.Delete("/login-settings/organizations/:organization", h.deleteOrganizationStyle)
 	e.Get("/login-settings/preview", h.savedPreview)
 	// A draft preview changes nothing; POST only carries the draft body.
 	e.Post("/login-settings/preview", h.draftPreview)
 	e.Get("/login-settings/locales", locales)
+	h.registerTexts(e)
 }
 
 // locales lists the languages emails can be written in.
@@ -117,6 +145,7 @@ func (h *Handler) Pages() map[string]fiber.Handler {
 		"POST /hosted/login/mfa/continue":    h.continueLogin,
 		"POST /hosted/login/password/new":    h.changePassword,
 		"GET /hosted/invite":                 h.invite,
+		"GET /hosted/fonts/:file":            h.font,
 		"POST /hosted/invite":                h.accept,
 	}
 	h.devicePages(pages)
@@ -125,8 +154,10 @@ func (h *Handler) Pages() map[string]fiber.Handler {
 
 // view is the data every page renders with.
 type view struct {
-	// Lang is the page language (an i18n code); T translates into it.
+	// Lang is the page language (an i18n code); T translates into it,
+	// with the operator's custom Texts first.
 	Lang                                  string
+	Texts                                 i18n.Texts
 	Nonce, Title, Subtitle, Error, Notice string
 	Brand                                 brand
 	Ticket, Email                         string
@@ -139,8 +170,10 @@ type view struct {
 	SignIn        hosted.SignIn
 	Challenge     identity.ChallengeID
 	Organizations []authentication.Organization
-	Token         string
-	Invite        *invitation.Preview
+	// Account is who chooses an organization (name, email, avatar).
+	Account authentication.Profile
+	Token   string
+	Invite  *invitation.Preview
 	// Second-factor pages: the authenticator to add (QR as a PNG data URI)
 	// and recovery codes shown once.
 	Secret        string
@@ -180,7 +213,16 @@ func (v view) Offers(kind string) bool { return slices.Contains(v.Factors, kind)
 func (v view) FactorList() string { return strings.Join(v.Factors, ",") }
 
 // T is the page text for key in the page language.
-func (v view) T(key string, args ...any) string { return i18n.T(v.Lang, key, args...) }
+func (v view) T(key string, args ...any) string { return v.Texts.T(v.Lang, key, args...) }
+
+// Dir is the page language's writing direction (ltr or rtl).
+func (v view) Dir() string { return i18n.Dir(v.Lang) }
+
+// N is the plural page text for key and count n.
+func (v view) N(key string, n int, vars i18n.Vars) string { return v.Texts.N(v.Lang, key, n, vars) }
+
+// V is the page text for key with named placeholders.
+func (v view) V(key string, vars i18n.Vars) string { return v.Texts.V(v.Lang, key, vars) }
 
 // language is the page language: preferred (the application's ui_locales
 // or the environment language) when set, else the browser's.
@@ -207,6 +249,11 @@ func render(c *fiber.Ctx, status int, page string, v view) error {
 		scripts = "; script-src 'nonce-" + v.Nonce + "'; connect-src 'self'"
 	} else if v.Post != nil {
 		scripts = "; script-src 'nonce-" + v.Nonce + "'"
+	}
+	// Fonts load only when the theme sets one: IAMKit's own ('self') or a
+	// custom https file.
+	if v.Brand.FontSrc != "" {
+		scripts += "; font-src " + v.Brand.FontSrc
 	}
 	c.Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+v.Nonce+"'; img-src https: data:; base-uri 'none'; frame-ancestors 'none'"+scripts)
 	c.Set("Cache-Control", "no-store")
@@ -239,72 +286,92 @@ func message(c *fiber.Ctx, lang string, status int, title, text string) error {
 	return render(c, status, "message", view{Lang: lang, Title: title, Error: text})
 }
 
-// problemCodes and problemMessages translate the errors people can fix
-// themselves; other client errors keep their message.
+// problemCodes translates, by code, the errors people can fix themselves;
+// problemMessages covers those other modules raise without a code (their
+// codes are part of the headless API). Other client errors keep their
+// message.
 var (
 	problemCodes = map[string]string{
-		"LOGIN_EXPIRED":              "hosted.error.login_expired",
-		"SIGN_IN_METHOD_UNAVAILABLE": "hosted.error.method_unavailable",
-		"INVALID_CODE":               "hosted.error.mfa_code",
-		"MFA_LOCKED":                 "hosted.error.too_many",
-		"PASSWORD_CHANGE_REQUIRED":   "hosted.subtitle.password_expired",
-		"TOO_MANY_REQUESTS":          "hosted.error.too_many",
-		"ACCOUNT_EXISTS":             "hosted.error.account_exists",
-		"SIGNUP_DISABLED":            "hosted.error.signup_disabled",
-		"SIGNED_UP_NO_ACCESS":        "hosted.error.signed_up_no_access",
+		hosted.CodeLoginInvalid:       "hosted.error.login",
+		hosted.CodeSSOOnly:            "hosted.error.login_sso",
+		hosted.CodeSSONotOffered:      "hosted.error.sso_not_offered",
+		hosted.CodeSSOEmail:           "hosted.error.sso_email",
+		hosted.CodePasswordRequired:   "hosted.error.password_required",
+		hosted.CodeChooseOrganization: "hosted.error.choose_organization",
+		hosted.CodeOrganizationChosen: "hosted.error.organization_chosen",
+		hosted.CodeFactorRequired:     "hosted.error.factor_required",
+		hosted.CodeNoAccess:           "hosted.error.no_access",
+		"FACTOR_NOT_ALLOWED":          "hosted.error.factor_not_allowed",
+		"LOGIN_EXPIRED":               "hosted.error.login_expired",
+		"SIGN_IN_METHOD_UNAVAILABLE":  "hosted.error.method_unavailable",
+		"INVALID_CODE":                "hosted.error.mfa_code",
+		"MFA_LOCKED":                  "hosted.error.too_many",
+		"PASSWORD_CHANGE_REQUIRED":    "hosted.subtitle.password_expired",
+		"TOO_MANY_REQUESTS":           "hosted.error.too_many",
+		"ACCOUNT_EXISTS":              "hosted.error.account_exists",
+		"SIGNUP_DISABLED":             "hosted.error.signup_disabled",
+		"TERMS_REQUIRED":              "hosted.error.terms_required",
+		"SIGNED_UP_NO_ACCESS":         "hosted.error.signed_up_no_access",
 	}
 	problemMessages = map[string]string{
-		"invalid credentials or access token":    "hosted.error.credentials",
-		"invalid challenge":                      "hosted.error.code",
-		"the security key could not be verified": "hosted.error.key",
-		"your organization requires single sign-on, which this application does not offer": "hosted.error.sso_not_offered",
-		"this email cannot sign in to this application with single sign-on":                "hosted.error.sso_email",
-		"your account does not have access to this application":                            "hosted.error.no_access",
-		"password must be 12-72 characters long":                                           "hosted.error.password_length",
-		"12-72 byte password required":                                                     "hosted.error.password_length",
-		"password is required":                                                             "hosted.error.password_required",
-		"email must be a valid address":                                                    "hosted.error.email",
-		"provider did not supply a valid email":                                            "hosted.error.provider_email",
-		"provider email is not verified":                                                   "hosted.error.provider_email",
-		"invalid or expired invitation":                                                    "hosted.invitation.invalid",
-		"name is required":                                                                 "hosted.error.name_required",
-		"name must be at most 200 characters long":                                         "hosted.error.name_length",
+		"invalid credentials or access token":      "hosted.error.credentials",
+		"invalid challenge":                        "hosted.error.code",
+		"the security key could not be verified":   "hosted.error.key",
+		"password must be 12-72 characters long":   "hosted.error.password_length",
+		"12-72 byte password required":             "hosted.error.password_length",
+		"password is required":                     "hosted.error.password_required",
+		"email must be a valid address":            "hosted.error.email",
+		"provider did not supply a valid email":    "hosted.error.provider_email",
+		"provider email is not verified":           "hosted.error.provider_email",
+		"invalid or expired invitation":            "hosted.invitation.invalid",
+		"name is required":                         "hosted.error.name_required",
+		"name must be at most 200 characters long": "hosted.error.name_length",
+		"name must be at most 200 characters":      "hosted.error.name_length",
 	}
 )
 
 // failed renders a page for an error in lang: client errors show their
 // message, an unreachable identity provider gets its own explanation, and
 // anything else is logged and shown generically.
-func failed(c *fiber.Ctx, lang string, err error) (int, string) {
+func failed(c *fiber.Ctx, v view, err error) (int, string) {
 	var e *errx.Error
 	if errx.As(err, &e) && e.HTTPStatus >= 400 && e.HTTPStatus < 500 {
 		if e.Code == authentication.CodePasswordPolicy {
-			return e.HTTPStatus, passwordProblem(lang, e)
+			return e.HTTPStatus, passwordProblem(v, e)
+		}
+		if e.Code == hosted.CodeWrongCode {
+			remaining, _ := e.Details["remaining"].(int)
+			return e.HTTPStatus, v.T("hosted.error.mfa_code") + " " + v.N("hosted.notice.attempts_left", remaining, nil)
 		}
 		if key, ok := problemCodes[e.Code]; ok {
-			return e.HTTPStatus, i18n.T(lang, key)
+			return e.HTTPStatus, v.T(key)
 		}
 		if key, ok := problemMessages[e.Message]; ok {
-			return e.HTTPStatus, i18n.T(lang, key)
+			return e.HTTPStatus, v.T(key)
 		}
 		return e.HTTPStatus, e.Message
 	}
 	if e != nil && e.Code == "PROVIDER_UNAVAILABLE" {
 		slog.Warn("hosted login: identity provider unavailable", "path", c.Path(), "err", err)
-		return fiber.StatusBadGateway, i18n.T(lang, "hosted.error.provider_unavailable")
+		return fiber.StatusBadGateway, v.T("hosted.error.provider_unavailable")
+	}
+	if e != nil && e.Code == "ACTION_FAILED" {
+		// An interrupting action target failed (its calls log says why).
+		slog.Warn("hosted login: an action failed", "path", c.Path())
+		return fiber.StatusBadGateway, v.T("hosted.error.generic")
 	}
 	slog.Error("hosted login", "path", c.Path(), "err", err)
-	return fiber.StatusInternalServerError, i18n.T(lang, "hosted.error.generic")
+	return fiber.StatusInternalServerError, v.T("hosted.error.generic")
 }
 
 // passwordProblem says which password rule a new password broke.
-func passwordProblem(lang string, e *errx.Error) string {
+func passwordProblem(v view, e *errx.Error) string {
 	rule, _ := e.Details["rule"].(string)
 	if rule == authentication.RuleLength {
 		minimum, _ := e.Details["min_length"].(int)
-		return i18n.T(lang, "hosted.error.password_between", minimum, config.PasswordMaxLength)
+		return v.V("hosted.error.password_between", i18n.Vars{"min": minimum, "max": config.PasswordMaxLength})
 	}
-	return i18n.T(lang, "hosted.error.password_"+rule)
+	return v.T("hosted.error.password_" + rule)
 }
 
 func (h *Handler) request(c *fiber.Ctx) hosted.Request {
@@ -318,16 +385,18 @@ func (h *Handler) request(c *fiber.Ctx) hosted.Request {
 // base loads the pending authorization's branding for a page; a dead
 // authorization ends the journey with an error page.
 func (h *Handler) base(c *fiber.Ctx, r hosted.Request) (view, bool, error) {
-	page, err := h.flow.Page(c.Context(), r)
+	page, err := h.flow.Page(c.UserContext(), r, c.FormValue("email"))
 	if err != nil {
 		lang := language(c, "")
-		status, text := failed(c, lang, err)
+		status, text := failed(c, view{Lang: lang}, err)
 		if status == fiber.StatusUnauthorized {
 			text = i18n.T(lang, "hosted.expired")
 		}
 		return view{}, false, message(c, lang, status, i18n.T(lang, "hosted.title.expired"), text)
 	}
-	return view{Lang: language(c, page.Language), Brand: brandOf(page.Settings, ""), Ticket: r.Ticket, Connections: page.Connections, SignIn: page.SignIn}, true, nil
+	v := view{Lang: page.Settings.Negotiate(page.Language, c.Get(fiber.HeaderAcceptLanguage)), Brand: brandOf(page.Settings, ""), Ticket: r.Ticket, Connections: page.Connections, SignIn: page.SignIn}
+	h.word(c, &v, page.Settings.Environment, page.Texts)
+	return v, true, nil
 }
 
 func (h *Handler) login(c *fiber.Ctx) error {
@@ -346,9 +415,9 @@ func (h *Handler) identify(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email = v.T("hosted.title.sign_in"), c.FormValue("email")
-	route, err := h.flow.Identify(c.Context(), r, v.Email)
+	route, err := h.flow.Identify(c.UserContext(), r, v.Email)
 	if err != nil {
-		status, text := failed(c, v.Lang, err)
+		status, text := failed(c, v, err)
 		v.Error = text
 		return render(c, status, "identify", v)
 	}
@@ -372,7 +441,7 @@ func (h *Handler) directory(c *fiber.Ctx) error {
 	v.Title, v.Email = v.T("hosted.title.sign_in"), c.FormValue("email")
 	connection, _ := identity.ParseConnectionID(c.FormValue("connection_id"))
 	v.Connection = &connection
-	result, err := h.flow.Directory(c.Context(), r, connection, v.Email, c.FormValue("password"))
+	result, err := h.flow.Directory(c.UserContext(), r, connection, v.Email, c.FormValue("password"))
 	if err != nil {
 		return h.retry(c, v, "directory", err)
 	}
@@ -386,7 +455,7 @@ func (h *Handler) password(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email = v.T("hosted.title.sign_in"), c.FormValue("email")
-	result, err := h.flow.Password(c.Context(), r, v.Email, c.FormValue("password"))
+	result, err := h.flow.Password(c.UserContext(), r, v.Email, c.FormValue("password"))
 	if err != nil {
 		return h.retry(c, v, "password", err)
 	}
@@ -400,11 +469,11 @@ func (h *Handler) sendCode(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email = v.T("hosted.title.check_email"), c.FormValue("email")
-	v.Challenge, err = h.flow.SendCode(c.Context(), r, v.Email)
+	v.Challenge, err = h.flow.SendCode(c.UserContext(), r, v.Email)
 	if err != nil {
 		return h.retry(c, v, "password", err)
 	}
-	v.Notice = v.T("hosted.notice.code_sent", v.Email)
+	v.Notice = v.T("hosted.notice.code_sent", sentTo(v))
 	return render(c, fiber.StatusOK, "code", v)
 }
 
@@ -416,11 +485,20 @@ func (h *Handler) verifyCode(c *fiber.Ctx) error {
 	}
 	v.Title = v.T("hosted.title.check_email")
 	v.Challenge, _ = identity.ParseChallengeID(c.FormValue("challenge_id"))
-	result, err := h.flow.VerifyCode(c.Context(), r, v.Challenge, c.FormValue("code"))
+	result, err := h.flow.VerifyCode(c.UserContext(), r, v.Challenge, c.FormValue("code"))
 	if err != nil {
 		return h.retry(c, v, "code", err)
 	}
 	return h.result(c, v, result)
+}
+
+// sentTo names where a code went: the typed email, or for a username the
+// account's email without revealing it.
+func sentTo(v view) string {
+	if strings.Contains(v.Email, "@") {
+		return v.Email
+	}
+	return v.T("hosted.notice.account_email")
 }
 
 func (h *Handler) sendReset(c *fiber.Ctx) error {
@@ -430,11 +508,11 @@ func (h *Handler) sendReset(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email = v.T("hosted.title.reset"), c.FormValue("email")
-	v.Challenge, err = h.flow.SendReset(c.Context(), r, v.Email)
+	v.Challenge, err = h.flow.SendReset(c.UserContext(), r, v.Email)
 	if err != nil {
 		return h.retry(c, v, "password", err)
 	}
-	v.Notice = v.T("hosted.notice.reset_sent", v.Email)
+	v.Notice = v.T("hosted.notice.reset_sent", sentTo(v))
 	return render(c, fiber.StatusOK, "reset", v)
 }
 
@@ -446,7 +524,7 @@ func (h *Handler) reset(c *fiber.Ctx) error {
 	}
 	v.Title, v.Email = v.T("hosted.title.reset"), c.FormValue("email")
 	v.Challenge, _ = identity.ParseChallengeID(c.FormValue("challenge_id"))
-	if err = h.flow.Reset(c.Context(), r, v.Challenge, c.FormValue("code"), c.FormValue("password")); err != nil {
+	if err = h.flow.Reset(c.UserContext(), r, v.Challenge, c.FormValue("code"), c.FormValue("password")); err != nil {
 		return h.retry(c, v, "reset", err)
 	}
 	v.Title, v.Notice = v.T("hosted.title.sign_in"), v.T("hosted.notice.password_changed")
@@ -460,7 +538,7 @@ func (h *Handler) sso(c *fiber.Ctx) error {
 		return err
 	}
 	connection, _ := identity.ParseConnectionID(c.FormValue("connection_id"))
-	start, err := h.flow.SSO(c.Context(), r, connection)
+	start, err := h.flow.SSO(c.UserContext(), r, connection)
 	if err != nil {
 		v.Title = v.T("hosted.title.sign_in")
 		return h.retry(c, v, "identify", err)
@@ -481,7 +559,7 @@ func (h *Handler) Federated(c *fiber.Ctx, out federation.Outcome, callbackErr er
 	if callbackErr != nil {
 		return h.retry(c, v, "identify", callbackErr)
 	}
-	result, err := h.flow.Federated(c.Context(), r, out.Verified)
+	result, err := h.flow.Federated(c.UserContext(), r, out.Verified)
 	if err != nil {
 		return h.retry(c, v, "identify", err)
 	}
@@ -495,7 +573,7 @@ func (h *Handler) organization(c *fiber.Ctx) error {
 		return err
 	}
 	organization, _ := identity.ParseOrganizationID(c.FormValue("organization_id"))
-	result, err := h.flow.Choose(c.Context(), r, organization)
+	result, err := h.flow.Choose(c.UserContext(), r, organization)
 	if err != nil {
 		v.Title = v.T("hosted.title.sign_in")
 		return h.retry(c, v, "identify", err)
@@ -514,7 +592,7 @@ func (h *Handler) secondFactor(c *fiber.Ctx) error {
 	if raw := c.FormValue("credential"); raw != "" {
 		proof.Credential = json.RawMessage(raw)
 	}
-	result, err := h.flow.SecondFactor(c.Context(), r, proof)
+	result, err := h.flow.SecondFactor(c.UserContext(), r, proof)
 	if err != nil {
 		var e *errx.Error
 		if enrolling && !(errx.As(err, &e) && e.Code == "LOGIN_EXPIRED") {
@@ -541,13 +619,13 @@ func factorList(raw string) []string {
 // securityKey answers the options of the parked login's security key
 // prompt (JSON, for webauthn.js).
 func (h *Handler) securityKey(c *fiber.Ctx) error {
-	out, err := h.flow.SecurityKey(c.Context(), h.request(c))
+	out, err := h.flow.SecurityKey(c.UserContext(), h.request(c))
 	return ceremony(c, out, err)
 }
 
 // passkeyOptions answers the options of a passkey sign-in (JSON).
 func (h *Handler) passkeyOptions(c *fiber.Ctx) error {
-	out, err := h.flow.PasskeyOptions(c.Context(), h.request(c))
+	out, err := h.flow.PasskeyOptions(c.UserContext(), h.request(c))
 	return ceremony(c, out, err)
 }
 
@@ -555,7 +633,7 @@ func (h *Handler) passkeyOptions(c *fiber.Ctx) error {
 func ceremony(c *fiber.Ctx, out authentication.WebAuthnOptions, err error) error {
 	c.Set("Cache-Control", "no-store")
 	if err != nil {
-		status, text := failed(c, language(c, ""), err)
+		status, text := failed(c, view{Lang: language(c, "")}, err)
 		return c.Status(status).JSON(fiber.Map{"error": text})
 	}
 	return c.JSON(out)
@@ -569,7 +647,7 @@ func (h *Handler) passkey(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title = v.T("hosted.title.sign_in")
-	result, err := h.flow.Passkey(c.Context(), r, c.FormValue("webauthn_session"), []byte(c.FormValue("credential")))
+	result, err := h.flow.Passkey(c.UserContext(), r, c.FormValue("webauthn_session"), []byte(c.FormValue("credential")))
 	if err != nil {
 		return h.retry(c, v, "identify", err)
 	}
@@ -584,7 +662,7 @@ func (h *Handler) sendFactorCode(c *fiber.Ctx) error {
 	if !ok {
 		return err
 	}
-	result, err := h.flow.SendFactorCode(c.Context(), r, c.FormValue("factor"))
+	result, err := h.flow.SendFactorCode(c.UserContext(), r, c.FormValue("factor"))
 	if err != nil {
 		var e *errx.Error
 		if c.FormValue("enrolling") == "true" && !(errx.As(err, &e) && e.Code == "LOGIN_EXPIRED") {
@@ -598,14 +676,14 @@ func (h *Handler) sendFactorCode(c *fiber.Ctx) error {
 }
 
 func (h *Handler) enrollPage(c *fiber.Ctx, r hosted.Request, v view, problem error) error {
-	enrollment, err := h.flow.Enrollment(c.Context(), r)
+	enrollment, err := h.flow.Enrollment(c.UserContext(), r)
 	if err != nil {
 		v.Title = v.T("hosted.title.sign_in")
 		return h.retry(c, v, "identify", err)
 	}
 	status := fiber.StatusOK
 	if problem != nil {
-		status, v.Error = failed(c, v.Lang, problem)
+		status, v.Error = failed(c, v, problem)
 	}
 	return h.renderEnroll(c, status, v, enrollment)
 }
@@ -638,7 +716,7 @@ func (h *Handler) continueLogin(c *fiber.Ctx) error {
 	if !ok {
 		return err
 	}
-	result, err := h.flow.Continue(c.Context(), r)
+	result, err := h.flow.Continue(c.UserContext(), r)
 	if err != nil {
 		v.Title = v.T("hosted.title.sign_in")
 		return h.retry(c, v, "identify", err)
@@ -652,7 +730,7 @@ func (h *Handler) changePassword(c *fiber.Ctx) error {
 	if !ok {
 		return err
 	}
-	result, err := h.flow.ChangePassword(c.Context(), r, c.FormValue("password"))
+	result, err := h.flow.ChangePassword(c.UserContext(), r, c.FormValue("password"))
 	if err != nil {
 		v.Title, v.Subtitle = v.T("hosted.title.password_expired"), v.T("hosted.subtitle.password_expired")
 		return h.retry(c, v, "expired", err)
@@ -681,14 +759,14 @@ func (h *Handler) result(c *fiber.Ctx, v view, result hosted.Result) error {
 		v.Title, v.Subtitle = v.T("hosted.title.password_expired"), v.T("hosted.subtitle.password_expired")
 		return render(c, fiber.StatusOK, "expired", v)
 	}
-	v.Title, v.Subtitle, v.Organizations = v.T("hosted.title.organization"), v.T("hosted.subtitle.organization"), result.Organizations
+	v.Title, v.Subtitle, v.Organizations, v.Account = v.T("hosted.title.organization"), v.T("hosted.subtitle.organization"), result.Organizations, result.Account
 	return render(c, fiber.StatusOK, "organization", v)
 }
 
 // retry shows the page again with the error; single sign-on requirements
 // send the user back to the email step, which routes them to SSO.
 func (h *Handler) retry(c *fiber.Ctx, v view, page string, err error) error {
-	status, text := failed(c, v.Lang, err)
+	status, text := failed(c, v, err)
 	var e *errx.Error
 	if errx.As(err, &e) && e.Code == "SSO_REQUIRED" {
 		page, text = "identify", v.T("hosted.error.sso_required")
@@ -711,7 +789,7 @@ func (h *Handler) federate(c *fiber.Ctx, address, binding string) error {
 
 func (h *Handler) invite(c *fiber.Ctx) error {
 	token := c.Query("token")
-	preview, err := h.invitations.Preview(c.Context(), token)
+	preview, err := h.invitations.Preview(c.UserContext(), token)
 	if err != nil {
 		return invalidInvitation(c)
 	}
@@ -729,13 +807,14 @@ func invalidInvitation(c *fiber.Ctx) error {
 func (h *Handler) SignedOut(c *fiber.Ctx, environment identity.EnvironmentID, problem error) error {
 	settings := hosted.Settings{}
 	if !environment.IsZero() {
-		if s, err := h.queries.Settings(c.Context(), environment); err == nil {
+		if s, err := h.queries.Settings(c.UserContext(), environment); err == nil {
 			settings = s
 		}
 	}
 	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, "")}
+	h.word(c, &v, environment, hosted.TextScope{})
 	if problem != nil {
-		status, text := failed(c, v.Lang, problem)
+		status, text := failed(c, v, problem)
 		v.Title, v.Error = v.T("hosted.title.sign_out_failed"), text
 		return render(c, status, "message", v)
 	}
@@ -743,49 +822,49 @@ func (h *Handler) SignedOut(c *fiber.Ctx, environment identity.EnvironmentID, pr
 	return render(c, fiber.StatusOK, "message", v)
 }
 
-// environmentLanguage is the environment language, else the browser's.
+// environmentLanguage is the configured language (organization, client or
+// environment) when enabled, else the browser's, within the enabled
+// languages.
 func environmentLanguage(c *fiber.Ctx, settings hosted.Settings) string {
-	code := ""
-	if settings.Locale != nil {
-		code = i18n.Match(*settings.Locale)
-	}
-	return language(c, code)
+	return settings.Negotiate(settings.Preferred(""), c.Get(fiber.HeaderAcceptLanguage))
 }
 
 func (h *Handler) invitePage(c *fiber.Ctx, token string, preview invitation.Preview, problem error) error {
-	settings, err := h.queries.Settings(c.Context(), preview.Environment)
+	settings, err := h.queries.Branded(c.UserContext(), preview.Environment, identity.ClientID{}, preview.Organization)
 	if err != nil {
 		lang := language(c, "")
-		code, text := failed(c, lang, err)
+		code, text := failed(c, view{Lang: lang}, err)
 		return message(c, lang, code, i18n.T(lang, "hosted.invitation.title"), text)
 	}
 	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, ""), Token: token, Invite: &preview}
+	h.word(c, &v, preview.Environment, hosted.TextScope{Organization: preview.Organization})
 	v.Title, v.Subtitle = v.T("hosted.invitation.join", preview.OrganizationName), v.T("hosted.invitation.invited", preview.OrganizationName)
 	if preview.SSORequired {
 		v.Subtitle += " " + v.T("hosted.invitation.sso")
 	}
 	status := fiber.StatusOK
 	if problem != nil {
-		status, v.Error = failed(c, v.Lang, problem)
+		status, v.Error = failed(c, v, problem)
 	}
 	return render(c, status, "invite", v)
 }
 
 func (h *Handler) accept(c *fiber.Ctx) error {
 	token := c.FormValue("token")
-	preview, err := h.invitations.Preview(c.Context(), token)
+	preview, err := h.invitations.Preview(c.UserContext(), token)
 	if err != nil {
 		return invalidInvitation(c)
 	}
-	accepted, err := h.invitations.Accept(c.Context(), invitation.Acceptance{Token: token, Name: c.FormValue("name"), Password: c.FormValue("password")})
+	accepted, err := h.invitations.Accept(c.UserContext(), invitation.Acceptance{Token: token, Name: c.FormValue("name"), Password: c.FormValue("password")})
 	if err != nil {
 		return h.invitePage(c, token, preview, err)
 	}
-	settings, err := h.queries.Settings(c.Context(), preview.Environment)
+	settings, err := h.queries.Branded(c.UserContext(), preview.Environment, identity.ClientID{}, preview.Organization)
 	if err != nil {
 		settings = hosted.Settings{}
 	}
 	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, "")}
+	h.word(c, &v, preview.Environment, hosted.TextScope{Organization: preview.Organization})
 	v.Title, v.Notice = v.T("hosted.invitation.accepted"), v.T("hosted.invitation.joined", preview.OrganizationName)
 	if accepted.SSORequired {
 		v.Notice = v.T("hosted.invitation.joined_sso", preview.OrganizationName)
@@ -795,7 +874,7 @@ func (h *Handler) accept(c *fiber.Ctx) error {
 
 func (h *Handler) settings(c *fiber.Ctx) error {
 	env, _ := identity.ParseEnvironmentID(c.Params("environment"))
-	out, err := h.queries.Settings(c.Context(), env)
+	out, err := h.queries.Settings(c.UserContext(), env)
 	if err != nil {
 		return err
 	}
@@ -808,7 +887,7 @@ func (h *Handler) saveSettings(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.SaveSettings(c.Context(), hosted.Mutation{Environment: env, Actor: h.actor(c), Action: c.Method(), Target: c.Path()}, input)
+	out, err := h.commands.SaveSettings(c.UserContext(), hosted.Mutation{Environment: env, Actor: h.actor(c), Action: c.Method(), Target: c.Path()}, input)
 	if err != nil {
 		return err
 	}

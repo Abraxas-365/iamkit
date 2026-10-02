@@ -223,3 +223,17 @@ func (s *Service) PasswordStatus(ctx context.Context, p management.Principal) (m
 	fresh := p.Method == management.MethodKey || ((!set || p.Method == management.MethodSSO) && p.Fresh(time.Now(), config.OperatorFreshAuth))
 	return management.PasswordStatus{Set: set, Usable: s.usable(account) == nil, Fresh: fresh, Mode: mode}, nil
 }
+
+// Preferences are the caller's console settings.
+func (s *Service) Preferences(ctx context.Context, p management.Principal) (management.Preferences, error) {
+	return s.sessions.Preferences(ctx, p.OperatorID)
+}
+
+// SetPreferences replaces the caller's console settings (not audited: they
+// change only how the console looks to that operator).
+func (s *Service) SetPreferences(ctx context.Context, p management.Principal, input management.Preferences) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+	return s.sessions.SetPreferences(ctx, p.OperatorID, input)
+}

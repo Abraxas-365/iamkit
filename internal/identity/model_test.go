@@ -2,6 +2,20 @@ package identity
 
 import "testing"
 
+func TestAvatarURL(t *testing.T) {
+	for in, want := range map[string]string{"": "", "  ": "", " https://cdn.example/a.png ": "https://cdn.example/a.png"} {
+		if got, err := AvatarURL(in); err != nil || got != want {
+			t.Errorf("AvatarURL(%q) = %q, %v", in, got, err)
+		}
+	}
+	long := "https://cdn.example/" + string(make([]byte, AvatarMaxLength))
+	for _, bad := range []string{"http://cdn.example/a.png", "javascript:alert(1)", "data:image/png;base64,AA", "https://user:pw@cdn.example/a", "https:///a.png", "//cdn.example/a", long} {
+		if _, err := AvatarURL(bad); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+}
+
 func TestPhone(t *testing.T) {
 	for in, want := range map[string]string{"+1 (415) 555-0100": "+14155550100", "+51.987.654.321": "+51987654321"} {
 		if got, err := Phone(in); err != nil || got != want {
@@ -62,6 +76,33 @@ func TestEmailAndRedirects(t *testing.T) {
 	for _, u := range []string{"http://example.com/callback", "https://user:pass@example.com", "https://example.com/#fragment", "/callback"} {
 		if ValidateRedirects([]string{u}) == nil {
 			t.Error(u)
+		}
+	}
+}
+
+func TestUsername(t *testing.T) {
+	for in, want := range map[string]string{"": "", " Ada.Lovelace ": "ada.lovelace", "a_1-b": "a_1-b", "007": "007"} {
+		if got, err := Username(in); err != nil || got != want {
+			t.Errorf("Username(%q) = %q, %v", in, got, err)
+		}
+	}
+	for _, bad := range []string{"ab", "ada@example.com", "_ada", ".ada", "ada lovelace", "ádá", string(make([]byte, UsernameMaxLength+1))} {
+		if _, err := Username(bad); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+}
+
+func TestLogin(t *testing.T) {
+	if email, username, err := Login(" Ada@Example.com "); err != nil || email != "ada@example.com" || username != "" {
+		t.Fatalf("email login = %q %q %v", email, username, err)
+	}
+	if email, username, err := Login("Ada"); err != nil || email != "" || username != "ada" {
+		t.Fatalf("username login = %q %q %v", email, username, err)
+	}
+	for _, bad := range []string{"", "  ", "a@", "x"} {
+		if _, _, err := Login(bad); err == nil {
+			t.Errorf("accepted %q", bad)
 		}
 	}
 }

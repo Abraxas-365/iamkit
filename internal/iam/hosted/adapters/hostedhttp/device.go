@@ -5,7 +5,6 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
-	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -32,13 +31,16 @@ func (h *Handler) devicePages(pages map[string]fiber.Handler) {
 func (h *Handler) deviceView(c *fiber.Ctx, request *oauth.DeviceRequest) view {
 	settings := hosted.Settings{}
 	if request != nil {
-		if s, err := h.queries.ClientSettings(c.Context(), request.Environment, request.Client); err == nil {
+		if s, err := h.queries.ClientSettings(c.UserContext(), request.Environment, request.Client); err == nil {
 			settings = s
-		} else if s, err := h.queries.Settings(c.Context(), request.Environment); err == nil {
+		} else if s, err := h.queries.Settings(c.UserContext(), request.Environment); err == nil {
 			settings = s
 		}
 	}
 	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, "")}
+	if request != nil {
+		h.word(c, &v, request.Environment, hosted.TextScope{Client: request.Client})
+	}
 	v.Title = v.T("hosted.device.title")
 	return v
 }
@@ -55,7 +57,7 @@ func (h *Handler) devicePage(c *fiber.Ctx) error {
 // signs in.
 func (h *Handler) deviceLookup(c *fiber.Ctx) error {
 	code := c.FormValue("user_code")
-	request, err := h.devices.DeviceRequest(c.Context(), code)
+	request, err := h.devices.DeviceRequest(c.UserContext(), code)
 	if err != nil {
 		return h.deviceRetry(c, code, err)
 	}
@@ -74,7 +76,7 @@ func (h *Handler) deviceRetry(c *fiber.Ctx, code string, err error) error {
 		v.Error = v.T("hosted.device.invalid")
 		return render(c, fiber.StatusNotFound, "device", v)
 	}
-	status, text := failed(c, v.Lang, err)
+	status, text := failed(c, v, err)
 	v.Error = text
 	return render(c, status, "device", v)
 }
@@ -83,7 +85,7 @@ func (h *Handler) deviceRetry(c *fiber.Ctx, code string, err error) error {
 // login approves it instead of redirecting to an application.
 func (h *Handler) deviceApprove(c *fiber.Ctx) error {
 	code := c.FormValue("user_code")
-	ticket, binding, err := h.devices.StartDevice(c.Context(), code)
+	ticket, binding, err := h.devices.StartDevice(c.UserContext(), code)
 	if err != nil {
 		return h.deviceRetry(c, code, err)
 	}
@@ -94,9 +96,9 @@ func (h *Handler) deviceApprove(c *fiber.Ctx) error {
 
 func (h *Handler) deviceDeny(c *fiber.Ctx) error {
 	code := c.FormValue("user_code")
-	request, err := h.devices.DeviceRequest(c.Context(), code)
+	request, err := h.devices.DeviceRequest(c.UserContext(), code)
 	if err == nil {
-		err = h.devices.DenyDevice(c.Context(), code)
+		err = h.devices.DenyDevice(c.UserContext(), code)
 	}
 	if err != nil {
 		return h.deviceRetry(c, code, err)
@@ -109,12 +111,13 @@ func (h *Handler) deviceDeny(c *fiber.Ctx) error {
 // DeviceApproved is the page a finished device approval shows (wired to
 // oauthhttp.Handler.Devices in bootstrap).
 func (h *Handler) DeviceApproved(c *fiber.Ctx, environment identity.EnvironmentID) error {
-	settings, err := h.queries.Settings(c.Context(), environment)
+	settings, err := h.queries.Settings(c.UserContext(), environment)
 	if err != nil {
 		settings = hosted.Settings{}
 	}
-	lang := environmentLanguage(c, settings)
-	v := view{Lang: lang, Brand: brandOf(settings, ""), Title: i18n.T(lang, "hosted.device.approved_title"), Notice: i18n.T(lang, "hosted.device.approved")}
+	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, "")}
+	h.word(c, &v, environment, hosted.TextScope{})
+	v.Title, v.Notice = v.T("hosted.device.approved_title"), v.T("hosted.device.approved")
 	return render(c, fiber.StatusOK, "message", v)
 }
 
@@ -122,11 +125,12 @@ func (h *Handler) DeviceApproved(c *fiber.Ctx, environment identity.EnvironmentI
 // provider: a nonce-bound script submits it at once, the visible button
 // does it without JavaScript.
 func (h *Handler) PostForm(c *fiber.Ctx, environment identity.EnvironmentID, action string, fields [][2]string) error {
-	settings, err := h.queries.Settings(c.Context(), environment)
+	settings, err := h.queries.Settings(c.UserContext(), environment)
 	if err != nil {
 		settings = hosted.Settings{}
 	}
-	lang := environmentLanguage(c, settings)
-	v := view{Lang: lang, Brand: brandOf(settings, ""), Title: i18n.T(lang, "hosted.title.redirecting"), Subtitle: i18n.T(lang, "hosted.subtitle.redirecting"), Post: &PostForm{Action: action, Fields: fields}}
+	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, ""), Post: &PostForm{Action: action, Fields: fields}}
+	h.word(c, &v, environment, hosted.TextScope{})
+	v.Title, v.Subtitle = v.T("hosted.title.redirecting"), v.T("hosted.subtitle.redirecting")
 	return render(c, fiber.StatusOK, "post", v)
 }

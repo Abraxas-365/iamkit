@@ -35,7 +35,7 @@ func client(c *fiber.Ctx) (identity.ClientID, error) {
 
 func (h *Handler) clientStyles(c *fiber.Ctx) error {
 	env, _ := identity.ParseEnvironmentID(c.Params("environment"))
-	out, err := h.queries.ListClientSettings(c.Context(), env, httpx.PaginationFromCtx(c))
+	out, err := h.queries.ListClientSettings(c.UserContext(), env, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (h *Handler) clientStyle(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.ClientSettings(c.Context(), env, id)
+	out, err := h.queries.ClientSettings(c.UserContext(), env, id)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (h *Handler) saveClientStyle(c *fiber.Ctx) error {
 	if err = c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.SaveClientSettings(c.Context(), h.mutation(c), id, input)
+	out, err := h.commands.SaveClientSettings(c.UserContext(), h.mutation(c), id, input)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (h *Handler) deleteClientStyle(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.DeleteClientSettings(c.Context(), h.mutation(c), id); err != nil {
+	if err = h.commands.DeleteClientSettings(c.UserContext(), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -137,31 +137,24 @@ func (m Methods) apply(v *view) error {
 }
 
 // savedPreview renders a page with the saved style of ?client= (or the
-// environment default). ?sign_in= is optional Methods as JSON; ?locale=
-// the page language.
+// environment default), with ?organization='s overrides. ?sign_in= is
+// optional Methods as JSON; ?locale= the page language.
 func (h *Handler) savedPreview(c *fiber.Ctx) error {
 	env, _ := identity.ParseEnvironmentID(c.Params("environment"))
-	settings, err := h.queries.Settings(c.Context(), env)
-	if err != nil {
-		return err
-	}
-	locale := ""
-	if settings.Locale != nil {
-		locale = *settings.Locale
-	}
+	var scope hosted.TextScope
 	if raw := c.Query("client"); raw != "" {
 		id, err := identity.ParseClientID(raw)
 		if err != nil {
 			return errx.Validation("invalid client id")
 		}
-		own, err := h.queries.ClientSettings(c.Context(), env, id)
-		var e *errx.Error
-		switch {
-		case err == nil:
-			settings = own
-		case !(errx.As(err, &e) && e.Type == errx.TypeNotFound):
-			return err
+		scope.Client = id
+	}
+	if raw := c.Query("organization"); raw != "" {
+		org, err := identity.ParseOrganizationID(raw)
+		if err != nil {
+			return errx.Validation("invalid organization id")
 		}
+		scope.Organization = org
 	}
 	var methods *Methods
 	if raw := c.Query("sign_in"); raw != "" {
@@ -170,30 +163,94 @@ func (h *Handler) savedPreview(c *fiber.Ctx) error {
 			return errx.Validation("sign_in must be a JSON object")
 		}
 	}
-	return preview(c, settings, previewInput{Page: c.Query("page"), Scheme: c.Query("scheme"), Locale: c.Query("locale"), Fallback: locale, SignIn: methods})
+	settings, locale, err := h.savedBranding(c, env, scope)
+	if err != nil {
+		return err
+	}
+	return h.preview(c, settings, previewInput{Page: c.Query("page"), Scheme: c.Query("scheme"), Locale: c.Query("locale"), Fallback: locale, SignIn: methods, TextScope: scope})
 }
 
-// draftPreview renders a page with an unsaved style.
-func (h *Handler) draftPreview(c *fiber.Ctx) error {
+// textsPreview renders a page in the saved branding of the body's client
+// or organization with unsaved custom texts (the sign-in texts editor).
+func (h *Handler) textsPreview(c *fiber.Ctx) error {
 	env, _ := identity.ParseEnvironmentID(c.Params("environment"))
 	var input struct {
 		previewInput
-		Settings hosted.Settings `json:"settings"`
+		Client       *identity.ClientID       `json:"client_id"`
+		Organization *identity.OrganizationID `json:"organization_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	settings, err := h.queries.Draft(c.Context(), env, input.Settings)
+	if input.Client != nil {
+		input.TextScope.Client = *input.Client
+	}
+	if input.Organization != nil {
+		input.TextScope.Organization = *input.Organization
+	}
+	if input.Texts == nil {
+		input.Texts = map[string]string{}
+	}
+	settings, locale, err := h.savedBranding(c, env, input.TextScope)
+	if err != nil {
+		return err
+	}
+	input.Fallback = locale
+	return h.preview(c, settings, input.previewInput)
+}
+
+// savedBranding is the saved branding of a scope (the client's style, or
+// the environment default, with the organization's overrides) and the
+// environment language.
+func (h *Handler) savedBranding(c *fiber.Ctx, env identity.EnvironmentID, scope hosted.TextScope) (hosted.Settings, string, error) {
+	base, err := h.queries.Settings(c.UserContext(), env)
+	if err != nil {
+		return hosted.Settings{}, "", err
+	}
+	locale := ""
+	if base.Locale != nil {
+		locale = *base.Locale
+	}
+	if scope.Client.IsZero() && scope.Organization.IsZero() {
+		return base, locale, nil
+	}
+	settings, err := h.queries.Branded(c.UserContext(), env, scope.Client, scope.Organization)
+	return settings, locale, err
+}
+
+// draftPreview renders a page with an unsaved style, or with unsaved
+// organization overrides laid over the environment default.
+func (h *Handler) draftPreview(c *fiber.Ctx) error {
+	env, _ := identity.ParseEnvironmentID(c.Params("environment"))
+	var input struct {
+		previewInput
+		Settings     hosted.Settings              `json:"settings"`
+		Organization *hosted.OrganizationSettings `json:"organization"`
+	}
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	if input.Organization != nil {
+		settings, err := h.queries.DraftOrganization(c.UserContext(), env, *input.Organization)
+		if err != nil {
+			return err
+		}
+		if settings.Locale != nil {
+			input.Fallback = *settings.Locale
+		}
+		return h.preview(c, settings, input.previewInput)
+	}
+	settings, err := h.queries.Draft(c.UserContext(), env, input.Settings)
 	if err != nil {
 		return err
 	}
 	if settings.Locale != nil {
 		input.Fallback = *settings.Locale
-	} else if saved, err := h.queries.Settings(c.Context(), env); err == nil && saved.Locale != nil {
+	} else if saved, err := h.queries.Settings(c.UserContext(), env); err == nil && saved.Locale != nil {
 		// A client style has no language: it is the environment's.
 		input.Fallback = *saved.Locale
 	}
-	return preview(c, settings, input.previewInput)
+	return h.preview(c, settings, input.previewInput)
 }
 
 // previewInput is what to preview: the page, its color scheme, its
@@ -205,9 +262,13 @@ type previewInput struct {
 	Locale   string   `json:"locale"`
 	Fallback string   `json:"-"`
 	SignIn   *Methods `json:"sign_in"`
+	// Texts are unsaved custom texts in the preview language, for
+	// TextScope (nil: the saved ones).
+	Texts     map[string]string `json:"texts"`
+	TextScope hosted.TextScope  `json:"-"`
 }
 
-func preview(c *fiber.Ctx, settings hosted.Settings, in previewInput) error {
+func (h *Handler) preview(c *fiber.Ctx, settings hosted.Settings, in previewInput) error {
 	page := in.Page
 	if page == "" {
 		page = "identify"
@@ -219,7 +280,12 @@ func preview(c *fiber.Ctx, settings hosted.Settings, in previewInput) error {
 	if lang == "" {
 		lang = i18n.Resolve(in.Fallback)
 	}
-	v, ok := sample(page, lang)
+	environment, _ := identity.ParseEnvironmentID(c.Params("environment"))
+	texts, err := h.previewTexts(c, environment, lang, in)
+	if err != nil {
+		return err
+	}
+	v, ok := sample(page, lang, texts)
 	if !ok {
 		return errx.Validation("page must be one of identify, password, code, reset, organization, mfa, enroll, recovery, invite, message")
 	}
@@ -232,6 +298,11 @@ func preview(c *fiber.Ctx, settings hosted.Settings, in previewInput) error {
 		}
 	}
 	v.Brand = brandOf(settings, in.Scheme)
+	if page == "signup" {
+		// The checkbox shows when sign-up requires accepting the terms
+		// (the sign-in policy): preview it once there are terms to link.
+		v.SignIn.Terms = v.Brand.Legal.TermsURL != ""
+	}
 	out, err := document(page, &v)
 	if err != nil {
 		return err
@@ -240,13 +311,33 @@ func preview(c *fiber.Ctx, settings hosted.Settings, in previewInput) error {
 	return c.JSON(Preview{HTML: string(out)})
 }
 
-// sample is example data for each previewable page, in lang.
-func sample(page, lang string) (view, bool) {
+// previewTexts are the custom texts a preview in lang shows: the draft
+// laid over the saved environment texts, else the scope's saved wording.
+func (h *Handler) previewTexts(c *fiber.Ctx, environment identity.EnvironmentID, lang string, in previewInput) (i18n.Texts, error) {
+	if h.texts.queries == nil || environment.IsZero() {
+		return nil, nil
+	}
+	if in.Texts != nil {
+		draft := hosted.Texts{Locale: lang, Messages: in.Texts}
+		if !in.TextScope.Client.IsZero() {
+			draft.Client = &in.TextScope.Client
+		}
+		if !in.TextScope.Organization.IsZero() {
+			draft.Organization = &in.TextScope.Organization
+		}
+		return h.texts.queries.DraftWording(c.UserContext(), environment, draft)
+	}
+	return h.texts.queries.Wording(c.UserContext(), environment, in.TextScope, lang)
+}
+
+// sample is example data for each previewable page, in lang with the
+// custom texts.
+func sample(page, lang string, texts i18n.Texts) (view, bool) {
 	const email = "jane@example.com"
 	connection := identity.ConnectionID{}
 	all := hosted.DefaultSignIn(identity.EnvironmentID{}, identity.ClientID{}).Within(authentication.DefaultSignInPolicy())
-	t := func(key string, args ...any) string { return i18n.T(lang, key, args...) }
-	v := view{Lang: lang}
+	v := view{Lang: lang, Texts: texts}
+	t := v.T
 	switch page {
 	case "identify":
 		v.Title, v.SignIn = t("hosted.title.sign_in"), all
@@ -292,7 +383,7 @@ func (h *Handler) signIn(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.SignIn(c.Context(), env, id)
+	out, err := h.queries.SignIn(c.UserContext(), env, id)
 	if err != nil {
 		return err
 	}
@@ -309,7 +400,7 @@ func (h *Handler) saveSignIn(c *fiber.Ctx) error {
 	if err = c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.SaveSignIn(c.Context(), h.mutation(c), id, input)
+	out, err := h.commands.SaveSignIn(c.UserContext(), h.mutation(c), id, input)
 	if err != nil {
 		return err
 	}
@@ -321,7 +412,7 @@ func (h *Handler) deleteSignIn(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.DeleteSignIn(c.Context(), h.mutation(c), id); err != nil {
+	if err = h.commands.DeleteSignIn(c.UserContext(), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -329,9 +420,59 @@ func (h *Handler) deleteSignIn(c *fiber.Ctx) error {
 
 func (h *Handler) signIns(c *fiber.Ctx) error {
 	env, _ := identity.ParseEnvironmentID(c.Params("environment"))
-	out, err := h.queries.ListSignIn(c.Context(), env, httpx.PaginationFromCtx(c))
+	out, err := h.queries.ListSignIn(c.UserContext(), env, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
 	return c.JSON(out)
+}
+
+func organization(c *fiber.Ctx) (identity.OrganizationID, error) {
+	id, err := identity.ParseOrganizationID(c.Params("organization"))
+	if err != nil {
+		return id, errx.Validation("invalid organization id")
+	}
+	return id, nil
+}
+
+// organizationStyle is the organization's branding overrides (every field
+// null when it has none).
+func (h *Handler) organizationStyle(c *fiber.Ctx) error {
+	env, _ := identity.ParseEnvironmentID(c.Params("environment"))
+	id, err := organization(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.queries.OrganizationSettings(c.UserContext(), env, id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+
+func (h *Handler) saveOrganizationStyle(c *fiber.Ctx) error {
+	id, err := organization(c)
+	if err != nil {
+		return err
+	}
+	var input hosted.OrganizationSettings
+	if err = c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	out, err := h.commands.SaveOrganizationSettings(c.UserContext(), h.mutation(c), id, input)
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+
+func (h *Handler) deleteOrganizationStyle(c *fiber.Ctx) error {
+	id, err := organization(c)
+	if err != nil {
+		return err
+	}
+	if err = h.commands.DeleteOrganizationSettings(c.UserContext(), h.mutation(c), id); err != nil {
+		return err
+	}
+	return c.SendStatus(fiber.StatusNoContent)
 }

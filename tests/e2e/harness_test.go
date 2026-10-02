@@ -65,6 +65,7 @@ func TestMain(m *testing.M) {
 			fmt.Fprintln(os.Stderr, "template:", err)
 			return 1
 		}
+		defer reportContract()
 		return m.Run()
 	}()
 	os.Exit(code)
@@ -135,7 +136,7 @@ func freshDB(t *testing.T) *sqlx.DB {
 type Harness struct {
 	t     *testing.T
 	DB    *sqlx.DB
-	App   *fiber.App
+	App   *App
 	Key   *rsa.PrivateKey
 	Mail  *capturedMail
 	DNS   *fakeDNS
@@ -196,7 +197,7 @@ func newHarness(t *testing.T, opts ...bootstrap.Option) *Harness {
 	s := bootstrap.New(db, key, "https://iam.example", mail, opts...)
 	app := s.App()
 	t.Cleanup(func() { app.Shutdown() })
-	return &Harness{t: t, DB: db, App: app, Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp, Server: s}
+	return &Harness{t: t, DB: db, App: contracted(t, app), Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp, Server: s}
 }
 
 // fakeDNS serves TXT records for domain verification; names in fail return
@@ -248,7 +249,7 @@ func (h *Harness) Do(method, path, token string, body any) Response {
 	}
 	r := httptest.NewRequest(method, path, reader)
 	r.Header.Set("Content-Type", "application/json")
-	if strings.HasPrefix(token, "ik_") && !strings.HasPrefix(token, "ik_svc_") {
+	if strings.HasPrefix(token, "ik_") && !strings.HasPrefix(token, "ik_svc_") && !strings.HasPrefix(token, "ik_pat_") {
 		r.Header.Set("X-API-Key", token)
 	} else if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)

@@ -27,6 +27,8 @@ type Deps struct {
 	Signups hosted.Signups
 	// Passkeys offers passkey sign-in (nil: never).
 	Passkeys hosted.Passkeys
+	// Features gates beta behavior (nil: every flag on).
+	Features hosted.Features
 	// Finish completes the OAuth authorization (oauthhttp.Handler.Finish).
 	Finish  hostedhttp.Finisher
 	ActorID func(*fiber.Ctx) string
@@ -36,7 +38,10 @@ type Module struct {
 	Flow     hosted.Flow
 	Commands hosted.Commands
 	Queries  hosted.Queries
-	HTTP     *hostedhttp.Handler
+	// Texts customize the hosted pages' wording.
+	TextCommands hosted.TextCommands
+	TextQueries  hosted.TextQueries
+	HTTP         *hostedhttp.Handler
 }
 
 func New(deps Deps) Module {
@@ -50,5 +55,10 @@ func New(deps Deps) Module {
 	if deps.Passkeys != nil {
 		service.SetPasskeys(deps.Passkeys)
 	}
-	return Module{Flow: service, Commands: service, Queries: service, HTTP: hostedhttp.New(service, service, service, deps.Invitations, deps.Finish, deps.ActorID)}
+	if deps.Features != nil {
+		service.SetFeatures(deps.Features)
+	}
+	handler := hostedhttp.New(service, service, service, deps.Invitations, deps.Finish, deps.ActorID)
+	handler.Texts(service, service)
+	return Module{Flow: service, Commands: service, Queries: service, TextCommands: service, TextQueries: service, HTTP: handler}
 }

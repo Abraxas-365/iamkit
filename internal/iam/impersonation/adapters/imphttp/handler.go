@@ -24,7 +24,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 		return errx.Validation("invalid request")
 	}
 	envID, _ := identity.ParseEnvironmentID(c.Params("environment"))
-	token, audience, err := h.commands.Create(c.Context(), mgmthttp.Principal(c), envID, input)
+	token, audience, err := h.commands.Create(c.UserContext(), mgmthttp.Principal(c), envID, input)
 	if err != nil {
 		return err
 	}

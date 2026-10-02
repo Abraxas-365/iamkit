@@ -123,7 +123,7 @@ func (h *Handler) List(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.Summary(c.Context(), token.EnvironmentID, token.Subject)
+	out, err := h.queries.Summary(c.UserContext(), token.EnvironmentID, token.Subject)
 	if err != nil {
 		return err
 	}
@@ -139,13 +139,13 @@ func (h *Handler) Start(c *fiber.Ctx, kind string) error {
 	}
 	c.Set("Cache-Control", "no-store")
 	if kind != mfa.KindTOTP {
-		sent, err := h.commands.StartCode(c.Context(), token.EnvironmentID, token.Subject, kind, input.Phone)
+		sent, err := h.commands.StartCode(c.UserContext(), token.EnvironmentID, token.Subject, kind, input.Phone)
 		if err != nil {
 			return err
 		}
 		return c.Status(fiber.StatusAccepted).JSON(sent)
 	}
-	out, err := h.commands.Start(c.Context(), token.EnvironmentID, token.Subject)
+	out, err := h.commands.Start(c.UserContext(), token.EnvironmentID, token.Subject)
 	if err != nil {
 		return err
 	}
@@ -157,7 +157,7 @@ func (h *Handler) Confirm(c *fiber.Ctx, kind string) error {
 	if err != nil {
 		return err
 	}
-	codes, err := h.commands.Confirm(c.Context(), mutation(token), token.Subject, kind, input.Code)
+	codes, err := h.commands.Confirm(c.UserContext(), mutation(token), token.Subject, kind, input.Code)
 	if err != nil {
 		return err
 	}
@@ -172,7 +172,7 @@ func (h *Handler) Challenge(c *fiber.Ctx, kind string) error {
 	if err != nil {
 		return err
 	}
-	sent, err := h.commands.SendProof(c.Context(), token.EnvironmentID, token.Subject, kind)
+	sent, err := h.commands.SendProof(c.UserContext(), token.EnvironmentID, token.Subject, kind)
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (h *Handler) Remove(c *fiber.Ctx, kind string) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.Remove(c.Context(), mutation(token), token.Subject, kind, input.proof()); err != nil {
+	if err = h.commands.Remove(c.UserContext(), mutation(token), token.Subject, kind, input.proof()); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -195,7 +195,7 @@ func (h *Handler) Regenerate(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	codes, err := h.commands.Regenerate(c.Context(), mutation(token), token.Subject, input.proof())
+	codes, err := h.commands.Regenerate(c.UserContext(), mutation(token), token.Subject, input.proof())
 	if err != nil {
 		return err
 	}
@@ -210,7 +210,7 @@ func (h *Handler) StartWebAuthn(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.commands.StartWebAuthn(c.Context(), token.EnvironmentID, token.Subject, mfa.StartRegistration{Name: input.Name, Passkey: input.Passkey})
+	out, err := h.commands.StartWebAuthn(c.UserContext(), token.EnvironmentID, token.Subject, mfa.StartRegistration{Name: input.Name, Passkey: input.Passkey})
 	if err != nil {
 		return err
 	}
@@ -224,7 +224,7 @@ func (h *Handler) FinishWebAuthn(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.commands.FinishWebAuthn(c.Context(), mutation(token), token.Subject, input.Session, input.Credential)
+	out, err := h.commands.FinishWebAuthn(c.UserContext(), mutation(token), token.Subject, input.Session, input.Credential)
 	if err != nil {
 		return err
 	}
@@ -238,7 +238,7 @@ func (h *Handler) ProveWebAuthn(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.commands.ProveWebAuthn(c.Context(), token.EnvironmentID, token.Subject)
+	out, err := h.commands.ProveWebAuthn(c.UserContext(), token.EnvironmentID, token.Subject)
 	if err != nil {
 		return err
 	}
@@ -255,7 +255,7 @@ func (h *Handler) RenameWebAuthn(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.commands.RenameWebAuthn(c.Context(), token.EnvironmentID, token.Subject, factor, input.Name)
+	out, err := h.commands.RenameWebAuthn(c.UserContext(), token.EnvironmentID, token.Subject, factor, input.Name)
 	if err != nil {
 		return err
 	}
@@ -271,7 +271,7 @@ func (h *Handler) RemoveWebAuthn(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.RemoveWebAuthn(c.Context(), mutation(token), token.Subject, factor, input.proof()); err != nil {
+	if err = h.commands.RemoveWebAuthn(c.UserContext(), mutation(token), token.Subject, factor, input.proof()); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -295,7 +295,7 @@ func (h *Handler) Factors(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.Summary(c.Context(), environment, user)
+	out, err := h.queries.Summary(c.UserContext(), environment, user)
 	if err != nil {
 		return err
 	}
@@ -309,7 +309,7 @@ func (h *Handler) Reset(c *fiber.Ctx) error {
 		return err
 	}
 	m := mfa.Mutation{Environment: environment, Actor: h.actor(c), Target: user.String()}
-	if err = h.commands.Reset(c.Context(), m, user); err != nil {
+	if err = h.commands.Reset(c.UserContext(), m, user); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

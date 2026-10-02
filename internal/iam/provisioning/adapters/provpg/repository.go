@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
@@ -33,7 +35,7 @@ func mutability(message string) error {
 	return errx.Validation(message).WithDetail("scimType", "mutability")
 }
 
-const selectUser = `SELECT u.id,u.email,coalesce(m.display_name,u.name) AS name,(u.active AND m.active) AS active,i.external_id,i.external_id_source,i.version,i.created_at,i.updated_at,coalesce(m.manager_id::text,'') AS manager_id ` + fromUsers
+const selectUser = `SELECT u.id,u.email,coalesce(m.display_name,u.name) AS name,(u.active AND m.active) AS active,i.external_id,i.external_id_source,i.version,i.created_at,i.updated_at,coalesce(m.manager_id::text,'') AS manager_id,u.phone ` + fromUsers
 
 // fromUsers selects live (not deprovisioned) identities of the connection that
 // still belong to its organization.
@@ -53,15 +55,16 @@ func (r *Repository) Authenticate(ctx context.Context, hash []byte) (provisionin
 		Environment  identity.EnvironmentID  `db:"environment_id"`
 		Organization identity.OrganizationID `db:"organization_id"`
 		Connection   identity.ConnectionID   `db:"connection_id"`
+		MapPhone     bool                    `db:"map_phone"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT k.id,k.environment_id,k.organization_id,k.connection_id FROM provisioning_credentials k JOIN organizations o ON o.id=k.organization_id AND o.environment_id=k.environment_id WHERE k.secret_hash=$1 AND k.revoked_at IS NULL AND k.expires_at>now() AND o.active`, hash)
+	err := r.db.GetContext(ctx, &row, `SELECT k.id,k.environment_id,k.organization_id,k.connection_id,c.map_phone FROM provisioning_credentials k JOIN organizations o ON o.id=k.organization_id AND o.environment_id=k.environment_id JOIN provisioning_connections c ON c.id=k.connection_id AND c.environment_id=k.environment_id WHERE k.secret_hash=$1 AND k.revoked_at IS NULL AND k.expires_at>now() AND o.active`, hash)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return provisioning.Principal{}, failure(err)
 		}
 		return provisioning.Principal{}, errx.Unauthorized("invalid credential")
 	}
-	return provisioning.Principal{ID: row.ID, Environment: row.Environment, Organization: row.Organization, Connection: row.Connection}, nil
+	return provisioning.Principal{ID: row.ID, Environment: row.Environment, Organization: row.Organization, Connection: row.Connection, MapPhone: row.MapPhone}, nil
 }
 func find(ctx context.Context, q sqlx.QueryerContext, p provisioning.Principal, id identity.UserID) (provisioning.User, error) {
 	var row provisioning.User
@@ -71,6 +74,9 @@ func find(ctx context.Context, q sqlx.QueryerContext, p provisioning.Principal, 
 	}
 	if err != nil {
 		return row, failure(err)
+	}
+	if !p.MapPhone {
+		row.Phone = ""
 	}
 	row.Aliases, err = aliases(ctx, q, p, id)
 	return row, err
@@ -92,6 +98,9 @@ func (r *Repository) List(ctx context.Context, p provisioning.Principal, f provi
 		return nil, 0, failure(err)
 	}
 	for i := range rows {
+		if !p.MapPhone {
+			rows[i].Phone = ""
+		}
 		if rows[i].Aliases, err = aliases(ctx, r.db, p, rows[i].ID); err != nil {
 			return nil, 0, err
 		}
@@ -122,20 +131,37 @@ func (r *Repository) Create(ctx context.Context, p provisioning.Principal, u pro
 		return u.ID, failure(err)
 	}
 	id, err := r.claim(ctx, tx, p, u)
+	mode := "claimed"
 	if err == nil && id.IsZero() {
 		id, err = r.reactivate(ctx, tx, p, u)
+		mode = "reactivated"
 	}
 	if err == nil && id.IsZero() && policy.Adopt {
 		id, err = r.adopt(ctx, tx, p, u, policy.Scope)
+		mode = "adopted"
 	}
 	if err == nil && id.IsZero() {
 		id, err = u.ID, r.insert(ctx, tx, p, u)
+		mode = ""
+	}
+	if err != nil {
+		return id, err
+	}
+	if mode == "" {
+		err = eventpg.UserCreated(ctx, tx, p.Environment, p.ID.String(), id, p.Organization, "scim")
+	} else {
+		err = scimEvent(ctx, tx, p, event.UserProvisioned, id, map[string]any{"mode": mode})
 	}
 	if err != nil {
 		return id, err
 	}
 	if u.Manager != "" {
 		if err = setManager(ctx, tx, p, id, u.Manager); err != nil {
+			return id, err
+		}
+	}
+	if p.MapPhone && u.Phone != "" {
+		if err = setPhone(ctx, tx, p, id, u.Phone); err != nil {
 			return id, err
 		}
 	}
@@ -147,7 +173,7 @@ func (r *Repository) insert(ctx context.Context, tx *sqlx.Tx, p provisioning.Pri
 		sql  string
 		args []any
 	}{
-		{`INSERT INTO users(id,environment_id,email,name,password_hash) VALUES($1,$2,$3,$4,'')`, []any{u.ID, p.Environment, u.Email, u.Name}},
+		{`INSERT INTO users(id,environment_id,email,name,password_hash,home_organization_id) VALUES($1,$2,$3,$4,'',$5)`, []any{u.ID, p.Environment, u.Email, u.Name, p.Organization}},
 		{`INSERT INTO memberships(environment_id,organization_id,user_id,active) VALUES($1,$2,$3,$4)`, []any{p.Environment, p.Organization, u.ID, u.Active}},
 		{`INSERT INTO provisioned_identities(connection_id,environment_id,user_id,external_id,external_id_source,origin) VALUES($1,$2,$3,$4,$5,'created')`, []any{p.Connection, p.Environment, u.ID, u.External, u.ExternalSource}},
 	} {
@@ -302,6 +328,11 @@ func (r *Repository) Update(ctx context.Context, p provisioning.Principal, id id
 			return out, err
 		}
 	}
+	if input.Phone != nil && p.MapPhone {
+		if err = setPhone(ctx, tx, p, id, *input.Phone); err != nil {
+			return out, err
+		}
+	}
 	if input.Active != nil {
 		if _, err = tx.ExecContext(ctx, `UPDATE memberships SET active=$4 WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, p.Environment, p.Organization, id, *input.Active); err != nil {
 			return out, failure(err)
@@ -315,11 +346,26 @@ func (r *Repository) Update(ctx context.Context, p provisioning.Principal, id id
 	if _, err = tx.ExecContext(ctx, `UPDATE provisioned_identities SET updated_at=now(),version=version+1 WHERE connection_id=$1 AND user_id=$2`, p.Connection, id); err != nil {
 		return out, failure(err)
 	}
+	if err = scimEvent(ctx, tx, p, event.UserUpdated, id, nil); err != nil {
+		return out, err
+	}
 	out, err = find(ctx, tx, p, id)
 	if err != nil {
 		return out, err
 	}
 	return out, failure(tx.Commit())
+}
+
+// scimEvent records a directory change of user; the actor is the SCIM
+// credential (actor_kind directory).
+func scimEvent(ctx context.Context, tx *sqlx.Tx, p provisioning.Principal, typ string, user identity.UserID, data map[string]any) error {
+	if data == nil {
+		data = map[string]any{}
+	}
+	data["user_id"] = user.String()
+	data["organization_id"] = p.Organization.String()
+	data["connection_id"] = p.Connection.String()
+	return eventpg.Emit(ctx, tx, p.Environment, p.ID.String(), typ, event.Subject{Kind: "user", ID: user.String()}, data)
 }
 
 // Deprovision implements SCIM DELETE: the identity is hidden from this
@@ -352,6 +398,9 @@ func (r *Repository) Deprovision(ctx context.Context, p provisioning.Principal, 
 			return failure(err)
 		}
 	}
+	if err = scimEvent(ctx, tx, p, event.UserDeprovisioned, id, nil); err != nil {
+		return err
+	}
 	return failure(tx.Commit())
 }
 
@@ -383,6 +432,13 @@ func setEmail(ctx context.Context, tx *sqlx.Tx, p provisioning.Principal, id ide
 	if errors.As(err, &pg) && pg.Code == "23505" {
 		return errx.Conflict("userName already in use")
 	}
+	return failure(err)
+}
+
+// setPhone sets the user's number from the directory; a different number
+// is unverified, the same one keeps its verification.
+func setPhone(ctx context.Context, tx *sqlx.Tx, p provisioning.Principal, id identity.UserID, phone string) error {
+	_, err := tx.ExecContext(ctx, `UPDATE users SET phone_verified=(phone_verified AND phone=$3),phone=$3 WHERE environment_id=$1 AND id=$2 AND kind='human'`, p.Environment, id, phone)
 	return failure(err)
 }
 

@@ -48,7 +48,7 @@ func (t *testTransaction) PasswordUser(context.Context, authentication.Context, 
 	if changed.IsZero() {
 		changed = time.Now()
 	}
-	return authentication.PasswordAccount{ID: t.user, Hash: "hash", Failures: t.failures, LockedUntil: t.lockedUntil, Changed: changed}, t.lookup
+	return authentication.PasswordAccount{ID: t.user, Email: "user@example.com", Hash: "hash", Failures: t.failures, LockedUntil: t.lockedUntil, Changed: changed}, t.lookup
 }
 func (t *testTransaction) SetLoginFailures(_ context.Context, _ identity.UserID, failures int, until *time.Time) error {
 	t.failures, t.lockedUntil = failures, until
@@ -68,8 +68,8 @@ func (t *testTransaction) Refresh(context.Context, authentication.Context, []byt
 func (t *testTransaction) Challenge(context.Context, identity.ChallengeID, identity.UserID, string) (authentication.Challenge, error) {
 	return authentication.Challenge{}, t.lookup
 }
-func (t *testTransaction) EligibleChallengeUser(context.Context, identity.EnvironmentID, string, string) (identity.UserID, error) {
-	return t.user, t.lookup
+func (t *testTransaction) EligibleChallengeUser(context.Context, identity.EnvironmentID, string, string) (identity.UserID, string, error) {
+	return t.user, "user@example.com", t.lookup
 }
 func (t *testTransaction) RecentChallenges(context.Context, identity.UserID, string) (int, error) {
 	return 0, nil
@@ -181,6 +181,32 @@ func TestIssuedBoundaryIsCanonical(t *testing.T) {
 		}
 		if out.Context != testBoundary() {
 			t.Fatalf("noncanonical %s: %+v", op, out.Context)
+		}
+	}
+}
+
+// A username login is held to the account email's SSO enforcement only once
+// the password matched, so SSO_REQUIRED never reveals that a username exists.
+func TestEnforcedSSOBlocksUsernameLoginAfterPassword(t *testing.T) {
+	user := identity.MustParseUserID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")
+	for _, c := range []struct {
+		name   string
+		tx     *testTransaction
+		wrong  bool
+		status int
+	}{
+		{"unknown", &testTransaction{sso: true, lookup: errx.Unauthorized("no such user")}, true, 401},
+		{"wrong password", &testTransaction{sso: true, user: user}, true, 401},
+		{"right password", &testTransaction{sso: true, user: user}, false, 403},
+	} {
+		s := New(testRepository{c.tx}, testPasswords{mismatch: c.wrong}, testSecrets{}, nil)
+		_, err := s.Login(context.Background(), testBoundary(), "Someone", "password", "")
+		var e *errx.Error
+		if !errx.As(err, &e) || e.HTTPStatus != c.status {
+			t.Fatalf("%s: want %d, got %v", c.name, c.status, err)
+		}
+		if c.status == 403 && e.Code != "SSO_REQUIRED" {
+			t.Fatalf("%s: want SSO_REQUIRED, got %v", c.name, err)
 		}
 	}
 }

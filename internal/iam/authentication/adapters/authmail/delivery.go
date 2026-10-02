@@ -19,6 +19,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/netx"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 )
 
 // WebhookDelivery delegates mail delivery to a trusted HTTPS service (HTTP
@@ -73,7 +74,7 @@ func (d WebhookDelivery) Send(ctx context.Context, m authentication.Message) err
 	if transport == nil {
 		transport = guardedHTTP()
 	}
-	client := http.Client{Transport: transport, Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := http.Client{Transport: telemetry.Transport(transport), Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	res, err := client.Do(req)
 	if err != nil {
 		code := authentication.CodeDeliveryUnreachable

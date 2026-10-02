@@ -6,6 +6,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ type fixedBrand struct {
 	err   error
 }
 
-func (b fixedBrand) Brand(context.Context, identity.EnvironmentID) (authentication.Brand, error) {
+func (b fixedBrand) Brand(context.Context, identity.EnvironmentID, identity.OrganizationID) (authentication.Brand, error) {
 	return b.brand, b.err
 }
 
@@ -56,10 +57,13 @@ func sample(purpose string) authentication.Message {
 	return m
 }
 
-// Golden files pin IAMKit's default emails; run with -update after an
-// intended change and review the diff.
+// Golden files pin IAMKit's default emails in English, Spanish and Arabic
+// (right to left); every other language must render completely, in its own
+// lang and direction. Run with -update after an intended change and review
+// the diff.
 func TestRenderGolden(t *testing.T) {
 	r := Renderer{Branding: fixedBrand{brand: acme}}
+	pinned := []string{"en", "es", "ar"}
 	for _, locale := range i18n.Locales() {
 		for _, purpose := range authentication.PreviewPurposes {
 			m := sample(purpose)
@@ -69,10 +73,15 @@ func TestRenderGolden(t *testing.T) {
 				t.Fatalf("%s/%s: %v", purpose, locale.Code, err)
 			}
 			name := purpose + "." + locale.Code
-			golden(t, name+".html", email.HTML)
-			golden(t, name+".txt", "Subject: "+email.Subject+"\n\n"+email.Text)
+			if slices.Contains(pinned, locale.Code) {
+				golden(t, name+".html", email.HTML)
+				golden(t, name+".txt", "Subject: "+email.Subject+"\n\n"+email.Text)
+			}
 			if strings.Contains(email.HTML+email.Text+email.Subject, "{{") {
 				t.Errorf("%s: unfilled placeholder", name)
+			}
+			if tag := `<html lang="` + locale.Code + `" dir="` + i18n.Dir(locale.Code) + `">`; !strings.Contains(email.HTML, tag) {
+				t.Errorf("%s: want %s", name, tag)
 			}
 		}
 	}
@@ -176,7 +185,7 @@ func TestRenderLocale(t *testing.T) {
 		{"", "es", "en", "es"},
 		{"en", "es", "es", "en"},
 		{"es-MX", "", "", "es"},
-		{"fr", "", "", "en"},
+		{"eo", "", "", "en"},
 	} {
 		templates := &fixedTemplates{}
 		r := Renderer{Branding: fixedBrand{brand: authentication.Brand{Locale: tc.brand}}, Templates: templates, Locale: tc.deployment}

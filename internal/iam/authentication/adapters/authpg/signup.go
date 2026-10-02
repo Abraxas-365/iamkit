@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -47,8 +49,8 @@ func (t *SignupTransaction) CreateSignup(ctx context.Context, p authentication.P
 	if _, err := t.tx.ExecContext(ctx, `UPDATE signups SET consumed_at=now() WHERE environment_id=$1 AND email=$2 AND consumed_at IS NULL`, p.Environment, p.Email); err != nil {
 		return failure(err)
 	}
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO signups(id,environment_id,email,name,password_hash,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7)`,
-		p.ID, p.Environment, p.Email, p.Name, p.PasswordHash, p.Hash, p.Expires)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO signups(id,environment_id,email,name,password_hash,secret_hash,expires_at,terms_accepted_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+		p.ID, p.Environment, p.Email, p.Name, p.PasswordHash, p.Hash, p.Expires, p.TermsAccepted)
 	return failure(err)
 }
 
@@ -61,8 +63,9 @@ func (t *SignupTransaction) PendingSignup(ctx context.Context, environment ident
 		PasswordHash string                 `db:"password_hash"`
 		Hash         []byte                 `db:"secret_hash"`
 		Attempts     int                    `db:"attempts"`
+		Terms        *time.Time             `db:"terms_accepted_at"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT id,environment_id,email,name,password_hash,secret_hash,attempts FROM signups
+	err := t.tx.GetContext(ctx, &row, `SELECT id,environment_id,email,name,password_hash,secret_hash,attempts,terms_accepted_at FROM signups
 		WHERE id=$1 AND environment_id=$2 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, signup, environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		return authentication.PendingSignup{}, errx.Unauthorized("invalid challenge")
@@ -71,7 +74,7 @@ func (t *SignupTransaction) PendingSignup(ctx context.Context, environment ident
 		return authentication.PendingSignup{}, failure(err)
 	}
 	return authentication.PendingSignup{ID: row.ID, Environment: row.Environment, Email: row.Email, Name: row.Name,
-		PasswordHash: row.PasswordHash, Hash: row.Hash, Attempts: row.Attempts}, nil
+		PasswordHash: row.PasswordHash, Hash: row.Hash, Attempts: row.Attempts, TermsAccepted: row.Terms}, nil
 }
 
 func (t *SignupTransaction) FailSignup(ctx context.Context, signup identity.ChallengeID) error {
@@ -88,8 +91,8 @@ func (t *SignupTransaction) Join(ctx context.Context, j authentication.Joining) 
 		return authentication.ErrSignupDisabled()
 	}
 	// A passwordless account signs in with email codes (otp_enabled).
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,email_verified,otp_enabled) VALUES($1,$2,$3,$4,$5,true,$5='')`,
-		j.User, j.Environment, j.Email, j.Name, j.PasswordHash)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,email_verified,otp_enabled,home_organization_id,terms_accepted_at) VALUES($1,$2,$3,$4,$5,true,$5='',$6,$7)`,
+		j.User, j.Environment, j.Email, j.Name, j.PasswordHash, j.Organization, j.TermsAccepted)
 	var pg *pq.Error
 	if errors.As(err, &pg) && pg.Code == "23505" {
 		return authentication.ErrAccountExists()
@@ -99,6 +102,9 @@ func (t *SignupTransaction) Join(ctx context.Context, j authentication.Joining) 
 	}
 	if _, err = t.tx.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, j.Environment, j.Organization, j.User); err != nil {
 		return failure(err)
+	}
+	if err = eventpg.UserCreated(ctx, t.tx, j.Environment, j.User.String(), j.User, j.Organization, "signup"); err != nil {
+		return err
 	}
 	if !j.Group.IsZero() {
 		if _, err = t.tx.ExecContext(ctx, `INSERT INTO group_members(group_id,environment_id,organization_id,user_id)

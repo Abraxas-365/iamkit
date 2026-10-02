@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventhttp"
 	"github.com/Abraxas-365/iamkit/internal/server/apiauth"
 	"github.com/gofiber/fiber/v2"
 )
@@ -25,8 +26,13 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	if s.API == nil {
 		return
 	}
-	api := app.Group("/api/v1", s.API.Authenticate, rateLimiter(rateLimit))
+	api := app.Group("/api/v1", s.API.Authenticate, s.rateLimiter(rateLimit))
 	e := api.Group("/environments/:environment", apiauth.Scope)
+	if s.Meter != nil {
+		// requests_per_minute: after Scope, so only the token's own
+		// environment is charged.
+		e.Use(s.Meter)
+	}
 
 	// Users
 	users := e.Group("/users", apiauth.ReadWrite(authorization.PermUsersRead, authorization.PermUsersWrite))
@@ -36,10 +42,30 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	users.Patch("/:id", s.APIHandlers.Users.Update)
 	users.Delete("/:id", s.APIHandlers.Users.Suspend)
 	users.Delete("/:id/permanent", s.APIHandlers.Users.Delete)
+	users.Post("/:id/deactivate", s.APIHandlers.Users.Suspend)
+	users.Post("/:id/reactivate", s.APIHandlers.Users.Reactivate)
 	users.Post("/:id/unlock", s.APIHandlers.Users.Unlock)
+	users.Get("/:id/metadata/:key", s.APIHandlers.Users.Metadata)
+	users.Put("/:id/metadata/:key", s.APIHandlers.Users.SetMetadata)
+	users.Delete("/:id/metadata/:key", s.APIHandlers.Users.DeleteMetadata)
+	users.Patch("/:id/profile", s.APIHandlers.Users.UpdateProfile)
+	schema := guarded(e, apiauth.ReadWrite(authorization.PermUsersRead, authorization.PermUsersWrite))
+	schema.Get("/user-schema", s.APIHandlers.Users.Schema)
+	schema.Put("/user-schema", s.APIHandlers.Users.SaveSchema)
+	schema.Delete("/user-schema", s.APIHandlers.Users.DeleteSchema)
 	if s.APIHandlers.Factors != nil {
 		users.Get("/:id/factors", s.APIHandlers.Factors.Factors)
 		users.Delete("/:id/factors", s.APIHandlers.Factors.Reset)
+	}
+	if s.APIHandlers.AccessTokens != nil {
+		users.Get("/:id/access-tokens", s.APIHandlers.AccessTokens.List)
+		users.Post("/:id/access-tokens", s.APIHandlers.AccessTokens.Create)
+		users.Delete("/:id/access-tokens/:token", s.APIHandlers.AccessTokens.Revoke)
+	}
+	if s.APIHandlers.UserKeys != nil {
+		users.Get("/:id/keys", s.APIHandlers.UserKeys.List)
+		users.Post("/:id/keys", s.APIHandlers.UserKeys.Add)
+		users.Delete("/:id/keys/:key", s.APIHandlers.UserKeys.Remove)
 	}
 
 	// Organizations
@@ -48,6 +74,16 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	orgs.Get("/organizations", s.APIHandlers.Organizations.List)
 	orgs.Get("/organizations/:id", s.APIHandlers.Organizations.Find)
 	orgs.Patch("/organizations/:id", s.APIHandlers.Organizations.Update)
+	orgs.Get("/organizations/:id/metadata/:key", s.APIHandlers.Organizations.Metadata)
+	orgs.Put("/organizations/:id/metadata/:key", s.APIHandlers.Organizations.SetMetadata)
+	orgs.Delete("/organizations/:id/metadata/:key", s.APIHandlers.Organizations.DeleteMetadata)
+
+	// Organization administration: end users administering their own
+	// organization with iam:org:* permissions. Registered before the
+	// structure prefix group so its iam:members:* check never runs here.
+	if h := s.APIHandlers.OrgAdmin; h != nil {
+		h.Register(e.Group("/organizations/:organization/admin"))
+	}
 
 	// Members
 	members := guarded(e, apiauth.ReadWrite(authorization.PermMembersRead, authorization.PermMembersWrite))
@@ -89,6 +125,14 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	res.Post("/application-resources", s.APIHandlers.Authorization.Link)
 	res.Delete("/application-resources/:application/:resource", s.APIHandlers.Authorization.Unlink)
 	res.Get("/applications/:application/resources", s.APIHandlers.Authorization.ListByApplication)
+	if h := s.APIHandlers.ResourceGrants; h != nil {
+		res.Put("/resources/:id/access", h.SetAccess)
+		grants := guarded(e, apiauth.ReadWrite(authorization.PermRolesRead, authorization.PermRolesWrite))
+		grants.Get("/resource-grants", h.List)
+		grants.Get("/resource-grants/:id", h.Find)
+		grants.Put("/resource-grants", h.Put)
+		grants.Delete("/resource-grants/:id", h.Delete)
+	}
 
 	// Roles
 	roles := guarded(e, apiauth.ReadWrite(authorization.PermRolesRead, authorization.PermRolesWrite))
@@ -136,6 +180,25 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 			delivery.Put("/templates/:purpose/:locale", d.SetTemplate)
 			delivery.Delete("/templates/:purpose/:locale", d.ResetTemplate)
 		}
+	}
+	if h := s.APIHandlers.Events; h != nil {
+		read := apiauth.RequirePermission(authorization.PermEventsRead)
+		e.Get("/events/export", read, h.Export)
+		e.Get("/events", read, h.List)
+		// An entity's history needs reading the entity and the log.
+		for collection, perm := range map[string]string{
+			"users": authorization.PermUsersRead, "organizations": authorization.PermOrgsRead,
+			"applications": authorization.PermAppsRead, "roles": authorization.PermRolesRead,
+			"resources": authorization.PermResourcesRead,
+		} {
+			e.Get("/"+collection+"/:id/history", apiauth.RequirePermission(perm), read, h.History(eventhttp.Histories[collection]))
+		}
+	}
+	if h := s.APIHandlers.Webhooks; h != nil {
+		h.Routes(e.Group("/webhooks", apiauth.ReadWrite(authorization.PermWebhooksRead, authorization.PermWebhooksWrite)))
+	}
+	if h := s.APIHandlers.Usage; h != nil {
+		e.Get("/usage", apiauth.RequirePermission(authorization.PermUsageRead), h.Usage)
 	}
 	if h := s.APIHandlers.SMS; h != nil {
 		sms := e.Group("/sms", apiauth.ReadWrite(authorization.PermDeliveryRead, authorization.PermDeliveryWrite))

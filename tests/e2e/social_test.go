@@ -36,13 +36,17 @@ func TestSocialLogin(t *testing.T) {
 
 	// Unknown verified email: an account in the sign-up organization and
 	// group, with access at once.
-	dave := e.sso(idp, conn, e.Org, map[string]any{"sub": "dave-sub", "email": "Dave@Example.net", "email_verified": true, "name": "Dave"})
+	dave := e.sso(idp, conn, e.Org, map[string]any{"sub": "dave-sub", "email": "Dave@Example.net", "email_verified": true, "name": "Dave", "picture": "https://cdn.example/dave.png"})
 	if dave.Status != 200 || !equal(e.permissions(dave.JSON["access_token"].(string)), []string{"invoices:read"}) {
 		t.Fatalf("signup: %d %v", dave.Status, dave.JSON)
 	}
 	var origin string
 	if err := e.DB.Get(&origin, `SELECT x.origin FROM external_identities x JOIN users u ON u.id=x.user_id WHERE x.connection_id=$1 AND u.email='dave@example.net' AND u.email_verified AND u.password_hash=''`, conn); err != nil || origin != "signup" {
 		t.Fatalf("signup identity: %q %v", origin, err)
+	}
+	var avatar string
+	if err := e.DB.Get(&avatar, `SELECT avatar_url FROM users WHERE environment_id=$1 AND email='dave@example.net'`, e.EnvID); err != nil || avatar != "https://cdn.example/dave.png" {
+		t.Fatalf("signup avatar = %q %v", avatar, err)
 	}
 	// The same subject signs in again without a second account.
 	if again := e.sso(idp, conn, e.Org, map[string]any{"sub": "dave-sub", "email": "other@example.net", "email_verified": true}); again.Status != 200 {
@@ -62,9 +66,12 @@ func TestSocialLogin(t *testing.T) {
 
 	// Existing account with the same verified email: linked, keeps its
 	// password and access.
-	alice := e.sso(idp, conn, e.Org, map[string]any{"sub": "alice-google", "email": e.AliceEmail, "email_verified": true})
+	alice := e.sso(idp, conn, e.Org, map[string]any{"sub": "alice-google", "email": e.AliceEmail, "email_verified": true, "picture": "http://cdn.example/insecure.png"})
 	if alice.Status != 200 || claims(t, alice.JSON["access_token"].(string))["sub"] != e.Alice {
 		t.Fatalf("link: %d %v", alice.Status, alice.JSON)
+	}
+	if err := e.DB.Get(&avatar, `SELECT avatar_url FROM users WHERE id=$1`, e.Alice); err != nil || avatar != "" {
+		t.Fatalf("a non-https picture is not an avatar: %q %v", avatar, err)
 	}
 	if err := e.DB.Get(&origin, `SELECT origin FROM external_identities WHERE connection_id=$1 AND user_id=$2`, conn, e.Alice); err != nil || origin != "email" {
 		t.Fatalf("link identity: %q %v", origin, err)

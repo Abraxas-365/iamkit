@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -89,7 +91,17 @@ func (r *Repository) CreateGroup(ctx context.Context, p provisioning.Principal, 
 	if err = addMembers(ctx, tx, p, id, input.Members); err != nil {
 		return err
 	}
+	if err = groupEvent(ctx, tx, p, event.GroupCreated, id); err != nil {
+		return err
+	}
 	return failure(tx.Commit())
+}
+
+// groupEvent records a directory change of group; the actor is the SCIM
+// credential.
+func groupEvent(ctx context.Context, tx sqlx.ExecerContext, p provisioning.Principal, typ string, id identity.GroupID) error {
+	return eventpg.Emit(ctx, tx, p.Environment, p.ID.String(), typ, event.Subject{Kind: "group", ID: id.String()},
+		map[string]any{"organization_id": p.Organization.String(), "connection_id": p.Connection.String()})
 }
 
 // UpdateGroup applies a replace-set of members first, then removals, then
@@ -115,7 +127,9 @@ func (r *Repository) UpdateGroup(ctx context.Context, p provisioning.Principal, 
 		if err = checkMembers(ctx, tx, p, *input.Members); err != nil {
 			return err
 		}
-		if _, err = tx.ExecContext(ctx, `DELETE FROM group_members WHERE group_id=$1 AND NOT (user_id=ANY($2::uuid[]))`, id, uuids(*input.Members)); err != nil {
+		// SCIM never sees machine users, so a full replace keeps them.
+		if _, err = tx.ExecContext(ctx, `DELETE FROM group_members gm WHERE gm.group_id=$1 AND NOT (gm.user_id=ANY($2::uuid[]))
+			AND NOT EXISTS(SELECT 1 FROM users u WHERE u.id=gm.user_id AND u.environment_id=gm.environment_id AND u.kind='machine')`, id, uuids(*input.Members)); err != nil {
 			return failure(err)
 		}
 		if err = addMembers(ctx, tx, p, id, *input.Members); err != nil {
@@ -130,23 +144,32 @@ func (r *Repository) UpdateGroup(ctx context.Context, p provisioning.Principal, 
 	if err = addMembers(ctx, tx, p, id, input.Add); err != nil {
 		return err
 	}
+	typ := event.GroupUpdated
+	if input.Name == nil && input.External == nil {
+		typ = event.GroupMembersChanged
+	}
+	if err = groupEvent(ctx, tx, p, typ, id); err != nil {
+		return err
+	}
 	return failure(tx.Commit())
 }
 
 // DeleteGroup removes the group with its members and role bindings.
 func (r *Repository) DeleteGroup(ctx context.Context, p provisioning.Principal, id identity.GroupID) error {
-	res, err := r.db.ExecContext(ctx, `DELETE FROM groups WHERE id=$4 AND connection_id=$1 AND environment_id=$2 AND organization_id=$3`, p.Connection, p.Environment, p.Organization, id)
-	if err != nil {
-		return failure(err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return failure(err)
-	}
-	if n == 0 {
-		return errx.NotFound("group not found")
-	}
-	return nil
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, `DELETE FROM groups WHERE id=$4 AND connection_id=$1 AND environment_id=$2 AND organization_id=$3`, p.Connection, p.Environment, p.Organization, id)
+		if err != nil {
+			return failure(err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return failure(err)
+		}
+		if n == 0 {
+			return errx.NotFound("group not found")
+		}
+		return groupEvent(ctx, tx, p, event.GroupDeleted, id)
+	})
 }
 
 func (r *Repository) FindGroup(ctx context.Context, p provisioning.Principal, id identity.GroupID, members bool) (provisioning.Group, error) {
@@ -203,7 +226,7 @@ func (r *Repository) members(ctx context.Context, groups []provisioning.Group) e
 	err := r.db.SelectContext(ctx, &rows, `SELECT gm.group_id,gm.user_id,coalesce(m.display_name,u.name) AS display
 		FROM group_members gm
 		JOIN memberships m ON m.environment_id=gm.environment_id AND m.organization_id=gm.organization_id AND m.user_id=gm.user_id
-		JOIN users u ON u.id=gm.user_id AND u.environment_id=gm.environment_id
+		JOIN users u ON u.id=gm.user_id AND u.environment_id=gm.environment_id AND u.kind='human'
 		WHERE gm.group_id=ANY($1::uuid[]) ORDER BY gm.created_at,gm.user_id`, pq.Array(ids))
 	if err != nil {
 		return failure(err)

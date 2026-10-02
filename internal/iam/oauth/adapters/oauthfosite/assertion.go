@@ -13,6 +13,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/netx"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 	"github.com/go-jose/go-jose/v3"
 	"github.com/jmoiron/sqlx"
 	"github.com/ory/fosite"
@@ -123,7 +124,7 @@ func NewKeyFetcher(transport http.RoundTripper) *KeyFetcher {
 	if transport == nil {
 		transport = GuardedTransport()
 	}
-	return &KeyFetcher{client: &http.Client{Transport: transport, Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, sets: map[string]fetchedKeys{}}
+	return &KeyFetcher{client: &http.Client{Transport: telemetry.Transport(transport), Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, sets: map[string]fetchedKeys{}}
 }
 
 // GuardedTransport dials only public addresses, ignoring proxies.

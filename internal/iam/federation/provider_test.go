@@ -338,6 +338,12 @@ func TestLinkingOptions(t *testing.T) {
 	if p := org.Profile(Claims{Email: "ann@example.com", EmailVerified: &no}); p.Email != "" {
 		t.Fatalf("organization unverified: %+v", p)
 	}
+	if p := social.Profile(Claims{Picture: " https://cdn.example/ann.png "}); p.AvatarURL != "https://cdn.example/ann.png" {
+		t.Fatalf("picture: %+v", p)
+	}
+	if p := social.Profile(Claims{Picture: "http://cdn.example/ann.png"}); p.AvatarURL != "" {
+		t.Fatalf("a non-https picture is dropped: %+v", p)
+	}
 	on := true
 	if got, err := (ConnectionUpdate{UpdateProfile: &on}).Apply(Connection{}); err != nil || !got.UpdateProfile {
 		t.Fatalf("update_profile: %+v %v", got, err)

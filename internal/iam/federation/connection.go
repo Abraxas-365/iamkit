@@ -1,6 +1,9 @@
 package federation
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"net/url"
 	"regexp"
 	"strings"
@@ -333,6 +336,9 @@ type Claims struct {
 	Email         string
 	EmailVerified *bool
 	Name          string
+	// Picture is the provider's avatar URL (OIDC picture); only an https
+	// URL is kept (Avatar).
+	Picture string
 	// HostedDomain is Google's hd claim: the Workspace domain of the
 	// account, empty for personal Google accounts.
 	HostedDomain string
@@ -381,11 +387,13 @@ type Profile struct {
 	Subject      string
 	Name         string
 	Email        string
+	// AvatarURL replaces the picture when the provider sent one.
+	AvatarURL string
 }
 
 // Profile returns the refresh the claims allow.
 func (c Connection) Profile(claims Claims) Profile {
-	p := Profile{Connection: c.ID, Environment: c.Environment, Organization: c.Organization, Subject: claims.Subject}
+	p := Profile{Connection: c.ID, Environment: c.Environment, Organization: c.Organization, Subject: claims.Subject, AvatarURL: claims.Avatar()}
 	if name := strings.TrimSpace(claims.Name); len(name) <= 200 {
 		p.Name = name
 	}
@@ -410,6 +418,16 @@ func ErrProviderUnavailable(cause error) error {
 }
 
 // DisplayName is the provider's name claim, or the email's local part.
+// Avatar is the provider's picture when it is an acceptable avatar URL,
+// else "".
+func (c Claims) Avatar() string {
+	avatar, err := identity.AvatarURL(c.Picture)
+	if err != nil {
+		return ""
+	}
+	return avatar
+}
+
 func (c Claims) DisplayName(email string) string {
 	if name := strings.TrimSpace(c.Name); name != "" && len(name) <= 200 {
 		return name
@@ -432,6 +450,9 @@ type Provisioning struct {
 	Email        string
 	Domain       string
 	Name         string
+	// AvatarURL is the provider's picture: a new user's avatar, and an
+	// existing account's when it has none.
+	AvatarURL string
 }
 
 // Discovery routes an email to its login method: "sso" when the email's
@@ -463,8 +484,81 @@ type State struct {
 	// Continuation is the OAuth authorization ticket a hosted login start
 	// resumes after the callback; empty for headless starts.
 	Continuation string
+	// Return sends a headless callback back to a custom sign-in UI.
+	Return Return
 }
 type Start struct{ URL, Binding string }
+
+// Return asks a headless federation callback to redirect back to a custom
+// sign-in UI instead of answering JSON at IAMKit's own URL: To (an origin
+// an OAuth client of the application allows) receives a one-time
+// federation_result handle, which only the holder of the verifier of
+// Challenge (S256, like PKCE) redeems for the login result. The zero value
+// keeps the JSON callback.
+type Return struct {
+	To        string `json:"return_to"`
+	Challenge string `json:"code_challenge"`
+}
+
+// Set reports whether the start asked for a redirect back.
+func (r Return) Set() bool { return r.To != "" || r.Challenge != "" }
+
+// Validate checks the shape: an absolute https URL (http only on a
+// loopback host) without credentials or fragment, and an S256 challenge.
+// Whether its origin is allowed is the service's check (Origin).
+func (r Return) Validate() error {
+	if _, err := r.Origin(); err != nil {
+		return err
+	}
+	if len(r.Challenge) != 43 || strings.Trim(r.Challenge, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_") != "" {
+		return errx.Validation("code_challenge must be the S256 challenge (43 base64url characters) of a verifier the sign-in UI keeps")
+	}
+	return nil
+}
+
+// Origin is the scheme://host[:port] of To, lowercased.
+func (r Return) Origin() (string, error) {
+	u, err := url.Parse(r.To)
+	invalid := errx.Validation("return_to must be an absolute https URL (http only on localhost) without credentials or fragment")
+	if err != nil || u.User != nil || u.Fragment != "" || u.Host == "" || len(r.To) > 2048 {
+		return "", invalid
+	}
+	scheme, host := strings.ToLower(u.Scheme), strings.ToLower(u.Hostname())
+	loopback := host == "localhost" || host == "127.0.0.1" || host == "::1"
+	if scheme != "https" && (scheme != "http" || !loopback) {
+		return "", invalid
+	}
+	return scheme + "://" + strings.ToLower(u.Host), nil
+}
+
+// ResultPrefix starts the one-time handle a callback hands to return_to.
+const ResultPrefix = "ik_fedres_"
+
+// ResultTTL bounds the time between the callback and the redemption.
+const ResultTTL = time.Minute
+
+// Result is a verified headless federated sign-in parked for a custom
+// sign-in UI: the session is issued only when the UI redeems it.
+type Result struct {
+	Boundary        authentication.Context
+	User            identity.UserID
+	Email           string
+	OrganizationSSO bool
+	// NoAccess turns a refused session into 403 (the provider proved the
+	// identity; access is what is missing).
+	NoAccess  bool
+	Challenge string
+}
+
+// Verifies reports whether verifier is the S256 verifier of the
+// challenge, in constant time.
+func (r Result) Verifies(verifier string) bool {
+	if len(verifier) < 43 || len(verifier) > 128 {
+		return false
+	}
+	sum := sha256.Sum256([]byte(verifier))
+	return subtle.ConstantTimeCompare([]byte(base64.RawURLEncoding.EncodeToString(sum[:])), []byte(r.Challenge)) == 1
+}
 
 // Outcome of a federation callback: the session of a headless start, or,
 // for a hosted login start, the verified user and the authorization ticket
@@ -477,6 +571,10 @@ type Outcome struct {
 	// MFA is set instead of Issued when the headless login needs a second
 	// factor.
 	MFA *authentication.MFA
+	// ReturnTo is the custom sign-in UI a headless start asked to return
+	// to (set even when the callback fails after the state was consumed);
+	// Result is then the one-time handle to redeem instead of a session.
+	ReturnTo, Result string
 }
 
 // Hosted reports whether the callback belongs to a hosted login.

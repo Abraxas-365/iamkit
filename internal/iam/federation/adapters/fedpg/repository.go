@@ -11,6 +11,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -68,8 +69,7 @@ func (r connectionRow) connection() federation.Connection {
 func null(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }
 
 func audit(ctx context.Context, tx *sqlx.Tx, m federation.Mutation) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
-	return failure(err)
+	return failure(eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target))
 }
 
 func (r *Repository) Create(ctx context.Context, m federation.Mutation, c federation.Connection) error {
@@ -111,7 +111,7 @@ func (r *Repository) SaveState(ctx context.Context, hash []byte, s federation.St
 	if s.Continuation != "" {
 		continuation = &s.Continuation
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+make_interval(secs => $11))`, hash, s.Connection, s.Boundary.EnvironmentID, s.Boundary.OrganizationID, s.Boundary.ApplicationID, s.Boundary.ResourceID, s.Binding, s.Nonce, s.Verifier, continuation, config.FederationStateTTL.Seconds())
+	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,expires_at,return_to,return_challenge) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+make_interval(secs => $11),$12,$13)`, hash, s.Connection, s.Boundary.EnvironmentID, s.Boundary.OrganizationID, s.Boundary.ApplicationID, s.Boundary.ResourceID, s.Binding, s.Nonce, s.Verifier, continuation, config.FederationStateTTL.Seconds(), null(s.Return.To), null(s.Return.Challenge))
 	return conflict(err)
 }
 func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (federation.State, error) {
@@ -131,8 +131,10 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 		Nonce        string                  `db:"nonce"`
 		Verifier     string                  `db:"verifier"`
 		Continuation sql.NullString          `db:"continuation"`
+		ReturnTo     sql.NullString          `db:"return_to"`
+		Challenge    sql.NullString          `db:"return_challenge"`
 	}
-	err = tx.GetContext(ctx, &row, `SELECT connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation FROM federation_states WHERE secret_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, hash)
+	err = tx.GetContext(ctx, &row, `SELECT connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,return_to,return_challenge FROM federation_states WHERE secret_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, hash)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, failure(err)
 	}
@@ -142,7 +144,7 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 	if _, err = tx.ExecContext(ctx, `UPDATE federation_states SET consumed_at=now(), continuation=NULL WHERE secret_hash=$1`, hash); err != nil {
 		return out, failure(err)
 	}
-	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier, Continuation: row.Continuation.String}
+	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier, Continuation: row.Continuation.String, Return: federation.Return{To: row.ReturnTo.String, Challenge: row.Challenge.String}}
 	return out, failure(tx.Commit())
 }
 func (r *Repository) LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, federation.Account, error) {
@@ -184,7 +186,7 @@ func (r *Repository) mutate(ctx context.Context, m federation.Mutation, query st
 	return failure(tx.Commit())
 }
 func (r *Repository) Link(ctx context.Context, m federation.Mutation, connection identity.ConnectionID, user identity.UserID, subject string) error {
-	return r.mutate(ctx, m, `INSERT INTO external_identities(connection_id,environment_id,user_id,subject) VALUES($1,$2,$3,$4)`, connection, m.Environment, user, subject)
+	return r.mutate(ctx, m, `INSERT INTO external_identities(connection_id,environment_id,user_id,subject) SELECT $1,$2,$3,$4 WHERE EXISTS(SELECT 1 FROM users WHERE id=$3 AND environment_id=$2 AND kind='human')`, connection, m.Environment, user, subject)
 }
 func (r *Repository) Disable(ctx context.Context, m federation.Mutation, id identity.ConnectionID) error {
 	return r.mutate(ctx, m, `UPDATE federation_connections SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
@@ -253,7 +255,7 @@ func (r *Repository) Identities(ctx context.Context, environment identity.Enviro
 		return query.Paginated[federation.ExternalIdentityView]{}, failure(err)
 	}
 	rows := []federation.ExternalIdentityView{}
-	sel := fmt.Sprintf("SELECT x.connection_id, x.subject, x.user_id, u.name AS user_name, u.email AS user_email, x.origin, x.created_at %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
+	sel := fmt.Sprintf("SELECT x.connection_id, x.subject, x.user_id, u.name AS user_name, coalesce(u.email,'') AS user_email, x.origin, x.created_at %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &rows, sel, args...); err != nil {
 		return query.Paginated[federation.ExternalIdentityView]{}, failure(err)
 	}

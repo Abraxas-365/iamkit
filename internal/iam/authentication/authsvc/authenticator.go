@@ -17,8 +17,8 @@ var _ authentication.Authenticator = (*Service)(nil)
 // The organization is not known yet, so an email whose domain any
 // organization enforces SSO for is refused before the password is compared
 // (as Login does), unless the user may bypass SSO there.
-func (s *Service) VerifyPassword(ctx context.Context, environment identity.EnvironmentID, email, password string) (authentication.Verified, error) {
-	email, err := identity.Email(email)
+func (s *Service) VerifyPassword(ctx context.Context, environment identity.EnvironmentID, login, password string) (authentication.Verified, error) {
+	email, username, err := identity.Login(login)
 	if err != nil || environment.IsZero() || len(password) > config.PasswordMaxLength {
 		return authentication.Verified{}, invalidCredentials()
 	}
@@ -39,7 +39,7 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 	if err = requireNoSSO(ctx, tx, authentication.Context{EnvironmentID: environment}, email); err != nil {
 		return authentication.Verified{}, err
 	}
-	account, lookup := tx.PasswordUser(ctx, authentication.Context{EnvironmentID: environment}, email)
+	account, lookup := tx.PasswordUser(ctx, authentication.Context{EnvironmentID: environment}, email+username)
 	// Compare always runs (dummy hash when unknown) so timing is uniform.
 	matches := s.passwords.Compare(account.Hash, password)
 	if lookup != nil {
@@ -47,6 +47,9 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 	}
 	if err = s.checkPassword(ctx, tx, environment, policy, account, matches); err != nil {
 		return authentication.Verified{}, credentialFailure(err)
+	}
+	if err = requireNoSSOAfter(ctx, tx, authentication.Context{EnvironmentID: environment}, username, account.Email); err != nil {
+		return authentication.Verified{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return authentication.Verified{}, err
@@ -56,7 +59,7 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 	if policy, err = s.memberPolicy(ctx, environment, account.ID, policy); err != nil {
 		return authentication.Verified{}, err
 	}
-	return authentication.Verified{User: account.ID, Email: email, Method: authentication.MethodPassword,
+	return authentication.Verified{User: account.ID, Email: account.Email, Method: authentication.MethodPassword,
 		PasswordExpired: policy.Expired(account.Changed, time.Now())}, nil
 }
 
@@ -135,6 +138,17 @@ func (s *Service) VerifyCode(ctx context.Context, environment identity.Environme
 		return authentication.Verified{}, err
 	}
 	return authentication.Verified{User: row.User, Email: row.Email, Method: authentication.MethodCode}, nil
+}
+
+// Account reads the active user's profile, for display while they choose
+// an organization.
+func (s *Service) Account(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (authentication.Profile, error) {
+	tx, err := s.repository.Begin(ctx)
+	if err != nil {
+		return authentication.Profile{}, err
+	}
+	defer tx.Rollback()
+	return tx.ActiveProfile(ctx, environment, user)
 }
 
 // Organizations drops the organizations that do not allow the method the

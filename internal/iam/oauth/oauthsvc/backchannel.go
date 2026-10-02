@@ -89,34 +89,20 @@ func (l *Logouts) deliver(ctx context.Context, n oauth.LogoutNotification) {
 	}
 }
 
-// Run dispatches until ctx ends: every interval, and at once again while
-// rounds come back full. Finished notifications are pruned hourly.
-func (l *Logouts) Run(ctx context.Context, interval time.Duration) {
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	var pruned time.Time
-	for {
-		for {
-			n, err := l.DispatchLogouts(ctx)
-			if err != nil && ctx.Err() == nil {
-				slog.Error("dispatch back-channel logouts", "error", err)
-			}
-			if err != nil || n < logoutBatch {
-				break
-			}
-		}
-		if time.Since(pruned) > time.Hour {
-			if err := l.repository.PruneLogouts(ctx, logoutRetention); err != nil && ctx.Err() == nil {
-				slog.Error("prune back-channel logouts", "error", err)
-			}
-			pruned = time.Now()
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
+// DispatchRound sends one batch; more reports a full batch (call again).
+func (l *Logouts) DispatchRound(ctx context.Context) (bool, error) {
+	n, err := l.DispatchLogouts(ctx)
+	return n == logoutBatch, err
+}
+
+// Prune deletes finished notifications past their retention.
+func (l *Logouts) Prune(ctx context.Context) (bool, error) {
+	return false, l.repository.PruneLogouts(ctx, logoutRetention)
+}
+
+// Lag is how long the oldest due notification has waited.
+func (l *Logouts) Lag(ctx context.Context) (time.Duration, error) {
+	return l.repository.LogoutLag(ctx)
 }
 
 func (l *Logouts) RetryLogout(ctx context.Context, m oauth.Mutation, notification int64) error {

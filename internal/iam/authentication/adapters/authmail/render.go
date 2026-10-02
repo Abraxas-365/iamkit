@@ -61,6 +61,9 @@ type view struct {
 
 type viewBrand struct{ Name, Logo, Accent, OnAccent string }
 
+// Dir is the email language's writing direction (ltr or rtl).
+func (v view) Dir() string { return i18n.Dir(v.Lang) }
+
 // Render never fails for a missing brand or saved wording (it logs and uses
 // the defaults): a broken template setting must not stop a sign-in code.
 func (r Renderer) Render(ctx context.Context, m authentication.Message, draft authentication.Draft) (authentication.Email, error) {
@@ -69,7 +72,7 @@ func (r Renderer) Render(ctx context.Context, m authentication.Message, draft au
 	}
 	var brand authentication.Brand
 	if r.Branding != nil && !m.Environment.IsZero() {
-		b, err := r.Branding.Brand(ctx, m.Environment)
+		b, err := r.Branding.Brand(ctx, m.Environment, m.OrganizationID)
 		if err != nil {
 			slog.WarnContext(ctx, "email branding unavailable, using defaults", "environment", m.Environment, "err", err)
 		} else {
@@ -79,7 +82,7 @@ func (r Renderer) Render(ctx context.Context, m authentication.Message, draft au
 	if draft.AppName != nil {
 		brand.Name = *draft.AppName
 	}
-	locale := i18n.Resolve(m.Locale, brand.Locale, r.Locale)
+	locale := i18n.Negotiate(brand.Languages, m.Locale, brand.Locale, r.Locale)
 	wording := authentication.DefaultCopy(m.Purpose, locale)
 	switch {
 	case draft.Copy != nil:

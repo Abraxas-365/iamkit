@@ -4,6 +4,7 @@
 *
 
 !cmd/
+!api/
 !internal/
 !migrations/
 !frontend/

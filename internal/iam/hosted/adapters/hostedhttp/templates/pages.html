@@ -2,8 +2,8 @@
 {{if .SignIn.EmailForm}}
 <form method="post" action="/hosted/login/identify">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<label for="email">{{.T "hosted.form.email"}}</label>
-<input id="email" type="email" name="email" value="{{.Email}}" autocomplete="{{if .SignIn.Passkey}}username webauthn{{else}}username{{end}}" required autofocus>
+<label for="email">{{.T "hosted.form.login"}}</label>
+<input id="email" type="text" name="email" value="{{.Email}}" inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="{{if .SignIn.Passkey}}username webauthn{{else}}username{{end}}" required autofocus>
 <button type="submit">{{.T "hosted.form.continue"}}</button>
 </form>
 {{end}}
@@ -33,6 +33,7 @@
 <button type="submit" class="link">{{.T "hosted.form.create_account"}}</button>
 </form>
 {{end}}
+{{template "legal" .}}
 {{end}}
 
 {{define "signup/content"}}
@@ -46,13 +47,19 @@
 <label for="password">{{.T "hosted.form.password"}}{{if .SignIn.EmailCode}} <span class="muted">{{.T "hosted.form.optional"}}</span>{{end}}</label>
 <input id="password" type="password" name="password" maxlength="72" autocomplete="new-password"{{if not .SignIn.EmailCode}} required{{end}}>
 {{end}}
+{{if .SignIn.Terms}}
+<label class="check" for="accept_terms"><input id="accept_terms" type="checkbox" name="accept_terms" required><span>{{if .Brand.Legal.TermsURL}}{{.T "hosted.form.accept_terms_link"}} <a href="{{.Brand.Legal.TermsURL}}" target="_blank" rel="noopener noreferrer">{{.T "hosted.legal.terms"}}</a>{{if .Brand.Legal.PrivacyURL}} {{.T "hosted.form.and"}} <a href="{{.Brand.Legal.PrivacyURL}}" target="_blank" rel="noopener noreferrer">{{.T "hosted.legal.privacy"}}</a>{{end}}{{else}}{{.T "hosted.form.accept_terms"}}{{end}}</span></label>
+{{end}}
 <button type="submit">{{.T "hosted.form.create_account"}}</button>
 </form>
 <form method="get" action="/hosted/login">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <button type="submit" class="link">{{.T "hosted.form.have_account"}}</button>
 </form>
+{{template "legal" .}}
 {{end}}
+
+{{define "legal"}}{{with .Brand.Legal}}{{if or .PrivacyURL .TermsURL .HelpURL .SupportEmail}}<nav class="legal">{{if .PrivacyURL}}<a href="{{.PrivacyURL}}" target="_blank" rel="noopener noreferrer">{{$.T "hosted.legal.privacy"}}</a>{{end}}{{if .TermsURL}}<a href="{{.TermsURL}}" target="_blank" rel="noopener noreferrer">{{$.T "hosted.legal.terms"}}</a>{{end}}{{if .HelpURL}}<a href="{{.HelpURL}}" target="_blank" rel="noopener noreferrer">{{$.T "hosted.legal.help"}}</a>{{end}}{{if .SupportEmail}}<a href="mailto:{{.SupportEmail}}">{{$.T "hosted.legal.support"}}</a>{{end}}</nav>{{end}}{{end}}{{end}}
 
 {{define "signup-code/content"}}
 <form method="post" action="/hosted/signup/verify">
@@ -164,6 +171,7 @@
 {{end}}
 
 {{define "organization/content"}}
+{{with .Account}}{{if .Email}}<div class="account">{{if .AvatarURL}}<img class="avatar" src="{{.AvatarURL}}" alt="" width="40" height="40" referrerpolicy="no-referrer">{{end}}<div><strong>{{.Name}}</strong><p class="muted">{{.Email}}</p></div></div>{{end}}{{end}}
 {{range .Organizations}}
 <form method="post" action="/hosted/login/organization">
 <input type="hidden" name="ticket" value="{{$.Ticket}}">

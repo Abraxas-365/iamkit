@@ -22,6 +22,8 @@ type Deps struct {
 	// PasswordPolicy checks new accounts' passwords; nil checks only the
 	// length.
 	PasswordPolicy invitation.PasswordPolicy
+	// Quota enforces the users limit on accepts that create accounts.
+	Quota invitation.Quota
 }
 
 type Module struct {
@@ -38,6 +40,9 @@ func New(deps Deps) Module {
 	service := invsvc.New(invpg.New(deps.DB), mgmtsecret.Generator{}, authbcrypt.Hasher{}, mailer, nil)
 	if deps.PasswordPolicy != nil {
 		service.SetPasswordPolicy(deps.PasswordPolicy)
+	}
+	if deps.Quota != nil {
+		service.SetQuota(deps.Quota)
 	}
 	return Module{Commands: service, Queries: service, HTTP: invhttp.New(service, service, deps.ActorID)}
 }

@@ -5,13 +5,20 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/application"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
-type Service struct{ repository application.Repository }
+type Service struct {
+	repository application.Repository
+	quota      application.Quota
+}
 
-func New(r application.Repository) *Service { return &Service{r} }
+func New(r application.Repository) *Service { return &Service{repository: r} }
+
+// SetQuota enforces the environment's applications limit on Create.
+func (s *Service) SetQuota(q application.Quota) { s.quota = q }
 
 func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input application.Create) (identity.ApplicationID, error) {
 	if err := input.Validate(); err != nil {
@@ -19,6 +26,11 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	}
 	if err := identity.ValidateRedirects(input.Redirects); err != nil {
 		return identity.ApplicationID{}, err
+	}
+	if s.quota != nil {
+		if err := s.quota.Admit(ctx, environment, usage.LimitApplications); err != nil {
+			return identity.ApplicationID{}, err
+		}
 	}
 	id := identity.NewApplicationID()
 	return id, s.repository.Create(ctx, environment, id, input)

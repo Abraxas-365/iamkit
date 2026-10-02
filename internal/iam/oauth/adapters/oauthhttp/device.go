@@ -47,7 +47,7 @@ func (h *Handler) deviceAuthorization(c *fiber.Ctx) error {
 	if _, err = oauthfosite.AuthenticateClient(ctx, p, req.WithContext(ctx)); err != nil {
 		return oauthError(c, "invalid_client", 401)
 	}
-	out, err := h.devices.AuthorizeDevice(c.Context(), client, req.PostForm.Get("scope"))
+	out, err := h.devices.AuthorizeDevice(c.UserContext(), client, req.PostForm.Get("scope"))
 	if err != nil {
 		return deviceError(c, err)
 	}
@@ -90,6 +90,11 @@ func (h *Handler) deviceToken(c *fiber.Ctx, req *http.Request, rawID string) err
 		return deviceError(c, err)
 	}
 	session := h.session(client, grant.Login, grant.Session, grant.Requested)
+	addClaims(session, h.customClaims(ctx, client.Environment, grant.Login.User, grant.Scopes))
+	if err = h.tokenHooks(ctx, client, session, grant.Login.User, grant.Login.Organization, grant.Session.AMR, grant.Scopes); err != nil {
+		p.WriteAccessError(ctx, w, ar, hookError(err))
+		return response(c, w)
+	}
 	session.SetExpiresAt(fosite.RefreshToken, session.Deadline)
 	ar.SetSession(session)
 	for _, scope := range grant.Scopes {
@@ -101,6 +106,7 @@ func (h *Handler) deviceToken(c *fiber.Ctx, req *http.Request, rawID string) err
 		p.WriteAccessError(ctx, w, ar, err)
 	} else {
 		p.WriteAccessResponse(ctx, w, ar, out)
+		h.issued(ctx, client)
 	}
 	return response(c, w)
 }

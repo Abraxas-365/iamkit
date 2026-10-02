@@ -2,8 +2,10 @@ package oauth
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -27,6 +29,10 @@ type Commands interface {
 type Queries interface {
 	List(ctx context.Context, environment identity.EnvironmentID, filter ClientFilter, page query.Pagination) (query.Paginated[ClientView], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (ClientView, error)
+	// OriginAllowed reports whether an active client of an active
+	// application lists origin (normalized, see Origins) in its
+	// allowed_origins.
+	OriginAllowed(ctx context.Context, origin string) (bool, error)
 }
 type Flows interface {
 	Client(ctx context.Context, client identity.ClientID) (*Client, error)
@@ -78,6 +84,9 @@ type Repository interface {
 	Disable(ctx context.Context, m Mutation, client identity.ClientID) error
 	List(ctx context.Context, environment identity.EnvironmentID, filter ClientFilter, page query.Pagination) (query.Paginated[ClientView], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (ClientView, error)
+	// OriginAllowed reports whether an active client of an active
+	// application lists origin.
+	OriginAllowed(ctx context.Context, origin string) (bool, error)
 	SaveTicket(ctx context.Context, ticketHash, bindingHash []byte, client *Client, form string) error
 	// PendingTicket reads an unconsumed, unexpired ticket without locking it.
 	PendingTicket(ctx context.Context, ticketHash []byte) (Ticket, error)
@@ -190,6 +199,9 @@ type LogoutRepository interface {
 	LogoutFailed(ctx context.Context, m Mutation, notification int64, reason string) error
 	// PruneLogouts deletes finished notifications older than age.
 	PruneLogouts(ctx context.Context, age time.Duration) error
+	// LogoutLag is how long the oldest due notification has waited (zero
+	// when none is due).
+	LogoutLag(ctx context.Context) (time.Duration, error)
 	// RetryLogout makes a failed notification due again (audited).
 	RetryLogout(ctx context.Context, m Mutation, notification int64) error
 	LogoutDeliveries(ctx context.Context, environment identity.EnvironmentID, filter LogoutFilter, page query.Pagination) (query.Paginated[LogoutDelivery], error)
@@ -201,4 +213,26 @@ type Secrets interface {
 }
 type Passwords interface {
 	Hash(password string) (string, error)
+}
+
+// ProfileClaims returns a user's claims for the granted scopes beyond name
+// and email: with profile picture, preferred_username and the user
+// schema's x-iamkit-claim properties; with phone phone_number and
+// phone_number_verified. Released in ID tokens and UserInfo. Implemented by
+// the user module (user.Queries.Claims).
+type ProfileClaims interface {
+	Claims(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, scopes []string) (map[string]json.RawMessage, error)
+}
+
+// Actions runs the environment's token hooks (action.Runner):
+// pre_access_token (also on refresh), pre_id_token and pre_userinfo.
+type Actions interface {
+	Run(ctx context.Context, environment identity.EnvironmentID, condition string, build func() action.Input) (action.Result, error)
+}
+
+// Usage counts access tokens /oauth/token issues through fosite
+// (usage.Commands.Count, metric usage.MetricTokens); tokens signed by the
+// authentication module count there.
+type Usage interface {
+	Count(ctx context.Context, environment identity.EnvironmentID, metric string, n int64)
 }

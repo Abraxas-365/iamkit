@@ -26,7 +26,7 @@ func (h *SignInPolicyHandler) Register(e fiber.Router) {
 
 // Get returns the effective policy (custom false for the default).
 func (h *SignInPolicyHandler) Get(c *fiber.Ctx) error {
-	out, err := h.queries.SignInPolicy(c.Context(), envParam(c))
+	out, err := h.queries.SignInPolicy(c.UserContext(), envParam(c))
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (h *SignInPolicyHandler) Set(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.SetSignInPolicy(c.Context(), h.mutation(c), input)
+	out, err := h.commands.SetSignInPolicy(c.UserContext(), h.mutation(c), input)
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (h *SignInPolicyHandler) Set(c *fiber.Ctx) error {
 
 // Delete returns the environment to the default policy.
 func (h *SignInPolicyHandler) Delete(c *fiber.Ctx) error {
-	if err := h.commands.DeleteSignInPolicy(c.Context(), h.mutation(c)); err != nil {
+	if err := h.commands.DeleteSignInPolicy(c.UserContext(), h.mutation(c)); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

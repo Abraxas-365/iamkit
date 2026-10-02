@@ -11,6 +11,8 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -52,8 +54,13 @@ func (r *Repository) AccessTokenClient(ctx context.Context, key string) (identit
 }
 func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID, input oauth.Registration, hash []byte) error {
 	auth := input.ClientAuth
-	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash,hosted_login,post_logout_redirect_uris,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri,access_token_format,backchannel_logout_uri,backchannel_logout_session_required,grant_types) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, id, environment, input.Application, input.Resource, pq.StringArray(nonNil(input.Redirects)), input.Public, hash, input.HostedLogin, pq.StringArray(nonNil(input.PostLogoutRedirects)), auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, pq.StringArray(input.Grants()))
-	return conflict(err)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash,hosted_login,post_logout_redirect_uris,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri,access_token_format,backchannel_logout_uri,backchannel_logout_session_required,grant_types,allowed_origins) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`, id, environment, input.Application, input.Resource, pq.StringArray(nonNil(input.Redirects)), input.Public, hash, input.HostedLogin, pq.StringArray(nonNil(input.PostLogoutRedirects)), auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, pq.StringArray(input.Grants()), pq.StringArray(nonNil(input.AllowedOrigins))); err != nil {
+			return conflict(err)
+		}
+		return eventpg.Record(ctx, tx, environment, event.OAuthClientCreated, event.Subject{Kind: "oauth_client", ID: id.String()},
+			map[string]any{"application_id": input.Application.String(), "resource_id": input.Resource.String()})
+	})
 }
 func (r *Repository) Update(ctx context.Context, m oauth.Mutation, id identity.ClientID, input oauth.ClientUpdate, auth *identity.ClientAuth) error {
 	var redirects any
@@ -68,10 +75,14 @@ func (r *Repository) Update(ctx context.Context, m oauth.Mutation, id identity.C
 	if input.GrantTypes != nil {
 		grants = pq.StringArray(*input.GrantTypes)
 	}
-	if auth != nil {
-		return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($11,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($12,backchannel_logout_session_required), grant_types=COALESCE($13,grant_types), token_endpoint_auth_method=$7, token_endpoint_auth_signing_alg=$8, jwks=$9, jwks_uri=$10 WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants)
+	var origins any
+	if input.AllowedOrigins != nil {
+		origins = pq.StringArray(nonNil(*input.AllowedOrigins))
 	}
-	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($7,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($8,backchannel_logout_session_required), grant_types=COALESCE($9,grant_types) WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants)
+	if auth != nil {
+		return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($11,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($12,backchannel_logout_session_required), grant_types=COALESCE($13,grant_types), allowed_origins=COALESCE($14,allowed_origins), token_endpoint_auth_method=$7, token_endpoint_auth_signing_alg=$8, jwks=$9, jwks_uri=$10 WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins)
+	}
+	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($7,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($8,backchannel_logout_session_required), grant_types=COALESCE($9,grant_types), allowed_origins=COALESCE($10,allowed_origins) WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins)
 }
 func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
 	return r.audited(ctx, m, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
@@ -95,8 +106,7 @@ func (r *Repository) audited(ctx context.Context, m oauth.Mutation, statement st
 	if n == 0 {
 		return errx.NotFound("resource not found")
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
-	if err != nil {
+	if err = eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())
@@ -142,7 +152,13 @@ func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentI
 	return row.view(), nil
 }
 
-const clientColumns = "oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.post_logout_redirect_uris, oc.public, oc.hosted_login, oc.active, oc.token_endpoint_auth_method, oc.token_endpoint_auth_signing_alg, oc.jwks, oc.jwks_uri, oc.access_token_format, oc.backchannel_logout_uri, oc.backchannel_logout_session_required, oc.grant_types"
+func (r *Repository) OriginAllowed(ctx context.Context, origin string) (bool, error) {
+	var ok bool
+	err := r.db.GetContext(ctx, &ok, `SELECT EXISTS(SELECT 1 FROM oauth_clients oc JOIN applications a ON a.id=oc.application_id AND a.environment_id=oc.environment_id WHERE oc.allowed_origins @> ARRAY[$1]::text[] AND oc.active AND a.active)`, origin)
+	return ok, failure(err)
+}
+
+const clientColumns = "oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.post_logout_redirect_uris, oc.public, oc.hosted_login, oc.active, oc.token_endpoint_auth_method, oc.token_endpoint_auth_signing_alg, oc.jwks, oc.jwks_uri, oc.access_token_format, oc.backchannel_logout_uri, oc.backchannel_logout_session_required, oc.grant_types, oc.allowed_origins, coalesce(oc.system,'') AS system"
 
 type clientViewRow struct {
 	ID              identity.ClientID      `db:"id"`
@@ -159,11 +175,13 @@ type clientViewRow struct {
 	Backchannel     string                 `db:"backchannel_logout_uri"`
 	SessionRequired bool                   `db:"backchannel_logout_session_required"`
 	Grants          pq.StringArray         `db:"grant_types"`
+	Origins         pq.StringArray         `db:"allowed_origins"`
+	System          string                 `db:"system"`
 	authRow
 }
 
 func (row clientViewRow) view() oauth.ClientView {
-	return oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), PostLogoutRedirects: nonNil([]string(row.PostLogout)), Public: row.Public, HostedLogin: row.HostedLogin, Active: row.Active, AccessTokenFormat: row.TokenFormat, BackchannelLogoutURI: row.Backchannel, BackchannelLogoutSessionRequired: row.SessionRequired, GrantTypes: nonNil([]string(row.Grants)), ClientAuth: row.auth()}
+	return oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), PostLogoutRedirects: nonNil([]string(row.PostLogout)), Public: row.Public, HostedLogin: row.HostedLogin, Active: row.Active, AccessTokenFormat: row.TokenFormat, BackchannelLogoutURI: row.Backchannel, BackchannelLogoutSessionRequired: row.SessionRequired, GrantTypes: nonNil([]string(row.Grants)), AllowedOrigins: nonNil([]string(row.Origins)), System: row.System, ClientAuth: row.auth()}
 }
 
 // authRow scans the token endpoint authentication columns.
@@ -265,7 +283,7 @@ func (r *Repository) EndSession(ctx context.Context, m oauth.Mutation, user iden
 	if n == 0 {
 		return false, nil
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+	if err = eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target); err != nil {
 		return false, failure(err)
 	}
 	return true, failure(tx.Commit())

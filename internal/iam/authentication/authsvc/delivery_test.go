@@ -278,7 +278,7 @@ func TestPreview(t *testing.T) {
 	if r.m.Environment != env || r.m.Code == "" || r.m.Locale != "es" || r.draft != (authentication.Draft{}) {
 		t.Fatalf("message %+v", r.m)
 	}
-	if _, err = s.Preview(ctx, env, authentication.PreviewInput{Purpose: "login", Locale: "fr"}); err != nil || r.m.Locale != "" {
+	if _, err = s.Preview(ctx, env, authentication.PreviewInput{Purpose: "login", Locale: "eo"}); err != nil || r.m.Locale != "" {
 		t.Fatalf("unsupported locale: %q, %v", r.m.Locale, err)
 	}
 

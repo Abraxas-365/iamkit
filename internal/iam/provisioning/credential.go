@@ -21,6 +21,10 @@ type CredentialInput struct {
 	// which only adopts members whose email is on one of the organization's
 	// verified domains. nil keeps the current setting.
 	AdoptScope *string `json:"adopt_scope,omitempty"`
+	// MapPhone makes SCIM phoneNumbers[type eq "mobile"] the user's phone
+	// number. Off by default so existing directories never clear numbers
+	// users set; nil keeps the current setting.
+	MapPhone *bool `json:"map_phone,omitempty"`
 }
 
 // Adoption scopes for AdoptExistingMembers.
@@ -85,4 +89,5 @@ type CredentialView struct {
 	Revoked          *time.Time            `json:"revoked_at"`
 	Adopt            bool                  `json:"adopt_existing_members"`
 	AdoptScope       string                `json:"adopt_scope"`
+	MapPhone         bool                  `json:"map_phone"`
 }

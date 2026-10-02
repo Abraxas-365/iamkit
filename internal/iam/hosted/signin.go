@@ -39,6 +39,9 @@ type SignIn struct {
 	// PasswordReset offers "forgot password" on the page (computed by
 	// Within; never stored).
 	PasswordReset bool `json:"-"`
+	// Terms asks sign-up to accept the terms (the policy's require_terms;
+	// computed by Within, never stored).
+	Terms bool `json:"-"`
 }
 
 // Within narrows the client's options to what the environment's sign-in
@@ -54,6 +57,7 @@ func (s SignIn) Within(p authentication.SignInPolicy) SignIn {
 	s.Passkey = s.Passkey && p.PasskeyAllowed() && slices.Contains(p.AllowedFactors, "webauthn")
 	s.PasswordReset = s.Password && p.AllowPasswordReset
 	s.Signup = s.Signup && p.AllowSignup && (s.Password || s.EmailCode)
+	s.Terms = s.Signup && p.TermsRequired()
 	return s
 }
 

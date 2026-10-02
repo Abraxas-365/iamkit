@@ -38,6 +38,10 @@ type SignInPolicy struct {
 	AllowSignup        bool                    `json:"allow_signup" db:"allow_signup"`
 	SignupOrganization identity.OrganizationID `json:"signup_organization_id" db:"signup_organization_id"`
 	SignupGroup        identity.GroupID        `json:"signup_group_id" db:"signup_group_id"`
+	// RequireTerms makes sign-up record that the person accepted the terms
+	// (accept_terms; the hosted page links the branding's terms_url).
+	// Omitted on update, the stored value is kept.
+	RequireTerms *bool `json:"require_terms" db:"require_terms"`
 	// Custom is false for the built-in default.
 	Custom    bool       `json:"custom" db:"-"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty" db:"updated_at"`
@@ -125,6 +129,9 @@ func (m Methods) Allows(method string) bool {
 func (p SignInPolicy) Methods() Methods {
 	return Methods{Password: p.AllowPassword, EmailCode: p.AllowEmailCode, Social: p.AllowSocial, Passkey: p.PasskeyAllowed() && slices.Contains(p.AllowedFactors, "webauthn")}
 }
+
+// TermsRequired reads RequireTerms (nil: not required, the default).
+func (p SignInPolicy) TermsRequired() bool { return p.RequireTerms != nil && *p.RequireTerms }
 
 // PasskeyAllowed reads AllowPasskey (nil: allowed, the default).
 func (p SignInPolicy) PasskeyAllowed() bool {

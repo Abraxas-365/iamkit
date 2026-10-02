@@ -281,6 +281,7 @@ type ClaimMapping struct {
 	Email         string `json:"email,omitempty"`
 	EmailVerified string `json:"email_verified,omitempty"`
 	Name          string `json:"name,omitempty"`
+	Picture       string `json:"picture,omitempty"`
 }
 
 // validClaims checks the claim mapping of an OAuth 2.0 connection.
@@ -288,7 +289,7 @@ func validClaims(m *ClaimMapping) error {
 	if m == nil || m.Subject == "" {
 		return errx.Validation("options.claims.subject is required")
 	}
-	for _, p := range []string{m.Subject, m.Email, m.EmailVerified, m.Name} {
+	for _, p := range []string{m.Subject, m.Email, m.EmailVerified, m.Name, m.Picture} {
 		if p != "" && !claimPath.MatchString(p) {
 			return errx.Validation("options.claims must be member names or dotted paths such as data.id")
 		}
@@ -394,7 +395,7 @@ func (o Options) Normalized() Options {
 		}
 	}
 	if o.Claims != nil {
-		m := ClaimMapping{Subject: strings.TrimSpace(o.Claims.Subject), Email: strings.TrimSpace(o.Claims.Email), EmailVerified: strings.TrimSpace(o.Claims.EmailVerified), Name: strings.TrimSpace(o.Claims.Name)}
+		m := ClaimMapping{Subject: strings.TrimSpace(o.Claims.Subject), Email: strings.TrimSpace(o.Claims.Email), EmailVerified: strings.TrimSpace(o.Claims.EmailVerified), Name: strings.TrimSpace(o.Claims.Name), Picture: strings.TrimSpace(o.Claims.Picture)}
 		o.Claims = &m
 	}
 	return o
@@ -588,6 +589,7 @@ type Joining struct {
 	Subject      string
 	Email        string
 	Name         string
+	AvatarURL    string
 	Link         bool
 	Signup       bool
 }

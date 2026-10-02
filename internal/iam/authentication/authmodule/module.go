@@ -38,6 +38,11 @@ type Deps struct {
 	// Breaches checks new passwords against known breaches when a policy
 	// asks; nil skips the check.
 	Breaches authentication.Breaches
+	// Actions runs pre_sign_in / pre_registration hooks (nil: none).
+	Actions authentication.Actions
+	// Usage enforces the users limit on signups and the daily email/SMS
+	// limits, and counts tokens, emails and SMS (nil: none).
+	Usage authentication.Usage
 	// Mail configures how emails IAMKit renders are written and sent.
 	Mail Mail
 }
@@ -76,8 +81,9 @@ type Module struct {
 	DeliveryService *authsvc.DeliveryService
 	// PasswordPolicies is the environment password policy; its Queries
 	// include the check other modules run on new passwords.
-	PasswordPolicies     authentication.PasswordPolicyQueries
-	PasswordPoliciesHTTP *authhttp.PasswordPolicyHandler
+	PasswordPolicies       authentication.PasswordPolicyQueries
+	PasswordPolicyCommands authentication.PasswordPolicyCommands
+	PasswordPoliciesHTTP   *authhttp.PasswordPolicyHandler
 	// SignInPolicies is the environment sign-in policy.
 	SignInPolicies     authentication.SignInPolicyQueries
 	SignInPoliciesHTTP *authhttp.SignInPolicyHandler
@@ -106,9 +112,9 @@ type lateBranding struct {
 	b atomic.Pointer[authentication.Branding]
 }
 
-func (l *lateBranding) Brand(ctx context.Context, environment identity.EnvironmentID) (authentication.Brand, error) {
+func (l *lateBranding) Brand(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (authentication.Brand, error) {
 	if b := l.b.Load(); b != nil {
-		return (*b).Brand(ctx, environment)
+		return (*b).Brand(ctx, environment, organization)
 	}
 	return authentication.Brand{}, nil
 }
@@ -135,6 +141,9 @@ func New(deps Deps) Module {
 	signIns := authsvc.NewSignInPolicies(authpg.NewSignInPolicyRepository(deps.DB))
 	service.SetSignInPolicies(signIns)
 	service.SetSignups(repo)
+	if deps.Actions != nil {
+		service.SetActions(deps.Actions)
+	}
 	deliveryRepo := authpg.NewDeliveryConfigRepository(deps.DB)
 	factory := func(cfg authentication.DeliveryConfig, secret authentication.DeliverySecret) (authentication.Delivery, error) {
 		if cfg.Provider == authentication.ProviderWebhook {
@@ -169,6 +178,12 @@ func New(deps Deps) Module {
 	service.SetDeliveryService(deliverySvc)
 	sms := authsvc.NewSMSService(authpg.NewSMSRepository(deps.DB), authsvc.SMSFactory(authsms.Factory(deps.Mail.SMSClient, deps.Mail.TwilioEndpoint)), deps.Cipher, branding, deps.Mail.Locale)
 	tokens := authsvc.NewTokens(repo, authjwt.New(deps.Keys, deps.Issuer), authsecret.Generator{}, deps.OAuthTokens)
+	if deps.Usage != nil {
+		service.SetUsage(deps.Usage)
+		deliverySvc.SetUsage(deps.Usage)
+		sms.SetUsage(deps.Usage)
+		tokens.SetUsage(deps.Usage)
+	}
 	var passkeys authentication.PasskeyCommands
 	if deps.Passkeys != nil {
 		passkeys = service
@@ -177,7 +192,7 @@ func New(deps Deps) Module {
 		Passkeys: passkeys,
 		Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens),
 		HTTP: authhttp.New(service, service, service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc,
-		PasswordPolicies: policies, PasswordPoliciesHTTP: authhttp.NewPasswordPolicyHandler(policies, policies, deps.ActorID),
+		PasswordPolicies: policies, PasswordPolicyCommands: policies, PasswordPoliciesHTTP: authhttp.NewPasswordPolicyHandler(policies, policies, deps.ActorID),
 		SignInPolicies: signIns, SignInPoliciesHTTP: authhttp.NewSignInPolicyHandler(signIns, signIns, deps.ActorID),
 		Signups: service, SignupHTTP: authhttp.NewSignupHandler(service),
 		SMS: sms, SMSQueries: sms, SMSHTTP: authhttp.NewSMSHandler(sms, sms, deps.ActorID),

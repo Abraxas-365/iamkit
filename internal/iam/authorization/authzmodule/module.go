@@ -15,17 +15,24 @@ type Deps struct {
 	ActorID func(*fiber.Ctx) string
 }
 type Module struct {
-	ResourceCommands authorization.ResourceCommands
-	ResourceQueries  authorization.ResourceQueries
-	GrantCommands    authorization.GrantCommands
-	GrantQueries     authorization.GrantQueries
-	HTTP             *authzhttp.Handler
-	Grants           *authzhttp.Grants
+	ResourceCommands      authorization.ResourceCommands
+	ResourceQueries       authorization.ResourceQueries
+	GrantCommands         authorization.GrantCommands
+	GrantQueries          authorization.GrantQueries
+	ResourceGrantCommands authorization.ResourceGrantCommands
+	ResourceGrantQueries  authorization.ResourceGrantQueries
+	HTTP                  *authzhttp.Handler
+	Grants                *authzhttp.Grants
+	ResourceGrants        *authzhttp.ResourceGrants
 }
 
 func New(deps Deps) Module {
 	repository := authzpg.New(deps.DB)
 	resources := authzsvc.New(repository)
 	grants := authzsvc.NewGrants(repository)
-	return Module{ResourceCommands: resources, ResourceQueries: resources, GrantCommands: grants, GrantQueries: grants, HTTP: authzhttp.New(resources, resources, deps.ActorID), Grants: authzhttp.NewGrants(grants, grants, deps.ActorID)}
+	resourceGrants := authzsvc.NewResourceGrants(repository)
+	return Module{ResourceCommands: resources, ResourceQueries: resources, GrantCommands: grants, GrantQueries: grants,
+		ResourceGrantCommands: resourceGrants, ResourceGrantQueries: resourceGrants,
+		HTTP: authzhttp.New(resources, resources, deps.ActorID), Grants: authzhttp.NewGrants(grants, grants, deps.ActorID),
+		ResourceGrants: authzhttp.NewResourceGrants(resourceGrants, resourceGrants, deps.ActorID)}
 }

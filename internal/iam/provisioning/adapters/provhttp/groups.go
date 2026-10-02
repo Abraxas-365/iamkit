@@ -132,7 +132,7 @@ func (h *Groups) list(c *fiber.Ctx) error {
 		}
 		gf.Field, gf.Value = field, value
 	}
-	out, err := h.queries.ListGroups(c.Context(), principal(c), gf, query.Pagination{Limit: f.Count, Offset: f.Start - 1})
+	out, err := h.queries.ListGroups(c.UserContext(), principal(c), gf, query.Pagination{Limit: f.Count, Offset: f.Start - 1})
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func (h *Groups) get(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	g, err := h.queries.FindGroup(c.Context(), principal(c), id, wantMembers(c))
+	g, err := h.queries.FindGroup(c.UserContext(), principal(c), id, wantMembers(c))
 	if err != nil {
 		return err
 	}
@@ -171,11 +171,11 @@ func (h *Groups) create(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	id, err := h.commands.CreateGroup(c.Context(), principal(c), provisioning.GroupInput{Name: input.DisplayName, External: input.ExternalID, Members: members})
+	id, err := h.commands.CreateGroup(c.UserContext(), principal(c), provisioning.GroupInput{Name: input.DisplayName, External: input.ExternalID, Members: members})
 	if err != nil {
 		return err
 	}
-	g, err := h.queries.FindGroup(c.Context(), principal(c), id, true)
+	g, err := h.queries.FindGroup(c.UserContext(), principal(c), id, true)
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (h *Groups) replace(c *fiber.Ctx) error {
 	}
 	external := input.ExternalID
 	update := provisioning.GroupUpdate{Name: &input.DisplayName, External: &external, Members: &members}
-	if err := h.commands.UpdateGroup(c.Context(), principal(c), id, update); err != nil {
+	if err := h.commands.UpdateGroup(c.UserContext(), principal(c), id, update); err != nil {
 		return err
 	}
 	return h.get(c)
@@ -224,12 +224,12 @@ func (h *Groups) patch(c *fiber.Ctx) error {
 	}
 	if update.Empty() {
 		// Still 404 for unknown groups.
-		if _, err := h.queries.FindGroup(c.Context(), principal(c), id, false); err != nil {
+		if _, err := h.queries.FindGroup(c.UserContext(), principal(c), id, false); err != nil {
 			return err
 		}
 		return c.SendStatus(204)
 	}
-	if err := h.commands.UpdateGroup(c.Context(), principal(c), id, update); err != nil {
+	if err := h.commands.UpdateGroup(c.UserContext(), principal(c), id, update); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -240,7 +240,7 @@ func (h *Groups) remove(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.commands.DeleteGroup(c.Context(), principal(c), id); err != nil {
+	if err := h.commands.DeleteGroup(c.UserContext(), principal(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

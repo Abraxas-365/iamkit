@@ -5,6 +5,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
@@ -28,11 +29,12 @@ func OperatorID(c *fiber.Ctx) string              { return Principal(c).Operator
 func (h *Handler) Authenticate(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-store")
 	if key := c.Get("X-API-Key"); strings.HasPrefix(key, "ik_mgmt_") {
-		p, err := h.auth.Authenticate(c.Context(), key)
+		p, err := h.auth.Authenticate(c.UserContext(), key)
 		if err != nil {
 			return errx.Unauthorized("management credential required")
 		}
 		c.Locals("operator", p)
+		c.SetUserContext(event.WithActor(c.UserContext(), p.OperatorID.String()))
 		return c.Next()
 	}
 	cookie := c.Cookies(sessionCookie)
@@ -42,11 +44,12 @@ func (h *Handler) Authenticate(c *fiber.Ctx) error {
 				return err
 			}
 		}
-		p, err := h.auth.AuthenticateSession(c.Context(), cookie)
+		p, err := h.auth.AuthenticateSession(c.UserContext(), cookie)
 		if err != nil {
 			return errx.Unauthorized("management credential required")
 		}
 		c.Locals("operator", p)
+		c.SetUserContext(event.WithActor(c.UserContext(), p.OperatorID.String()))
 		return c.Next()
 	}
 	return errx.Unauthorized("management credential required")
@@ -65,7 +68,7 @@ func (h *Handler) Environment(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	if !h.auth.EnvironmentAllowed(c.Context(), Principal(c), envID) {
+	if !h.auth.EnvironmentAllowed(c.UserContext(), Principal(c), envID) {
 		return errx.NotFound("resource not found")
 	}
 	return c.Next()
@@ -85,6 +88,8 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Get("/projects/:project/environments", h.environments)
 	r.Get("/password", h.passwordStatus)
 	r.Post("/password", h.setPassword)
+	r.Get("/preferences", h.preferences)
+	r.Put("/preferences", h.setPreferences)
 	r.Delete("/sessions/current", h.logout)
 }
 func requireConsoleRequest(c *fiber.Ctx) error {
@@ -107,7 +112,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	raw, p, err := h.sessions.Login(c.Context(), input.Email, input.Password, input.NewPassword)
+	raw, p, err := h.sessions.Login(c.UserContext(), input.Email, input.Password, input.NewPassword)
 	if err != nil {
 		return err
 	}
@@ -118,7 +123,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 func (h *Handler) logout(c *fiber.Ctx) error {
 	cookie := c.Cookies(sessionCookie)
 	if cookie != "" {
-		if err := h.sessions.Logout(c.Context(), cookie); err != nil {
+		if err := h.sessions.Logout(c.UserContext(), cookie); err != nil {
 			return err
 		}
 	}
@@ -133,31 +138,48 @@ func (h *Handler) setPassword(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.sessions.SetPassword(c.Context(), Principal(c), input.Current, input.Password); err != nil {
+	if err := h.sessions.SetPassword(c.UserContext(), Principal(c), input.Current, input.Password); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 func (h *Handler) passwordStatus(c *fiber.Ctx) error {
-	out, err := h.status.PasswordStatus(c.Context(), Principal(c))
+	out, err := h.status.PasswordStatus(c.UserContext(), Principal(c))
 	if err != nil {
 		return err
 	}
 	return c.JSON(out)
+}
+func (h *Handler) preferences(c *fiber.Ctx) error {
+	out, err := h.status.Preferences(c.UserContext(), Principal(c))
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+func (h *Handler) setPreferences(c *fiber.Ctx) error {
+	var input management.Preferences
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	if err := h.sessions.SetPreferences(c.UserContext(), Principal(c), input); err != nil {
+		return err
+	}
+	return c.JSON(input)
 }
 func (h *Handler) createKey(c *fiber.Ctx) error {
 	var input struct {
 		ExpiresIn *string `json:"expires_in"`
 	}
 	c.BodyParser(&input)
-	out, err := h.commands.CreateKey(c.Context(), Principal(c), input.ExpiresIn)
+	out, err := h.commands.CreateKey(c.UserContext(), Principal(c), input.ExpiresIn)
 	if err != nil {
 		return err
 	}
 	return c.Status(201).JSON(out)
 }
 func (h *Handler) keys(c *fiber.Ctx) error {
-	out, err := h.queries.Keys(c.Context(), Principal(c))
+	out, err := h.queries.Keys(c.UserContext(), Principal(c))
 	if err != nil {
 		return err
 	}
@@ -168,7 +190,7 @@ func (h *Handler) revokeKey(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	if err := h.commands.RevokeKey(c.Context(), Principal(c), id); err != nil {
+	if err := h.commands.RevokeKey(c.UserContext(), Principal(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -182,7 +204,7 @@ func (h *Handler) delegate(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Delegate(c.Context(), Principal(c), input.Email, input.Role, input.ExpiresIn)
+	out, err := h.commands.Delegate(c.UserContext(), Principal(c), input.Email, input.Role, input.ExpiresIn)
 	if err != nil {
 		return err
 	}
@@ -193,7 +215,7 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	if err := h.commands.DisableOperator(c.Context(), Principal(c), id); err != nil {
+	if err := h.commands.DisableOperator(c.UserContext(), Principal(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -209,13 +231,13 @@ func (h *Handler) passwordAccess(c *fiber.Ctx) error {
 	if err = c.BodyParser(&input); err != nil || input.Allowed == nil {
 		return errx.Validation("allowed is required")
 	}
-	if err = h.commands.SetPasswordAccess(c.Context(), Principal(c), id, *input.Allowed); err != nil {
+	if err = h.commands.SetPasswordAccess(c.UserContext(), Principal(c), id, *input.Allowed); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 func (h *Handler) operators(c *fiber.Ctx) error {
-	out, err := h.queries.Operators(c.Context(), Principal(c))
+	out, err := h.queries.Operators(c.UserContext(), Principal(c))
 	if err != nil {
 		return err
 	}
@@ -228,14 +250,14 @@ func (h *Handler) createProject(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.CreateProject(c.Context(), Principal(c), input.Name)
+	id, err := h.commands.CreateProject(c.UserContext(), Principal(c), input.Name)
 	if err != nil {
 		return err
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Handler) projects(c *fiber.Ctx) error {
-	out, err := h.queries.Projects(c.Context(), Principal(c))
+	out, err := h.queries.Projects(c.UserContext(), Principal(c))
 	if err != nil {
 		return err
 	}
@@ -252,7 +274,7 @@ func (h *Handler) createEnvironment(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.Validation("invalid project id")
 	}
-	id, err := h.commands.CreateEnvironment(c.Context(), Principal(c), projectID, input.Name)
+	id, err := h.commands.CreateEnvironment(c.UserContext(), Principal(c), projectID, input.Name)
 	if err != nil {
 		return err
 	}
@@ -263,7 +285,7 @@ func (h *Handler) environments(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	out, err := h.queries.Environments(c.Context(), Principal(c), projectID)
+	out, err := h.queries.Environments(c.UserContext(), Principal(c), projectID)
 	if err != nil {
 		return err
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/netx"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 )
 
 // Guarded is the shared transport for environment SMS endpoints: public
@@ -151,7 +152,7 @@ func do(transport http.RoundTripper, req *http.Request) (*http.Response, error) 
 	if transport == nil {
 		transport = Guarded()
 	}
-	client := http.Client{Transport: transport, Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := http.Client{Transport: telemetry.Transport(transport), Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return client.Do(req)
 }
 

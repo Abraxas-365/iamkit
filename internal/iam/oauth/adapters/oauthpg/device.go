@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/lib/pq"
@@ -109,6 +110,6 @@ func (t *authorization) ApproveDevice(ctx context.Context, environment identity.
 	if n == 0 {
 		return errx.Unauthorized("the device authorization expired")
 	}
-	_, err = t.tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,'oauth.device_approved',$3)`, environment, login.User, login.Session.String())
-	return failure(err)
+	return failure(eventpg.AuditWith(ctx, t.tx, environment, login.User.String(), "oauth.device_approved", login.Session.String(),
+		map[string]any{"user_id": login.User.String()}))
 }

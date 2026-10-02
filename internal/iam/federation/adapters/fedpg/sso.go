@@ -6,8 +6,11 @@ import (
 	"errors"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/jmoiron/sqlx"
 )
 
 // EnvironmentConnections lists active connections not owned by an
@@ -22,6 +25,12 @@ func (r *Repository) EnvironmentConnections(ctx context.Context, environment ide
 func (r *Repository) ActiveOrganization(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (bool, error) {
 	var ok bool
 	err := r.db.GetContext(ctx, &ok, `SELECT EXISTS(SELECT 1 FROM organizations WHERE id=$1 AND environment_id=$2 AND active)`, organization, environment)
+	return ok, failure(err)
+}
+
+func (r *Repository) HasUser(ctx context.Context, environment identity.EnvironmentID, email string) (bool, error) {
+	var ok bool
+	err := r.db.GetContext(ctx, &ok, `SELECT EXISTS(SELECT 1 FROM users WHERE environment_id=$1 AND email=$2)`, environment, email)
 	return ok, failure(err)
 }
 
@@ -92,8 +101,11 @@ func (r *Repository) Provision(ctx context.Context, p federation.Provisioning) e
 		return errx.Unauthorized("external identity is not linked")
 	case errors.Is(err, sql.ErrNoRows):
 		user = p.User
-		if _, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,email_verified) VALUES($1,$2,$3,$4,'',true)`, user, p.Environment, p.Email, p.Name); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,email_verified,avatar_url,home_organization_id) VALUES($1,$2,$3,$4,'',true,$5,$6)`, user, p.Environment, p.Email, p.Name, p.AvatarURL, p.Organization); err != nil {
 			return conflict(err)
+		}
+		if err = eventpg.UserCreated(ctx, tx, p.Environment, user.String(), user, identity.OrganizationID{}, "federation"); err != nil {
+			return err
 		}
 	case err != nil:
 		return failure(err)
@@ -117,6 +129,9 @@ func (r *Repository) Provision(ctx context.Context, p federation.Provisioning) e
 	if _, err = tx.ExecContext(ctx, `INSERT INTO external_identities(connection_id,environment_id,user_id,subject,origin) VALUES($1,$2,$3,$4,$5)`, p.Connection, p.Environment, user, p.Subject, origin); err != nil {
 		return conflict(err)
 	}
+	if err = fillAvatar(ctx, tx, p.Environment, user, p.AvatarURL); err != nil {
+		return err
+	}
 	if !p.Create {
 		if err = audit(ctx, tx, federation.Mutation{Environment: p.Environment, Actor: user.String(), Action: "federation.email", Target: "/federation-connections/" + p.Connection.String() + "/identities?user=" + user.String()}); err != nil {
 			return err
@@ -125,8 +140,14 @@ func (r *Repository) Provision(ctx context.Context, p federation.Provisioning) e
 	}
 	// An existing membership is left as is: SSO must not undo an operator's
 	// or directory's deactivation (the session then fails with 403).
-	if _, err = tx.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3) ON CONFLICT (organization_id,user_id) DO NOTHING`, p.Environment, p.Organization, user); err != nil {
+	res, err := tx.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3) ON CONFLICT (organization_id,user_id) DO NOTHING`, p.Environment, p.Organization, user)
+	if err != nil {
 		return failure(err)
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		if err = eventpg.Membership(ctx, tx, p.Environment, user.String(), event.MembershipCreated, p.Organization, user); err != nil {
+			return err
+		}
 	}
 	if !p.Group.IsZero() {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO group_members(group_id,environment_id,organization_id,user_id)
@@ -171,11 +192,14 @@ func (r *Repository) Join(ctx context.Context, j federation.Joining) error {
 			return errx.Unauthorized("sign-up is not available")
 		}
 		user, origin = j.User, "signup"
-		if _, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,email_verified) VALUES($1,$2,$3,$4,'',true)`, user, j.Environment, j.Email, j.Name); err != nil {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,email_verified,avatar_url,home_organization_id) VALUES($1,$2,$3,$4,'',true,$5,$6)`, user, j.Environment, j.Email, j.Name, j.AvatarURL, j.Organization); err != nil {
 			return conflict(err)
 		}
 		if _, err = tx.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, j.Environment, j.Organization, user); err != nil {
 			return failure(err)
+		}
+		if err = eventpg.UserCreated(ctx, tx, j.Environment, user.String(), user, j.Organization, "federation"); err != nil {
+			return err
 		}
 		if !j.Group.IsZero() {
 			if _, err = tx.ExecContext(ctx, `INSERT INTO group_members(group_id,environment_id,organization_id,user_id)
@@ -196,13 +220,27 @@ func (r *Repository) Join(ctx context.Context, j federation.Joining) error {
 	if _, err = tx.ExecContext(ctx, `INSERT INTO external_identities(connection_id,environment_id,user_id,subject,origin) VALUES($1,$2,$3,$4,$5)`, j.Connection, j.Environment, user, j.Subject, origin); err != nil {
 		return conflict(err)
 	}
+	if err = fillAvatar(ctx, tx, j.Environment, user, j.AvatarURL); err != nil {
+		return err
+	}
 	if err = audit(ctx, tx, federation.Mutation{Environment: j.Environment, Actor: user.String(), Action: "federation." + origin, Target: "/federation-connections/" + j.Connection.String() + "/identities?user=" + user.String()}); err != nil {
 		return err
 	}
 	return failure(tx.Commit())
 }
 
-// Refresh updates the active user linked to p.Subject: its name when the
+// fillAvatar gives a just-linked account the provider's picture when it
+// has none.
+func fillAvatar(ctx context.Context, tx *sqlx.Tx, environment identity.EnvironmentID, user identity.UserID, avatar string) error {
+	if avatar == "" {
+		return nil
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE users SET avatar_url=$3 WHERE environment_id=$1 AND id=$2 AND avatar_url=''`, environment, user, avatar)
+	return failure(err)
+}
+
+// Refresh updates the active user linked to p.Subject: its name (and
+// avatar) when the
 // provider sent one, and its email when p.Email is set, differs, the
 // account is passwordless (the provider is how it signs in), no SCIM
 // directory manages it, no other account has the email and, for an
@@ -218,10 +256,11 @@ func (r *Repository) Refresh(ctx context.Context, p federation.Profile) error {
 		ID       identity.UserID `db:"id"`
 		Name     string          `db:"name"`
 		Email    string          `db:"email"`
+		Avatar   string          `db:"avatar_url"`
 		Password string          `db:"password_hash"`
 		Managed  bool            `db:"managed"`
 	}
-	err = tx.GetContext(ctx, &u, `SELECT u.id, u.name, u.email, u.password_hash,
+	err = tx.GetContext(ctx, &u, `SELECT u.id, u.name, u.email, u.avatar_url, u.password_hash,
 		EXISTS(SELECT 1 FROM provisioned_identities i WHERE i.user_id=u.id AND i.environment_id=u.environment_id AND i.deprovisioned_at IS NULL) AS managed
 		FROM external_identities x JOIN users u ON u.id=x.user_id AND u.environment_id=x.environment_id
 		WHERE x.connection_id=$1 AND x.environment_id=$2 AND x.subject=$3 AND u.active FOR UPDATE OF u`, p.Connection, p.Environment, p.Subject)
@@ -231,9 +270,12 @@ func (r *Repository) Refresh(ctx context.Context, p federation.Profile) error {
 	if err != nil {
 		return failure(err)
 	}
-	name, email := u.Name, u.Email
+	name, email, avatar := u.Name, u.Email, u.Avatar
 	if p.Name != "" {
 		name = p.Name
+	}
+	if p.AvatarURL != "" {
+		avatar = p.AvatarURL
 	}
 	if p.Email != "" && p.Email != u.Email && u.Password == "" && !u.Managed {
 		ok := true
@@ -251,10 +293,10 @@ func (r *Repository) Refresh(ctx context.Context, p federation.Profile) error {
 			email = p.Email
 		}
 	}
-	if name == u.Name && email == u.Email {
+	if name == u.Name && email == u.Email && avatar == u.Avatar {
 		return nil
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE users SET name=$3, email=$4, email_verified=CASE WHEN email=$4 THEN email_verified ELSE true END WHERE id=$1 AND environment_id=$2`, u.ID, p.Environment, name, email); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET name=$3, email=$4, email_verified=CASE WHEN email=$4 THEN email_verified ELSE true END, avatar_url=$5 WHERE id=$1 AND environment_id=$2`, u.ID, p.Environment, name, email, avatar); err != nil {
 		return conflict(err)
 	}
 	if err = audit(ctx, tx, federation.Mutation{Environment: p.Environment, Actor: u.ID.String(), Action: "federation.profile_updated", Target: "/users/" + u.ID.String()}); err != nil {

@@ -1,6 +1,8 @@
 package server
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,7 +20,11 @@ func (s *Server) hostedRoutes(app *fiber.App) {
 		return
 	}
 	group := app.Group("/hosted", hostedHeaders)
-	for route, handler := range s.Hosted.Pages() {
+	pages := s.Hosted.Pages()
+	// Sorted: limiters are numbered in registration order (Server.limit),
+	// which must be the same on every replica.
+	for _, route := range slices.Sorted(maps.Keys(pages)) {
+		handler := pages[route]
 		method, path, _ := strings.Cut(route, " ")
 		max := 60
 		if method == fiber.MethodPost {
@@ -28,7 +34,11 @@ func (s *Server) hostedRoutes(app *fiber.App) {
 			// User codes are short: guessing them is throttled harder.
 			max = 10
 		}
-		limit := limiter.New(limiter.Config{Max: max, Expiration: time.Minute, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }})
+		if strings.HasPrefix(path, "/hosted/fonts/") {
+			// Static, cached files: a page loads up to four.
+			max = 600
+		}
+		limit := s.limit(limiter.Config{Max: max, Expiration: time.Minute, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }})
 		group.Add(method, strings.TrimPrefix(path, "/hosted"), limit, handler)
 	}
 }
@@ -53,8 +63,8 @@ func (s *Server) samlRoutes(app *fiber.App) {
 	}
 	group := app.Group("/saml/:environment", hostedHeaders)
 	tooMany := func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }
-	group.Get("/metadata", limiter.New(limiter.Config{Max: 60, Expiration: time.Minute, LimitReached: tooMany}), s.SAML.Metadata)
-	sso := limiter.New(limiter.Config{Max: 30, Expiration: time.Minute, LimitReached: tooMany})
+	group.Get("/metadata", s.limit(limiter.Config{Max: 60, Expiration: time.Minute, LimitReached: tooMany}), s.SAML.Metadata)
+	sso := s.limit(limiter.Config{Max: 30, Expiration: time.Minute, LimitReached: tooMany})
 	group.Get("/sso", sso, s.SAML.SSO)
 	group.Post("/sso", sso, s.SAML.SSO)
 }

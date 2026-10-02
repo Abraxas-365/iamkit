@@ -9,21 +9,35 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/bootstrap"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 	"github.com/Abraxas-365/iamkit/migrations"
 )
 
 func main() {
+	// Log lines carry the request id and trace/span ids of their context.
+	slog.SetDefault(slog.New(telemetry.LogHandler(slog.NewTextHandler(os.Stderr, nil))))
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
+
+// version is the module version the binary was built from ("dev" in a
+// local build).
+func version() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return ""
+}
+
 func run() error {
 	db, err := bootstrap.OpenDatabase()
 	if err != nil {
@@ -124,6 +138,25 @@ func run() error {
 	}
 
 	// ── Serve ─────────────────────────────────────────────────────────
+	// Only the server exports telemetry (the global providers delegate, so
+	// the database pool metrics registered at open still arrive). Nothing
+	// is exported unless OTEL_* or IAMKIT_METRICS_ADDR ask for it.
+	cfg := telemetry.FromEnvironment()
+	cfg.Version = version()
+	shutdownTelemetry, err := telemetry.Setup(context.Background(), cfg)
+	if err != nil {
+		return fmt.Errorf("telemetry: %w", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdownTelemetry(ctx); err != nil {
+			slog.Warn("telemetry shutdown", "err", err)
+		}
+	}()
+	if cfg.Enabled() {
+		slog.Info("telemetry enabled", "traces", cfg.Traces, "metrics", cfg.Metrics, "metrics_addr", cfg.MetricsAddr)
+	}
 	s, err := bootstrap.FromEnvironment(db)
 	if err != nil {
 		return err
@@ -136,6 +169,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	s.Start(ctx)
+	if s.Workers != nil {
+		slog.Info("background jobs", "state", s.Workers.State(), "jobs", s.Workers.Jobs())
+	}
 	done := make(chan error, 1)
 	go func() { done <- app.Listen(":" + port) }()
 	slog.Info("server listening", "port", port)
@@ -144,6 +180,16 @@ func run() error {
 		return err
 	case <-ctx.Done():
 		slog.Info("shutting down")
-		return app.ShutdownWithTimeout(10 * time.Second)
+		err = app.ShutdownWithTimeout(10 * time.Second)
+		if s.Workers != nil && !s.Workers.Wait(10*time.Second) {
+			slog.Warn("background jobs still running at exit")
+		}
+		if !s.WaitFlushed(10 * time.Second) {
+			slog.Warn("usage counters not flushed at exit")
+		}
+		if s.CloseCache != nil {
+			_ = s.CloseCache()
+		}
+		return err
 	}
 }

@@ -97,31 +97,36 @@ func (id *ID[T]) Scan(src any) error {
 // ---------- Entity tags (unexported, zero-size) ----------
 
 type (
-	environmentTag  struct{}
-	organizationTag struct{}
-	applicationTag  struct{}
-	resourceTag     struct{}
-	userTag         struct{}
-	sessionTag      struct{}
-	roleTag         struct{}
-	grantTag        struct{}
-	connectionTag   struct{}
-	workspaceTag    struct{}
-	projectTag      struct{}
-	operatorTag     struct{}
-	credentialTag   struct{}
-	unitTag         struct{}
-	positionTag     struct{}
-	assignmentTag   struct{}
-	challengeTag    struct{}
-	accountTag      struct{} // service account
-	clientTag       struct{} // oauth client
-	keyTag          struct{} // management key
-	groupTag        struct{}
-	domainTag       struct{} // organization domain
-	invitationTag   struct{}
-	factorTag       struct{} // MFA factor
-	spTag           struct{} // SAML service provider
+	environmentTag   struct{}
+	organizationTag  struct{}
+	applicationTag   struct{}
+	resourceTag      struct{}
+	userTag          struct{}
+	sessionTag       struct{}
+	roleTag          struct{}
+	grantTag         struct{}
+	connectionTag    struct{}
+	workspaceTag     struct{}
+	projectTag       struct{}
+	operatorTag      struct{}
+	credentialTag    struct{}
+	unitTag          struct{}
+	positionTag      struct{}
+	assignmentTag    struct{}
+	challengeTag     struct{}
+	accountTag       struct{} // service account
+	clientTag        struct{} // oauth client
+	keyTag           struct{} // management key
+	groupTag         struct{}
+	domainTag        struct{} // organization domain
+	invitationTag    struct{}
+	factorTag        struct{} // MFA factor
+	spTag            struct{} // SAML service provider
+	resourceGrantTag struct{} // resource granted to an organization
+	accessTokenTag   struct{} // personal access token of a machine user
+	userKeyTag       struct{} // public key of a machine user (JWT-bearer login)
+	subscriptionTag  struct{} // event webhook subscription
+	targetTag        struct{} // action target (hook endpoint)
 )
 
 // tagName returns a human-readable name for error messages.
@@ -178,6 +183,16 @@ func tagName[T any]() string {
 		return "factor_id"
 	case spTag:
 		return "service_provider_id"
+	case resourceGrantTag:
+		return "resource_grant_id"
+	case accessTokenTag:
+		return "token_id"
+	case userKeyTag:
+		return "user_key_id"
+	case subscriptionTag:
+		return "subscription_id"
+	case targetTag:
+		return "target_id"
 	default:
 		return "id"
 	}
@@ -212,6 +227,16 @@ type (
 	FactorID       = ID[factorTag]
 	// ServiceProviderID names a SAML service provider (application).
 	ServiceProviderID = ID[spTag]
+	// ResourceGrantID names a resource granted to an organization.
+	ResourceGrantID = ID[resourceGrantTag]
+	// AccessTokenID names a machine user's personal access token.
+	AccessTokenID = ID[accessTokenTag]
+	// UserKeyID names a machine user's key; it is the kid of its assertions.
+	UserKeyID = ID[userKeyTag]
+	// SubscriptionID names an event webhook subscription.
+	SubscriptionID = ID[subscriptionTag]
+	// TargetID names an action target (an endpoint hooks call).
+	TargetID = ID[targetTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -243,6 +268,11 @@ func NewFactorID() FactorID             { return NewID[factorTag]() }
 func NewServiceProviderID() ServiceProviderID {
 	return NewID[spTag]()
 }
+func NewResourceGrantID() ResourceGrantID { return NewID[resourceGrantTag]() }
+func NewAccessTokenID() AccessTokenID     { return NewID[accessTokenTag]() }
+func NewUserKeyID() UserKeyID             { return NewID[userKeyTag]() }
+func NewSubscriptionID() SubscriptionID   { return NewID[subscriptionTag]() }
+func NewTargetID() TargetID               { return NewID[targetTag]() }
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -273,6 +303,13 @@ func ParseFactorID(raw string) (FactorID, error)             { return ParseID[fa
 func ParseServiceProviderID(raw string) (ServiceProviderID, error) {
 	return ParseID[spTag](raw)
 }
+func ParseResourceGrantID(raw string) (ResourceGrantID, error) {
+	return ParseID[resourceGrantTag](raw)
+}
+func ParseAccessTokenID(raw string) (AccessTokenID, error)   { return ParseID[accessTokenTag](raw) }
+func ParseUserKeyID(raw string) (UserKeyID, error)           { return ParseID[userKeyTag](raw) }
+func ParseSubscriptionID(raw string) (SubscriptionID, error) { return ParseID[subscriptionTag](raw) }
+func ParseTargetID(raw string) (TargetID, error)             { return ParseID[targetTag](raw) }
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.
 func MustParseEnvironmentID(raw string) EnvironmentID   { return MustParseID[environmentTag](raw) }
@@ -302,3 +339,10 @@ func MustParseFactorID(raw string) FactorID             { return MustParseID[fac
 func MustParseServiceProviderID(raw string) ServiceProviderID {
 	return MustParseID[spTag](raw)
 }
+func MustParseResourceGrantID(raw string) ResourceGrantID {
+	return MustParseID[resourceGrantTag](raw)
+}
+func MustParseAccessTokenID(raw string) AccessTokenID   { return MustParseID[accessTokenTag](raw) }
+func MustParseUserKeyID(raw string) UserKeyID           { return MustParseID[userKeyTag](raw) }
+func MustParseSubscriptionID(raw string) SubscriptionID { return MustParseID[subscriptionTag](raw) }
+func MustParseTargetID(raw string) TargetID             { return MustParseID[targetTag](raw) }

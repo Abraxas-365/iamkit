@@ -2,20 +2,38 @@ package orgsvc
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
-type Service struct{ repository organization.Repository }
+type Service struct {
+	repository organization.Repository
+	actions    organization.Actions
+	quota      organization.Quota
+}
 
-func New(repository organization.Repository) *Service { return &Service{repository} }
+// SetQuota enforces the environment's organizations limit on Create.
+func (s *Service) SetQuota(q organization.Quota) { s.quota = q }
+
+func New(repository organization.Repository) *Service { return &Service{repository: repository} }
+
+// SetActions runs the environment's request:membership.create hooks.
+func (s *Service) SetActions(actions organization.Actions) { s.actions = actions }
 func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, name string) (identity.OrganizationID, error) {
 	if strings.TrimSpace(name) == "" {
 		return identity.OrganizationID{}, errx.Validation("organization name is required")
+	}
+	if s.quota != nil {
+		if err := s.quota.Admit(ctx, environment, usage.LimitOrganizations); err != nil {
+			return identity.OrganizationID{}, err
+		}
 	}
 	id := identity.NewOrganizationID()
 	return id, s.repository.Create(ctx, environment, id, name)
@@ -41,6 +59,14 @@ func (s *Service) Update(ctx context.Context, mutation organization.Mutation, id
 func (s *Service) AddMember(ctx context.Context, environment identity.EnvironmentID, input organization.Membership) error {
 	if err := input.Validate(); err != nil {
 		return err
+	}
+	if s.actions != nil {
+		if _, err := s.actions.Run(ctx, environment, action.MembershipAdd, func() action.Input {
+			body, _ := json.Marshal(input)
+			return action.Input{Organization: &input.Organization, User: &action.UserInput{ID: &input.User}, Request: body}
+		}); err != nil {
+			return err
+		}
 	}
 	return s.repository.AddMember(ctx, environment, input)
 }
@@ -68,3 +94,42 @@ func (s *Service) Members(ctx context.Context, environment identity.EnvironmentI
 
 var _ organization.Commands = (*Service)(nil)
 var _ organization.Queries = (*Service)(nil)
+
+func (s *Service) Metadata(ctx context.Context, environment identity.EnvironmentID, id identity.OrganizationID, key string) (json.RawMessage, error) {
+	if err := identity.MetadataKey(key); err != nil {
+		return nil, err
+	}
+	org, err := s.repository.Find(ctx, environment, id)
+	if err != nil {
+		return nil, err
+	}
+	value, ok := identity.MetadataValue(org.Metadata, key)
+	if !ok {
+		return nil, errx.NotFound("metadata key not found")
+	}
+	return value, nil
+}
+
+func (s *Service) SetMetadata(ctx context.Context, m organization.Mutation, id identity.OrganizationID, key string, value json.RawMessage) error {
+	if err := identity.MetadataKey(key); err != nil {
+		return err
+	}
+	m.Action = organization.ActionMetadataSet
+	return s.repository.EditMetadata(ctx, m, id, func(current json.RawMessage) (json.RawMessage, error) {
+		return identity.SetMetadata(current, key, value)
+	})
+}
+
+func (s *Service) DeleteMetadata(ctx context.Context, m organization.Mutation, id identity.OrganizationID, key string) error {
+	if err := identity.MetadataKey(key); err != nil {
+		return err
+	}
+	m.Action = organization.ActionMetadataDeleted
+	return s.repository.EditMetadata(ctx, m, id, func(current json.RawMessage) (json.RawMessage, error) {
+		out, found, err := identity.DeleteMetadata(current, key)
+		if err == nil && !found {
+			err = errx.NotFound("metadata key not found")
+		}
+		return out, err
+	})
+}

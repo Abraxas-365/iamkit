@@ -38,7 +38,7 @@ func TestMoreFederationProviders(t *testing.T) {
 	if r := e.sso(idp, conn, e.Org, map[string]any{"sub": "u-1", "email": "dana@example.net", "email_verified": true, "name": "Dana"}); r.Status != 401 {
 		t.Fatalf("unmapped verification: %d %v", r.Status, r.JSON)
 	}
-	options["claims"] = fiber.Map{"subject": "user.sub", "email": "user.email", "email_verified": "user.email_verified", "name": "user.name"}
+	options["claims"] = fiber.Map{"subject": "user.sub", "email": "user.email", "email_verified": "user.email_verified", "name": "user.name", "picture": "user.picture"}
 	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"options": options}, 204)
 	moved := fiber.Map{"authorize_url": "https://elsewhere.example/authorize", "token_url": idp.URL + "/token", "userinfo_url": idp.URL + "/me", "claims": options["claims"]}
 	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"options": moved}, 400)
@@ -59,10 +59,10 @@ func TestMoreFederationProviders(t *testing.T) {
 		t.Fatal("profile refreshed while update_profile is off")
 	}
 	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"update_profile": true}, 204)
-	if r := e.sso(idp, conn, e.Org, map[string]any{"sub": "u-1", "email": "Dana.New@example.net", "email_verified": true, "name": "Dana Renamed"}); r.Status != 200 || claims(t, r.JSON["access_token"].(string))["sub"] != danaID {
+	if r := e.sso(idp, conn, e.Org, map[string]any{"sub": "u-1", "email": "Dana.New@example.net", "email_verified": true, "name": "Dana Renamed", "picture": "https://cdn.example/dana.png"}); r.Status != 200 || claims(t, r.JSON["access_token"].(string))["sub"] != danaID {
 		t.Fatalf("refresh sign-in: %d %v", r.Status, r.JSON)
 	}
-	if n := count(t, e.DB, `SELECT count(*) FROM users WHERE id=$1 AND name='Dana Renamed' AND email='dana.new@example.net' AND email_verified`, danaID); n != 1 {
+	if n := count(t, e.DB, `SELECT count(*) FROM users WHERE id=$1 AND name='Dana Renamed' AND email='dana.new@example.net' AND email_verified AND avatar_url='https://cdn.example/dana.png'`, danaID); n != 1 {
 		t.Fatal("profile not refreshed")
 	}
 	if e.audited("federation.profile_updated", "/users/"+danaID) != 1 {

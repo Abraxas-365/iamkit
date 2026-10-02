@@ -60,13 +60,16 @@ func (r *Repository) Login(ctx context.Context, hash []byte, environment identit
 	return hosted.Login{Verified: authentication.Verified{User: row.User, Email: row.Email, Method: row.Method, Organization: row.Organization, AMR: []string(row.AMR), PasswordExpired: row.PasswordChange}, Chosen: row.Chosen, Attempts: row.Attempts}, nil
 }
 
-func (r *Repository) Attempt(ctx context.Context, hash []byte, limit int) (bool, error) {
-	res, err := r.db.ExecContext(ctx, `UPDATE hosted_logins SET mfa_attempts=mfa_attempts+1 WHERE ticket_hash=$1 AND expires_at>now() AND mfa_attempts<$2`, hash, limit)
-	if err != nil {
-		return false, failure(err)
+func (r *Repository) Attempt(ctx context.Context, hash []byte, limit int) (int, bool, error) {
+	var used int
+	err := r.db.GetContext(ctx, &used, `UPDATE hosted_logins SET mfa_attempts=mfa_attempts+1 WHERE ticket_hash=$1 AND expires_at>now() AND mfa_attempts<$2 RETURNING mfa_attempts`, hash, limit)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
 	}
-	n, err := res.RowsAffected()
-	return n == 1, failure(err)
+	if err != nil {
+		return 0, false, failure(err)
+	}
+	return used, true, nil
 }
 
 // DeleteLogin removes the login, and every expired one with it.

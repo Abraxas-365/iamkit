@@ -49,7 +49,7 @@ func NewDiscovery(issuer string) Discovery {
 		JWKSURI:                issuer + "/.well-known/jwks.json",
 		ResponseTypesSupported: []string{"code"},
 		// client_credentials: service accounts only (client_id = account id).
-		GrantTypesSupported:                             []string{"authorization_code", "refresh_token", "client_credentials", GrantDeviceCode, GrantTokenExchange},
+		GrantTypesSupported:                             []string{"authorization_code", "refresh_token", "client_credentials", GrantDeviceCode, GrantTokenExchange, GrantJWTBearer},
 		SubjectTypesSupported:                           []string{"public"},
 		IDTokenSigningAlgValuesSupported:                []string{"RS256"},
 		TokenEndpointAuthMethodsSupported:               []string{"none", "client_secret_basic", "client_secret_post", "private_key_jwt"},
@@ -57,8 +57,8 @@ func NewDiscovery(issuer string) Discovery {
 		IntrospectionEndpointAuthMethodsSupported:       []string{"client_secret_basic"},
 		RevocationEndpointAuthMethodsSupported:          []string{"none", "client_secret_basic", "client_secret_post", "private_key_jwt"},
 		RevocationEndpointAuthSigningAlgValuesSupported: identity.AssertionAlgorithms,
-		ScopesSupported:                                 []string{"openid", "profile", "email", "offline_access"},
-		ClaimsSupported:                                 []string{"sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "amr", "sid", "name", "email", "email_verified", "environment_id", "organization_id"},
+		ScopesSupported:                                 []string{"openid", "profile", "email", "phone", "offline_access"},
+		ClaimsSupported:                                 []string{"sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "amr", "sid", "name", "picture", "preferred_username", "email", "email_verified", "phone_number", "phone_number_verified", "environment_id", "organization_id"},
 		CodeChallengeMethodsSupported:                   []string{"S256"},
 		BackchannelLogoutSupported:                      true,
 		BackchannelLogoutSessionSupported:               true,
@@ -67,7 +67,8 @@ func NewDiscovery(issuer string) Discovery {
 }
 
 // UserInfo is the /oauth/userinfo answer: sub always, the rest by the
-// token's granted scopes (profile: name; email: email, email_verified).
+// token's granted scopes (profile: name; email: email, email_verified;
+// phone: phone_number, phone_number_verified, merged in by the handler).
 type UserInfo struct {
 	Subject       string `json:"sub"`
 	Name          string `json:"name,omitempty"`

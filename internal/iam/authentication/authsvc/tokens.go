@@ -8,6 +8,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/google/uuid"
 )
@@ -17,11 +18,15 @@ type Tokens struct {
 	codec      authentication.TokenCodec
 	secrets    authentication.Secrets
 	oauth      authentication.OAuthTokens
+	usage      authentication.Usage
 }
 
 func NewTokens(r authentication.TokenRepository, c authentication.TokenCodec, s authentication.Secrets, o authentication.OAuthTokens) *Tokens {
-	return &Tokens{r, c, s, o}
+	return &Tokens{repository: r, codec: c, secrets: s, oauth: o}
 }
+
+// SetUsage counts issued access tokens.
+func (s *Tokens) SetUsage(u authentication.Usage)       { s.usage = u }
 func (s *Tokens) JWKS(ctx context.Context) (any, error) { return s.codec.JWKS(ctx) }
 func (s *Tokens) Issue(ctx context.Context, input authentication.Token, audience string) (string, error) {
 	now := time.Now()
@@ -30,12 +35,23 @@ func (s *Tokens) Issue(ctx context.Context, input authentication.Token, audience
 	input.IssuedAt = now.Unix()
 	input.NotBefore = now.Unix()
 	input.ExpiresAt = now.Add(config.TokenTTL).Unix()
-	return s.codec.Sign(ctx, input)
+	raw, err := s.codec.Sign(ctx, input)
+	if err == nil && s.usage != nil {
+		s.usage.Count(ctx, input.EnvironmentID, usage.MetricTokens, 1)
+	}
+	return raw, err
 }
 func (s *Tokens) Validate(ctx context.Context, raw string, audience string, environment identity.EnvironmentID) (authentication.Token, error) {
 	var out authentication.Token
 	if environment.IsZero() || audience == "" {
 		return out, errx.Unauthorized("invalid credentials or access token")
+	}
+	if strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
+		out, err := s.ValidateAccessToken(ctx, raw)
+		if err != nil || out.EnvironmentID != environment || out.Audience[0] != audience {
+			return authentication.Token{}, errx.Unauthorized("invalid credentials or access token")
+		}
+		return out, nil
 	}
 	out, err := s.codec.Verify(ctx, raw, audience)
 	if err != nil {
@@ -61,6 +77,9 @@ func (s *Tokens) Validate(ctx context.Context, raw string, audience string, envi
 }
 
 func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.Token, error) {
+	if strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
+		return s.ValidateAccessToken(ctx, raw)
+	}
 	out, err := s.codec.VerifySelf(ctx, raw)
 	if err != nil {
 		return out, err
@@ -129,6 +148,89 @@ func (s *Tokens) MachineAccount(ctx context.Context, account identity.AccountID)
 	}
 	return s.Issue(ctx, token, audience)
 }
+
+// ValidateAccessToken resolves a personal access token used as a bearer.
+func (s *Tokens) ValidateAccessToken(ctx context.Context, raw string) (authentication.Token, error) {
+	if !strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
+		return authentication.Token{}, errx.Unauthorized("invalid credentials or access token")
+	}
+	pat, err := s.repository.AccessToken(ctx, s.secrets.Hash(raw))
+	if err != nil {
+		return authentication.Token{}, err
+	}
+	return pat.Token, nil
+}
+
+// ExchangeAccessToken issues an application access token for a personal
+// access token. Its session is shared by the token's exchanges while it
+// lasts (at most config.SessionTTL, never past the token's expiry), so
+// frequent exchanges do not pile up sessions.
+func (s *Tokens) ExchangeAccessToken(ctx context.Context, raw string) (string, error) {
+	if !strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
+		return "", errx.Unauthorized("invalid credentials or access token")
+	}
+	pat, err := s.repository.AccessToken(ctx, s.secrets.Hash(raw))
+	if err != nil {
+		return "", err
+	}
+	now := time.Now()
+	expires := now.Add(config.SessionTTL)
+	if pat.Expires.Before(expires) {
+		expires = pat.Expires
+	}
+	session, err := s.repository.AccessTokenSession(ctx, pat, identity.NewSessionID(), now.Add(config.TokenTTL), expires)
+	if err != nil {
+		return "", err
+	}
+	token := pat.Token
+	token.Purpose = authentication.PurposeApplication
+	token.SessionID = session
+	token.AuthTime = now.Unix()
+	return s.Issue(ctx, token, pat.Audience)
+}
+
+// KeyGrant answers a machine user's RFC 7523 JWT-bearer assertion with an
+// application access token on a session opened with the key.
+func (s *Tokens) KeyGrant(ctx context.Context, assertion string, boundary authentication.Context) (string, error) {
+	id, err := s.codec.AssertionKey(assertion)
+	if err != nil {
+		return "", err
+	}
+	key, err := s.repository.MachineKey(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	verified, err := s.codec.VerifyAssertion(ctx, assertion, key)
+	if err != nil {
+		return "", err
+	}
+	// The key names the environment; a boundary elsewhere is no match.
+	if boundary.EnvironmentID.IsZero() {
+		boundary.EnvironmentID = key.Environment
+	}
+	if boundary.EnvironmentID != key.Environment {
+		return "", errx.Unauthorized("invalid credentials or access token")
+	}
+	now := time.Now()
+	expires := now.Add(config.SessionTTL)
+	if key.Expires.Before(expires) {
+		expires = key.Expires
+	}
+	grant := authentication.KeyGrant{Key: key, Boundary: boundary, Assertion: verified}
+	session, err := s.repository.KeySession(ctx, grant, identity.NewSessionID(), now.Add(config.TokenTTL), expires)
+	if err != nil {
+		return "", err
+	}
+	token := authentication.Token{
+		Access:    identity.Access{EnvironmentID: boundary.EnvironmentID, OrganizationID: boundary.OrganizationID, ApplicationID: boundary.ApplicationID, ResourceID: boundary.ResourceID, Permissions: session.Permissions},
+		Purpose:   authentication.PurposeApplication,
+		SessionID: session.Session,
+		Subject:   key.User,
+		AMR:       []string{authentication.AMRKey},
+		AuthTime:  session.Authenticated.Unix(),
+	}
+	return s.Issue(ctx, token, session.Audience)
+}
 func (s *Tokens) Logout(ctx context.Context, token authentication.Token) error {
 	if token.Purpose != "application" {
 		return errx.Forbidden("insufficient permissions")
@@ -147,15 +249,15 @@ func (s *Tokens) Organizations(ctx context.Context, token authentication.Token) 
 	}
 	return s.repository.Organizations(ctx, token)
 }
-func (s *Tokens) UpdateProfile(ctx context.Context, token authentication.Token, name string) error {
+func (s *Tokens) UpdateProfile(ctx context.Context, token authentication.Token, input authentication.ProfileUpdate) error {
 	if token.Purpose != "application" || token.Impersonated() {
 		return errx.Forbidden("non-impersonated user session required")
 	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return errx.Validation("name is required")
+	input = input.Normalize()
+	if err := input.Validate(); err != nil {
+		return err
 	}
-	return s.repository.UpdateProfile(ctx, token, name)
+	return s.repository.UpdateProfile(ctx, token, input)
 }
 func (s *Tokens) AddMember(ctx context.Context, token authentication.Token, user identity.UserID) error {
 	if token.Purpose != "application" || token.OrganizationID.IsZero() {

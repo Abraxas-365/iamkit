@@ -10,7 +10,9 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/i18n"
+	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
@@ -80,6 +82,14 @@ func (s *Service) Signup(ctx context.Context, input authentication.Signup) (iden
 	if err = input.Validate(); err != nil {
 		return identity.ChallengeID{}, err
 	}
+	var accepted *time.Time
+	if policy.TermsRequired() {
+		if !input.AcceptTerms {
+			return identity.ChallengeID{}, authentication.ErrTermsRequired()
+		}
+		now := time.Now()
+		accepted = &now
+	}
 	email, _ := identity.Email(input.Email)
 	var hash string
 	switch {
@@ -115,7 +125,7 @@ func (s *Service) Signup(ctx context.Context, input authentication.Signup) (iden
 		return identity.ChallengeID{}, err
 	}
 	pending := authentication.PendingSignup{ID: id, Environment: input.Environment, Email: email, Name: strings.TrimSpace(input.Name),
-		PasswordHash: hash, Hash: s.secrets.Hash(id.String() + ":" + code), Expires: time.Now().Add(config.ChallengeTTL)}
+		PasswordHash: hash, Hash: s.secrets.Hash(id.String() + ":" + code), Expires: time.Now().Add(config.ChallengeTTL), TermsAccepted: accepted}
 	if err = tx.CreateSignup(ctx, pending); err != nil {
 		return identity.ChallengeID{}, err
 	}
@@ -200,9 +210,21 @@ func (s *Service) CompleteSignup(ctx context.Context, environment identity.Envir
 	if required {
 		return authentication.SignedUp{}, errSSORequired()
 	}
+	if s.usage != nil {
+		if err = s.usage.Admit(ctx, environment, usage.LimitUsers); err != nil {
+			return authentication.SignedUp{}, err
+		}
+	}
+	if s.actions != nil {
+		if _, err = s.actions.Run(ctx, environment, action.PreRegistration, func() action.Input {
+			return action.Input{Organization: &policy.SignupOrganization, Method: []string{method}, User: &action.UserInput{Email: row.Email, Name: row.Name}}
+		}); err != nil {
+			return authentication.SignedUp{}, err
+		}
+	}
 	user := identity.NewUserID()
 	err = tx.Join(ctx, authentication.Joining{Signup: signup, User: user, Environment: environment, Organization: policy.SignupOrganization,
-		Group: policy.SignupGroup, Email: row.Email, Name: row.Name, PasswordHash: row.PasswordHash})
+		Group: policy.SignupGroup, Email: row.Email, Name: row.Name, PasswordHash: row.PasswordHash, TermsAccepted: row.TermsAccepted})
 	if err != nil {
 		return authentication.SignedUp{}, err
 	}

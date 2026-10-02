@@ -9,6 +9,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 )
 
 var _ oauth.LogoutRepository = (*Repository)(nil)
@@ -47,13 +48,16 @@ func (r *Repository) ClaimLogouts(ctx context.Context, limit int, lease time.Dur
 }
 func (r *Repository) LogoutDelivered(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE logout_notifications SET delivered_at = now(), last_error = '' WHERE id = $1`, id)
+	telemetry.Logout(ctx, telemetry.LogoutDelivered)
 	return failure(err)
 }
 func (r *Repository) LogoutRetry(ctx context.Context, id int64, wait time.Duration, reason string) error {
 	_, err := r.db.ExecContext(ctx, `UPDATE logout_notifications SET next_attempt_at = now() + make_interval(secs => $2), last_error = $3 WHERE id = $1`, id, wait.Seconds(), reason)
+	telemetry.Logout(ctx, telemetry.LogoutRetried)
 	return failure(err)
 }
 func (r *Repository) LogoutFailed(ctx context.Context, m oauth.Mutation, id int64, reason string) error {
+	telemetry.Logout(ctx, telemetry.LogoutFailed)
 	return r.audited(ctx, m, `UPDATE logout_notifications SET failed_at = now(), last_error = $2 WHERE id = $1`, id, reason)
 }
 func (r *Repository) RetryLogout(ctx context.Context, m oauth.Mutation, id int64) error {
@@ -68,6 +72,17 @@ func (r *Repository) RetryLogout(ctx context.Context, m oauth.Mutation, id int64
 func (r *Repository) PruneLogouts(ctx context.Context, age time.Duration) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM logout_notifications WHERE (delivered_at IS NOT NULL OR failed_at IS NOT NULL) AND created_at < now() - make_interval(secs => $1)`, age.Seconds())
 	return failure(err)
+}
+
+// LogoutLag measures from the oldest due notification's next_attempt_at.
+func (r *Repository) LogoutLag(ctx context.Context) (time.Duration, error) {
+	var seconds float64
+	err := r.db.GetContext(ctx, &seconds, `SELECT COALESCE(EXTRACT(EPOCH FROM now() - min(next_attempt_at)), 0)::float8
+		FROM logout_notifications WHERE delivered_at IS NULL AND failed_at IS NULL AND next_attempt_at <= now()`)
+	if err != nil {
+		return 0, failure(err)
+	}
+	return time.Duration(seconds * float64(time.Second)), nil
 }
 
 const logoutStatus = `CASE WHEN n.delivered_at IS NOT NULL THEN 'delivered' WHEN n.failed_at IS NOT NULL THEN 'failed' ELSE 'pending' END`

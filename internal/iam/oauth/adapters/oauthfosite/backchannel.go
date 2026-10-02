@@ -15,6 +15,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/iam/signing"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 	"github.com/ory/fosite/token/jwt"
 )
 
@@ -37,7 +38,7 @@ func NewLogoutSender(keys signing.Keyring, issuer string, transport http.RoundTr
 	if transport == nil {
 		transport = GuardedTransport()
 	}
-	return &LogoutSender{Keys: keys, Issuer: issuer, client: &http.Client{Transport: transport, Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	return &LogoutSender{Keys: keys, Issuer: issuer, client: &http.Client{Transport: telemetry.Transport(transport), Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 
 // Token is the signed logout token of n.

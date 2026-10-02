@@ -70,3 +70,9 @@ type ControlRepository interface {
 type Generator interface {
 	Generate(prefix string) (string, []byte, error)
 }
+
+// Quota admits a creation within the environment's limits (usage.Commands):
+// limit usage.LimitUsers → 422 QUOTA_EXCEEDED.
+type Quota interface {
+	Admit(ctx context.Context, environment identity.EnvironmentID, limit string) error
+}

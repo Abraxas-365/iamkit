@@ -4,17 +4,20 @@ import (
 	"context"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
 type Commands interface {
-	// Login signs in with a password. An expired password answers
-	// ErrPasswordChangeRequired unless newPassword replaces it.
-	Login(ctx context.Context, boundary Context, email, password, newPassword string) (Result, error)
+	// Login signs in with a password; login is an email or username. An
+	// expired password answers ErrPasswordChangeRequired unless newPassword
+	// replaces it.
+	Login(ctx context.Context, boundary Context, login, password, newPassword string) (Result, error)
 	Refresh(ctx context.Context, boundary Context, token string) (Issued, error)
-	// InitiateChallenge emails a code when the address is eligible; locale
-	// is the requested email language ("" = the environment default).
-	InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, email, purpose, locale string) (identity.ChallengeID, error)
+	// InitiateChallenge emails a code when the account (email or username)
+	// is eligible; locale is the requested email language ("" = the
+	// environment default).
+	InitiateChallenge(ctx context.Context, environment identity.EnvironmentID, login, purpose, locale string) (identity.ChallengeID, error)
 	VerifyChallenge(ctx context.Context, boundary Context, challenge identity.ChallengeID, code, purpose, password string) (Result, error)
 }
 
@@ -65,7 +68,8 @@ type PasskeyCommands interface {
 // user is (no organization yet), then issue the session once the
 // organization is chosen.
 type Authenticator interface {
-	VerifyPassword(ctx context.Context, environment identity.EnvironmentID, email, password string) (Verified, error)
+	// VerifyPassword checks a password; login is an email or username.
+	VerifyPassword(ctx context.Context, environment identity.EnvironmentID, login, password string) (Verified, error)
 	VerifyCode(ctx context.Context, environment identity.EnvironmentID, challenge identity.ChallengeID, code string) (Verified, error)
 	// VerifyPasskey verifies a passkey sign-in (the email comes from the
 	// account).
@@ -74,6 +78,9 @@ type Authenticator interface {
 	// target application and resource with the method they verified with
 	// (ErrMethodNotAllowed when only the method keeps them out).
 	Organizations(ctx context.Context, target Target, verified Verified) ([]Organization, error)
+	// Account is who a verified login belongs to (name, email, avatar) for
+	// the pages to show; NotFound unless the user is active.
+	Account(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (Profile, error)
 	// Issue creates the session; password and code logins are refused where
 	// the organization enforces SSO or does not allow the method, and a
 	// verified login whose password expired is refused until ChangePassword.
@@ -85,7 +92,7 @@ type Authenticator interface {
 
 type SessionCommands interface {
 	Logout(ctx context.Context, token Token) error
-	UpdateProfile(ctx context.Context, token Token, name string) error
+	UpdateProfile(ctx context.Context, token Token, input ProfileUpdate) error
 	AddMember(ctx context.Context, token Token, user identity.UserID) error
 }
 type SessionQueries interface {
@@ -111,9 +118,11 @@ type Renderer interface {
 	Render(ctx context.Context, message Message, draft Draft) (Email, error)
 }
 
-// Branding reads how an environment's emails look (hosted login branding).
+// Branding reads how an environment's emails look (hosted login branding):
+// the environment default, with organization's overrides when it is not
+// zero (invitations into it).
 type Branding interface {
-	Brand(ctx context.Context, environment identity.EnvironmentID) (Brand, error)
+	Brand(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Brand, error)
 }
 
 // Templates reads an environment's saved wording for one email in one
@@ -354,6 +363,21 @@ type SignupRepository interface {
 type Breaches interface {
 	Breached(ctx context.Context, password string) (bool, error)
 }
+
+// Actions runs the environment's hooks (action.Runner): pre_sign_in before
+// every user session and pre_registration before a signup.
+type Actions interface {
+	Run(ctx context.Context, environment identity.EnvironmentID, condition string, build func() action.Input) (action.Result, error)
+}
+
+// Usage meters the environment (usage.Commands): Admit checks the users
+// limit before a signup creates an account (422 QUOTA_EXCEEDED) and the
+// daily email/SMS limits before a send (429); Count adds issued access
+// tokens and sent emails/SMS to today's usage.
+type Usage interface {
+	Admit(ctx context.Context, environment identity.EnvironmentID, limit string) error
+	Count(ctx context.Context, environment identity.EnvironmentID, metric string, n int64)
+}
 type Secrets interface {
 	Generate(prefix string) (string, []byte, error)
 	Hash(raw string) []byte
@@ -368,6 +392,16 @@ type TokenIssuer interface {
 	// already authenticated (OAuth client_credentials): the same token
 	// Machine issues for its secret.
 	MachineAccount(ctx context.Context, account identity.AccountID) (string, error)
+	// ExchangeAccessToken trades a personal access token for an ordinary
+	// application access token backed by a session (no refresh token) that
+	// ends when the personal access token is revoked.
+	ExchangeAccessToken(ctx context.Context, raw string) (string, error)
+	// KeyGrant answers the RFC 7523 JWT-bearer grant: an assertion signed
+	// with a machine user's key (kid = key ID, iss = sub = user ID, aud =
+	// the issuer or its token endpoint, single-use jti) becomes an
+	// application access token backed by a session in boundary (whose
+	// environment is the key's), ended when the key is removed.
+	KeyGrant(ctx context.Context, assertion string, boundary Context) (string, error)
 }
 type TokenValidator interface {
 	Validate(ctx context.Context, raw string, audience string, environment identity.EnvironmentID) (Token, error)
@@ -375,6 +409,9 @@ type TokenValidator interface {
 	// the caller to specify audience/environment upfront. Used by /api/v1/*
 	// where the token's own claims determine the environment scope.
 	ValidateSelf(ctx context.Context, raw string) (Token, error)
+	// ValidateAccessToken resolves a personal access token (ik_pat_) used
+	// directly as a bearer; its audience is its resource's.
+	ValidateAccessToken(ctx context.Context, raw string) (Token, error)
 }
 
 // TokenCodec signs with the environment's signing key (signing.Keyring)
@@ -385,6 +422,13 @@ type TokenCodec interface {
 	// VerifySelf checks signature, issuer, and expiry without audience enforcement.
 	VerifySelf(ctx context.Context, raw string) (Token, error)
 	JWKS(ctx context.Context) (any, error)
+	// AssertionKey reads, unverified, the kid naming the key an RFC 7523
+	// assertion claims to be signed with.
+	AssertionKey(raw string) (identity.UserKeyID, error)
+	// VerifyAssertion checks the assertion's signature with key and its
+	// claims: iss = sub = the key's user, aud = the issuer or its token
+	// endpoint, exp at most config.ClientAssertionMaxAge ahead, a jti.
+	VerifyAssertion(ctx context.Context, raw string, key MachineKey) (Assertion, error)
 }
 
 // OAuthTokens reports whether an OAuth-issued access token is still live.
@@ -400,11 +444,14 @@ type Repository interface {
 	Begin(ctx context.Context) (Transaction, error)
 }
 type Transaction interface {
-	// PasswordUser locks the active user signing in with a password.
-	PasswordUser(ctx context.Context, boundary Context, email string) (PasswordAccount, error)
+	// PasswordUser locks the active user signing in with a password; login
+	// is a normalized email or username (identity.Login).
+	PasswordUser(ctx context.Context, boundary Context, login string) (PasswordAccount, error)
 	// ActiveEmail is the address of an active user (passkey sign-in);
 	// Unauthorized when there is none.
 	ActiveEmail(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (string, error)
+	// ActiveProfile is the id, email, name and avatar of an active user.
+	ActiveProfile(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (Profile, error)
 	// SetLoginFailures records wrong passwords in a row and the lock they
 	// caused (nil clears it).
 	SetLoginFailures(ctx context.Context, user identity.UserID, failures int, lockedUntil *time.Time) error
@@ -431,7 +478,9 @@ type Transaction interface {
 	Refresh(ctx context.Context, boundary Context, hash []byte) (Session, error)
 	RevokeSession(ctx context.Context, session identity.SessionID) error
 	UseRefresh(ctx context.Context, hash []byte) error
-	EligibleChallengeUser(ctx context.Context, environment identity.EnvironmentID, email, purpose string) (identity.UserID, error)
+	// EligibleChallengeUser finds the user a challenge may be sent to by
+	// normalized email or username, and their email; zero when none.
+	EligibleChallengeUser(ctx context.Context, environment identity.EnvironmentID, login, purpose string) (identity.UserID, string, error)
 	RecentChallenges(ctx context.Context, user identity.UserID, purpose string) (int, error)
 	CreateChallenge(ctx context.Context, challenge identity.ChallengeID, user identity.UserID, purpose string, environment identity.EnvironmentID, hash []byte) error
 	Challenge(ctx context.Context, challenge identity.ChallengeID, user identity.UserID, purpose string) (Challenge, error)
@@ -448,9 +497,25 @@ type TokenRepository interface {
 	ActorActive(ctx context.Context, token Token) (bool, error)
 	Machine(ctx context.Context, hash []byte) (Token, string, error)
 	MachineAccount(ctx context.Context, account identity.AccountID) (Token, string, error)
+	// AccessToken resolves a live personal access token by its hash (not
+	// revoked or expired; machine user, membership, organization and
+	// application active; a grant on its resource) with the permissions
+	// held now, and records the use.
+	AccessToken(ctx context.Context, hash []byte) (PersonalAccessToken, error)
+	// AccessTokenSession returns a live session of the token lasting past
+	// after, else opens session ending at expires.
+	AccessTokenSession(ctx context.Context, token PersonalAccessToken, session identity.SessionID, after, expires time.Time) (identity.SessionID, error)
+	// MachineKey resolves a live key (not expired, user an active machine
+	// user).
+	MachineKey(ctx context.Context, key identity.UserKeyID) (MachineKey, error)
+	// KeySession remembers the assertion's jti (a replay is refused),
+	// resolves the machine user's access in the boundary like a sign-in,
+	// and reuses the key's live session there lasting past after, else
+	// opens session ending at expires; it records the use.
+	KeySession(ctx context.Context, grant KeyGrant, session identity.SessionID, after, expires time.Time) (KeySession, error)
 	Revoke(ctx context.Context, environment identity.EnvironmentID, session identity.SessionID) error
 	Profile(ctx context.Context, token Token) (Profile, error)
 	Organizations(ctx context.Context, token Token) ([]Organization, error)
-	UpdateProfile(ctx context.Context, token Token, name string) error
+	UpdateProfile(ctx context.Context, token Token, input ProfileUpdate) error
 	AddMember(ctx context.Context, token Token, user identity.UserID) error
 }

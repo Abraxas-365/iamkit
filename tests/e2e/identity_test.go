@@ -65,7 +65,7 @@ func TestIdentityIsolationJourney(t *testing.T) {
 	}
 	mail := &capturedMail{}
 	s := bootstrap.New(db, key, "https://iam.example", mail)
-	app := s.App()
+	app := contracted(t, s.App())
 	defer app.Shutdown()
 	call := func(method, path, token string, body any, want int) map[string]any {
 		t.Helper()
@@ -217,6 +217,23 @@ func TestIdentityIsolationJourney(t *testing.T) {
 	call("GET", "/management/v1/me", viewerKey["secret"].(string), nil, 401)
 	replacement := call("POST", "/management/v1/operators", owner, fiber.Map{"email": "viewer@example.com", "role": "viewer"}, 201)
 	call("GET", "/management/v1/me", replacement["secret"].(string), nil, 200)
+	// Console preferences belong to each operator, viewers included.
+	viewerSecret := replacement["secret"].(string)
+	if got := call("GET", "/management/v1/preferences", viewerSecret, nil, 200); got["locale"] != nil {
+		t.Fatalf("default preferences: %v", got)
+	}
+	call("PUT", "/management/v1/preferences", viewerSecret, fiber.Map{"locale": "es"}, 200)
+	call("PUT", "/management/v1/preferences", viewerSecret, fiber.Map{"locale": "xx"}, 400)
+	if got := call("GET", "/management/v1/preferences", viewerSecret, nil, 200); got["locale"] != "es" {
+		t.Fatalf("saved preferences: %v", got)
+	}
+	if got := call("GET", "/management/v1/preferences", owner, nil, 200); got["locale"] != nil {
+		t.Fatalf("preferences leaked to another operator: %v", got)
+	}
+	call("PUT", "/management/v1/preferences", viewerSecret, fiber.Map{"locale": nil}, 200)
+	if got := call("GET", "/management/v1/preferences", viewerSecret, nil, 200); got["locale"] != nil {
+		t.Fatalf("cleared preferences: %v", got)
+	}
 	call("POST", "/management/v1/operators", owner, fiber.Map{"email": "viewer@example.com", "role": "admin"}, 409)
 	admin := call("POST", "/management/v1/operators", owner, fiber.Map{"email": "admin@example.com", "role": "admin"}, 201)
 	adminKey := admin["secret"].(string)

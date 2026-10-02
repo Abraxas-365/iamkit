@@ -66,7 +66,7 @@ func id(c *fiber.Ctx) (identity.ServiceProviderID, error) {
 }
 
 func (h *Handler) identityProvider(c *fiber.Ctx) error {
-	out, err := h.queries.IdentityProvider(c.Context(), env(c))
+	out, err := h.queries.IdentityProvider(c.UserContext(), env(c))
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func (h *Handler) list(c *fiber.Ctx) error {
 		}
 		filter.Application = application
 	}
-	out, err := h.queries.List(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
+	out, err := h.queries.List(c.UserContext(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (h *Handler) find(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.Find(c.Context(), env(c), provider)
+	out, err := h.queries.Find(c.UserContext(), env(c), provider)
 	if err != nil {
 		return err
 	}
@@ -106,7 +106,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Create(c.Context(), h.mutation(c), input)
+	out, err := h.commands.Create(c.UserContext(), h.mutation(c), input)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (h *Handler) update(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Update(c.Context(), h.mutation(c), provider, input)
+	out, err := h.commands.Update(c.UserContext(), h.mutation(c), provider, input)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (h *Handler) delete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.commands.Delete(c.Context(), h.mutation(c), provider); err != nil {
+	if err := h.commands.Delete(c.UserContext(), h.mutation(c), provider); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -146,7 +146,7 @@ func (h *Handler) Metadata(c *fiber.Ctx) error {
 	if environment.IsZero() {
 		return errx.NotFound("environment not found")
 	}
-	out, err := h.flows.Metadata(c.Context(), environment)
+	out, err := h.flows.Metadata(c.UserContext(), environment)
 	if err != nil {
 		return err
 	}
@@ -165,7 +165,7 @@ func (h *Handler) SSO(c *fiber.Ctx) error {
 	if c.Method() == fiber.MethodPost {
 		message = samlidp.Message{SAMLRequest: c.FormValue("SAMLRequest"), RelayState: c.FormValue("RelayState")}
 	}
-	ticket, binding, err := h.flows.Begin(c.Context(), environment, message)
+	ticket, binding, err := h.flows.Begin(c.UserContext(), environment, message)
 	if err != nil {
 		return err
 	}
@@ -177,13 +177,13 @@ func (h *Handler) SSO(c *fiber.Ctx) error {
 // Target is the application a SAML ticket signs in to (the hosted pages'
 // view of it).
 func (h *Handler) Target(c *fiber.Ctx, ticket, binding string) (samlidp.Target, error) {
-	return h.flows.Target(c.Context(), ticket, binding)
+	return h.flows.Target(c.UserContext(), ticket, binding)
 }
 
 // Finish answers the parked AuthnRequest for the session the hosted pages
 // issued: the browser posts the signed response to the ACS.
 func (h *Handler) Finish(c *fiber.Ctx, ticket string, login samlidp.Login) error {
-	response, err := h.flows.Finish(c.Context(), ticket, c.Cookies(bindingCookie), login)
+	response, err := h.flows.Finish(c.UserContext(), ticket, c.Cookies(bindingCookie), login)
 	if err != nil {
 		return err
 	}

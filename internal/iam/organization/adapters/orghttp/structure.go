@@ -25,14 +25,14 @@ func (h *Structure) mutation(c *fiber.Ctx) organization.Mutation {
 	return organization.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
 }
 func (h *Structure) Check(c *fiber.Ctx) error {
-	if err := h.commands.Check(c.Context(), boundary(c)); err != nil {
+	if err := h.commands.Check(c.UserContext(), boundary(c)); err != nil {
 		return err
 	}
 	return c.Next()
 }
 func (h *Structure) view(view organization.StructureView) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		raw, err := h.queries.View(c.Context(), boundary(c), view, c.Params("id"))
+		raw, err := h.queries.View(c.UserContext(), boundary(c), view, c.Params("id"))
 		if err != nil {
 			return err
 		}
@@ -70,7 +70,7 @@ func (h *Structure) SaveUnit(c *fiber.Ctx) error {
 		return errx.Validation("invalid request")
 	}
 	unitID, _ := identity.ParseUnitID(c.Params("id"))
-	id, err := h.commands.SaveUnit(c.Context(), boundary(c), h.mutation(c), unitID, input)
+	id, err := h.commands.SaveUnit(c.UserContext(), boundary(c), h.mutation(c), unitID, input)
 	if err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (h *Structure) DeleteUnit(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.Validation("invalid unit id")
 	}
-	if err := h.commands.DeleteUnit(c.Context(), boundary(c), h.mutation(c), id); err != nil {
+	if err := h.commands.DeleteUnit(c.UserContext(), boundary(c), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -98,7 +98,7 @@ func (h *Structure) SetProfile(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.Validation("invalid user id")
 	}
-	if err := h.commands.SetProfile(c.Context(), boundary(c), h.mutation(c), userID, input); err != nil {
+	if err := h.commands.SetProfile(c.UserContext(), boundary(c), h.mutation(c), userID, input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -109,7 +109,7 @@ func (h *Structure) SavePosition(c *fiber.Ctx) error {
 		return errx.Validation("invalid request")
 	}
 	posID, _ := identity.ParsePositionID(c.Params("id"))
-	id, err := h.commands.SavePosition(c.Context(), boundary(c), h.mutation(c), posID, input)
+	id, err := h.commands.SavePosition(c.UserContext(), boundary(c), h.mutation(c), posID, input)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (h *Structure) DeletePosition(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.Validation("invalid position id")
 	}
-	if err := h.commands.DeletePosition(c.Context(), boundary(c), h.mutation(c), id); err != nil {
+	if err := h.commands.DeletePosition(c.UserContext(), boundary(c), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -133,7 +133,7 @@ func (h *Structure) AssignPosition(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.AssignPosition(c.Context(), boundary(c), input)
+	id, err := h.commands.AssignPosition(c.UserContext(), boundary(c), input)
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func (h *Structure) UnassignPosition(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.Validation("invalid assignment id")
 	}
-	if err := h.commands.DeleteAssignment(c.Context(), boundary(c), h.mutation(c), id); err != nil {
+	if err := h.commands.DeleteAssignment(c.UserContext(), boundary(c), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

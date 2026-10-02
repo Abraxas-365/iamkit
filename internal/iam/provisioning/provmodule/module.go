@@ -14,6 +14,8 @@ import (
 type Deps struct {
 	DB      *sqlx.DB
 	ActorID func(*fiber.Ctx) string
+	// Quota enforces the users limit on SCIM creates (nil: none).
+	Quota provisioning.Quota
 }
 type Module struct {
 	Commands        provisioning.Commands
@@ -28,6 +30,9 @@ type Module struct {
 func New(deps Deps) Module {
 	repository := provpg.New(deps.DB)
 	service := provsvc.New(repository, mgmtsecret.Generator{})
+	if deps.Quota != nil {
+		service.SetQuota(deps.Quota)
+	}
 	groups := provsvc.NewGroups(repository)
 	control := provsvc.NewControl(repository, mgmtsecret.Generator{})
 	return Module{

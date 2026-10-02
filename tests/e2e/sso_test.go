@@ -213,6 +213,17 @@ func TestOrgSSOJourney(t *testing.T) {
 	}
 	// Same answer for an unknown account and a wrong password.
 	e.Must("POST", "/identity/v1/login", "", e.LoginBody("nobody@example.com", "wrong"), 403)
+	// A username login is held to the same enforcement, revealed only once
+	// the password matched (a username has no domain to check before).
+	e.Must("PATCH", e.Base+"/users/"+e.Alice, e.Owner, fiber.Map{"username": "alice"}, 204)
+	byName := e.LoginBody("", e.Pass)
+	delete(byName, "email")
+	byName["login"] = "alice"
+	if r := e.Must("POST", "/identity/v1/login", "", byName, 403); !strings.Contains(r.Body, "SSO_REQUIRED") {
+		t.Fatalf("username login under enforced SSO = %s", r.Body)
+	}
+	byName["password"] = "wrong password!!"
+	e.Must("POST", "/identity/v1/login", "", byName, 401)
 	e.Login("olga@other.example")
 	if d := discover("alice@example.com"); d["required"] != true {
 		t.Fatalf("enforced discover = %v", d)

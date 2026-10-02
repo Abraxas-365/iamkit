@@ -68,7 +68,7 @@ func (h *Groups) List(c *fiber.Ctx) error {
 	default:
 		return errx.Validation("source must be manual or directory")
 	}
-	out, err := h.queries.ListGroups(c.Context(), boundary(c), filter, httpx.PaginationFromCtx(c))
+	out, err := h.queries.ListGroups(c.UserContext(), boundary(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func (h *Groups) UserGroups(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("member not found")
 	}
-	out, err := h.queries.ListGroups(c.Context(), boundary(c), organization.GroupFilter{User: user}, httpx.PaginationFromCtx(c))
+	out, err := h.queries.ListGroups(c.UserContext(), boundary(c), organization.GroupFilter{User: user}, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func (h *Groups) Find(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.FindGroup(c.Context(), boundary(c), id)
+	out, err := h.queries.FindGroup(c.UserContext(), boundary(c), id)
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (h *Groups) Members(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.ListGroupMembers(c.Context(), boundary(c), id, httpx.PaginationFromCtx(c))
+	out, err := h.queries.ListGroupMembers(c.UserContext(), boundary(c), id, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func (h *Groups) Create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.CreateGroup(c.Context(), boundary(c), h.mutation(c), input)
+	id, err := h.commands.CreateGroup(c.UserContext(), boundary(c), h.mutation(c), input)
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func (h *Groups) Update(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.commands.UpdateGroup(c.Context(), boundary(c), h.mutation(c), id, input); err != nil {
+	if err := h.commands.UpdateGroup(c.UserContext(), boundary(c), h.mutation(c), id, input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -143,7 +143,7 @@ func (h *Groups) Delete(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.commands.DeleteGroup(c.Context(), boundary(c), h.mutation(c), id); err != nil {
+	if err := h.commands.DeleteGroup(c.UserContext(), boundary(c), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -158,7 +158,7 @@ func (h *Groups) ChangeMembers(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.commands.ChangeGroupMembers(c.Context(), boundary(c), h.mutation(c), id, input); err != nil {
+	if err := h.commands.ChangeGroupMembers(c.UserContext(), boundary(c), h.mutation(c), id, input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

@@ -23,6 +23,9 @@ type Session struct {
 	Deadline      time.Time      `json:"deadline"`
 	AccessClaims  *jwt.JWTClaims `json:"access_claims"`
 	AccessHeaders *jwt.Headers   `json:"access_headers"`
+	// Injected names the access claims actions added, so a refresh drops
+	// them and asks the actions again.
+	Injected []string `json:"injected,omitempty"`
 }
 
 func NewSession() *Session {
@@ -64,7 +67,7 @@ func NewProvider(store *Store, issuer string, secret []byte, keys signing.Keyrin
 	if len(secret) < 32 || keys == nil {
 		return nil, errx.Internal("OIDC signing configuration is invalid")
 	}
-	cfg := &fosite.Config{GlobalSecret: secret, AuthorizeCodeLifespan: config.OAuthAuthorizeCodeLifespan, AccessTokenLifespan: config.OAuthAccessTokenLifespan, RefreshTokenLifespan: config.OAuthRefreshTokenLifespan, RefreshTokenScopes: []string{"offline_access"}, IDTokenLifespan: config.OAuthIDTokenLifespan, IDTokenIssuer: issuer, AccessTokenIssuer: issuer, EnforcePKCE: true, EnablePKCEPlainChallengeMethod: false, SendDebugMessagesToClients: false, TokenURL: issuer + "/oauth/token", JWKSFetcherStrategy: fetcher}
+	cfg := &fosite.Config{GlobalSecret: secret, AuthorizeCodeLifespan: config.OAuthAuthorizeCodeLifespan, AccessTokenLifespan: config.OAuthAccessTokenLifespan, RefreshTokenLifespan: config.OAuthRefreshTokenLifespan, RefreshTokenScopes: []string{"offline_access"}, IDTokenLifespan: config.OAuthIDTokenLifespan, IDTokenIssuer: issuer, AccessTokenIssuer: issuer, EnforcePKCE: true, EnablePKCEPlainChallengeMethod: false, SendDebugMessagesToClients: false, TokenURL: issuer + "/oauth/token", JWKSFetcherStrategy: fetcher, ScopeStrategy: scopeStrategy}
 	signer := Signer{Keys: keys, Environment: store.Environment}
 	hmac := compose.NewOAuth2HMACStrategy(cfg)
 	strategy := &compose.CommonStrategy{

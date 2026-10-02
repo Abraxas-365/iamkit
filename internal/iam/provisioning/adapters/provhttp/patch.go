@@ -64,8 +64,9 @@ func parseFilter(raw string) (field, value string, err error) {
 
 // applyPatch translates SCIM PATCH operations into a domain update.
 // Supported attributes: active, displayName/name.formatted, userName (rename),
-// externalId (upgrade of a derived anchor), emails (aliases) and the enterprise
-// manager. Attributes IAMKit does not store (name.givenName, title,
+// externalId (upgrade of a derived anchor), emails (aliases),
+// phoneNumbers[type eq "mobile"] (stored only when the connection maps
+// phones) and the enterprise manager. Attributes IAMKit does not store (name.givenName, title,
 // department, addresses, …) are ignored, as directories send their full
 // attribute mapping and treat any 400 as a sync failure.
 func applyPatch(old provisioning.User, ops []patchOp) (provisioning.Update, error) {
@@ -139,6 +140,9 @@ type patchState struct {
 // `emails[primary eq true].value`, …
 var emailPath = regexp.MustCompile(`(?i)^emails\[\s*(type|value|primary)\s+eq\s+("(?:[^"\\]|\\.)*"|true|false)\s*\](\.value)?$`)
 
+// mobilePath matches `phoneNumbers[type eq "mobile"]` and its `.value`.
+var mobilePath = regexp.MustCompile(`(?i)^phonenumbers\[\s*type\s+eq\s+"mobile"\s*\](\.value)?$`)
+
 func (s *patchState) apply(kind, path string, value json.RawMessage) error {
 	attr := strings.ToLower(strings.TrimSpace(path))
 	attr = strings.TrimPrefix(attr, strings.ToLower(scimUserSchema)+":")
@@ -157,6 +161,21 @@ func (s *patchState) apply(kind, path string, value json.RawMessage) error {
 		return s.emailFilter(kind, strings.ToLower(m[1]), match, value)
 	case attr == "emails.value":
 		return s.emails(kind, value)
+	case attr == "phonenumbers":
+		return s.phones(kind, value)
+	case mobilePath.MatchString(attr):
+		phone := ""
+		if kind != "remove" {
+			v, err := stringValue(subValue(value), "phoneNumbers.value")
+			if err != nil {
+				return err
+			}
+			phone = v
+		}
+		s.update.Phone = &phone
+		return nil
+	case strings.HasPrefix(attr, "phonenumbers"):
+		return nil // other phone types are not stored
 	case attr == "username":
 		if kind == "remove" {
 			return scimError("userName cannot be removed", scimMutability)
@@ -238,6 +257,28 @@ func (s *patchState) emailFilter(kind, field, match string, value json.RawMessag
 		e.Type = match
 	}
 	s.add(e)
+	return nil
+}
+
+// phones handles the whole phoneNumbers attribute: only the mobile entry is
+// kept; replace without one and remove clear it, add without one keeps it.
+func (s *patchState) phones(kind string, value json.RawMessage) error {
+	phone := ""
+	if kind != "remove" {
+		var list []scimPhone
+		if err := json.Unmarshal(value, &list); err != nil {
+			var one scimPhone
+			if err := json.Unmarshal(value, &one); err != nil {
+				return scimError("phoneNumbers must be a list", scimInvalidValue)
+			}
+			list = []scimPhone{one}
+		}
+		phone = mobile(list)
+		if phone == "" && kind == "add" {
+			return nil
+		}
+	}
+	s.update.Phone = &phone
 	return nil
 }
 

@@ -111,7 +111,7 @@ func TestSMTPDelivery(t *testing.T) {
 
 	// Language: environment default (with brand), the request's own, and an
 	// unavailable one falling back to the default.
-	e.Must("PUT", e.Base+"/login-settings", e.Owner, fiber.Map{"display_name": "Acme", "locale": "fr"}, 400)
+	e.Must("PUT", e.Base+"/login-settings", e.Owner, fiber.Map{"display_name": "Acme", "locale": "eo"}, 400)
 	e.Must("PUT", e.Base+"/login-settings", e.Owner, fiber.Map{"display_name": "Acme", "locale": "ES"}, 200)
 	e.Must("PATCH", e.Base+"/users/"+e.Alice, e.Owner, fiber.Map{"otp_enabled": true}, 204)
 	login := func(locale string) sentEmail {
@@ -125,7 +125,7 @@ func TestSMTPDelivery(t *testing.T) {
 	if m = login("en-US"); m.Subject != "Your sign-in code for Acme" {
 		t.Fatalf("requested language: %+v", m)
 	}
-	if m = login("fr"); m.Subject != "Tu código de acceso a Acme" {
+	if m = login("eo"); m.Subject != "Tu código de acceso a Acme" {
 		t.Fatalf("unavailable language: %+v", m)
 	}
 

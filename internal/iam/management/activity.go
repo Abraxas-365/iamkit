@@ -35,6 +35,10 @@ type AuditEvent struct {
 	// ActorLabel is the operator or end user email behind Actor; empty for
 	// unknown actors (e.g. API keys of removed operators).
 	ActorLabel string `json:"actor_label" db:"actor_label"`
+	// ActorKind is operator, user, service_account or system.
+	ActorKind string `json:"actor_kind" db:"actor_kind"`
+	// Organization is the organization the target lies in, when any.
+	Organization *identity.OrganizationID `json:"organization_id" db:"organization_id"`
 	// TargetLabel is the current name of the entity Target refers to; empty
 	// when it cannot be resolved (deleted, or not a named entity).
 	TargetLabel string `json:"target_label" db:"target_label"`

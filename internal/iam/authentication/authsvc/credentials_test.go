@@ -19,10 +19,13 @@ func TestLoginCredentialFailuresAreIndistinguishable(t *testing.T) {
 		passwords testPasswords
 		email     string
 	}{
-		"unknown email":  {tx: &testTransaction{lookup: errx.Unauthorized("no such user")}, email: "user@example.com"},
-		"wrong password": {tx: &testTransaction{user: user}, passwords: testPasswords{mismatch: true}, email: "user@example.com"},
-		"no access":      {tx: &testTransaction{user: user, resolve: errx.Unauthorized("no grant")}, email: "user@example.com"},
-		"malformed":      {tx: &testTransaction{user: user}, email: "not-an-email"},
+		"unknown email":           {tx: &testTransaction{lookup: errx.Unauthorized("no such user")}, email: "user@example.com"},
+		"wrong password":          {tx: &testTransaction{user: user}, passwords: testPasswords{mismatch: true}, email: "user@example.com"},
+		"no access":               {tx: &testTransaction{user: user, resolve: errx.Unauthorized("no grant")}, email: "user@example.com"},
+		"malformed":               {tx: &testTransaction{user: user}, email: "not an email"},
+		"bad email":               {tx: &testTransaction{user: user}, email: "user@"},
+		"unknown username":        {tx: &testTransaction{lookup: errx.Unauthorized("no such user")}, email: "someone"},
+		"username wrong password": {tx: &testTransaction{user: user}, passwords: testPasswords{mismatch: true}, email: "someone"},
 	}
 	var want string
 	for name, c := range cases {
@@ -38,7 +41,7 @@ func TestLoginCredentialFailuresAreIndistinguishable(t *testing.T) {
 		if e.Message != want {
 			t.Errorf("%s: message %q differs from %q", name, e.Message, want)
 		}
-		if c.tx.committed != (name == "wrong password") {
+		if c.tx.committed != (name == "wrong password" || name == "username wrong password") {
 			t.Errorf("%s: committed=%v (only a wrong password is counted)", name, c.tx.committed)
 		}
 	}

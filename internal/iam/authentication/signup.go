@@ -23,6 +23,9 @@ type Signup struct {
 	Password    string                 `json:"password"`
 	// Locale is the email language (a tag or list); optional.
 	Locale string `json:"locale"`
+	// AcceptTerms records that the person accepted the terms; required
+	// when the sign-in policy's require_terms is set.
+	AcceptTerms bool `json:"accept_terms"`
 }
 
 func (s Signup) Validate() error {
@@ -55,19 +58,22 @@ type PendingSignup struct {
 	Hash         []byte
 	Attempts     int
 	Expires      time.Time
+	// TermsAccepted is when the person accepted the terms (nil: not asked).
+	TermsAccepted *time.Time
 }
 
 // Joining creates the account of a verified sign-up in the environment's
 // sign-up organization (and group, when set).
 type Joining struct {
-	Signup       identity.ChallengeID
-	User         identity.UserID
-	Environment  identity.EnvironmentID
-	Organization identity.OrganizationID
-	Group        identity.GroupID
-	Email        string
-	Name         string
-	PasswordHash string
+	Signup        identity.ChallengeID
+	User          identity.UserID
+	Environment   identity.EnvironmentID
+	Organization  identity.OrganizationID
+	Group         identity.GroupID
+	Email         string
+	Name          string
+	PasswordHash  string
+	TermsAccepted *time.Time
 }
 
 // SignedUp is the account a completed sign-up created.
@@ -94,7 +100,16 @@ const ActionSignup = "user.signup"
 const (
 	CodeSignupDisabled = "SIGNUP_DISABLED"
 	CodeAccountExists  = "ACCOUNT_EXISTS"
+	CodeTermsRequired  = "TERMS_REQUIRED"
 )
+
+// ErrTermsRequired refuses a sign-up that did not accept the terms the
+// sign-in policy requires.
+func ErrTermsRequired() error {
+	e := errx.Validation("accept_terms is required: accept the terms to sign up")
+	e.Code = CodeTermsRequired
+	return e
+}
 
 // ErrSignupDisabled refuses a sign-up the environment does not offer.
 func ErrSignupDisabled() error {

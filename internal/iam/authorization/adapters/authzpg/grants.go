@@ -7,8 +7,11 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
@@ -44,15 +47,16 @@ func (r *Repository) ListRoles(ctx context.Context, environment identity.Environ
 		Resource     identity.ResourceID `db:"resource_id"`
 		ResourceName string              `db:"resource_name"`
 		Permissions  pq.StringArray      `db:"permissions"`
+		SystemRole   string              `db:"system_role"`
 	}
 	dbRows := []roleRow{}
-	sel := fmt.Sprintf("SELECT r.id, r.name, r.resource_id, res.name AS resource_name, r.permissions %s ORDER BY r.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
+	sel := fmt.Sprintf("SELECT r.id, r.name, r.resource_id, res.name AS resource_name, r.permissions, coalesce(r.system_role,'') AS system_role %s ORDER BY r.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &dbRows, sel, args...); err != nil {
 		return query.Paginated[authorization.RoleView]{}, failure(err)
 	}
 	rows := make([]authorization.RoleView, len(dbRows))
 	for i, row := range dbRows {
-		rows[i] = authorization.RoleView{ID: row.ID, Name: row.Name, Resource: row.Resource, ResourceName: row.ResourceName, Permissions: []string(row.Permissions)}
+		rows[i] = authorization.RoleView{ID: row.ID, Name: row.Name, Resource: row.Resource, ResourceName: row.ResourceName, Permissions: []string(row.Permissions), SystemRole: row.SystemRole}
 	}
 	return query.NewPaginated(rows, total, page), nil
 }
@@ -118,20 +122,20 @@ func (r *Repository) mutateAs(ctx context.Context, m authorization.Mutation, onC
 	if n == 0 {
 		return errx.NotFound("resource not found")
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+	if err = audit(ctx, tx, m); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())
 }
 func (r *Repository) SaveRole(ctx context.Context, m authorization.Mutation, id identity.RoleID, input authorization.Role, creating bool) error {
 	if !creating {
-		return r.mutate(ctx, m, `UPDATE roles SET name=$3,permissions=$4 WHERE environment_id=$1 AND id=$2 AND resource_id=$5`, m.Environment, id, input.Name, array(input.Permissions), input.Resource)
+		return r.mutate(ctx, m, `UPDATE roles SET name=$3,permissions=$4 WHERE environment_id=$1 AND id=$2 AND resource_id=$5 AND system_role IS NULL`, m.Environment, id, input.Name, array(input.Permissions), input.Resource)
 	}
 	_, err := r.db.ExecContext(ctx, `INSERT INTO roles(id,environment_id,resource_id,name,permissions) VALUES($1,$2,$3,$4,$5)`, id, m.Environment, input.Resource, input.Name, array(input.Permissions))
 	return conflict(err)
 }
 func (r *Repository) DeleteRole(ctx context.Context, m authorization.Mutation, id identity.RoleID) error {
-	return r.mutate(ctx, m, `DELETE FROM roles WHERE environment_id=$1 AND id=$2`, m.Environment, id)
+	return r.mutate(ctx, m, `DELETE FROM roles WHERE environment_id=$1 AND id=$2 AND system_role IS NULL`, m.Environment, id)
 }
 func (r *Repository) AssignRole(ctx context.Context, m authorization.Mutation, input authorization.RoleAssignment) error {
 	return r.mutateAs(ctx, m, assignment("the user already holds this role in the organization", "the user is not a member of the organization"),
@@ -182,7 +186,7 @@ func (r *Repository) RoleAssignments(ctx context.Context, environment identity.E
 	}
 
 	sel := fmt.Sprintf(`SELECT a.organization_id, o.name AS organization_name,
-		a.user_id, u.name AS user_name, u.email AS user_email,
+		a.user_id, u.name AS user_name, coalesce(u.email,'') AS user_email,
 		a.resource_id, res.name AS resource_name,
 		a.role_id, ro.name AS role_name %s ORDER BY ro.name LIMIT %d OFFSET %d`, base, page.Limit, page.Offset)
 	rows := []authorization.RoleAssignmentView{}
@@ -192,8 +196,18 @@ func (r *Repository) RoleAssignments(ctx context.Context, environment identity.E
 	return query.NewPaginated(rows, total, page), nil
 }
 func (r *Repository) PutGrant(ctx context.Context, environment identity.EnvironmentID, id identity.GrantID, input authorization.Grant) (identity.GrantID, error) {
-	err := r.db.GetContext(ctx, &id, `INSERT INTO grants(id,environment_id,organization_id,user_id,resource_id,permissions) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(organization_id,user_id,resource_id) DO UPDATE SET permissions=EXCLUDED.permissions RETURNING id`, id, environment, input.Organization, input.User, input.Resource, array(input.Permissions))
-	return id, conflict(err)
+	err := eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		if err := tx.GetContext(ctx, &id, `INSERT INTO grants(id,environment_id,organization_id,user_id,resource_id,permissions) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(organization_id,user_id,resource_id) DO UPDATE SET permissions=EXCLUDED.permissions RETURNING id`, id, environment, input.Organization, input.User, input.Resource, array(input.Permissions)); err != nil {
+			return conflict(err)
+		}
+		return grantEvent(ctx, tx, environment, event.GrantUpdated, id, input.Organization, input.User, input.Resource)
+	})
+	return id, err
+}
+
+func grantEvent(ctx context.Context, tx *sqlx.Tx, environment identity.EnvironmentID, typ string, id identity.GrantID, org identity.OrganizationID, user identity.UserID, resource identity.ResourceID) error {
+	return eventpg.Record(ctx, tx, environment, typ, event.Subject{Kind: "user", ID: user.String()},
+		map[string]any{"grant_id": id.String(), "organization_id": org.String(), "user_id": user.String(), "resource_id": resource.String()})
 }
 func (r *Repository) DeleteGrant(ctx context.Context, environment identity.EnvironmentID, id identity.GrantID) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -215,6 +229,9 @@ func (r *Repository) DeleteGrant(ctx context.Context, environment identity.Envir
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE sessions SET revoked_at=now() WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3 AND resource_id=$4`, environment, row.Organization, row.User, row.Resource); err != nil {
 		return failure(err)
+	}
+	if err = grantEvent(ctx, tx, environment, event.GrantDeleted, id, row.Organization, row.User, row.Resource); err != nil {
+		return err
 	}
 	return failure(tx.Commit())
 }

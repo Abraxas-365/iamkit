@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/url"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
@@ -30,6 +31,7 @@ type Service struct {
 	signIns        authentication.SignInPolicyQueries
 	signups        hosted.Signups
 	passkeys       hosted.Passkeys
+	features       hosted.Features
 	now            func() time.Time
 }
 
@@ -47,6 +49,10 @@ func (s *Service) SetPasskeys(passkeys hosted.Passkeys) { s.passkeys = passkeys 
 
 // SetSignups offers self-registration (without it the pages never do).
 func (s *Service) SetSignups(signups hosted.Signups) { s.signups = signups }
+
+// SetFeatures reads feature flags (without it every flag is on: all
+// languages are offered).
+func (s *Service) SetFeatures(features hosted.Features) { s.features = features }
 
 // options are the client's sign-in options within the environment's
 // sign-in policy: what its pages offer. A SAML sign-in has no OAuth client
@@ -91,6 +97,15 @@ func (s *Service) client(ctx context.Context, r hosted.Request) (*oauth.Client, 
 	return p.Client, err
 }
 
+// hint is the organization the pending authorization named (zero: none).
+func (s *Service) hint(ctx context.Context, r hosted.Request) (identity.OrganizationID, error) {
+	p, err := s.pendingHosted(ctx, r)
+	if err != nil {
+		return identity.OrganizationID{}, err
+	}
+	return oauth.FormOrganization(p.Form), nil
+}
+
 // pendingHosted is the pending authorization of a hosted login client.
 func (s *Service) pendingHosted(ctx context.Context, r hosted.Request) (oauth.Pending, error) {
 	p, err := s.authorizations.Pending(ctx, r.Ticket, r.Binding)
@@ -113,15 +128,21 @@ func uiLocales(p oauth.Pending) string {
 	return form.Get("ui_locales")
 }
 
-// Page brands the journey with the client's own style, or the
-// environment default when it has none.
-func (s *Service) Page(ctx context.Context, r hosted.Request) (hosted.Page, error) {
+// Page brands the journey: the environment default ← the client's own
+// style ← the organization's overrides, when the organization is known
+// (the authorization's hint, the parked login's choice, or the verified
+// domain of email, the address typed so far).
+func (s *Service) Page(ctx context.Context, r hosted.Request, email string) (hosted.Page, error) {
 	p, err := s.pendingHosted(ctx, r)
 	if err != nil {
 		return hosted.Page{}, err
 	}
 	client := p.Client
-	settings, err := s.style(ctx, client.Environment, client.ID)
+	organization, err := s.brandOrganization(ctx, r, client.Environment, oauth.FormOrganization(p.Form), email)
+	if err != nil {
+		return hosted.Page{}, err
+	}
+	settings, err := s.Branded(ctx, client.Environment, client.ID, organization)
 	if err != nil {
 		return hosted.Page{}, err
 	}
@@ -133,30 +154,57 @@ func (s *Service) Page(ctx context.Context, r hosted.Request) (hosted.Page, erro
 	if err != nil {
 		return hosted.Page{}, err
 	}
-	language, err := s.language(ctx, p, settings)
-	if err != nil {
-		return hosted.Page{}, err
-	}
-	return hosted.Page{Settings: settings, SignIn: options, Connections: options.Offered(connections), Language: language}, nil
+	return hosted.Page{Settings: settings, SignIn: options, Connections: options.Offered(connections), Language: settings.Preferred(uiLocales(p)), Texts: hosted.TextScope{Client: client.ID, Organization: organization}}, nil
 }
 
-// language is the page language: the application's ui_locales, else the
-// environment language (client styles have none: it is the default's).
-func (s *Service) language(ctx context.Context, p oauth.Pending, settings hosted.Settings) (string, error) {
-	if code := i18n.Match(uiLocales(p)); code != "" {
-		return code, nil
+// Authorization describes a pending authorization to the client's own
+// sign-in UI like Page does to the hosted pages: the same branding,
+// options, connections and custom texts.
+func (s *Service) Authorization(ctx context.Context, r hosted.Request, acceptLanguage string) (hosted.Authorization, error) {
+	p, err := s.authorizations.Pending(ctx, r.Ticket, r.Binding)
+	if err != nil {
+		return hosted.Authorization{}, err
 	}
-	if settings.Locale == nil {
-		environment, err := s.repository.Settings(ctx, p.Client.Environment)
-		if err != nil {
-			return "", err
-		}
-		settings.Locale = environment.Locale
+	client := p.Client
+	if client.HostedLogin || client.ID.IsZero() {
+		return hosted.Authorization{}, errx.Forbidden("client uses hosted login")
 	}
-	if settings.Locale == nil {
-		return "", nil
+	form, _ := url.ParseQuery(p.Form)
+	hint := oauth.FormOrganization(p.Form)
+	settings, err := s.Branded(ctx, client.Environment, client.ID, hint)
+	if err != nil {
+		return hosted.Authorization{}, err
 	}
-	return i18n.Match(*settings.Locale), nil
+	options, err := s.options(ctx, client.Environment, client.ID)
+	if err != nil {
+		return hosted.Authorization{}, err
+	}
+	connections, err := s.federation.EnvironmentConnections(ctx, client.Environment)
+	if err != nil {
+		return hosted.Authorization{}, err
+	}
+	languages := settings.Languages
+	if len(languages) == 0 {
+		languages = i18n.Codes()
+	}
+	out := hosted.Authorization{Client: client.ID, Environment: client.Environment, Application: client.Application, Resource: client.Resource,
+		Audience: client.Audience, Scopes: strings.Fields(form.Get("scope")), LoginHint: form.Get("login_hint"),
+		Locale: settings.Negotiate(settings.Preferred(form.Get("ui_locales")), acceptLanguage), Languages: languages, Branding: hosted.BrandingOf(settings),
+		Methods: hosted.MethodsOf(options), Connections: options.Offered(connections), Texts: i18n.Texts{}}
+	if out.Scopes == nil {
+		out.Scopes = []string{}
+	}
+	if !hint.IsZero() {
+		out.Organization = &hint
+	}
+	texts, err := s.Wording(ctx, client.Environment, hosted.TextScope{Client: client.ID, Organization: hint}, out.Locale)
+	if err != nil {
+		return hosted.Authorization{}, err
+	}
+	if texts != nil {
+		out.Texts = texts
+	}
+	return out, nil
 }
 
 // offered checks the pending authorization and that its client offers the
@@ -216,7 +264,7 @@ func (s *Service) Passkey(ctx context.Context, r hosted.Request, session string,
 // Signup emails a code confirming the address of a new account. Which
 // methods the account may use is the authentication module's decision; the
 // page only offers what the client shows.
-func (s *Service) Signup(ctx context.Context, r hosted.Request, email, name, password string) (identity.ChallengeID, error) {
+func (s *Service) Signup(ctx context.Context, r hosted.Request, email, name, password string, acceptTerms bool) (identity.ChallengeID, error) {
 	target, options, p, err := s.offering(ctx, r, signup)
 	if err != nil {
 		return identity.ChallengeID{}, err
@@ -225,9 +273,9 @@ func (s *Service) Signup(ctx context.Context, r hosted.Request, email, name, pas
 	case password != "" && !options.Password:
 		return identity.ChallengeID{}, hosted.ErrMethodUnavailable()
 	case password == "" && !options.EmailCode:
-		return identity.ChallengeID{}, errx.Validation("password is required")
+		return identity.ChallengeID{}, hosted.Problem(errx.Validation, hosted.CodePasswordRequired, "password is required")
 	}
-	return s.signups.Signup(ctx, authentication.Signup{Environment: target.Environment, Email: email, Name: name, Password: password, Locale: uiLocales(p)})
+	return s.signups.Signup(ctx, authentication.Signup{Environment: target.Environment, Email: email, Name: name, Password: password, Locale: uiLocales(p), AcceptTerms: acceptTerms})
 }
 
 // CompleteSignup creates the account and continues as a verified login with
@@ -263,6 +311,18 @@ func (s *Service) Identify(ctx context.Context, r hosted.Request, email string) 
 	if err != nil {
 		return hosted.Route{}, err
 	}
+	if !strings.Contains(email, "@") {
+		// A username: no domain to route by, and the answer must not reveal
+		// whether it exists. SSO enforcement applies once the password
+		// matched (authentication) and again at Issue.
+		if _, err = identity.Username(email); err != nil || email == "" {
+			return hosted.Route{}, hosted.Problem(errx.Validation, hosted.CodeLoginInvalid, "enter a valid email address or username")
+		}
+		if !options.Password && !options.EmailCode {
+			return hosted.Route{}, hosted.Problem(errx.Forbidden, hosted.CodeSSOOnly, "this application only offers single sign-on: enter your email address")
+		}
+		return hosted.Route{Method: federation.MethodPassword}, nil
+	}
 	d, err := s.federation.Discover(ctx, target.Environment, email)
 	if err != nil {
 		return hosted.Route{}, err
@@ -270,11 +330,9 @@ func (s *Service) Identify(ctx context.Context, r hosted.Request, email string) 
 	sso := d.Method == federation.MethodSSO && d.Connection != nil
 	switch {
 	case sso && d.Required && !options.OrganizationSSO:
-		e := errx.Forbidden("your organization requires single sign-on, which this application does not offer")
-		e.Code = "SSO_REQUIRED"
-		return hosted.Route{}, e
+		return hosted.Route{}, hosted.Problem(errx.Forbidden, hosted.CodeSSONotOffered, "your organization requires single sign-on, which this application does not offer")
 	case !options.Password && !options.EmailCode && (!sso || !options.OrganizationSSO):
-		return hosted.Route{}, errx.Forbidden("this email cannot sign in to this application with single sign-on")
+		return hosted.Route{}, hosted.Problem(errx.Forbidden, hosted.CodeSSOEmail, "this email cannot sign in to this application with single sign-on")
 	case !sso || !options.OrganizationSSO:
 		return hosted.Route{Method: federation.MethodPassword}, nil
 	case d.Provider == federation.ProviderLDAP:
@@ -401,6 +459,14 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 	if !login.Chosen.IsZero() {
 		organizations = only(organizations, login.Chosen)
 	}
+	// An authorization that named its organization signs in there only.
+	hint, err := s.hint(ctx, r)
+	if err != nil {
+		return hosted.Result{}, err
+	}
+	if !hint.IsZero() {
+		organizations = only(organizations, hint)
+	}
 	if len(organizations) == 0 {
 		return hosted.Result{}, hosted.ErrNoAccess()
 	}
@@ -418,7 +484,9 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 				return hosted.Result{SecondFactor: true, Factors: req.Factors}, s.park(ctx, r, target, login)
 			}
 		}
-		return hosted.Result{Organizations: organizations}, s.park(ctx, r, target, login)
+		// The chooser shows who is signing in; a failed read only hides it.
+		account, _ := s.authenticator.Account(ctx, target.Environment, verified.User)
+		return hosted.Result{Organizations: organizations, Account: account}, s.park(ctx, r, target, login)
 	}
 	organization := organizations[0].ID
 	login.Chosen = organization
@@ -467,14 +535,14 @@ func (s *Service) parked(ctx context.Context, r hosted.Request) (authentication.
 
 func (s *Service) Choose(ctx context.Context, r hosted.Request, organization identity.OrganizationID) (hosted.Result, error) {
 	if organization.IsZero() {
-		return hosted.Result{}, errx.Validation("choose an organization")
+		return hosted.Result{}, hosted.Problem(errx.Validation, hosted.CodeChooseOrganization, "choose an organization")
 	}
 	target, login, err := s.parked(ctx, r)
 	if err != nil {
 		return hosted.Result{}, err
 	}
 	if !login.Chosen.IsZero() && login.Chosen != organization {
-		return hosted.Result{}, errx.Validation("the organization was already chosen")
+		return hosted.Result{}, hosted.Problem(errx.Validation, hosted.CodeOrganizationChosen, "the organization was already chosen")
 	}
 	login.Chosen = organization
 	return s.step(ctx, r, target, login)
@@ -541,7 +609,7 @@ func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, proof auth
 	}
 	// The try is reserved before the code is checked so parallel posts
 	// cannot share one count.
-	allowed, err := s.repository.Attempt(ctx, hash, config.MFAAttempts)
+	used, allowed, err := s.repository.Attempt(ctx, hash, config.MFAAttempts)
 	if err != nil {
 		return hosted.Result{}, err
 	}
@@ -553,6 +621,9 @@ func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, proof auth
 	}
 	v, err := s.second.Verify(ctx, boundary(target, login), login.Verified.User, login.Verified.Methods(), proof, req.Enroll)
 	if err != nil {
+		if mfa.IsInvalidCode(err) {
+			return hosted.Result{}, hosted.ErrWrongCode(config.MFAAttempts - used)
+		}
 		return hosted.Result{}, err
 	}
 	login.Verified.AMR = append(login.Verified.AMR, mfa.AMR(v.Proof)...)
@@ -632,7 +703,7 @@ func (s *Service) ChangePassword(ctx context.Context, r hosted.Request, secret s
 			return hosted.Result{}, err
 		}
 		if req.Needed {
-			return hosted.Result{}, errx.Forbidden("a second factor is required")
+			return hosted.Result{}, hosted.Problem(errx.Forbidden, hosted.CodeFactorRequired, "a second factor is required")
 		}
 	}
 	login.Verified, err = s.authenticator.ChangePassword(ctx, target.Environment, login.Verified, secret)
@@ -672,11 +743,48 @@ func (s *Service) SaveSettings(ctx context.Context, m hosted.Mutation, input hos
 		return hosted.Settings{}, err
 	}
 	input.Environment, input.Client = m.Environment, nil
+	if input.Locale == nil || input.Languages == nil {
+		// Omitted fields keep the stored ones: check the result.
+		stored, err := s.repository.Settings(ctx, m.Environment)
+		if err != nil {
+			return hosted.Settings{}, err
+		}
+		locale, languages := input.Locale, input.Languages
+		if locale == nil {
+			locale = stored.Locale
+		}
+		if languages == nil {
+			languages = stored.Languages
+		}
+		if err = enabled(languages, locale); err != nil {
+			return hosted.Settings{}, err
+		}
+	}
 	out, err := s.repository.SaveSettings(ctx, m, input)
 	if err != nil {
 		return hosted.Settings{}, err
 	}
 	return out, filled(&out)
+}
+
+// enabled checks a default language is one of the enabled languages.
+func enabled(languages []string, locale *string) error {
+	if locale == nil || *locale == "" || len(languages) == 0 || slices.Contains(languages, *locale) {
+		return nil
+	}
+	return errx.Validation("locale must be one of languages")
+}
+
+// environmentLanguage checks locale is one of the environment's languages.
+func (s *Service) environmentLanguage(ctx context.Context, environment identity.EnvironmentID, locale *string) error {
+	if locale == nil || *locale == "" {
+		return nil
+	}
+	stored, err := s.repository.Settings(ctx, environment)
+	if err != nil {
+		return err
+	}
+	return enabled(stored.Languages, locale)
 }
 
 func (s *Service) ClientSettings(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (hosted.Settings, error) {
@@ -713,8 +821,12 @@ func (s *Service) SaveClientSettings(ctx context.Context, m hosted.Mutation, cli
 	if err := input.Validate(); err != nil {
 		return hosted.Settings{}, err
 	}
-	// Email language is the environment's; a client style has none.
-	input.Environment, input.Client, input.Locale = m.Environment, &client, nil
+	// The enabled languages are the environment's; a client may choose its
+	// own default among them ("" = the environment's).
+	input.Environment, input.Client, input.Languages = m.Environment, &client, nil
+	if err := s.environmentLanguage(ctx, m.Environment, input.Locale); err != nil {
+		return hosted.Settings{}, err
+	}
 	out, err := s.repository.SaveClientSettings(ctx, m, client, input)
 	if err != nil {
 		return hosted.Settings{}, err
@@ -791,10 +903,31 @@ func (s *Service) DeleteSignIn(ctx context.Context, m hosted.Mutation, client id
 
 // style is the client's own style, or the environment default.
 func (s *Service) style(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (hosted.Settings, error) {
+	if client.IsZero() {
+		out, err := s.repository.Settings(ctx, environment)
+		if err != nil {
+			return hosted.Settings{}, err
+		}
+		return out, filled(&out)
+	}
 	out, err := s.repository.ClientSettings(ctx, environment, client)
 	var e *errx.Error
 	if errx.As(err, &e) && e.Type == errx.TypeNotFound {
 		out, err = s.repository.Settings(ctx, environment)
+	} else if err == nil {
+		// The languages are the environment's; the client's own language,
+		// when it has one, replaces the default.
+		var base hosted.Settings
+		if base, err = s.repository.Settings(ctx, environment); err == nil {
+			out.Languages = base.Languages
+			if out.Locale == nil || *out.Locale == "" {
+				out.Locale = base.Locale
+			}
+			if out.Legal != nil && base.Legal != nil {
+				legal := out.Legal.Over(*base.Legal)
+				out.Legal = &legal
+			}
+		}
 	}
 	if err != nil {
 		return hosted.Settings{}, err
@@ -803,14 +936,14 @@ func (s *Service) style(ctx context.Context, environment identity.EnvironmentID,
 }
 
 // filled completes stored branding with the defaults of unset values
-// (rows saved before the theme existed have an empty one). A stored email
-// language no longer available is kept as is: readers resolve it with
-// i18n.Match (the default applies) and the console asks for another.
+// (rows saved before the theme existed have an empty one). Stored
+// languages no longer available are kept as they are: readers resolve them
+// with i18n.Match (the default applies) and the console asks for others.
 func filled(s *hosted.Settings) error {
-	locale := s.Locale
-	s.Locale = nil
+	locale, languages := s.Locale, s.Languages
+	s.Locale, s.Languages = nil, nil
 	err := s.Validate()
-	s.Locale = locale
+	s.Locale, s.Languages = locale, languages
 	if err != nil {
 		return errx.Wrap(err, "stored hosted branding is invalid", errx.TypeInternal)
 	}

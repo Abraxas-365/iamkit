@@ -46,7 +46,7 @@ var (
 	_ authentication.SecondFactor = (*Service)(nil)
 )
 
-func invalidCode() error { return errx.Unauthorized("invalid verification code") }
+func invalidCode() error { return mfa.ErrInvalidCode() }
 
 // wrongCode answers a wrong code on an authenticated self-service route:
 // 422, so clients do not mistake it for an expired access token.

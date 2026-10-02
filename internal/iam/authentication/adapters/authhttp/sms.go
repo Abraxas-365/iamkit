@@ -44,7 +44,7 @@ func (h *SMSHandler) mutation(c *fiber.Ctx) authentication.Mutation {
 }
 
 func (h *SMSHandler) Get(c *fiber.Ctx) error {
-	out, err := h.queries.SMSConfig(c.Context(), envParam(c))
+	out, err := h.queries.SMSConfig(c.UserContext(), envParam(c))
 	if err != nil {
 		return err
 	}
@@ -56,21 +56,21 @@ func (h *SMSHandler) Set(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.commands.SetSMSConfig(c.Context(), h.mutation(c), input); err != nil {
+	if err := h.commands.SetSMSConfig(c.UserContext(), h.mutation(c), input); err != nil {
 		return err
 	}
 	return h.Get(c)
 }
 
 func (h *SMSHandler) Delete(c *fiber.Ctx) error {
-	if err := h.commands.DeleteSMSConfig(c.Context(), h.mutation(c)); err != nil {
+	if err := h.commands.DeleteSMSConfig(c.UserContext(), h.mutation(c)); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 
 func (h *SMSHandler) Status(c *fiber.Ctx) error {
-	out, err := h.queries.SMSStatus(c.Context(), envParam(c))
+	out, err := h.queries.SMSStatus(c.UserContext(), envParam(c))
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func (h *SMSHandler) Test(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.TestSMS(c.Context(), h.mutation(c), input)
+	out, err := h.commands.TestSMS(c.UserContext(), h.mutation(c), input)
 	if err != nil {
 		return err
 	}

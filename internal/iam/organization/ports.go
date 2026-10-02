@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 )
@@ -14,10 +15,16 @@ type Commands interface {
 	AddMember(ctx context.Context, environment identity.EnvironmentID, input Membership) error
 	RemoveMember(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) error
 	UpdateMember(ctx context.Context, m Mutation, organization identity.OrganizationID, user identity.UserID, input MemberUpdate) error
+	// SetMetadata sets one metadata key (audited organization.metadata_set).
+	SetMetadata(ctx context.Context, m Mutation, organization identity.OrganizationID, key string, value json.RawMessage) error
+	// DeleteMetadata removes one key; NotFound when it is not set.
+	DeleteMetadata(ctx context.Context, m Mutation, organization identity.OrganizationID, key string) error
 }
 type Queries interface {
 	List(ctx context.Context, environment identity.EnvironmentID, filter Filter, page query.Pagination) (query.Paginated[Summary], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Organization, error)
+	// Metadata returns one metadata value; NotFound when unset.
+	Metadata(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, key string) (json.RawMessage, error)
 	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, filter MemberFilter, page query.Pagination) (query.Paginated[MemberView], error)
 }
 
@@ -30,6 +37,9 @@ type Repository interface {
 	RemoveMember(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) error
 	UpdateMember(ctx context.Context, m Mutation, organization identity.OrganizationID, user identity.UserID, input MemberUpdate) error
 	Members(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, filter MemberFilter, page query.Pagination) (query.Paginated[MemberView], error)
+	// EditMetadata runs edit on the metadata under a row lock, stores the
+	// result and audits m.Action.
+	EditMetadata(ctx context.Context, m Mutation, organization identity.OrganizationID, edit func(current json.RawMessage) (json.RawMessage, error)) error
 }
 
 type StructureCommands interface {
@@ -112,4 +122,16 @@ type DomainRepository interface {
 // list and no error; lookup failures return an external error.
 type Resolver interface {
 	TXT(ctx context.Context, name string) ([]string, error)
+}
+
+// Actions runs the environment's request hooks (action.Runner):
+// request:membership.create.
+type Actions interface {
+	Run(ctx context.Context, environment identity.EnvironmentID, condition string, build func() action.Input) (action.Result, error)
+}
+
+// Quota admits a creation within the environment's limits (usage.Commands):
+// limit usage.LimitOrganizations → 422 QUOTA_EXCEEDED.
+type Quota interface {
+	Admit(ctx context.Context, environment identity.EnvironmentID, limit string) error
 }

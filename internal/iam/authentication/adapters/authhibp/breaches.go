@@ -13,6 +13,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 )
 
 // Endpoint is the public range API.
@@ -43,7 +44,7 @@ func (b Breaches) Breached(ctx context.Context, password string) (bool, error) {
 	// Padding hides the true size of the response for the prefix.
 	req.Header.Set("Add-Padding", "true")
 	req.Header.Set("User-Agent", "IAMKit")
-	res, err := (&http.Client{Transport: b.Transport}).Do(req)
+	res, err := (&http.Client{Transport: telemetry.Transport(b.Transport)}).Do(req)
 	if err != nil {
 		return false, errx.Wrap(err, "breach service unreachable", errx.TypeExternal)
 	}

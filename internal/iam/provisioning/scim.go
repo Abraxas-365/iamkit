@@ -12,6 +12,9 @@ type Principal struct {
 	Environment  identity.EnvironmentID
 	Organization identity.OrganizationID
 	Connection   identity.ConnectionID
+	// MapPhone maps SCIM phoneNumbers[type eq "mobile"] to the user's phone
+	// (the connection's map_phone opt-in).
+	MapPhone bool
 }
 
 // Anchor provenance of a provisioned identity's externalId.
@@ -37,10 +40,13 @@ type User struct {
 	External       string          `db:"external_id"`
 	ExternalSource string          `db:"external_id_source"`
 	Manager        string          `db:"manager_id"`
-	Active         bool            `db:"active"`
-	Aliases        []Email         `db:"-"`
-	Created        time.Time       `db:"created_at"`
-	Modified       time.Time       `db:"updated_at"`
+	// Phone is the user's number (E.164, "" none); read and written only
+	// when Principal.MapPhone.
+	Phone    string    `db:"phone"`
+	Active   bool      `db:"active"`
+	Aliases  []Email   `db:"-"`
+	Created  time.Time `db:"created_at"`
+	Modified time.Time `db:"updated_at"`
 	// Version increases on every change; used for optimistic concurrency.
 	Version int64 `db:"version"`
 }
@@ -53,6 +59,9 @@ type Update struct {
 	Email    *string  // new primary address (userName)
 	External *string  // accepted only when unchanged or upgrading a derived anchor
 	Aliases  *[]Email // replace-set of this connection's aliases
+	// Phone sets the mobile number ("" clears it); ignored without
+	// Principal.MapPhone. A number that is not E.164 is ignored.
+	Phone *string
 	// IfVersion makes the update conditional on the identity's current
 	// version (read-modify-write PATCH); a mismatch fails with ErrStale.
 	IfVersion *int64

@@ -3,12 +3,16 @@ package authpg
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -17,9 +21,14 @@ type Repository struct{ db *sqlx.DB }
 
 func New(db *sqlx.DB) *Repository { return &Repository{db} }
 
-type Transaction struct{ tx *sqlx.Tx }
+type Transaction struct {
+	tx *sqlx.Tx
+	// Outcomes recorded as metrics once the transaction commits.
+	signIns  [][]string // amr of created sessions
+	failures int        // wrong passwords counted
+}
 
-func Wrap(tx *sqlx.Tx) *Transaction { return &Transaction{tx} }
+func Wrap(tx *sqlx.Tx) *Transaction { return &Transaction{tx: tx} }
 func (r *Repository) Begin(ctx context.Context) (authentication.Transaction, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -42,21 +51,50 @@ func credentialError(err error) error {
 	}
 	return failure(err)
 }
-func (t *Transaction) Commit() error   { return failure(t.tx.Commit()) }
+func (t *Transaction) Commit() error {
+	if err := t.tx.Commit(); err != nil {
+		return failure(err)
+	}
+	ctx := context.Background()
+	for _, amr := range t.signIns {
+		telemetry.SignIn(ctx, amr, telemetry.Success)
+	}
+	for range t.failures {
+		telemetry.SignIn(ctx, []string{"pwd"}, telemetry.Failure)
+	}
+	return nil
+}
 func (t *Transaction) Rollback() error { return t.tx.Rollback() }
-func (t *Transaction) PasswordUser(ctx context.Context, b authentication.Context, email string) (authentication.PasswordAccount, error) {
+
+// Emails always contain "@" and usernames never do, so one login matches
+// at most one of the two columns.
+func (t *Transaction) PasswordUser(ctx context.Context, b authentication.Context, login string) (authentication.PasswordAccount, error) {
 	var row authentication.PasswordAccount
-	err := t.tx.GetContext(ctx, &row, `SELECT id,password_hash,failed_logins,locked_until,password_changed_at FROM users WHERE environment_id=$1 AND email=$2 AND active FOR UPDATE`, b.EnvironmentID, email)
+	err := t.tx.GetContext(ctx, &row, `SELECT id,email,password_hash,failed_logins,locked_until,password_changed_at FROM users WHERE environment_id=$1 AND (email=$2 OR username=$2) AND active AND kind='human' FOR UPDATE`, b.EnvironmentID, login)
 	return row, credentialError(err)
 }
 func (t *Transaction) ActiveEmail(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (string, error) {
 	var email string
-	err := t.tx.GetContext(ctx, &email, `SELECT email FROM users WHERE environment_id=$1 AND id=$2 AND active`, environment, user)
+	err := t.tx.GetContext(ctx, &email, `SELECT email FROM users WHERE environment_id=$1 AND id=$2 AND active AND kind='human'`, environment, user)
 	return email, credentialError(err)
 }
+func (t *Transaction) ActiveProfile(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (authentication.Profile, error) {
+	var row authentication.Profile
+	err := t.tx.GetContext(ctx, &row, `SELECT id,email,name,coalesce(username,'') AS username,avatar_url,email_verified,environment_id FROM users WHERE environment_id=$1 AND id=$2 AND active AND kind='human'`, environment, user)
+	if errors.Is(err, sql.ErrNoRows) {
+		return row, errx.NotFound("user not found")
+	}
+	return row, failure(err)
+}
 func (t *Transaction) SetLoginFailures(ctx context.Context, user identity.UserID, failures int, lockedUntil *time.Time) error {
-	_, err := t.tx.ExecContext(ctx, `UPDATE users SET failed_logins=$2,locked_until=$3 WHERE id=$1`, user, failures, lockedUntil)
-	return failure(err)
+	var environment identity.EnvironmentID
+	err := t.tx.GetContext(ctx, &environment, `UPDATE users SET failed_logins=$2,locked_until=$3 WHERE id=$1 RETURNING environment_id`, user, failures, lockedUntil)
+	if err != nil || failures == 0 {
+		return failure(err)
+	}
+	t.failures++
+	return eventpg.Emit(ctx, t.tx, environment, user.String(), event.LoginFailed, event.Subject{Kind: "user", ID: user.String()},
+		map[string]any{"method": "password", "failures": failures, "locked": lockedUntil != nil})
 }
 func (t *Transaction) SetPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, hash string) error {
 	_, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,password_changed_at=now(),failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash)
@@ -112,6 +150,13 @@ func (t *Transaction) Resolve(ctx context.Context, b authentication.Context, use
 }
 func (t *Transaction) CreateSession(ctx context.Context, b authentication.Context, user identity.UserID, id identity.SessionID, authenticated, expires time.Time, amr []string) error {
 	_, err := t.tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,amr,authenticated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, b.EnvironmentID, b.OrganizationID, user, b.ApplicationID, b.ResourceID, expires, pq.StringArray(amr), authenticated)
+	if err != nil {
+		return failure(err)
+	}
+	_, err = t.tx.ExecContext(ctx, `UPDATE users SET last_signed_in_at=$3 WHERE environment_id=$1 AND id=$2`, b.EnvironmentID, user, authenticated)
+	if err == nil {
+		t.signIns = append(t.signIns, amr)
+	}
 	return failure(err)
 }
 func (t *Transaction) SaveRefresh(ctx context.Context, hash []byte, user identity.UserID, session identity.SessionID, expires time.Time) error {
@@ -139,13 +184,16 @@ func (t *Transaction) UseRefresh(ctx context.Context, hash []byte) error {
 	_, err := t.tx.ExecContext(ctx, `UPDATE refresh_tokens SET used_at=now() WHERE secret_hash=$1`, hash)
 	return failure(err)
 }
-func (t *Transaction) EligibleChallengeUser(ctx context.Context, environment identity.EnvironmentID, email, purpose string) (identity.UserID, error) {
-	var user identity.UserID
-	err := t.tx.GetContext(ctx, &user, `SELECT id FROM users WHERE environment_id=$1 AND email=$2 AND active AND ($3!='login' OR otp_enabled) AND ($3!='password_reset' OR password_hash!='') FOR UPDATE`, environment, email, purpose)
-	if err == sql.ErrNoRows {
-		return identity.UserID{}, nil
+func (t *Transaction) EligibleChallengeUser(ctx context.Context, environment identity.EnvironmentID, login, purpose string) (identity.UserID, string, error) {
+	var row struct {
+		ID    identity.UserID `db:"id"`
+		Email string          `db:"email"`
 	}
-	return user, failure(err)
+	err := t.tx.GetContext(ctx, &row, `SELECT id,email FROM users WHERE environment_id=$1 AND (email=$2 OR username=$2) AND active AND kind='human' AND ($3!='login' OR otp_enabled) AND ($3!='password_reset' OR password_hash!='') FOR UPDATE`, environment, login, purpose)
+	if err == sql.ErrNoRows {
+		return identity.UserID{}, "", nil
+	}
+	return row.ID, row.Email, failure(err)
 }
 func (t *Transaction) RecentChallenges(ctx context.Context, user identity.UserID, purpose string) (int, error) {
 	var count int
@@ -169,7 +217,7 @@ func (t *Transaction) Challenge(ctx context.Context, id identity.ChallengeID, _ 
 		Active bool   `db:"eligible"`
 		Email  string `db:"email"`
 	}
-	if err := t.tx.GetContext(ctx, &account, `SELECT (active AND ($2!='login' OR otp_enabled) AND ($2!='password_reset' OR password_hash!='')) AS eligible, email FROM users WHERE id=$1 FOR UPDATE`, user, purpose); err != nil {
+	if err := t.tx.GetContext(ctx, &account, `SELECT (active AND kind='human' AND ($2!='login' OR otp_enabled) AND ($2!='password_reset' OR password_hash!='')) AS eligible, coalesce(email,'') AS email FROM users WHERE id=$1 FOR UPDATE`, user, purpose); err != nil {
 		return out, credentialError(err)
 	}
 	if !account.Active {

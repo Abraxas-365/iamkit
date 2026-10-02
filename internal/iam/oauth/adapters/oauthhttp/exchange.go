@@ -51,7 +51,7 @@ func (h *Handler) exchangeToken(c *fiber.Ctx, req *http.Request, rawID string) e
 		if subjectErr != nil {
 			return oauthError(c, oauth.ExchangeInvalidRequest, 400)
 		}
-		out, err = h.exchanges.ExchangeResource(c.Context(), client, oauth.Exchange{Subject: subject, Audience: form.Get("audience"), Scope: strings.Fields(form.Get("scope"))})
+		out, err = h.exchanges.ExchangeResource(c.UserContext(), client, oauth.Exchange{Subject: subject, Audience: form.Get("audience"), Scope: strings.Fields(form.Get("scope"))})
 	case oauth.TokenTypeUserID:
 		if h.accounts == nil {
 			return oauthError(c, oauth.ExchangeUnauthorizedClient, 400)
@@ -66,7 +66,7 @@ func (h *Handler) exchangeToken(c *fiber.Ctx, req *http.Request, rawID string) e
 		}
 		user, _ := identity.ParseUserID(form.Get("subject_token"))
 		organization, _ := identity.ParseOrganizationID(form.Get("organization_id"))
-		out, err = h.exchanges.Impersonate(c.Context(), oauth.Impersonation{Account: account, User: user, Organization: organization, Reason: form.Get("reason"), Audience: form.Get("audience")})
+		out, err = h.exchanges.Impersonate(c.UserContext(), oauth.Impersonation{Account: account, User: user, Organization: organization, Reason: form.Get("reason"), Audience: form.Get("audience")})
 	default:
 		return oauthError(c, oauth.ExchangeInvalidRequest, 400)
 	}

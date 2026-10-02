@@ -36,7 +36,7 @@ func (h *Handler) Find(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	out, err := h.queries.Find(c.Context(), env(c), id)
+	out, err := h.queries.Find(c.UserContext(), env(c), id)
 	if err != nil {
 		return err
 	}
@@ -56,10 +56,10 @@ func (h *Handler) SetAuthentication(c *fiber.Ctx) error {
 		return errx.Validation("invalid request")
 	}
 	m := serviceaccount.Mutation{Environment: env(c), Actor: h.actor(c)}
-	if err = h.commands.SetAuthentication(c.Context(), m, id, input); err != nil {
+	if err = h.commands.SetAuthentication(c.UserContext(), m, id, input); err != nil {
 		return err
 	}
-	out, err := h.queries.Find(c.Context(), env(c), id)
+	out, err := h.queries.Find(c.UserContext(), env(c), id)
 	if err != nil {
 		return err
 	}
@@ -80,10 +80,10 @@ func (h *Handler) SetImpersonation(c *fiber.Ctx) error {
 		return errx.Validation("allowed is required")
 	}
 	m := serviceaccount.Mutation{Environment: env(c), Actor: h.actor(c)}
-	if err = h.commands.SetImpersonation(c.Context(), m, h.owner != nil && h.owner(c), id, *input.Allowed); err != nil {
+	if err = h.commands.SetImpersonation(c.UserContext(), m, h.owner != nil && h.owner(c), id, *input.Allowed); err != nil {
 		return err
 	}
-	out, err := h.queries.Find(c.Context(), env(c), id)
+	out, err := h.queries.Find(c.UserContext(), env(c), id)
 	if err != nil {
 		return err
 	}
@@ -94,14 +94,14 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Create(c.Context(), env(c), input)
+	out, err := h.commands.Create(c.UserContext(), env(c), input)
 	if err != nil {
 		return err
 	}
 	return c.Status(201).JSON(out)
 }
 func (h *Handler) List(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
+	out, err := h.queries.List(c.UserContext(), env(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -112,7 +112,7 @@ func (h *Handler) Revoke(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	if err := h.commands.Revoke(c.Context(), env(c), id); err != nil {
+	if err := h.commands.Revoke(c.UserContext(), env(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

@@ -2,10 +2,10 @@
 package oauthmodule
 
 import (
-	"context"
 	"net/http"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
@@ -15,6 +15,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/oauthsvc"
 	"github.com/Abraxas-365/iamkit/internal/iam/signing"
+	"github.com/Abraxas-365/iamkit/internal/worker"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
 	"github.com/ory/fosite"
@@ -34,13 +35,14 @@ type Deps struct {
 type Module struct {
 	// Logouts serves the back-channel logout delivery log.
 	Logouts *oauthhttp.Logouts
-	// Dispatch sends back-channel logout notifications every interval until
-	// ctx ends (run it in a goroutine on every replica).
-	Dispatch func(ctx context.Context, interval time.Duration)
+	// Jobs are the back-channel logout background jobs (delivery, pruning).
+	Jobs []worker.Job
 	// Dispatcher sends one round now (tests).
 	Dispatcher oauth.Dispatcher
 	Commands   oauth.Commands
-	Flows      oauth.Flows
+	// Queries reads clients (and their allowed origins, for CORS).
+	Queries oauth.Queries
+	Flows   oauth.Flows
 	// Devices is the device authorization grant (the hosted module serves
 	// its user side; wire oauthhttp.Handler.Devices to enable it).
 	Devices oauth.Devices
@@ -60,5 +62,8 @@ func New(deps Deps) Module {
 	handler.Accounts(oauthfosite.NewAccounts(deps.DB, clients, deps.Issuer, fetcher))
 	handler.Exchanges(service)
 	logouts := oauthsvc.NewLogouts(clients, oauthfosite.NewLogoutSender(deps.Keys, deps.Issuer, deps.Transport))
-	return Module{Commands: service, Flows: service, Devices: service, HTTP: handler, Logouts: oauthhttp.NewLogouts(logouts, logouts, deps.ActorID), Dispatch: logouts.Run, Dispatcher: logouts}
+	return Module{Commands: service, Queries: service, Flows: service, Devices: service, HTTP: handler, Logouts: oauthhttp.NewLogouts(logouts, logouts, deps.ActorID), Dispatcher: logouts, Jobs: []worker.Job{
+		{Name: "logout_delivery", Interval: config.LogoutDispatchInterval, Run: logouts.DispatchRound, Lag: logouts.Lag},
+		{Name: "logout_prune", Interval: time.Hour, Run: logouts.Prune},
+	}}
 }

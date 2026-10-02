@@ -35,14 +35,14 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.Create(c.Context(), env(c), input)
+	id, err := h.commands.Create(c.UserContext(), env(c), input)
 	if err != nil {
 		return err
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Handler) List(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), env(c), httpx.PaginationFromCtx(c))
+	out, err := h.queries.List(c.UserContext(), env(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (h *Handler) Find(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	out, err := h.queries.Find(c.Context(), env(c), id)
+	out, err := h.queries.Find(c.UserContext(), env(c), id)
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (h *Handler) Update(c *fiber.Ctx) error {
 		return errx.Validation("invalid resource id")
 	}
 	m := authorization.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
-	if err := h.commands.UpdateCatalog(c.Context(), m, id, input); err != nil {
+	if err := h.commands.UpdateCatalog(c.UserContext(), m, id, input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -82,7 +82,7 @@ func (h *Handler) Link(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.commands.LinkApplication(c.Context(), env(c), input.Application, input.Resource); err != nil {
+	if err := h.commands.LinkApplication(c.UserContext(), env(c), input.Application, input.Resource); err != nil {
 		return err
 	}
 	return c.SendStatus(201)
@@ -96,7 +96,7 @@ func (h *Handler) Unlink(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.Validation("invalid resource id")
 	}
-	if err := h.commands.UnlinkApplication(c.Context(), env(c), app, res); err != nil {
+	if err := h.commands.UnlinkApplication(c.UserContext(), env(c), app, res); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -106,7 +106,7 @@ func (h *Handler) ListByApplication(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.Validation("invalid application id")
 	}
-	out, err := h.queries.ListByApplication(c.Context(), env(c), app, httpx.PaginationFromCtx(c))
+	out, err := h.queries.ListByApplication(c.UserContext(), env(c), app, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

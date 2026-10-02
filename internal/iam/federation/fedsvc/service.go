@@ -6,8 +6,10 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 )
@@ -20,7 +22,16 @@ type Service struct {
 	sessions   federation.Sessions
 	directory  federation.Directory
 	issuer     string
+	actions    federation.Actions
+	quota      federation.Quota
 }
+
+// SetActions runs the environment's federation hooks.
+func (s *Service) SetActions(actions federation.Actions) { s.actions = actions }
+
+// SetQuota enforces the environment's users limit on first sign-ins that
+// create accounts.
+func (s *Service) SetQuota(q federation.Quota) { s.quota = q }
 
 func New(r federation.Repository, p federation.Provider, directory federation.Directory, cipher federation.Cipher, secrets federation.Secrets, sessions federation.Sessions, issuer string) *Service {
 	return &Service{repository: r, provider: p, directory: directory, cipher: cipher, secrets: secrets, sessions: sessions, issuer: issuer}
@@ -227,9 +238,14 @@ func (s *Service) EnvironmentConnections(ctx context.Context, environment identi
 	return s.repository.EnvironmentConnections(ctx, environment)
 }
 
-func (s *Service) Start(ctx context.Context, b authentication.Context, id identity.ConnectionID) (federation.Start, error) {
+func (s *Service) Start(ctx context.Context, b authentication.Context, id identity.ConnectionID, back federation.Return) (federation.Start, error) {
 	if err := b.Validate(); err != nil {
 		return federation.Start{}, err
+	}
+	if back.Set() {
+		if err := s.returnable(ctx, b, back); err != nil {
+			return federation.Start{}, err
+		}
 	}
 	connection, err := s.connection(ctx, b.EnvironmentID, id)
 	if err != nil {
@@ -239,7 +255,24 @@ func (s *Service) Start(ctx context.Context, b authentication.Context, id identi
 	if connection.Scoped() && connection.Organization != b.OrganizationID {
 		return federation.Start{}, errx.Validation("connection belongs to another organization")
 	}
-	return s.start(ctx, connection, federation.State{Connection: id, Boundary: b})
+	return s.start(ctx, connection, federation.State{Connection: id, Boundary: b, Return: back})
+}
+
+// returnable checks that a custom sign-in UI may receive the callback:
+// return_to's origin is allowed by an OAuth client of the application.
+func (s *Service) returnable(ctx context.Context, b authentication.Context, back federation.Return) error {
+	if err := back.Validate(); err != nil {
+		return err
+	}
+	origin, _ := back.Origin()
+	ok, err := s.repository.ReturnAllowed(ctx, b.EnvironmentID, b.ApplicationID, origin)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errx.Validation("return_to must be on an origin an OAuth client of the application allows (allowed_origins)")
+	}
+	return nil
 }
 
 func (s *Service) StartHosted(ctx context.Context, target authentication.Target, id identity.ConnectionID, continuation string) (federation.Start, error) {
@@ -304,6 +337,7 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 		return out, err
 	}
 	out.Continuation = row.Continuation
+	out.ReturnTo = row.Return.To
 	connection, err := s.repository.Find(ctx, row.Boundary.EnvironmentID, row.Connection)
 	if err != nil {
 		return out, err
@@ -338,6 +372,21 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 	}
 	// Only the organization's own identity provider stands in for its
 	// second factor; social providers do not.
+	if row.Return.Set() {
+		// A custom sign-in UI redeems the identity with its verifier; the
+		// session is issued then, in its own transaction. Release the user
+		// lock first: the parked row's foreign key needs it.
+		tx.Rollback()
+		handle, hash, err := s.secrets.Generate(federation.ResultPrefix)
+		if err != nil {
+			return out, err
+		}
+		if err = s.repository.ParkResult(ctx, hash, federation.Result{Boundary: row.Boundary, User: user.ID, Email: user.Email, OrganizationSSO: connection.Scoped(), NoAccess: connection.Scoped() || connection.Social(), Challenge: row.Return.Challenge}); err != nil {
+			return out, err
+		}
+		out.Result = handle
+		return out, nil
+	}
 	result, err := s.sessions.SignIn(ctx, tx, row.Boundary, user.ID, user.Email, connection.Scoped())
 	out.Issued, out.MFA = result.Issued, result.MFA
 	if (connection.Scoped() || connection.Social()) && unauthorized(err) {
@@ -348,10 +397,38 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 	return out, err
 }
 
+// Redeem signs in with a parked result; a wrong verifier spends it.
+func (s *Service) Redeem(ctx context.Context, handle, verifier string) (authentication.Result, error) {
+	if !strings.HasPrefix(handle, federation.ResultPrefix) || len(handle) > 128 {
+		return authentication.Result{}, errx.Unauthorized("invalid or expired federation result")
+	}
+	r, err := s.repository.TakeResult(ctx, s.secrets.Hash(handle))
+	if err != nil {
+		return authentication.Result{}, err
+	}
+	if !r.Verifies(verifier) {
+		return authentication.Result{}, errx.Unauthorized("invalid or expired federation result")
+	}
+	tx, user, err := s.repository.ActiveUser(ctx, r.Boundary.EnvironmentID, r.User)
+	if err != nil {
+		return authentication.Result{}, err
+	}
+	defer tx.Rollback()
+	result, err := s.sessions.SignIn(ctx, tx, r.Boundary, user.ID, user.Email, r.OrganizationSSO)
+	if r.NoAccess && unauthorized(err) {
+		return result, errx.Forbidden("signed in, but the user has no access to this application")
+	}
+	return result, err
+}
+
 // account refreshes the profile when the connection asks for it, then
 // returns the user linked to the claims' subject, linking it first when the
 // connection allows (join), with the open transaction to sign in with.
 func (s *Service) account(ctx context.Context, connection federation.Connection, claims federation.Claims) (authentication.Transaction, federation.Account, error) {
+	claims, err := s.postFederation(ctx, connection, claims)
+	if err != nil {
+		return nil, federation.Account{}, err
+	}
 	if connection.UpdateProfile {
 		// Before the lookup, so the session carries the refreshed email.
 		if err := s.repository.Refresh(ctx, connection.Profile(claims)); err != nil {
@@ -361,6 +438,9 @@ func (s *Service) account(ctx context.Context, connection federation.Connection,
 	tx, user, err := s.repository.LinkedUser(ctx, connection.Environment, connection.ID, claims.Subject)
 	if err != nil || tx != nil {
 		return tx, user, err
+	}
+	if err = s.preRegistration(ctx, connection, claims); err != nil {
+		return nil, federation.Account{}, err
 	}
 	if err = s.join(ctx, connection, claims); err != nil {
 		return nil, federation.Account{}, err
@@ -457,7 +537,7 @@ func (s *Service) join(ctx context.Context, c federation.Connection, claims fede
 	}
 	return s.repository.Join(ctx, federation.Joining{
 		Connection: c.ID, Environment: c.Environment, Organization: c.SignupOrganization, Group: c.SignupGroup,
-		User: identity.NewUserID(), Subject: claims.Subject, Email: email, Name: claims.DisplayName(email), Link: c.LinkEmail, Signup: c.Signup,
+		User: identity.NewUserID(), Subject: claims.Subject, Email: email, Name: claims.DisplayName(email), AvatarURL: claims.Avatar(), Link: c.LinkEmail, Signup: c.Signup,
 	})
 }
 
@@ -474,13 +554,76 @@ func (s *Service) provision(ctx context.Context, c federation.Connection, claims
 	return s.repository.Provision(ctx, federation.Provisioning{
 		Create:     c.JIT,
 		Connection: c.ID, Environment: c.Environment, Organization: c.Organization, Group: c.JITGroup,
-		User: identity.NewUserID(), Subject: claims.Subject, Email: email, Domain: identity.EmailDomain(email), Name: claims.DisplayName(email),
+		User: identity.NewUserID(), Subject: claims.Subject, Email: email, Domain: identity.EmailDomain(email), Name: claims.DisplayName(email), AvatarURL: claims.Avatar(),
 	})
 }
 
 func unauthorized(err error) bool {
 	var e *errx.Error
 	return errx.As(err, &e) && e.Type == errx.TypeAuthorization && e.HTTPStatus == 401
+}
+
+func identityInput(c federation.Connection, claims federation.Claims) *action.IdentityInput {
+	return &action.IdentityInput{Connection: c.ID, Provider: c.Provider, Subject: claims.Subject, Email: claims.Email, Name: claims.Name}
+}
+
+// postFederation runs function:post_federation, which may refuse the
+// identity or replace its name.
+func (s *Service) postFederation(ctx context.Context, c federation.Connection, claims federation.Claims) (federation.Claims, error) {
+	if s.actions == nil {
+		return claims, nil
+	}
+	result, err := s.actions.Run(ctx, c.Environment, action.PostFederation, func() action.Input {
+		in := action.Input{Identity: identityInput(c, claims)}
+		if c.Scoped() {
+			in.Organization = &c.Organization
+		}
+		return in
+	})
+	if err != nil {
+		return claims, err
+	}
+	if name, ok := result.Patch["name"]; ok {
+		claims.Name = name
+	}
+	return claims, nil
+}
+
+// preRegistration runs function:pre_registration and checks the users
+// limit before a first sign-in that would create a user (sign-up or JIT
+// connections, and no account has the email yet — linking an existing
+// account is not a registration).
+func (s *Service) preRegistration(ctx context.Context, c federation.Connection, claims federation.Claims) error {
+	if (s.actions == nil && s.quota == nil) || !(c.Signup || (c.Scoped() && c.JIT)) {
+		return nil
+	}
+	email, err := identity.Email(claims.Email)
+	if err != nil {
+		return nil // join refuses it
+	}
+	if exists, err := s.repository.HasUser(ctx, c.Environment, email); err != nil || exists {
+		return err
+	}
+	if s.quota != nil {
+		if err = s.quota.Admit(ctx, c.Environment, usage.LimitUsers); err != nil {
+			return err
+		}
+	}
+	if s.actions == nil {
+		return nil
+	}
+	_, err = s.actions.Run(ctx, c.Environment, action.PreRegistration, func() action.Input {
+		in := action.Input{Method: []string{"fed"}, Identity: identityInput(c, claims), User: &action.UserInput{Email: email, Name: claims.Name}}
+		organization := c.SignupOrganization
+		if c.Scoped() {
+			organization = c.Organization
+		}
+		if !organization.IsZero() {
+			in.Organization = &organization
+		}
+		return in
+	})
+	return err
 }
 
 // Assertion parks a SAML response for its RelayState. The state and the

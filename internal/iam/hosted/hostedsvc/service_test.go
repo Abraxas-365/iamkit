@@ -60,6 +60,9 @@ func (f *fakeAuthenticator) VerifyPasskey(_ context.Context, _ identity.Environm
 func (f *fakeAuthenticator) Organizations(context.Context, authentication.Target, authentication.Verified) ([]authentication.Organization, error) {
 	return f.organizations, nil
 }
+func (f *fakeAuthenticator) Account(_ context.Context, environment identity.EnvironmentID, id identity.UserID) (authentication.Profile, error) {
+	return authentication.Profile{ID: id, Environment: environment, Email: "a@example.com", Name: "Ada", AvatarURL: "https://cdn.example/ada.png"}, nil
+}
 func (f *fakeAuthenticator) Issue(_ context.Context, b authentication.Context, v authentication.Verified) (authentication.Issued, error) {
 	f.issued = append(f.issued, b)
 	return authentication.Issued{Context: b, User: v.User, Session: identity.NewSessionID()}, nil
@@ -80,6 +83,19 @@ type fakeRepository struct {
 	branding hosted.Settings
 	styles   map[identity.ClientID]hosted.Settings
 	signIn   *hosted.SignIn
+	orgs     map[identity.OrganizationID]hosted.OrganizationSettings
+	domains  map[string]identity.OrganizationID
+}
+
+func (r *fakeRepository) OrganizationSettings(_ context.Context, _ identity.EnvironmentID, o identity.OrganizationID) (hosted.OrganizationSettings, error) {
+	s, ok := r.orgs[o]
+	if !ok {
+		return s, errx.NotFound("organization uses the client or environment branding")
+	}
+	return s, nil
+}
+func (r *fakeRepository) DomainOrganization(_ context.Context, _ identity.EnvironmentID, domain string) (identity.OrganizationID, error) {
+	return r.domains[domain], nil
 }
 
 func (r *fakeRepository) SignIn(context.Context, identity.EnvironmentID, identity.ClientID) (hosted.SignIn, bool, error) {
@@ -105,6 +121,16 @@ func (r *fakeRepository) ClientSettings(_ context.Context, _ identity.Environmen
 	}
 	return s, nil
 }
+func (r *fakeRepository) SaveSettings(_ context.Context, m hosted.Mutation, input hosted.Settings) (hosted.Settings, error) {
+	r.branding = input
+	return input, nil
+}
+func (r *fakeRepository) SaveClientSettings(_ context.Context, _ hosted.Mutation, c identity.ClientID, input hosted.Settings) (hosted.Settings, error) {
+	return input, nil
+}
+func (r *fakeRepository) SaveOrganizationSettings(_ context.Context, _ hosted.Mutation, _ identity.OrganizationID, input hosted.OrganizationSettings) (hosted.OrganizationSettings, error) {
+	return input, nil
+}
 
 func (r *fakeRepository) SaveLogin(_ context.Context, hash []byte, _ identity.EnvironmentID, l hosted.Login, _ time.Time) error {
 	r.saved[string(hash)] = l
@@ -117,14 +143,14 @@ func (r *fakeRepository) Login(_ context.Context, hash []byte, _ identity.Enviro
 	}
 	return l, nil
 }
-func (r *fakeRepository) Attempt(_ context.Context, hash []byte, limit int) (bool, error) {
+func (r *fakeRepository) Attempt(_ context.Context, hash []byte, limit int) (int, bool, error) {
 	l, ok := r.saved[string(hash)]
 	if !ok || l.Attempts >= limit {
-		return false, nil
+		return 0, false, nil
 	}
 	l.Attempts++
 	r.saved[string(hash)] = l
-	return true, nil
+	return l.Attempts, true, nil
 }
 func (r *fakeRepository) DeleteLogin(_ context.Context, hash []byte) error {
 	if _, ok := r.saved[string(hash)]; ok {
@@ -259,6 +285,9 @@ func TestPasswordSeveralOrganizationsThenChoose(t *testing.T) {
 	if err != nil || out.Login != nil || len(out.Organizations) != 2 {
 		t.Fatalf("want choice, got %+v %v", out, err)
 	}
+	if out.Account.AvatarURL != "https://cdn.example/ada.png" || out.Account.ID != user {
+		t.Fatalf("the chooser shows who signs in: %+v", out.Account)
+	}
 	if len(auth.issued) != 0 {
 		t.Fatal("no session before the organization is chosen")
 	}
@@ -323,7 +352,7 @@ func TestNonHostedClientRefused(t *testing.T) {
 		t.Fatal("headless client must not use hosted pages")
 	}
 	s = New(repo, hashSecrets{}, fakeAuthorizations{hosted: true, err: errx.Unauthorized("bad ticket")}, auth, nil, fed, nil)
-	if _, err := s.Page(context.Background(), request); err == nil {
+	if _, err := s.Page(context.Background(), request, ""); err == nil {
 		t.Fatal("dead ticket must fail")
 	}
 	if len(auth.issued) != 0 {
@@ -350,6 +379,21 @@ func TestIdentifyRoutes(t *testing.T) {
 	}
 	if fed.started[0].Application != app || fed.started[0].Resource != res {
 		t.Fatalf("SSO target %+v", fed.started[0])
+	}
+}
+
+// A username has no domain: it always goes to the password page, even when
+// an enforced connection would match, so the page reveals nothing.
+func TestIdentifyUsernameGoesToPassword(t *testing.T) {
+	connection := identity.NewConnectionID()
+	s, _, _, fed := setup(orgA)
+	fed.discovery = federation.Discovery{Method: federation.MethodSSO, Organization: &orgA, Connection: &connection, Required: true}
+	route, err := s.Identify(context.Background(), request, "ada.l")
+	if err != nil || route.Method != federation.MethodPassword || route.Connection != nil || route.Redirect != "" || len(fed.started) != 0 {
+		t.Fatalf("username: %+v %v", route, err)
+	}
+	if _, err = s.Identify(context.Background(), request, "a b"); err == nil {
+		t.Fatal("invalid username accepted")
 	}
 }
 
@@ -605,37 +649,82 @@ func TestThemeValidate(t *testing.T) {
 func TestPageUsesClientStyleOrDefault(t *testing.T) {
 	s, _, repo, _ := setup(orgA)
 	repo.branding = hosted.Settings{DisplayName: "Default"}
-	page, err := s.Page(context.Background(), request)
+	page, err := s.Page(context.Background(), request, "")
 	if err != nil || page.Settings.DisplayName != "Default" || page.Settings.Theme.Mode != hosted.ModeLight {
 		t.Fatalf("default: %+v %v", page.Settings, err)
 	}
 	repo.styles = map[identity.ClientID]hosted.Settings{client: {DisplayName: "Billing", Theme: hosted.Theme{Mode: hosted.ModeDark}}}
-	page, err = s.Page(context.Background(), request)
+	page, err = s.Page(context.Background(), request, "")
 	if err != nil || page.Settings.DisplayName != "Billing" || page.Settings.Theme.Mode != hosted.ModeDark {
 		t.Fatalf("client: %+v %v", page.Settings, err)
 	}
 }
 
-// The page language is the application's ui_locales, else the environment
-// language (a client style has none), else left to the browser.
+// The page language is the application's ui_locales, else the client's
+// language, else the environment's — each only when enabled — else left to
+// the browser.
 func TestPageLanguage(t *testing.T) {
 	ctx := context.Background()
 	repo := &fakeRepository{saved: map[string]hosted.Login{}}
-	for _, tc := range []struct{ form, environment, want string }{
-		{"", "", ""},
-		{"", "es", "es"},
-		{"ui_locales=es-MX+en", "", "es"},
-		{"ui_locales=en", "es", "en"},
-		{"ui_locales=fr", "es", "es"},
+	for _, tc := range []struct {
+		form, environment, client string
+		languages                 []string
+		want                      string
+	}{
+		{"", "", "", nil, ""},
+		{"", "es", "", nil, "es"},
+		{"ui_locales=es-MX+en", "", "", nil, "es"},
+		{"ui_locales=en", "es", "", nil, "en"},
+		{"ui_locales=eo", "es", "", nil, "es"},
+		{"", "en", "es", nil, "es"},
+		{"ui_locales=es", "", "", []string{"en"}, ""},
+		{"ui_locales=es", "en", "", []string{"en"}, "en"},
+		{"", "", "es", []string{"en"}, ""},
 	} {
-		locale := tc.environment
-		repo.branding = hosted.Settings{Locale: &locale}
-		repo.styles = map[identity.ClientID]hosted.Settings{client: {DisplayName: "Billing"}}
+		locale, own := tc.environment, tc.client
+		repo.branding = hosted.Settings{Locale: &locale, Languages: tc.languages}
+		repo.styles = map[identity.ClientID]hosted.Settings{client: {DisplayName: "Billing", Locale: &own}}
 		s := New(repo, hashSecrets{}, fakeAuthorizations{hosted: true, form: tc.form}, &fakeAuthenticator{}, nil, &fakeFederation{}, nil)
-		page, err := s.Page(ctx, request)
+		page, err := s.Page(ctx, request, "")
 		if err != nil || page.Language != tc.want {
-			t.Fatalf("form %q environment %q: got %q (%v), want %q", tc.form, tc.environment, page.Language, err, tc.want)
+			t.Fatalf("%+v: got %q (%v)", tc, page.Language, err)
 		}
+		if !slices.Equal(page.Settings.Languages, tc.languages) {
+			t.Fatalf("%+v: languages %v", tc, page.Settings.Languages)
+		}
+	}
+}
+
+// The default language must be one of the enabled ones, on every level.
+func TestLanguagesSave(t *testing.T) {
+	ctx := context.Background()
+	repo := &fakeRepository{saved: map[string]hosted.Login{}}
+	s := New(repo, hashSecrets{}, fakeAuthorizations{hosted: true}, &fakeAuthenticator{}, nil, &fakeFederation{}, nil)
+	m := hosted.Mutation{Environment: env}
+	es, en, bad := "es", "EN", "xx"
+	if _, err := s.SaveSettings(ctx, m, hosted.Settings{Locale: &es, Languages: []string{"en"}}); err == nil {
+		t.Fatal("default outside the enabled languages accepted")
+	}
+	if _, err := s.SaveSettings(ctx, m, hosted.Settings{Languages: []string{"xx"}}); err == nil {
+		t.Fatal("unavailable language accepted")
+	}
+	stored := hosted.Settings{Locale: &en, Languages: []string{" ES ", "en", "es"}}
+	if err := stored.Validate(); err != nil || *stored.Locale != "en" || !slices.Equal(stored.Languages, []string{"es", "en"}) {
+		t.Fatalf("normalized: %+v %v", stored, err)
+	}
+	repo.branding = hosted.Settings{Locale: &es, Languages: []string{"es"}}
+	// Omitted languages keep the stored ones, which the new default must fit.
+	if _, err := s.SaveSettings(ctx, m, hosted.Settings{Locale: &en}); err == nil {
+		t.Fatal("default outside the stored languages accepted")
+	}
+	if _, err := s.SaveClientSettings(ctx, m, client, hosted.Settings{Locale: &en}); err == nil {
+		t.Fatal("client language outside the enabled ones accepted")
+	}
+	if _, err := s.SaveOrganizationSettings(ctx, m, orgA, hosted.OrganizationSettings{Locale: &en}); err == nil {
+		t.Fatal("organization language outside the enabled ones accepted")
+	}
+	if _, err := s.SaveOrganizationSettings(ctx, m, orgA, hosted.OrganizationSettings{Locale: &bad}); err == nil {
+		t.Fatal("unavailable organization language accepted")
 	}
 }
 
@@ -647,7 +736,7 @@ func TestSignInOptionsGateMethods(t *testing.T) {
 	repo.signIn = &hosted.SignIn{EmailCode: true, Connections: []identity.ConnectionID{google}}
 	ctx := context.Background()
 
-	page, err := s.Page(ctx, request)
+	page, err := s.Page(ctx, request, "")
 	if err != nil || len(page.Connections) != 1 || page.Connections[0].ID != google {
 		t.Fatalf("page must list only the offered connection: %+v %v", page.Connections, err)
 	}

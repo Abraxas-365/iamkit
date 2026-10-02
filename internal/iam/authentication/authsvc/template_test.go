@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -83,7 +84,7 @@ func TestSetTemplate(t *testing.T) {
 	}{
 		{authentication.TemplateKey{Purpose: "welcome", Locale: "es"}, authentication.Copy{Subject: "x"}, "purpose"},
 		{authentication.TemplateKey{Purpose: "login", Locale: "es-MX"}, authentication.Copy{Subject: "x"}, "locale"},
-		{authentication.TemplateKey{Purpose: "login", Locale: "fr"}, authentication.Copy{Subject: "x"}, "locale"},
+		{authentication.TemplateKey{Purpose: "login", Locale: "eo"}, authentication.Copy{Subject: "x"}, "locale"},
 		{key, authentication.Copy{Subject: "{{link}}"}, "unknown placeholder {{link}}"},
 		{key, authentication.Copy{Action: "Go"}, "action"},
 		{key, authentication.Copy{Body: strings.Repeat("é", 2001)}, "body must be at most 2000"},
@@ -130,7 +131,7 @@ func TestListAndGetTemplates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != len(authentication.PreviewPurposes)*2 {
+	if len(list) != len(authentication.PreviewPurposes)*len(i18n.Codes()) {
 		t.Fatalf("want every purpose × language, got %d", len(list))
 	}
 	if list[0].Purpose != authentication.PreviewPurposes[0] || list[0].Locale != "en" {

@@ -24,7 +24,7 @@ func (m Mailer) Send(ctx context.Context, environment identity.EnvironmentID, ma
 	expires := mail.ExpiresAt
 	return m.Sender.Send(ctx, environment, authentication.Message{
 		Email: mail.Email, Purpose: "invitation", Token: mail.Token, Link: mail.Link,
-		Organization: mail.Organization, Inviter: mail.Inviter, ExpiresAt: &expires,
+		Organization: mail.Organization, OrganizationID: mail.OrganizationID, Inviter: mail.Inviter, ExpiresAt: &expires,
 	})
 }
 

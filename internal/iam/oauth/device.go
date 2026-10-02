@@ -17,6 +17,9 @@ const (
 	// GrantDeviceCode is the OAuth 2.0 Device Authorization Grant (RFC
 	// 8628). It needs hosted login: the user approves on /hosted/device.
 	GrantDeviceCode = "urn:ietf:params:oauth:grant-type:device_code"
+	// GrantJWTBearer is the RFC 7523 JWT-bearer authorization grant:
+	// machine users sign an assertion with one of their keys (no client).
+	GrantJWTBearer = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 )
 
 // DefaultGrantTypes are what a client may use when none are given, and
@@ -69,13 +72,13 @@ const (
 )
 
 // DeviceScopes are the scopes a device may ask for.
-var DeviceScopes = []string{"openid", "profile", "email", "offline_access"}
+var DeviceScopes = []string{"openid", "profile", "email", "phone", "offline_access"}
 
 // ValidateDeviceScope checks a space-separated scope request.
 func ValidateDeviceScope(scope string) error {
 	for _, s := range strings.Fields(scope) {
 		if !slices.Contains(DeviceScopes, s) {
-			return errx.Validation("scope may contain openid, profile, email and offline_access")
+			return errx.Validation("scope may contain openid, profile, email, phone and offline_access")
 		}
 	}
 	return nil

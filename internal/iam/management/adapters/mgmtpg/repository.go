@@ -148,6 +148,18 @@ func (r *Repository) OperatorPassword(ctx context.Context, workspace identity.Wo
 	}
 	return management.PasswordAccount{Hash: row.PasswordHash, Allowed: row.Allowed, MustChange: row.MustChange}, nil
 }
+func (r *Repository) Preferences(ctx context.Context, operator identity.OperatorID) (management.Preferences, error) {
+	var out management.Preferences
+	err := r.db.GetContext(ctx, &out.Locale, `SELECT locale FROM operators WHERE id=$1`, operator)
+	if errors.Is(err, sql.ErrNoRows) {
+		return management.Preferences{}, errx.Unauthorized("management credential required")
+	}
+	return out, failure(err)
+}
+func (r *Repository) SetPreferences(ctx context.Context, operator identity.OperatorID, input management.Preferences) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE operators SET locale=$2 WHERE id=$1`, operator, input.Locale)
+	return failure(err)
+}
 func (r *Repository) CreateSession(ctx context.Context, id identity.SessionID, p management.Principal, hash []byte, expires time.Time) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO operator_sessions(id,workspace_id,operator_id,secret_hash,expires_at,method,authenticated_at) VALUES($1,$2,$3,$4,$5,$6,now())`, id, p.WorkspaceID, p.OperatorID, hash, expires, p.Method)
 	return failure(err)

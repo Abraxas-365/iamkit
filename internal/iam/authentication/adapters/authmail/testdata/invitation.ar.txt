@@ -1,0 +1,12 @@
+Subject: تمت دعوتك إلى Acme Corp
+
+انضم إلى Acme Corp
+
+دعاك Bob للانضمام إلى Acme Corp في Acme.
+
+تنتهي صلاحية هذه الدعوة في 4 أكتوبر 2026.
+
+قبول الدعوة: https://app.acme.io/invite?token=ik_inv_token
+
+--
+إذا لم تكن تتوقع هذه الدعوة، يمكنك تجاهل هذه الرسالة.

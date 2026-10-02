@@ -13,7 +13,7 @@ func (h *Grants) AssignGroup(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.commands.AssignGroupRole(c.Context(), h.mutation(c), input, false); err != nil {
+	if err := h.commands.AssignGroupRole(c.UserContext(), h.mutation(c), input, false); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -24,7 +24,7 @@ func (h *Grants) UnassignGroup(c *fiber.Ctx) error {
 	org, _ := identity.ParseOrganizationID(c.Params("organization"))
 	group, _ := identity.ParseGroupID(c.Params("group"))
 	input := authorization.GroupRoleAssignment{Role: role, Organization: org, Group: group}
-	if err := h.commands.AssignGroupRole(c.Context(), h.mutation(c), input, true); err != nil {
+	if err := h.commands.AssignGroupRole(c.UserContext(), h.mutation(c), input, true); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -36,7 +36,7 @@ func (h *Grants) GroupRoleAssignments(c *fiber.Ctx) error {
 	group, _ := identity.ParseGroupID(c.Query("group_id"))
 	resource, _ := identity.ParseResourceID(c.Query("resource_id"))
 	filter := authorization.GroupRoleAssignmentFilter{RoleID: role, OrganizationID: org, GroupID: group, ResourceID: resource}
-	out, err := h.queries.GroupRoleAssignments(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
+	out, err := h.queries.GroupRoleAssignments(c.UserContext(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func (h *Grants) EffectiveRoles(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.Validation("user_id must be a valid UUID")
 	}
-	out, err := h.queries.EffectiveRoles(c.Context(), env(c), org, user)
+	out, err := h.queries.EffectiveRoles(c.UserContext(), env(c), org, user)
 	if err != nil {
 		return err
 	}

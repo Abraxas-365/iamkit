@@ -33,8 +33,12 @@ type Page struct {
 	SignIn      SignIn
 	Connections []federation.ConnectionSummary
 	// Language is the page language: the application's ui_locales, else
-	// the environment language; "" leaves it to the browser.
+	// the organization's, client's or environment language, each within
+	// Settings.Languages; "" leaves it to the browser (Settings.Negotiate).
 	Language string
+	// Texts is who the page's custom texts come from: its client and the
+	// organization it brands for.
+	Texts TextScope
 }
 
 // Route is where an identified email signs in: single sign-on (the browser
@@ -52,7 +56,10 @@ type Route struct {
 // second-factor step, or the login that finishes the authorization.
 type Result struct {
 	Organizations []authentication.Organization
-	Login         *oauth.Login
+	// Account is who is choosing an organization (shown on the chooser;
+	// zero when it could not be read).
+	Account authentication.Profile
+	Login   *oauth.Login
 	// SecondFactor asks for a second-factor or recovery code; Factors are
 	// the kinds the login accepts (email and sms offer to send a code).
 	SecondFactor bool
@@ -95,6 +102,37 @@ func ErrNoAccess() error {
 
 // CodeNoAccess is the code of ErrNoAccess.
 const CodeNoAccess = "NO_ACCESS"
+
+// Codes of the hosted journey's errors people can act on; the hosted pages
+// show each in the page language (hostedhttp).
+const (
+	CodeLoginInvalid       = "LOGIN_INVALID"       // neither an email nor a username
+	CodeSSOOnly            = "SSO_ONLY"            // a username where only SSO is offered
+	CodeSSONotOffered      = "SSO_NOT_OFFERED"     // the organization's SSO is not offered here
+	CodeSSOEmail           = "SSO_EMAIL"           // the email has no SSO and nothing else is offered
+	CodePasswordRequired   = "PASSWORD_REQUIRED"   // empty password
+	CodeChooseOrganization = "CHOOSE_ORGANIZATION" // no organization picked
+	CodeOrganizationChosen = "ORGANIZATION_CHOSEN" // another organization was already picked
+	CodeFactorRequired     = "FACTOR_REQUIRED"     // the second factor comes first
+)
+
+// Problem is an error with one of the codes above.
+func Problem(status func(string) *errx.Error, code, message string) error {
+	e := status(message)
+	e.Code = code
+	return e
+}
+
+// CodeWrongCode is the code of ErrWrongCode.
+const CodeWrongCode = "WRONG_CODE"
+
+// ErrWrongCode refuses a wrong second-factor code on the hosted pages,
+// saying how many tries the login has left (details.remaining).
+func ErrWrongCode(remaining int) error {
+	e := errx.Unauthorized("invalid verification code").WithDetail("remaining", max(remaining, 0))
+	e.Code, e.Public = CodeWrongCode, true
+	return e
+}
 
 // ErrSignedUpNoAccess is returned when a new account was created but its
 // sign-up organization gives it no access to the application yet.

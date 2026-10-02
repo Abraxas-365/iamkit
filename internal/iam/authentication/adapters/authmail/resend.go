@@ -14,6 +14,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/netx"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 )
 
 // ResendEndpoint is Resend's send-email API.
@@ -89,7 +90,7 @@ func (r Resend) Deliver(ctx context.Context, email authentication.Email) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+r.APIKey)
 	req.Header.Set("User-Agent", "IAMKit")
-	client := http.Client{Transport: transport, Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := http.Client{Transport: telemetry.Transport(transport), Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	res, err := client.Do(req)
 	if err != nil {
 		return networkFailure(err)

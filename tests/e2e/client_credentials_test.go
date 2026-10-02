@@ -264,9 +264,15 @@ func TestOAuthClientPrivateKeyJWT(t *testing.T) {
 // the code and its PKCE verifier.
 func (e *Env) authorizationCode(client string) (string, string) {
 	e.t.Helper()
+	return e.authorizationCodeScope(client, "openid offline_access")
+}
+
+// authorizationCodeScope is authorizationCode with the requested scope.
+func (e *Env) authorizationCodeScope(client, scope string) (string, string) {
+	e.t.Helper()
 	verifier := strings.Repeat("v", 50) + uuid.NewString()
 	challenge := pkceS256(verifier)
-	q := url.Values{"response_type": {"code"}, "client_id": {client}, "redirect_uri": {"https://app.example/callback"}, "scope": {"openid offline_access"}, "state": {"unpredictable-state-123456"}, "nonce": {"unpredictable-nonce-123456"}, "code_challenge": {challenge}, "code_challenge_method": {"S256"}}
+	q := url.Values{"response_type": {"code"}, "client_id": {client}, "redirect_uri": {"https://app.example/callback"}, "scope": {scope}, "state": {"unpredictable-state-123456"}, "nonce": {"unpredictable-nonce-123456"}, "code_challenge": {challenge}, "code_challenge_method": {"S256"}}
 	res, err := e.App.Test(httptest.NewRequest("GET", "/oauth/authorize?"+q.Encode(), nil), 10000)
 	if err != nil || res.StatusCode != 200 {
 		e.t.Fatalf("authorize: %v %v", err, res)

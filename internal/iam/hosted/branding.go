@@ -3,6 +3,7 @@ package hosted
 import (
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,11 +24,97 @@ type Settings struct {
 	LogoURL     string                 `json:"logo_url"`
 	AccentColor string                 `json:"accent_color"`
 	Theme       Theme                  `json:"theme"`
-	// Locale is the default language of the environment's emails ("" = the
-	// deployment default). Omitted on save keeps the stored one, so clients
-	// that predate it don't reset it; client styles have none (nil).
-	Locale    *string    `json:"locale,omitempty"`
+	// Locale is the default language of the hosted pages and emails ("" =
+	// the deployment default for emails, the browser's for pages; on a
+	// client style "" = the environment's). Omitted on save keeps the
+	// stored one, so clients that predate it don't reset it.
+	Locale *string `json:"locale,omitempty"`
+	// Languages are the languages hosted pages may use (empty = every
+	// available one); environment default only. Omitted (null) on save
+	// keeps the stored list.
+	Languages []string `json:"languages"`
+	// Legal links show on the sign-in and sign-up pages (the sign-up
+	// page links the terms when the sign-in policy requires accepting
+	// them). Omitted (nil) on save keeps the stored ones; reads always
+	// carry them. An empty client style's Legal inherits the environment's.
+	Legal     *Legal     `json:"legal,omitempty"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+}
+
+// Legal are the links to an application's policies.
+type Legal struct {
+	PrivacyURL   string `json:"privacy_url"`
+	TermsURL     string `json:"terms_url"`
+	HelpURL      string `json:"help_url"`
+	SupportEmail string `json:"support_email"`
+}
+
+// Empty reports whether nothing is set.
+func (l Legal) Empty() bool { return l == Legal{} }
+
+// Over lays these links over base: empty fields keep base's.
+func (l Legal) Over(base Legal) Legal {
+	pick := func(own, inherited string) string {
+		if own != "" {
+			return own
+		}
+		return inherited
+	}
+	return Legal{PrivacyURL: pick(l.PrivacyURL, base.PrivacyURL), TermsURL: pick(l.TermsURL, base.TermsURL),
+		HelpURL: pick(l.HelpURL, base.HelpURL), SupportEmail: pick(l.SupportEmail, base.SupportEmail)}
+}
+
+// Validate normalizes and checks the links: https URLs and an email.
+func (l *Legal) Validate() error {
+	l.PrivacyURL, l.TermsURL, l.HelpURL = strings.TrimSpace(l.PrivacyURL), strings.TrimSpace(l.TermsURL), strings.TrimSpace(l.HelpURL)
+	for _, f := range []struct{ name, value string }{{"legal.privacy_url", l.PrivacyURL}, {"legal.terms_url", l.TermsURL}, {"legal.help_url", l.HelpURL}} {
+		if err := image(f.value, f.name); err != nil {
+			return err
+		}
+	}
+	if l.SupportEmail = strings.TrimSpace(l.SupportEmail); l.SupportEmail != "" {
+		email, err := identity.Email(l.SupportEmail)
+		if err != nil {
+			return errx.Validation("legal.support_email must be a valid address")
+		}
+		l.SupportEmail = email
+	}
+	return nil
+}
+
+// Font is a typeface of the hosted pages: one of the fonts IAMKit serves
+// (Fonts) or, with Family "custom", an https woff2 file (URL).
+type Font struct {
+	Family string `json:"family"`
+	URL    string `json:"url"`
+}
+
+// Font families; FontSystem (the default) uses the device's own font.
+const (
+	FontSystem = "system"
+	FontCustom = "custom"
+)
+
+// Fonts are the families IAMKit serves itself (no third-party request).
+var Fonts = []string{"inter", "roboto", "open-sans", "lora"}
+
+func (f *Font) validate(field string) error {
+	family, err := choice(f.Family, field+".family", FontSystem, append([]string{FontSystem, FontCustom}, Fonts...)...)
+	if err != nil {
+		return err
+	}
+	f.Family, f.URL = family, strings.TrimSpace(f.URL)
+	if family != FontCustom {
+		f.URL = ""
+		return nil
+	}
+	// The URL is written into a CSS url(""), like the background image.
+	u, err := url.Parse(f.URL)
+	if f.URL == "" || err != nil || image(f.URL, field+".url") != nil || !strings.HasSuffix(strings.ToLower(u.Path), ".woff2") ||
+		strings.ContainsAny(f.URL, "\"'()\\<>{};` \t\r\n") {
+		return errx.Validation(field + ".url must be an https URL of a .woff2 file without quotes, parentheses, backslashes or spaces")
+	}
+	return nil
 }
 
 // Theme is the look of the hosted pages beyond name, logo and accent.
@@ -51,6 +138,9 @@ type Theme struct {
 	// (0-90 %) tints it with the background color so text stays readable.
 	BackgroundImageURL string `json:"background_image_url"`
 	BackgroundOverlay  int    `json:"background_overlay"`
+	// Font is the text typeface; HeadingFont the title's (system = Font).
+	Font        Font `json:"font"`
+	HeadingFont Font `json:"heading_font"`
 }
 
 // Palette colors one scheme; empty colors use the defaults.
@@ -93,6 +183,7 @@ const (
 	MaxRadius      = 24
 	MaxFooterLinks = 5
 	MaxOverlay     = 90
+	MaxLanguages   = 64
 	maxURL         = 2048
 	maxDisplayName = 100
 	maxFooterText  = 200
@@ -120,12 +211,36 @@ func (s *Settings) Validate() error {
 	if err := s.Theme.validate(); err != nil {
 		return err
 	}
+	if s.Legal != nil {
+		if err := s.Legal.Validate(); err != nil {
+			return err
+		}
+	}
 	if s.Locale != nil {
-		locale := strings.ToLower(strings.TrimSpace(*s.Locale))
-		if locale != "" && !i18n.Supported(locale) {
-			return errx.Validation("locale must be one of " + strings.Join(localeCodes(), ", "))
+		locale, err := Language(*s.Locale, "locale")
+		if err != nil {
+			return err
 		}
 		s.Locale = &locale
+	}
+	if s.Languages != nil {
+		if len(s.Languages) > MaxLanguages {
+			return errx.Validation("languages has at most 64 entries")
+		}
+		languages := make([]string, 0, len(s.Languages))
+		for _, raw := range s.Languages {
+			code, err := Language(raw, "languages")
+			if err != nil {
+				return err
+			}
+			if code != "" && !slices.Contains(languages, code) {
+				languages = append(languages, code)
+			}
+		}
+		s.Languages = languages
+		if s.Locale != nil && *s.Locale != "" && len(languages) > 0 && !slices.Contains(languages, *s.Locale) {
+			return errx.Validation("locale must be one of languages")
+		}
 	}
 	// accent_color and theme.light.primary are the same color.
 	if s.Theme.Light.Primary == "" {
@@ -133,6 +248,27 @@ func (s *Settings) Validate() error {
 	}
 	s.AccentColor = s.Theme.Light.Primary
 	return nil
+}
+
+// Preferred is the language the configuration asks for: the first
+// available, enabled language of uiLocales (the application's request),
+// else the configured Locale when enabled, else "" (the browser decides,
+// see Negotiate).
+func (s Settings) Preferred(uiLocales string) string {
+	if code := i18n.MatchIn(s.Languages, uiLocales); code != "" {
+		return code
+	}
+	if s.Locale != nil {
+		return i18n.MatchIn(s.Languages, *s.Locale)
+	}
+	return ""
+}
+
+// Negotiate is the page language: preferred when set, else the browser's
+// Accept-Language, within the enabled languages (falling back to English,
+// else the first enabled one).
+func (s Settings) Negotiate(preferred, acceptLanguage string) string {
+	return i18n.Negotiate(s.Languages, preferred, acceptLanguage)
 }
 
 func (t *Theme) validate() error {
@@ -185,6 +321,12 @@ func (t *Theme) validate() error {
 	if t.BackgroundOverlay < 0 || t.BackgroundOverlay > MaxOverlay {
 		return errx.Validation("theme.background_overlay must be between 0 and 90")
 	}
+	if err = t.Font.validate("theme.font"); err != nil {
+		return err
+	}
+	if err = t.HeadingFont.validate("theme.heading_font"); err != nil {
+		return err
+	}
 	return t.Footer.validate()
 }
 
@@ -227,13 +369,18 @@ func (f *Footer) validate() error {
 	return nil
 }
 
-// localeCodes lists the available email languages.
-func localeCodes() []string {
-	var out []string
-	for _, l := range i18n.Locales() {
-		out = append(out, l.Code)
+// Language normalizes a language code to its catalog form ("PT_br" →
+// "pt-BR"; "" stays ""), refusing unavailable languages for field.
+func Language(code, field string) (string, error) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", nil
 	}
-	return out
+	out, ok := i18n.Canonical(code)
+	if !ok {
+		return "", errx.Validation(field + " must be one of " + strings.Join(i18n.Codes(), ", "))
+	}
+	return out, nil
 }
 
 // choice normalizes an enumerated value; empty takes the default.

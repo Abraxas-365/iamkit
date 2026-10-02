@@ -29,7 +29,7 @@ func (h *Handler) signup(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email, v.Name = v.T("hosted.title.signup"), c.FormValue("email"), c.FormValue("name")
-	v.Challenge, err = h.flow.Signup(c.Context(), r, v.Email, v.Name, c.FormValue("password"))
+	v.Challenge, err = h.flow.Signup(c.UserContext(), r, v.Email, v.Name, c.FormValue("password"), c.FormValue("accept_terms") == "on")
 	if err != nil {
 		var e *errx.Error
 		if errx.As(err, &e) && e.Code == "SSO_REQUIRED" {
@@ -52,13 +52,13 @@ func (h *Handler) completeSignup(c *fiber.Ctx) error {
 	}
 	v.Title, v.Email = v.T("hosted.title.check_email"), c.FormValue("email")
 	v.Challenge, _ = identity.ParseChallengeID(c.FormValue("challenge_id"))
-	result, err := h.flow.CompleteSignup(c.Context(), r, v.Challenge, c.FormValue("code"))
+	result, err := h.flow.CompleteSignup(c.UserContext(), r, v.Challenge, c.FormValue("code"))
 	if err != nil {
 		var e *errx.Error
 		if errx.As(err, &e) && e.Code == "SIGNED_UP_NO_ACCESS" {
 			// The account exists: nothing to retry on this page.
-			status, text := failed(c, v.Lang, err)
-			return render(c, status, "message", view{Lang: v.Lang, Brand: v.Brand, Title: v.T("hosted.title.signed_up"), Error: text})
+			status, text := failed(c, v, err)
+			return render(c, status, "message", view{Lang: v.Lang, Texts: v.Texts, Brand: v.Brand, Title: v.T("hosted.title.signed_up"), Error: text})
 		}
 		return h.retry(c, v, "signup-code", err)
 	}

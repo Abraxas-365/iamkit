@@ -3,6 +3,7 @@ package fedoidc
 import (
 	"context"
 	"encoding/json"
+	"github.com/Abraxas-365/iamkit/internal/cache"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/netx"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 )
@@ -39,6 +41,10 @@ type Provider struct {
 	// deployment configured it, like its issuer, so it needs no approval
 	// and uses Transport (the deployment's own IdP may be internal).
 	Secret string
+	// Discovery keeps providers' discovery documents for
+	// config.OIDCDiscoveryCacheTTL (nil: fetched on every authorization and
+	// callback).
+	Discovery cache.Store
 }
 
 func (Provider) Approved(c federation.Connection) bool {
@@ -94,7 +100,7 @@ func (p Provider) context(ctx context.Context, c federation.Connection) context.
 			transport = GuardedTransport()
 		}
 	}
-	client := &http.Client{Transport: transport, Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := &http.Client{Transport: telemetry.Transport(transport), Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	return oidc.ClientContext(ctx, client)
 }
 
@@ -135,7 +141,7 @@ func (p Provider) session(ctx context.Context, c federation.Connection) (session
 		// checks the token's issuer against its tenant instead.
 		discovery = oidc.InsecureIssuerURLContext(ctx, c.Issuer)
 	}
-	provider, err := oidc.NewProvider(discovery, c.Issuer)
+	provider, err := p.discover(discovery, c)
 	if err != nil {
 		return session{}, federation.ErrProviderUnavailable(err)
 	}
@@ -150,6 +156,57 @@ func (p Provider) session(ctx context.Context, c federation.Connection) (session
 		}
 	}
 	return session{oidc: provider, config: config}, nil
+}
+
+// discovered is the part of a discovery document IAMKit reads.
+type discovered struct {
+	Issuer     string   `json:"issuer"`
+	AuthURL    string   `json:"authorization_endpoint"`
+	TokenURL   string   `json:"token_endpoint"`
+	JWKSURL    string   `json:"jwks_uri"`
+	UserInfo   string   `json:"userinfo_endpoint"`
+	Algorithms []string `json:"id_token_signing_alg_values_supported"`
+}
+
+// signingAlgorithms are the ID token algorithms go-oidc verifies (its
+// NewProvider drops the others the same way).
+var signingAlgorithms = map[string]bool{oidc.RS256: true, oidc.RS384: true, oidc.RS512: true, oidc.ES256: true,
+	oidc.ES384: true, oidc.ES512: true, oidc.PS256: true, oidc.PS384: true, oidc.PS512: true, oidc.EdDSA: true}
+
+// discover reads the connection's discovery document through Discovery,
+// keyed by issuer and by whether it was fetched through the guarded
+// transport. go-oidc checked the issuer when it was fetched.
+func (p Provider) discover(ctx context.Context, c federation.Connection) (*oidc.Provider, error) {
+	if p.Discovery == nil {
+		return oidc.NewProvider(ctx, c.Issuer)
+	}
+	kind := "open"
+	if c.Sealed != "" && p.Secret == "" {
+		kind = "guarded"
+	}
+	if c.Provider == federation.ProviderMicrosoft {
+		kind += "-tenant"
+	}
+	doc, err := cache.Read(ctx, p.Discovery, "oidc:"+kind+":"+c.Issuer, config.OIDCDiscoveryCacheTTL, func() (discovered, error) {
+		provider, err := oidc.NewProvider(ctx, c.Issuer)
+		if err != nil {
+			return discovered{}, err
+		}
+		var out discovered
+		err = provider.Claims(&out)
+		return out, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	var algorithms []string
+	for _, a := range doc.Algorithms {
+		if signingAlgorithms[a] {
+			algorithms = append(algorithms, a)
+		}
+	}
+	return (&oidc.ProviderConfig{IssuerURL: c.Issuer, AuthURL: doc.AuthURL, TokenURL: doc.TokenURL, JWKSURL: doc.JWKSURL,
+		UserInfoURL: doc.UserInfo, Algorithms: algorithms}).NewProvider(ctx), nil
 }
 
 func (Provider) Verifier() string { return oauth2.GenerateVerifier() }
@@ -216,6 +273,7 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, code, non
 		Email         string `json:"email"`
 		EmailVerified any    `json:"email_verified"`
 		Name          string `json:"name"`
+		Picture       string `json:"picture"`
 		Tenant        string `json:"tid"`
 		DomainOwner   any    `json:"xms_edov"`
 		HostedDomain  string `json:"hd"`
@@ -223,7 +281,7 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, code, non
 	if err = verified.Claims(&claims); err != nil {
 		return federation.Claims{}, errx.Unauthorized("invalid provider identity")
 	}
-	out := federation.Claims{Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name, Issuer: c.Issuer}
+	out := federation.Claims{Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name, Picture: claims.Picture, Issuer: c.Issuer}
 	if c.Provider == federation.ProviderGoogle {
 		out.HostedDomain = claims.HostedDomain
 		if !c.Options.AcceptsHostedDomain(claims.HostedDomain) {

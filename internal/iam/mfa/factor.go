@@ -191,6 +191,18 @@ func Fresh(authTime int64, now time.Time) error {
 	return e
 }
 
+// ErrInvalidCode is the login-time answer to a wrong second-factor code
+// (401; the self-service routes answer 422 INVALID_CODE instead).
+func ErrInvalidCode() error { return errx.Unauthorized(invalidCodeMessage) }
+
+const invalidCodeMessage = "invalid verification code"
+
+// IsInvalidCode reports whether err is ErrInvalidCode.
+func IsInvalidCode(err error) bool {
+	var e *errx.Error
+	return errx.As(err, &e) && e.Type == errx.TypeAuthorization && e.HTTPStatus == 401 && e.Message == invalidCodeMessage
+}
+
 // Lockout returns how long the factor locks after failures wrong codes in
 // a row, or 0 (authentication.Lockout, shared with password logins).
 func Lockout(failures, threshold int, base, max time.Duration) time.Duration {

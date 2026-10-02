@@ -9,6 +9,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
@@ -26,7 +27,11 @@ type SMSService struct {
 	branding authentication.Branding
 	locale   string
 	now      func() time.Time
+	usage    authentication.Usage
 }
+
+// SetUsage enforces sms_per_day on SendSMS and counts delivered texts.
+func (s *SMSService) SetUsage(u authentication.Usage) { s.usage = u }
 
 // NewSMSService: branding (optional) names the app in the text and picks
 // its language, else locale.
@@ -144,6 +149,11 @@ func (s *SMSService) SendSMS(ctx context.Context, environment identity.Environme
 	if !authentication.ValidSMSPurpose(purpose) || purpose == authentication.PurposeTest {
 		return errx.Internal("unknown SMS purpose " + purpose)
 	}
+	if s.usage != nil {
+		if err := s.usage.Admit(ctx, environment, usage.LimitSMS); err != nil {
+			return err
+		}
+	}
 	_, err := s.deliver(ctx, environment, phone, purpose, code)
 	return err
 }
@@ -151,16 +161,16 @@ func (s *SMSService) SendSMS(ctx context.Context, environment identity.Environme
 // Body is the text of an SMS: the app name, the code and its purpose, in
 // the environment's language.
 func (s *SMSService) Body(ctx context.Context, environment identity.EnvironmentID, purpose, code string) string {
-	name, locale := "", ""
+	name, locale, languages := "", "", []string(nil)
 	if s.branding != nil {
-		if b, err := s.branding.Brand(ctx, environment); err == nil {
-			name, locale = strings.TrimSpace(b.Name), b.Locale
+		if b, err := s.branding.Brand(ctx, environment, identity.OrganizationID{}); err == nil {
+			name, locale, languages = strings.TrimSpace(b.Name), b.Locale, b.Languages
 		}
 	}
 	if name == "" {
 		name = "IAMKit"
 	}
-	locale = i18n.Resolve(locale, s.locale)
+	locale = i18n.Negotiate(languages, locale, s.locale)
 	if purpose == authentication.PurposeTest {
 		return i18n.T(locale, "sms.test", name)
 	}
@@ -187,6 +197,8 @@ func (s *SMSService) deliver(ctx context.Context, environment identity.Environme
 	attempt := authentication.Attempt{Source: source, Purpose: purpose, Delivered: err == nil, LatencyMS: int(s.now().Sub(start).Milliseconds()), At: start.UTC()}
 	if err != nil {
 		attempt.Status, attempt.Reason = authentication.Describe(err)
+	} else if s.usage != nil {
+		s.usage.Count(ctx, environment, usage.MetricSMS, 1)
 	}
 	if recordErr := s.repo.RecordSMSAttempt(context.WithoutCancel(ctx), environment, attempt); recordErr != nil {
 		slog.WarnContext(ctx, "record SMS attempt failed", "environment", environment, "err", recordErr)

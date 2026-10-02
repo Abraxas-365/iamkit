@@ -30,6 +30,9 @@ type Message struct {
 
 	Environment identity.EnvironmentID `json:"-"`
 	Locale      string                 `json:"-"` // requested language; "" = environment default
+	// OrganizationID brands the email with the organization's overrides
+	// (invitations into it); zero keeps the environment brand.
+	OrganizationID identity.OrganizationID `json:"-"`
 }
 
 // Delivery providers: who sends an environment's email. The webhook
@@ -124,12 +127,14 @@ type Email struct {
 }
 
 // Brand is how an environment's rendered emails look and which language
-// they default to (Locale "" = server default).
+// they default to (Locale "" = server default). Languages are the
+// languages they may be written in (empty: every available one).
 type Brand struct {
-	Name    string
-	LogoURL string
-	Accent  string
-	Locale  string
+	Name      string
+	LogoURL   string
+	Accent    string
+	Locale    string
+	Languages []string
 }
 
 // Delivery sources: which webhook serves an environment.

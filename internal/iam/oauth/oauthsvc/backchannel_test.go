@@ -48,6 +48,7 @@ func (f *fakeOutbox) LogoutFailed(_ context.Context, m oauth.Mutation, id int64,
 }
 func (f *fakeOutbox) RetryLogout(context.Context, oauth.Mutation, int64) error { return nil }
 func (f *fakeOutbox) PruneLogouts(context.Context, time.Duration) error        { return nil }
+func (f *fakeOutbox) LogoutLag(context.Context) (time.Duration, error)         { return 0, nil }
 func (f *fakeOutbox) LogoutDeliveries(context.Context, identity.EnvironmentID, oauth.LogoutFilter, query.Pagination) (query.Paginated[oauth.LogoutDelivery], error) {
 	return query.Paginated[oauth.LogoutDelivery]{}, nil
 }

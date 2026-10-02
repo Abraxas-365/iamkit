@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -37,16 +39,30 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 		input.Permissions = []string{}
 	}
 	auth := input.ClientAuth
-	_, err := r.db.ExecContext(ctx, `INSERT INTO service_accounts(id,environment_id,application_id,resource_id,name,permissions,secret_hash,expires_at,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, out.ID, environment, input.Application, input.Resource, input.Name, pq.Array(input.Permissions), hash, out.Expires, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI)
-	var pg *pq.Error
-	if errors.As(err, &pg) && pg.Code.Class() == "23" {
-		return errx.Conflict("service account requires application/resource binding")
-	}
-	return failure(err)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO service_accounts(id,environment_id,application_id,resource_id,name,permissions,secret_hash,expires_at,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, out.ID, environment, input.Application, input.Resource, input.Name, pq.Array(input.Permissions), hash, out.Expires, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI)
+		var pg *pq.Error
+		if errors.As(err, &pg) && pg.Code.Class() == "23" {
+			return errx.Conflict("service account requires application/resource binding")
+		}
+		if err != nil {
+			return failure(err)
+		}
+		return eventpg.Record(ctx, tx, environment, event.ServiceAccountCreated, event.Subject{Kind: "service_account", ID: out.ID.String()},
+			map[string]any{"application_id": input.Application.String(), "resource_id": input.Resource.String()})
+	})
 }
 func (r *Repository) Revoke(ctx context.Context, environment identity.EnvironmentID, id identity.AccountID) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE service_accounts SET revoked_at=now() WHERE id=$1 AND environment_id=$2`, id, environment)
-	return failure(err)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE service_accounts SET revoked_at=now() WHERE id=$1 AND environment_id=$2 AND revoked_at IS NULL`, id, environment)
+		if err != nil {
+			return failure(err)
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return nil
+		}
+		return eventpg.Record(ctx, tx, environment, event.ServiceAccountRevoked, event.Subject{Kind: "service_account", ID: id.String()}, nil)
+	})
 }
 func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[serviceaccount.Account], error) {
 	base := `FROM service_accounts sa JOIN applications a ON a.id=sa.application_id JOIN resources res ON res.id=sa.resource_id WHERE sa.environment_id=$1`
@@ -102,7 +118,7 @@ func (r *Repository) SetAuthentication(ctx context.Context, m serviceaccount.Mut
 		}
 		return errx.NotFound("resource not found")
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+	if err = eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())
@@ -132,7 +148,7 @@ func (r *Repository) SetImpersonation(ctx context.Context, m serviceaccount.Muta
 			return failure(err)
 		}
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+	if err = eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())

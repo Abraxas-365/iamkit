@@ -8,6 +8,8 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/application"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/jmoiron/sqlx"
@@ -41,8 +43,12 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 	if input.Redirects == nil {
 		input.Redirects = []string{}
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO applications(id,environment_id,name,redirect_uris) VALUES($1,$2,$3,$4)`, id, environment, input.Name, pq.Array(input.Redirects))
-	return failure(err)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO applications(id,environment_id,name,redirect_uris) VALUES($1,$2,$3,$4)`, id, environment, input.Name, pq.Array(input.Redirects)); err != nil {
+			return failure(err)
+		}
+		return eventpg.Record(ctx, tx, environment, event.ApplicationCreated, event.Subject{Kind: "application", ID: id.String()}, nil)
+	})
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ApplicationID) (application.Application, error) {
 	var row applicationRow
@@ -100,7 +106,7 @@ func (r *Repository) Update(ctx context.Context, m application.Mutation, id iden
 	if n == 0 {
 		return errx.NotFound("resource not found")
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+	if err = eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())

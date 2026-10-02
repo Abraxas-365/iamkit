@@ -45,7 +45,7 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	}
 	// 5xx causes never reach the client, so they must be logged here or lost.
 	if custom.HTTPStatus >= 500 {
-		slog.ErrorContext(c.Context(), "request failed",
+		slog.ErrorContext(c.UserContext(), "request failed",
 			"method", c.Method(),
 			"path", c.Path(),
 			"status", custom.HTTPStatus,

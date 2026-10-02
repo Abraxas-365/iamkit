@@ -43,7 +43,7 @@ func optionalResourceID(c *fiber.Ctx) identity.ResourceID {
 	return id
 }
 func (h *Grants) ListRoles(c *fiber.Ctx) error {
-	out, err := h.queries.ListRoles(c.Context(), env(c), optionalResourceID(c), httpx.PaginationFromCtx(c))
+	out, err := h.queries.ListRoles(c.UserContext(), env(c), optionalResourceID(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (h *Grants) ListRoles(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 func (h *Grants) ListGrants(c *fiber.Ctx) error {
-	out, err := h.queries.ListGrants(c.Context(), env(c), optionalResourceID(c), httpx.PaginationFromCtx(c))
+	out, err := h.queries.ListGrants(c.UserContext(), env(c), optionalResourceID(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ func (h *Grants) SaveRole(c *fiber.Ctx) error {
 		return errx.Validation("invalid request")
 	}
 	roleID, _ := identity.ParseRoleID(c.Params("id"))
-	id, err := h.commands.SaveRole(c.Context(), h.mutation(c), roleID, input)
+	id, err := h.commands.SaveRole(c.UserContext(), h.mutation(c), roleID, input)
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func (h *Grants) DeleteRole(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("role not found")
 	}
-	if err := h.commands.DeleteRole(c.Context(), h.mutation(c), id); err != nil {
+	if err := h.commands.DeleteRole(c.UserContext(), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -92,7 +92,7 @@ func (h *Grants) Assign(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.commands.AssignRole(c.Context(), h.mutation(c), input, false); err != nil {
+	if err := h.commands.AssignRole(c.UserContext(), h.mutation(c), input, false); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -102,7 +102,7 @@ func (h *Grants) Unassign(c *fiber.Ctx) error {
 	orgID, _ := identity.ParseOrganizationID(c.Params("organization"))
 	userID, _ := identity.ParseUserID(c.Params("user"))
 	input := authorization.RoleAssignment{Role: roleID, Organization: orgID, User: userID}
-	if err := h.commands.AssignRole(c.Context(), h.mutation(c), input, true); err != nil {
+	if err := h.commands.AssignRole(c.UserContext(), h.mutation(c), input, true); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -112,7 +112,7 @@ func (h *Grants) PutGrant(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.PutGrant(c.Context(), env(c), input)
+	id, err := h.commands.PutGrant(c.UserContext(), env(c), input)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (h *Grants) DeleteGrant(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	if err := h.commands.DeleteGrant(c.Context(), env(c), id); err != nil {
+	if err := h.commands.DeleteGrant(c.UserContext(), env(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -136,7 +136,7 @@ func (h *Grants) RoleAssignments(c *fiber.Ctx) error {
 	filter := authorization.RoleAssignmentFilter{
 		RoleID: roleID, OrganizationID: orgID, UserID: userID, ResourceID: resID,
 	}
-	out, err := h.queries.RoleAssignments(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
+	out, err := h.queries.RoleAssignments(c.UserContext(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

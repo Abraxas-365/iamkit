@@ -2,6 +2,7 @@
 package fedmodule
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/cache"
 	"net/http"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
@@ -34,22 +35,35 @@ type Deps struct {
 	LDAPAllowed []string
 	LDAPDial    fedldap.Dialer
 	Sessions    federation.Sessions
-	ActorID     func(*fiber.Ctx) string
+	// Actions runs post_federation / pre_registration hooks (nil: none).
+	Actions federation.Actions
+	// Quota enforces the users limit on account-creating sign-ins (nil: none).
+	Quota federation.Quota
+	// Discovery keeps OIDC discovery documents (REDIS_URL; nil: none).
+	Discovery cache.Store
+	ActorID   func(*fiber.Ctx) string
 	// Respond answers a headless login: tokens or the mfa_required body.
 	Respond func(*fiber.Ctx, authentication.Result) error
 }
 type Module struct {
 	Commands federation.Commands
+	Queries  federation.Queries
 	Flows    federation.Flows
 	HTTP     *fedhttp.Handler
 }
 
 func New(deps Deps) Module {
 	provider := router{
-		oidc: fedoidc.Provider{Issuer: deps.Issuer, Cipher: deps.Cipher, Guarded: deps.Transport},
+		oidc: fedoidc.Provider{Issuer: deps.Issuer, Cipher: deps.Cipher, Guarded: deps.Transport, Discovery: deps.Discovery},
 		saml: fedsaml.New(deps.Issuer, deps.Keys, deps.Transport),
 	}
 	directory := fedldap.New(deps.Cipher, deps.LDAPAllowed, deps.LDAPDial)
 	service := fedsvc.New(fedpg.New(deps.DB), provider, directory, deps.Cipher, mgmtsecret.Generator{}, deps.Sessions, deps.Issuer)
-	return Module{Commands: service, Flows: service, HTTP: fedhttp.New(service, service, service, deps.ActorID, deps.Respond)}
+	if deps.Actions != nil {
+		service.SetActions(deps.Actions)
+	}
+	if deps.Quota != nil {
+		service.SetQuota(deps.Quota)
+	}
+	return Module{Commands: service, Queries: service, Flows: service, HTTP: fedhttp.New(service, service, service, deps.ActorID, deps.Respond)}
 }

@@ -68,6 +68,9 @@ type RoleView struct {
 	Resource     identity.ResourceID `json:"resource_id" db:"resource_id"`
 	ResourceName string              `json:"resource_name" db:"resource_name"`
 	Permissions  []string            `json:"permissions" db:"permissions"`
+	// SystemRole names a built-in role (authorization.SystemRoles); built-in
+	// roles cannot be edited or deleted. Empty for custom roles.
+	SystemRole string `json:"system_role,omitempty" db:"system_role"`
 }
 type GrantView struct {
 	ID               identity.GrantID        `json:"id" db:"id"`

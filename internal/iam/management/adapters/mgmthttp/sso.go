@@ -32,13 +32,13 @@ func NewSSO(flows management.SSOFlows, commands management.IdentityCommands, que
 // Options serves GET /management/v1/login-options.
 func (h *SSO) Options(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-store")
-	return c.JSON(h.flows.Options(c.Context()))
+	return c.JSON(h.flows.Options(c.UserContext()))
 }
 
 // Start serves GET /management/v1/sso/:provider/start.
 func (h *SSO) Start(c *fiber.Ctx) error {
 	navigation(c)
-	out, err := h.flows.Start(c.Context(), c.Params("provider"))
+	out, err := h.flows.Start(c.UserContext(), c.Params("provider"))
 	if err != nil {
 		return failed(c, err)
 	}
@@ -57,7 +57,7 @@ func (h *SSO) Callback(c *fiber.Ctx) error {
 		// code next to an error is never exchanged.
 		return login(c, "cancelled")
 	}
-	raw, _, err := h.flows.Callback(c.Context(), c.Query("code"), c.Query("state"), binding)
+	raw, _, err := h.flows.Callback(c.UserContext(), c.Query("code"), c.Query("state"), binding)
 	if err != nil {
 		return failed(c, err)
 	}
@@ -78,7 +78,7 @@ func (h *SSO) identities(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	out, err := h.queries.Identities(c.Context(), Principal(c), id)
+	out, err := h.queries.Identities(c.UserContext(), Principal(c), id)
 	if err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (h *SSO) unlink(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("resource not found")
 	}
-	if err = h.commands.UnlinkIdentities(c.Context(), Principal(c), id); err != nil {
+	if err = h.commands.UnlinkIdentities(c.UserContext(), Principal(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
@@ -119,10 +119,10 @@ func failed(c *fiber.Ctx, err error) error {
 		}
 	}
 	if reason == "failed" || reason == "provider_unavailable" {
-		slog.ErrorContext(c.Context(), "operator single sign-on failed", "err", err)
+		slog.ErrorContext(c.UserContext(), "operator single sign-on failed", "err", err)
 	} else if e != nil && e.Code != management.CodeSSONotAuthorized {
 		// SSO_NOT_AUTHORIZED is logged with its reason by the service.
-		slog.WarnContext(c.Context(), "operator single sign-on refused", "reason", e.Message)
+		slog.WarnContext(c.UserContext(), "operator single sign-on refused", "reason", e.Message)
 	}
 	return login(c, reason)
 }

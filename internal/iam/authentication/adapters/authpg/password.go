@@ -176,7 +176,7 @@ func NewSignInPolicyRepository(db *sqlx.DB) *SignInPolicyRepository {
 	return &SignInPolicyRepository{db}
 }
 
-const signInColumns = `allow_password,allow_email_code,allow_social,allow_passkey,allow_password_reset,mfa_required,mfa_for_federated,allow_signup,signup_organization_id,signup_group_id,updated_at`
+const signInColumns = `allow_password,allow_email_code,allow_social,allow_passkey,allow_password_reset,mfa_required,mfa_for_federated,allow_signup,signup_organization_id,signup_group_id,require_terms,updated_at`
 
 func (r *SignInPolicyRepository) GetSignInPolicy(ctx context.Context, environment identity.EnvironmentID) (authentication.SignInPolicy, error) {
 	var row struct {
@@ -204,12 +204,12 @@ func (r *SignInPolicyRepository) SetSignInPolicy(ctx context.Context, m authenti
 	defer tx.Rollback()
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO sign_in_policies (environment_id,allow_password,allow_email_code,allow_social,allow_password_reset,mfa_required,mfa_for_federated,
-			allow_signup,signup_organization_id,signup_group_id,allowed_factors,allow_passkey,updated_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now())
+			allow_signup,signup_organization_id,signup_group_id,allowed_factors,allow_passkey,require_terms,updated_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())
 		ON CONFLICT (environment_id) DO UPDATE SET allow_password=$2,allow_email_code=$3,allow_social=$4,allow_password_reset=$5,
-			mfa_required=$6,mfa_for_federated=$7,allow_signup=$8,signup_organization_id=$9,signup_group_id=$10,allowed_factors=$11,allow_passkey=$12,updated_at=now()`,
+			mfa_required=$6,mfa_for_federated=$7,allow_signup=$8,signup_organization_id=$9,signup_group_id=$10,allowed_factors=$11,allow_passkey=$12,require_terms=$13,updated_at=now()`,
 		m.Environment, p.AllowPassword, p.AllowEmailCode, p.AllowSocial, p.AllowPasswordReset, p.MFARequired, p.MFAForFederated,
-		p.AllowSignup, p.SignupOrganization, p.SignupGroup, pq.Array(p.AllowedFactors), p.PasskeyAllowed())
+		p.AllowSignup, p.SignupOrganization, p.SignupGroup, pq.Array(p.AllowedFactors), p.PasskeyAllowed(), p.TermsRequired())
 	var pg *pq.Error
 	if errors.As(err, &pg) && pg.Code == "23503" {
 		// The sign-up organization or group is not the environment's.

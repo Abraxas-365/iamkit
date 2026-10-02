@@ -44,7 +44,7 @@ func mailFromEnv() (authentication.Delivery, authmodule.Mail, error) {
 		mail.Dial = (&net.Dialer{Timeout: config.ExternalHTTPTimeout}).DialContext
 		mail.WebhookClient = http.DefaultTransport
 		mail.SMSClient = http.DefaultTransport
-		slog.Warn("IAMKIT_ALLOW_PRIVATE_DELIVERY is on: environment email/SMS webhooks and SMTP servers may reach localhost and private networks. Development only — never enable it in production")
+		slog.Warn("IAMKIT_ALLOW_PRIVATE_DELIVERY is on: environment email/SMS webhooks, event webhooks and SMTP servers may reach localhost and private networks. Development only — never enable it in production")
 	}
 	port := 0
 	if v := strings.TrimSpace(os.Getenv("SMTP_PORT")); v != "" {
@@ -139,15 +139,16 @@ func envError(err error) error {
 }
 
 // branding reads an environment's email brand from its hosted login
-// branding (the environment default, not client styles).
+// branding (the environment default, not client styles), with an
+// organization's overrides for invitations into it.
 type branding struct{ queries hosted.Queries }
 
-func (b branding) Brand(ctx context.Context, environment identity.EnvironmentID) (authentication.Brand, error) {
-	s, err := b.queries.Settings(ctx, environment)
+func (b branding) Brand(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (authentication.Brand, error) {
+	s, err := b.queries.Branded(ctx, environment, identity.ClientID{}, organization)
 	if err != nil {
 		return authentication.Brand{}, err
 	}
-	out := authentication.Brand{Name: s.DisplayName, LogoURL: s.LogoURL, Accent: s.Theme.Light.Primary}
+	out := authentication.Brand{Name: s.DisplayName, LogoURL: s.LogoURL, Accent: s.Theme.Light.Primary, Languages: s.Languages}
 	if out.Accent == "" {
 		out.Accent = s.AccentColor
 	}

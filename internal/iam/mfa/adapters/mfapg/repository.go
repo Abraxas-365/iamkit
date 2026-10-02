@@ -11,8 +11,10 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/telemetry"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
@@ -37,7 +39,7 @@ func (r *Repository) Begin(ctx context.Context) (mfa.Transaction, error) {
 	if err != nil {
 		return nil, failure(err)
 	}
-	return &Transaction{tx}, nil
+	return &Transaction{tx: tx}, nil
 }
 
 func (r *Repository) Summary(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (mfa.Summary, error) {
@@ -108,7 +110,7 @@ func (r *Repository) Allowed(ctx context.Context, environment identity.Environme
 // the environment.
 func (r *Repository) Account(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (mfa.Account, error) {
 	var out mfa.Account
-	err := r.db.GetContext(ctx, &out, `SELECT u.email, coalesce(nullif(s.display_name,''), e.name) AS issuer
+	err := r.db.GetContext(ctx, &out, `SELECT coalesce(u.email,'') AS email, coalesce(nullif(s.display_name,''), e.name) AS issuer
 		FROM users u JOIN environments e ON e.id=u.environment_id
 		LEFT JOIN login_settings s ON s.environment_id=u.environment_id
 		WHERE u.id=$1 AND u.environment_id=$2 AND u.active`, user, environment)
@@ -156,7 +158,12 @@ func (r *Repository) SavePending(ctx context.Context, hash []byte, p mfa.Pending
 	return failure(err)
 }
 
-type Transaction struct{ tx *sqlx.Tx }
+// Transaction counts wrong second-factor answers, recorded as a metric
+// once it commits.
+type Transaction struct {
+	tx       *sqlx.Tx
+	failures int
+}
 
 var _ mfa.Transaction = (*Transaction)(nil)
 
@@ -179,6 +186,9 @@ func (t *Transaction) SetLock(ctx context.Context, environment identity.Environm
 	_, err := t.tx.ExecContext(ctx, `INSERT INTO user_mfa_state(environment_id,user_id,failed_attempts,locked_until) VALUES($1,$2,$3,$4)
 		ON CONFLICT (environment_id,user_id) DO UPDATE SET failed_attempts=EXCLUDED.failed_attempts, locked_until=EXCLUDED.locked_until`,
 		environment, user, lock.Failures, lock.LockedUntil)
+	if err == nil && lock.Failures > 0 {
+		t.failures++
+	}
 	return failure(err)
 }
 
@@ -334,8 +344,7 @@ func (t *Transaction) DeletePending(ctx context.Context, hash []byte) error {
 }
 
 func (t *Transaction) Audit(ctx context.Context, m mfa.Mutation) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
-	return failure(err)
+	return failure(eventpg.Audit(ctx, t.tx, m.Environment, m.Actor, m.Action, m.Target))
 }
 
 func (t *Transaction) SaveWebAuthn(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, f mfa.Factor, c mfa.Credential) error {
@@ -419,7 +428,15 @@ func (r *Repository) RenameFactor(ctx context.Context, environment identity.Envi
 	return out, failure(err)
 }
 
-func (t *Transaction) Commit() error { return failure(t.tx.Commit()) }
+func (t *Transaction) Commit() error {
+	if err := t.tx.Commit(); err != nil {
+		return failure(err)
+	}
+	for range t.failures {
+		telemetry.MFAFailure(context.Background())
+	}
+	return nil
+}
 func (t *Transaction) Rollback() error {
 	err := t.tx.Rollback()
 	if errors.Is(err, sql.ErrTxDone) {

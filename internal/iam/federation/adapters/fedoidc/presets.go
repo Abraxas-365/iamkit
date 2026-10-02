@@ -73,9 +73,10 @@ func gitHub(c federation.Connection) bool {
 // primary one only when GitHub verified it.
 func gitHubClaims(ctx context.Context, client *http.Client, api string) (federation.Claims, error) {
 	var user struct {
-		ID    int64  `json:"id"`
-		Login string `json:"login"`
-		Name  string `json:"name"`
+		ID     int64  `json:"id"`
+		Login  string `json:"login"`
+		Name   string `json:"name"`
+		Avatar string `json:"avatar_url"`
 	}
 	if err := getJSON(ctx, client, api+"/user", true, &user); err != nil {
 		return federation.Claims{}, err
@@ -91,7 +92,7 @@ func gitHubClaims(ctx context.Context, client *http.Client, api string) (federat
 	if err := getJSON(ctx, client, api+"/user/emails", true, &emails); err != nil {
 		return federation.Claims{}, err
 	}
-	out := federation.Claims{Subject: strconv.FormatInt(user.ID, 10), Name: user.Name}
+	out := federation.Claims{Subject: strconv.FormatInt(user.ID, 10), Name: user.Name, Picture: user.Avatar}
 	if out.Name == "" {
 		out.Name = user.Login
 	}
@@ -167,6 +168,9 @@ func oauth2Claims(ctx context.Context, client *http.Client, c federation.Connect
 	}
 	if m.Name != "" {
 		out.Name, _ = member(raw, m.Name).(string)
+	}
+	if m.Picture != "" {
+		out.Picture, _ = member(raw, m.Picture).(string)
 	}
 	return out, nil
 }

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -83,8 +85,7 @@ func ids[T interface{ String() string }](in []T) pq.StringArray {
 }
 
 func audit(ctx context.Context, tx *sqlx.Tx, m invitation.Mutation) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target)
-	return failure(err)
+	return failure(eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target))
 }
 
 func (r *Repository) Begin(ctx context.Context) (invitation.Transaction, error) {
@@ -300,8 +301,8 @@ func (t *Transaction) Join(ctx context.Context, j invitation.Joining) error {
 	inv := j.Invitation
 	var err error
 	if j.NewUser {
-		_, err = t.tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,email_verified) VALUES($1,$2,$3,$4,$5,true)`,
-			j.User, j.Environment, inv.Email, j.Name, j.PasswordHash)
+		_, err = t.tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,email_verified,home_organization_id) VALUES($1,$2,$3,$4,$5,true,$6)`,
+			j.User, j.Environment, inv.Email, j.Name, j.PasswordHash, inv.Organization)
 	} else {
 		_, err = t.tx.ExecContext(ctx, `UPDATE users SET email_verified=true WHERE environment_id=$1 AND id=$2`, j.Environment, j.User)
 	}
@@ -327,6 +328,14 @@ func (t *Transaction) Join(ctx context.Context, j invitation.Joining) error {
 		if _, err = t.tx.ExecContext(ctx, step.query, step.args...); err != nil {
 			return failure(err)
 		}
+	}
+	if j.NewUser {
+		err = eventpg.UserCreated(ctx, t.tx, j.Environment, j.User.String(), j.User, inv.Organization, "invitation")
+	} else {
+		err = eventpg.Membership(ctx, t.tx, j.Environment, j.User.String(), event.MembershipCreated, inv.Organization, j.User)
+	}
+	if err != nil {
+		return err
 	}
 	return audit(ctx, t.tx, invitation.Mutation{Environment: j.Environment, Actor: j.User.String(), Action: "invitation.accept",
 		Target: "/organizations/" + inv.Organization.String() + "/invitations/" + inv.ID.String() + "?user=" + j.User.String()})

@@ -1,8 +1,11 @@
 package management
 
 import (
+	"slices"
+	"strings"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
@@ -80,6 +83,24 @@ type PasswordAccount struct {
 	Hash       string
 	Allowed    bool
 	MustChange bool
+}
+
+// ConsoleLocales are the languages the console is translated into
+// (frontend/src/locales); keep both lists in step.
+var ConsoleLocales = []string{"en", "es"}
+
+// Preferences are the caller's own console settings.
+type Preferences struct {
+	// Locale is the console language; nil follows the browser.
+	Locale *string `json:"locale"`
+}
+
+// Validate accepts a console language or nil.
+func (p Preferences) Validate() error {
+	if p.Locale != nil && !slices.Contains(ConsoleLocales, *p.Locale) {
+		return errx.Validation("locale must be one of " + strings.Join(ConsoleLocales, ", "))
+	}
+	return nil
 }
 
 // PasswordStatus is the caller's own password state, for the console.

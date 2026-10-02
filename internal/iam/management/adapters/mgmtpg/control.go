@@ -152,7 +152,12 @@ func (r *Repository) Projects(ctx context.Context, workspace identity.WorkspaceI
 var iamResourcePermissions = pq.StringArray(authorization.IAMResourcePermissions)
 
 func (r *Repository) CreateEnvironment(ctx context.Context, workspace identity.WorkspaceID, project identity.ProjectID, id identity.EnvironmentID, name string) error {
-	res, err := r.db.ExecContext(ctx, `INSERT INTO environments(id,project_id,name) SELECT $1,id,$2 FROM projects WHERE id=$3 AND workspace_id=$4`, id, name, project, workspace)
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `INSERT INTO environments(id,project_id,name) SELECT $1,id,$2 FROM projects WHERE id=$3 AND workspace_id=$4`, id, name, project, workspace)
 	if err != nil {
 		return conflict(err)
 	}
@@ -163,12 +168,20 @@ func (r *Repository) CreateEnvironment(ctx context.Context, workspace identity.W
 	if n == 0 {
 		return errx.NotFound("resource not found")
 	}
-	_, err = r.db.ExecContext(ctx, `INSERT INTO resources(id,environment_id,name,prefix,audience,permissions) VALUES($1,$2,'IAM','iam',$3,$4)`,
-		uuid.NewString(), id, "urn:iamkit:environment:"+id.String(), iamResourcePermissions)
+	resource := uuid.NewString()
+	_, err = tx.ExecContext(ctx, `INSERT INTO resources(id,environment_id,name,prefix,audience,permissions) VALUES($1,$2,'IAM','iam',$3,$4)`,
+		resource, id, "urn:iamkit:environment:"+id.String(), iamResourcePermissions)
 	if err != nil {
 		return failure(err)
 	}
-	return nil
+	// The built-in organization administration roles (authorization.SystemRoles).
+	for _, role := range authorization.SystemRoles {
+		if _, err = tx.ExecContext(ctx, `INSERT INTO roles(id,environment_id,resource_id,name,permissions,system_role) VALUES($1,$2,$3,$4,$5,$6)`,
+			uuid.NewString(), id, resource, role.Name, pq.StringArray(role.Permissions), role.Key); err != nil {
+			return failure(err)
+		}
+	}
+	return failure(tx.Commit())
 }
 func (r *Repository) Environments(ctx context.Context, workspace identity.WorkspaceID, project identity.ProjectID) ([]management.Named, error) {
 	return r.named(ctx, `SELECT e.id,e.name FROM environments e JOIN projects p ON p.id=e.project_id WHERE p.id=$1 AND p.workspace_id=$2 ORDER BY e.id`, project, workspace)

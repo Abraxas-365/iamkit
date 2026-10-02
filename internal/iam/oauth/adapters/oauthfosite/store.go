@@ -32,7 +32,7 @@ func (s *Store) Client(ctx context.Context, id string) (*oauth.Client, error) {
 	return s.Clients.FindActive(ctx, s.Environment, clientID)
 }
 func clientDTO(c *oauth.Client) *fosite.DefaultOpenIDConnectClient {
-	return authClient(&fosite.DefaultClient{ID: c.ID.String(), Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: []string{"openid", "profile", "email", "offline_access"}, Public: c.Public, Audience: []string{c.Audience}, GrantTypes: grantTypes(c), ResponseTypes: []string{"code"}}, c.Auth)
+	return authClient(&fosite.DefaultClient{ID: c.ID.String(), Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: []string{"openid", "profile", "email", "phone", "offline_access"}, Public: c.Public, Audience: []string{c.Audience}, GrantTypes: grantTypes(c), ResponseTypes: []string{"code"}}, c.Auth)
 }
 
 // grantTypes are the client's grants (the defaults for a client built

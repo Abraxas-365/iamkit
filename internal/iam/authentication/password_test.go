@@ -124,3 +124,23 @@ func TestPasswordLockout(t *testing.T) {
 		t.Error("Locked window wrong")
 	}
 }
+
+func TestProfileUpdate(t *testing.T) {
+	s := func(v string) *string { return &v }
+	if (ProfileUpdate{}).Validate() == nil {
+		t.Fatal("empty update accepted")
+	}
+	if (ProfileUpdate{Name: s("  ")}).Normalize().Validate() == nil {
+		t.Fatal("blank name accepted")
+	}
+	if (ProfileUpdate{AvatarURL: s("http://x.example/a.png")}).Validate() == nil {
+		t.Fatal("http avatar accepted")
+	}
+	u := ProfileUpdate{Name: s(" Ada "), AvatarURL: s(" https://x.example/a.png ")}.Normalize()
+	if u.Validate() != nil || *u.Name != "Ada" || *u.AvatarURL != "https://x.example/a.png" {
+		t.Fatalf("normalize = %+v", u)
+	}
+	if (ProfileUpdate{AvatarURL: s("")}).Validate() != nil {
+		t.Fatal("clearing the avatar is allowed")
+	}
+}

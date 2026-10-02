@@ -35,7 +35,7 @@ func (h *Logouts) list(c *fiber.Ctx) error {
 		}
 		filter.Client = client
 	}
-	out, err := h.queries.LogoutDeliveries(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
+	out, err := h.queries.LogoutDeliveries(c.UserContext(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -48,7 +48,7 @@ func (h *Logouts) retry(c *fiber.Ctx) error {
 		return errx.NotFound("failed logout delivery not found")
 	}
 	m := oauth.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
-	if err = h.commands.RetryLogout(c.Context(), m, id); err != nil {
+	if err = h.commands.RetryLogout(c.UserContext(), m, id); err != nil {
 		return err
 	}
 	return c.SendStatus(fiber.StatusAccepted)

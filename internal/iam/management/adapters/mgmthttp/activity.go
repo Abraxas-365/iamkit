@@ -34,14 +34,14 @@ func (h *Activity) sessions(c *fiber.Ctx) error {
 		}
 		filter.User = user
 	}
-	out, err := h.queries.Sessions(c.Context(), envID(c), filter, httpx.PaginationFromCtx(c))
+	out, err := h.queries.Sessions(c.UserContext(), envID(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
 	return c.JSON(out)
 }
 func (h *Activity) audit(c *fiber.Ctx) error {
-	out, err := h.queries.Audit(c.Context(), envID(c), httpx.PaginationFromCtx(c))
+	out, err := h.queries.Audit(c.UserContext(), envID(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -49,7 +49,7 @@ func (h *Activity) audit(c *fiber.Ctx) error {
 }
 func (h *Activity) revoke(c *fiber.Ctx) error {
 	sessID, _ := identity.ParseSessionID(c.Params("id"))
-	if err := h.commands.RevokeSession(c.Context(), envID(c), sessID, Principal(c).OperatorID.String(), c.Method(), c.Path()); err != nil {
+	if err := h.commands.RevokeSession(c.UserContext(), envID(c), sessID, Principal(c).OperatorID.String(), c.Method(), c.Path()); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

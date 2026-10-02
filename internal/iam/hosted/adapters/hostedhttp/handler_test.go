@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
@@ -26,6 +27,7 @@ func TestPagesRenderAndEscape(t *testing.T) {
 		Connections:   []federation.ConnectionSummary{{ID: connection, Name: "Google"}},
 		Challenge:     identity.NewChallengeID(),
 		Organizations: []authentication.Organization{{ID: identity.NewOrganizationID(), Name: "Org <b>"}},
+		Account:       authentication.Profile{Email: "a@example.com", Name: "Ada <i>", AvatarURL: "https://cdn.example/ada.png"},
 		Token:         "ik_invite_x", Invite: &invitation.Preview{Email: "a***@example.com", PasswordRequired: true},
 		Post: &PostForm{Action: `https://sp.example/acs"><script>`, Fields: [][2]string{{"SAMLResponse", `"><script>x`}}},
 	}
@@ -46,6 +48,9 @@ func TestPagesRenderAndEscape(t *testing.T) {
 	_ = pages["organization"].ExecuteTemplate(&out, "layout", v)
 	if !strings.Contains(out.String(), "Org &lt;b&gt;") {
 		t.Fatal("organization name not escaped")
+	}
+	if !strings.Contains(out.String(), `src="https://cdn.example/ada.png"`) || !strings.Contains(out.String(), "Ada &lt;i&gt;") {
+		t.Fatal("chooser shows the account with its avatar, escaped")
 	}
 }
 
@@ -178,8 +183,8 @@ func TestLayoutThemeParts(t *testing.T) {
 
 func TestPreviewSamples(t *testing.T) {
 	for _, page := range []string{"identify", "password", "code", "reset", "organization", "mfa", "enroll", "recovery", "invite", "message", "signup", "signup-code"} {
-		for _, lang := range []string{"en", "es"} {
-			v, ok := sample(page, lang)
+		for _, lang := range i18n.Codes() {
+			v, ok := sample(page, lang, nil)
 			if !ok {
 				t.Fatalf("no sample for %s", page)
 			}
@@ -189,12 +194,12 @@ func TestPreviewSamples(t *testing.T) {
 				t.Fatalf("%s: %v", page, err)
 			}
 			// Every page text comes from the catalog: none is left as a key.
-			if html := string(out); strings.Contains(html, "hosted.") || !strings.Contains(html, `<html lang="`+lang+`">`) {
+			if html := string(out); strings.Contains(html, "hosted.") || !strings.Contains(html, `<html lang="`+lang+`" dir="`+i18n.Dir(lang)+`">`) {
 				t.Fatalf("%s/%s: untranslated\n%s", page, lang, html)
 			}
 		}
 	}
-	if _, ok := sample("admin", "en"); ok {
+	if _, ok := sample("admin", "en", nil); ok {
 		t.Fatal("unknown page previewed")
 	}
 }
@@ -202,15 +207,15 @@ func TestPreviewSamples(t *testing.T) {
 // Pages speak the page language: titles, labels, buttons and the errors
 // people can fix; the browser language applies when nothing else does.
 func TestLocalizedPages(t *testing.T) {
-	v, _ := sample("identify", "es")
+	v, _ := sample("identify", "es", nil)
 	out, _ := document("identify", &v)
 	html := string(out)
-	for _, want := range []string{"<title>Iniciar sesión", ">Correo electrónico<", ">Continuar<", `class="divider">o<`, "Continuar con Google"} {
+	for _, want := range []string{"<title>Iniciar sesión", ">Correo electrónico o usuario<", ">Continuar<", `class="divider">o<`, "Continuar con Google"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("missing %q in\n%s", want, html)
 		}
 	}
-	v, _ = sample("password", "es")
+	v, _ = sample("password", "es", nil)
 	out, _ = document("password", &v)
 	if html = string(out); !strings.Contains(html, "¿Olvidaste tu contraseña?") || !strings.Contains(html, "Envíame un código") {
 		t.Fatalf("password page\n%s", html)
@@ -219,14 +224,15 @@ func TestLocalizedPages(t *testing.T) {
 	app := fiber.New()
 	app.Get("/", func(c *fiber.Ctx) error {
 		lang := language(c, c.Query("preferred"))
-		_, text := failed(c, lang, errx.Unauthorized("invalid credentials or access token"))
+		_, text := failed(c, view{Lang: lang}, errx.Unauthorized("invalid credentials or access token"))
 		return c.SendString(lang + "|" + text)
 	})
 	for _, tc := range []struct{ preferred, accept, want string }{
-		{"", "es-MX,es;q=0.9,en;q=0.8", "es|Correo o contraseña incorrectos."},
-		{"", "fr-FR", "en|Incorrect email or password."},
-		{"en", "es", "en|Incorrect email or password."},
-		{"es", "", "es|Correo o contraseña incorrectos."},
+		{"", "es-MX,es;q=0.9,en;q=0.8", "es|Correo, usuario o contraseña incorrectos."},
+		{"", "eo", "en|Incorrect email, username or password."},
+		{"", "fr-FR,fr;q=0.9", "fr|Adresse e-mail, nom d’utilisateur ou mot de passe incorrect."},
+		{"en", "es", "en|Incorrect email, username or password."},
+		{"es", "", "es|Correo, usuario o contraseña incorrectos."},
 	} {
 		req := httptest.NewRequest("GET", "/?preferred="+tc.preferred, nil)
 		req.Header.Set("Accept-Language", tc.accept)
@@ -237,6 +243,32 @@ func TestLocalizedPages(t *testing.T) {
 		body, _ := io.ReadAll(res.Body)
 		if string(body) != tc.want {
 			t.Fatalf("preferred %q accept %q: got %q, want %q", tc.preferred, tc.accept, body, tc.want)
+		}
+	}
+
+	// Only enabled languages are used: the browser's Spanish is ignored
+	// when the environment enables English only, and an environment with
+	// Spanish only answers in Spanish whatever the browser asks.
+	for _, tc := range []struct {
+		languages []string
+		accept    string
+		want      string
+	}{
+		{[]string{"en"}, "es-MX", "en"},
+		{[]string{"es"}, "en-US", "es"},
+		{nil, "es-MX", "es"},
+	} {
+		app := fiber.New()
+		settings := hosted.Settings{Languages: tc.languages}
+		app.Get("/", func(c *fiber.Ctx) error { return c.SendString(environmentLanguage(c, settings)) })
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Accept-Language", tc.accept)
+		res, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if body, _ := io.ReadAll(res.Body); string(body) != tc.want {
+			t.Fatalf("languages %v accept %q: %q", tc.languages, tc.accept, body)
 		}
 	}
 }
@@ -270,7 +302,7 @@ func TestBackgroundImage(t *testing.T) {
 
 func TestPreviewMethods(t *testing.T) {
 	render := func(page string, m Methods) (string, error) {
-		v, _ := sample(page, "en")
+		v, _ := sample(page, "en", nil)
 		if err := m.apply(&v); err != nil {
 			return "", err
 		}
@@ -316,12 +348,15 @@ func TestFailedMessages(t *testing.T) {
 		{"provider outage is explained", federation.ErrProviderUnavailable(errors.New("dial tcp: no such host")), 502, "single sign-on provider is not responding"},
 		{"other failures stay generic", errx.Internal("database down"), 500, "Something went wrong"},
 		{"plain errors stay generic", errors.New("boom"), 500, "Something went wrong"},
+		{"hosted codes are translated", hosted.Problem(errx.Validation, hosted.CodeChooseOrganization, "choose an organization"), 400, "Choose an organization."},
+		{"wrong code counts down", hosted.ErrWrongCode(1), 401, "That code is not valid. Try again. 1 attempt left."},
+		{"password length names its bounds", authentication.PasswordRejected(authentication.RuleLength, 14), 400, "The password must be 14 to 72 characters long."},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			app := fiber.New()
 			app.Get("/", func(c *fiber.Ctx) error {
-				status, text := failed(c, "en", tc.err)
+				status, text := failed(c, view{Lang: "en"}, tc.err)
 				return c.Status(status).SendString(text)
 			})
 			res, err := app.Test(httptest.NewRequest("GET", "/", nil))

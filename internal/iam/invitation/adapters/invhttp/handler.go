@@ -52,7 +52,7 @@ func invitationID(c *fiber.Ctx) (identity.InvitationID, error) {
 }
 
 func (h *Handler) List(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.Context(), boundary(c), invitation.Filter{Status: c.Query("status")}, httpx.PaginationFromCtx(c))
+	out, err := h.queries.List(c.UserContext(), boundary(c), invitation.Filter{Status: c.Query("status")}, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (h *Handler) Find(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.Find(c.Context(), boundary(c), id)
+	out, err := h.queries.Find(c.UserContext(), boundary(c), id)
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Invite(c.Context(), boundary(c), h.mutation(c), input)
+	out, err := h.commands.Invite(c.UserContext(), boundary(c), h.mutation(c), input)
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (h *Handler) Resend(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.commands.Resend(c.Context(), boundary(c), h.mutation(c), id)
+	out, err := h.commands.Resend(c.UserContext(), boundary(c), h.mutation(c), id)
 	if err != nil {
 		return err
 	}
@@ -102,7 +102,7 @@ func (h *Handler) Revoke(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.commands.Revoke(c.Context(), boundary(c), h.mutation(c), id); err != nil {
+	if err := h.commands.Revoke(c.UserContext(), boundary(c), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -117,7 +117,7 @@ func (h *Handler) Preview(c *fiber.Ctx) error {
 	if err := c.BodyParser(&body); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.queries.Preview(c.Context(), body.Token)
+	out, err := h.queries.Preview(c.UserContext(), body.Token)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (h *Handler) Accept(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Accept(c.Context(), input)
+	out, err := h.commands.Accept(c.UserContext(), input)
 	if err != nil {
 		return err
 	}

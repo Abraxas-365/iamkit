@@ -8,6 +8,8 @@ import (
 	"fmt"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
+	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -32,8 +34,13 @@ func conflict(err error) error {
 	return failure(err)
 }
 func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, id identity.OrganizationID, name string) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO organizations(id,environment_id,name) VALUES($1,$2,$3)`, id, environment, name)
-	return failure(err)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO organizations(id,environment_id,name) VALUES($1,$2,$3)`, id, environment, name); err != nil {
+			return failure(err)
+		}
+		return eventpg.Record(ctx, tx, environment, event.OrganizationCreated, event.Subject{Kind: "organization", ID: id.String()},
+			map[string]any{"organization_id": id.String()})
+	})
 }
 func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, filter organization.Filter, page query.Pagination) (query.Paginated[organization.Summary], error) {
 	base := `FROM organizations WHERE environment_id=$1`
@@ -97,7 +104,7 @@ func (r *Repository) UpdateMember(ctx context.Context, m organization.Mutation, 
 	if count == 0 {
 		return errx.NotFound("resource not found")
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+	if err = audit(ctx, tx, m); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())
@@ -130,14 +137,18 @@ func (r *Repository) Update(ctx context.Context, m organization.Mutation, id ide
 	if count == 0 {
 		return errx.NotFound("resource not found")
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+	if err = audit(ctx, tx, m); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())
 }
 func (r *Repository) AddMember(ctx context.Context, environment identity.EnvironmentID, input organization.Membership) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, environment, input.Organization, input.User)
-	return conflict(err)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, environment, input.Organization, input.User); err != nil {
+			return conflict(err)
+		}
+		return eventpg.Membership(ctx, tx, environment, event.ActorFrom(ctx), event.MembershipCreated, input.Organization, input.User)
+	})
 }
 
 // RemoveMember deactivates the membership and drops the user from the
@@ -153,6 +164,9 @@ func (r *Repository) RemoveMember(ctx context.Context, environment identity.Envi
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM group_members WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user); err != nil {
 		return failure(err)
+	}
+	if err = eventpg.Membership(ctx, tx, environment, event.ActorFrom(ctx), event.MembershipRemoved, org, user); err != nil {
+		return err
 	}
 	return failure(tx.Commit())
 }
@@ -180,10 +194,37 @@ func (r *Repository) Members(ctx context.Context, environment identity.Environme
 		return query.Paginated[organization.MemberView]{}, failure(err)
 	}
 	out := []organization.MemberView{}
-	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT m.user_id, u.name AS user_name, u.email AS user_email, m.active, m.manager_id, mgr.name AS manager_name, m.sso_bypass %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
+	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("SELECT m.user_id, u.name AS user_name, coalesce(u.email,'') AS user_email, m.active, m.manager_id, mgr.name AS manager_name, m.sso_bypass %s ORDER BY u.name LIMIT %d OFFSET %d", base, page.Limit, page.Offset), args...); err != nil {
 		return query.Paginated[organization.MemberView]{}, failure(err)
 	}
 	return query.NewPaginated(out, total, page), nil
 }
 
 var _ organization.Repository = (*Repository)(nil)
+
+// EditMetadata locks the organization, applies edit and stores the result.
+func (r *Repository) EditMetadata(ctx context.Context, m organization.Mutation, id identity.OrganizationID, edit func(json.RawMessage) (json.RawMessage, error)) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err)
+	}
+	defer tx.Rollback()
+	var current []byte
+	if err = tx.GetContext(ctx, &current, `SELECT metadata FROM organizations WHERE environment_id=$1 AND id=$2 FOR UPDATE`, m.Environment, id); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return errx.NotFound("resource not found")
+		}
+		return failure(err)
+	}
+	next, err := edit(current)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE organizations SET metadata=$3::jsonb WHERE environment_id=$1 AND id=$2`, m.Environment, id, string(next)); err != nil {
+		return failure(err)
+	}
+	if err = audit(ctx, tx, m); err != nil {
+		return failure(err)
+	}
+	return failure(tx.Commit())
+}

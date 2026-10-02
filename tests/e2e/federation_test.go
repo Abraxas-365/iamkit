@@ -16,7 +16,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func federationJourney(t *testing.T, app *fiber.App, key *rsa.PrivateKey, call func(string, string, string, any, int) map[string]any, owner, base, env, org, user, client, resource string) {
+func federationJourney(t *testing.T, app *App, key *rsa.PrivateKey, call func(string, string, string, any, int) map[string]any, owner, base, env, org, user, client, resource string) {
 	t.Helper()
 	var issuer, nonce string
 	provider := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

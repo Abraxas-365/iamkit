@@ -28,35 +28,35 @@ func bearer(c *fiber.Ctx) string {
 	return parts[1]
 }
 func (h *Tokens) Validate(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
-	return h.validator.Validate(c.Context(), bearer(c), audience, environment)
+	return h.validator.Validate(c.UserContext(), bearer(c), audience, environment)
 }
 
 // Self validates the bearer token by its own claims (any environment and
 // audience IAMKit issued it for) and reads the user's profile.
 func (h *Tokens) Self(c *fiber.Ctx) (authentication.Token, authentication.Profile, error) {
-	token, err := h.validator.ValidateSelf(c.Context(), bearer(c))
+	token, err := h.validator.ValidateSelf(c.UserContext(), bearer(c))
 	if err != nil {
 		return token, authentication.Profile{}, err
 	}
-	profile, err := h.queries.Profile(c.Context(), token)
+	profile, err := h.queries.Profile(c.UserContext(), token)
 	return token, profile, err
 }
 
 // ProfileOf reads the profile of a token resolved elsewhere (an opaque
 // OAuth access token introspected by the OAuth module).
 func (h *Tokens) ProfileOf(c *fiber.Ctx, token authentication.Token) (authentication.Profile, error) {
-	return h.queries.Profile(c.Context(), token)
+	return h.queries.Profile(c.UserContext(), token)
 }
 
 // Verify validates a raw access token by its own claims, like Self does
 // for the bearer token (OAuth token exchange subject tokens).
 func (h *Tokens) Verify(c *fiber.Ctx, raw string) (authentication.Token, error) {
-	return h.validator.ValidateSelf(c.Context(), raw)
+	return h.validator.ValidateSelf(c.UserContext(), raw)
 }
 
 // Sign issues an access token for audience without writing a response.
 func (h *Tokens) Sign(c *fiber.Ctx, t authentication.Token, audience string) (string, error) {
-	return h.issuer.Issue(c.Context(), t, audience)
+	return h.issuer.Issue(c.UserContext(), t, audience)
 }
 func (h *Tokens) Issue(c *fiber.Ctx, t authentication.Token, audience, refresh string) error {
 	return h.IssueWith(c, t, audience, refresh, nil)
@@ -65,7 +65,7 @@ func (h *Tokens) Issue(c *fiber.Ctx, t authentication.Token, audience, refresh s
 // IssueWith answers a login that enrolled its first second factor with
 // the recovery codes, shown this once.
 func (h *Tokens) IssueWith(c *fiber.Ctx, t authentication.Token, audience, refresh string, recoveryCodes []string) error {
-	raw, err := h.issuer.Issue(c.Context(), t, audience)
+	raw, err := h.issuer.Issue(c.UserContext(), t, audience)
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,17 @@ func tokenResponse(c *fiber.Ctx, raw, refresh string) error {
 	return c.JSON(tokenBody(raw, refresh))
 }
 func (h *Tokens) Machine(c *fiber.Ctx) error {
-	raw, err := h.issuer.Machine(c.Context(), bearer(c))
+	raw, err := h.issuer.Machine(c.UserContext(), bearer(c))
+	if err != nil {
+		return err
+	}
+	return tokenResponse(c, raw, "")
+}
+
+// ExchangeAccessToken trades the personal access token in the
+// Authorization header for an application access token.
+func (h *Tokens) ExchangeAccessToken(c *fiber.Ctx) error {
+	raw, err := h.issuer.ExchangeAccessToken(c.UserContext(), bearer(c))
 	if err != nil {
 		return err
 	}
@@ -98,7 +108,18 @@ func (h *Tokens) Machine(c *fiber.Ctx) error {
 // IssueMachine is the token response of an already authenticated service
 // account (OAuth client_credentials); it sets Cache-Control like Machine.
 func (h *Tokens) IssueMachine(c *fiber.Ctx, account identity.AccountID) (fiber.Map, error) {
-	raw, err := h.issuer.MachineAccount(c.Context(), account)
+	raw, err := h.issuer.MachineAccount(c.UserContext(), account)
+	if err != nil {
+		return nil, err
+	}
+	c.Set("Cache-Control", "no-store")
+	return tokenBody(raw, ""), nil
+}
+
+// KeyGrant is the token response of a machine user's JWT-bearer
+// assertion (OAuth urn:ietf:params:oauth:grant-type:jwt-bearer).
+func (h *Tokens) KeyGrant(c *fiber.Ctx, assertion string, boundary authentication.Context) (fiber.Map, error) {
+	raw, err := h.issuer.KeyGrant(c.UserContext(), assertion, boundary)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +127,7 @@ func (h *Tokens) IssueMachine(c *fiber.Ctx, account identity.AccountID) (fiber.M
 	return tokenBody(raw, ""), nil
 }
 func (h *Tokens) JWKS(c *fiber.Ctx) error {
-	out, err := h.issuer.JWKS(c.Context())
+	out, err := h.issuer.JWKS(c.UserContext())
 	if err != nil {
 		return err
 	}
@@ -141,7 +162,7 @@ func (h *Tokens) Logout(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.Logout(c.Context(), token); err != nil {
+	if err = h.commands.Logout(c.UserContext(), token); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -152,7 +173,7 @@ func (h *Tokens) Profile(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.Profile(c.Context(), token)
+	out, err := h.queries.Profile(c.UserContext(), token)
 	if err != nil {
 		return err
 	}
@@ -164,7 +185,7 @@ func (h *Tokens) Organizations(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.Organizations(c.Context(), token)
+	out, err := h.queries.Organizations(c.UserContext(), token)
 	if err != nil {
 		return err
 	}
@@ -174,7 +195,7 @@ func (h *Tokens) UpdateProfile(c *fiber.Ctx) error {
 	var input struct {
 		Environment identity.EnvironmentID `json:"environment_id"`
 		Audience    string                 `json:"audience"`
-		Name        string                 `json:"name"`
+		authentication.ProfileUpdate
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
@@ -183,7 +204,7 @@ func (h *Tokens) UpdateProfile(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err = h.commands.UpdateProfile(c.Context(), token, input.Name); err != nil {
+	if err = h.commands.UpdateProfile(c.UserContext(), token, input.ProfileUpdate); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -207,7 +228,7 @@ func (h *Tokens) AddMember(c *fiber.Ctx) error {
 			return errx.Validation("user_id must be a valid user ID")
 		}
 	}
-	if err = h.commands.AddMember(c.Context(), token, user); err != nil {
+	if err = h.commands.AddMember(c.UserContext(), token, user); err != nil {
 		return err
 	}
 	return c.SendStatus(201)

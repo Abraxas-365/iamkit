@@ -24,7 +24,7 @@ func (h *SignupHandler) Signup(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.Signup(c.Context(), input)
+	id, err := h.commands.Signup(c.UserContext(), input)
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func (h *SignupHandler) Verify(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.CompleteSignup(c.Context(), input.Environment, input.Challenge, input.Code)
+	out, err := h.commands.CompleteSignup(c.UserContext(), input.Environment, input.Challenge, input.Code)
 	if err != nil {
 		return err
 	}

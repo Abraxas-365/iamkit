@@ -239,8 +239,8 @@ func TestHostedMFA(t *testing.T) {
 	if ask.Status != 200 || !strings.Contains(ask.Body, `action="/hosted/login/mfa"`) || strings.Contains(ask.Body, "data:image/png") {
 		t.Fatalf("mfa page: %d %s", ask.Status, ask.Body)
 	}
-	if r := b.post("/hosted/login/mfa", url.Values{"ticket": {tk}, "code": {"000000"}}); r.Status != 401 {
-		t.Fatalf("wrong code: %d", r.Status)
+	if r := b.post("/hosted/login/mfa", url.Values{"ticket": {tk}, "code": {"000000"}}); r.Status != 401 || !strings.Contains(r.Body, "4 attempts left.") {
+		t.Fatalf("wrong code: %d %s", r.Status, r.Body)
 	}
 	tokens = b.exchange(client, b.post("/hosted/login/mfa", url.Values{"ticket": {tk}, "code": {totp(t, secret, 1)}}))
 	if a := strs(claims(t, tokens["id_token"].(string))["amr"]); !contains(a, "otp") {

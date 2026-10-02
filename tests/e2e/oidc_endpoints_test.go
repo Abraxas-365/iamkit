@@ -20,7 +20,7 @@ import (
 
 // appTransport sends a relying party library's requests to the in-memory
 // app, as if it were served at the issuer.
-type appTransport struct{ app *fiber.App }
+type appTransport struct{ app *App }
 
 func (a appTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	req := r.Clone(r.Context())

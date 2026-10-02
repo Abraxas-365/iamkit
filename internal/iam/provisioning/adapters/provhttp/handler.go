@@ -47,6 +47,22 @@ type scimEmail struct {
 	Type    string `json:"type,omitempty"`
 	Primary bool   `json:"primary"`
 }
+type scimPhone struct {
+	Value   string `json:"value"`
+	Type    string `json:"type,omitempty"`
+	Primary bool   `json:"primary,omitempty"`
+}
+
+// mobile returns the phoneNumbers[type eq "mobile"] value ("" none).
+func mobile(list []scimPhone) string {
+	for _, p := range list {
+		if strings.EqualFold(p.Type, "mobile") {
+			return strings.TrimSpace(p.Value)
+		}
+	}
+	return ""
+}
+
 type scimMeta struct {
 	ResourceType string `json:"resourceType"`
 	Created      string `json:"created,omitempty"`
@@ -68,7 +84,9 @@ type scimUser struct {
 	Name        *scimName       `json:"name,omitempty"`
 	Active      *bool           `json:"active,omitempty"`
 	Emails      []scimEmail     `json:"emails,omitempty"`
-	Meta        *scimMeta       `json:"meta,omitempty"`
+	// PhoneNumbers carries the mobile number when the connection maps it.
+	PhoneNumbers []scimPhone `json:"phoneNumbers,omitempty"`
+	Meta         *scimMeta   `json:"meta,omitempty"`
 }
 
 // scimInput is the inbound resource; active uses parseBool so Entra's
@@ -96,6 +114,9 @@ func dto(c *fiber.Ctx, u provisioning.User) scimUser {
 	}
 	for _, alias := range u.Aliases {
 		out.Emails = append(out.Emails, scimEmail{Value: alias.Value, Type: alias.Type})
+	}
+	if u.Phone != "" {
+		out.PhoneNumbers = []scimPhone{{Value: u.Phone, Type: "mobile", Primary: true}}
 	}
 	if u.Manager != "" {
 		out.Enterprise = &scimEnterprise{Manager: &scimManager{Value: u.Manager}}
@@ -208,7 +229,7 @@ func (h *Handler) authenticate(c *fiber.Ctx) error {
 	if key == "" {
 		return scimFailure(c, 401, "invalid credential", "")
 	}
-	p, err := h.commands.Authenticate(c.Context(), key)
+	p, err := h.commands.Authenticate(c.UserContext(), key)
 	if err != nil {
 		return scimFailure(c, 401, "invalid credential", "")
 	}
@@ -278,7 +299,7 @@ func (h *Handler) get(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	u, err := h.queries.Find(c.Context(), principal(c), id)
+	u, err := h.queries.Find(c.UserContext(), principal(c), id)
 	if err != nil {
 		return err
 	}
@@ -293,7 +314,7 @@ func (h *Handler) list(c *fiber.Ctx) error {
 		}
 		f.Field, f.Value = field, value
 	}
-	rows, total, err := h.queries.List(c.Context(), principal(c), f)
+	rows, total, err := h.queries.List(c.UserContext(), principal(c), f)
 	if err != nil {
 		return err
 	}
@@ -313,14 +334,14 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	u := provisioning.User{Email: input.UserName, Name: input.DisplayName, External: strings.TrimSpace(input.ExternalID), Aliases: input.aliases(), Active: true}
+	u := provisioning.User{Email: input.UserName, Name: input.DisplayName, External: strings.TrimSpace(input.ExternalID), Aliases: input.aliases(), Phone: mobile(input.PhoneNumbers), Active: true}
 	if active != nil {
 		u.Active = *active
 	}
 	if m := input.manager(); m != nil {
 		u.Manager = *m
 	}
-	out, err := h.commands.Create(c.Context(), principal(c), u)
+	out, err := h.commands.Create(c.UserContext(), principal(c), u)
 	if err != nil {
 		return err
 	}
@@ -338,7 +359,7 @@ func (h *Handler) replace(c *fiber.Ctx) error {
 		return err
 	}
 	normalize(&input)
-	old, err := h.queries.Find(c.Context(), principal(c), id)
+	old, err := h.queries.Find(c.UserContext(), principal(c), id)
 	if err != nil {
 		return err
 	}
@@ -356,6 +377,8 @@ func (h *Handler) replace(c *fiber.Ctx) error {
 	}
 	aliases := input.aliases()
 	update.Aliases = &aliases
+	phone := mobile(input.PhoneNumbers) // a full replace without one clears it
+	update.Phone = &phone
 	name := strings.TrimSpace(input.DisplayName)
 	if name == "" {
 		name = old.Email
@@ -386,7 +409,7 @@ func (h *Handler) patch(c *fiber.Ctx) error {
 	// set): the update is conditional on the version read, retried when a
 	// concurrent request got there first.
 	for attempt := 0; ; attempt++ {
-		old, err := h.queries.Find(c.Context(), principal(c), id)
+		old, err := h.queries.Find(c.UserContext(), principal(c), id)
 		if err != nil {
 			return err
 		}
@@ -395,7 +418,7 @@ func (h *Handler) patch(c *fiber.Ctx) error {
 			return err
 		}
 		update.IfVersion = &old.Version
-		out, err := h.commands.Update(c.Context(), principal(c), id, update)
+		out, err := h.commands.Update(c.UserContext(), principal(c), id, update)
 		if errors.Is(err, provisioning.ErrStale) && attempt < 3 {
 			continue
 		}
@@ -409,7 +432,7 @@ func (h *Handler) patch(c *fiber.Ctx) error {
 	}
 }
 func (h *Handler) update(c *fiber.Ctx, id identity.UserID, input provisioning.Update) error {
-	out, err := h.commands.Update(c.Context(), principal(c), id, input)
+	out, err := h.commands.Update(c.UserContext(), principal(c), id, input)
 	if err != nil {
 		return err
 	}
@@ -424,7 +447,7 @@ func (h *Handler) remove(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.commands.Delete(c.Context(), principal(c), id); err != nil {
+	if err := h.commands.Delete(c.UserContext(), principal(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

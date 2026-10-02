@@ -24,6 +24,10 @@ func scimDefinitions() []fiber.Map {
 	emails["subAttributes"] = []fiber.Map{attr("value", "string", "readWrite", false), attr("type", "string", "readWrite", false), attr("primary", "boolean", "readWrite", false)}
 	managerValue := attr("value", "string", "readWrite", false)
 	managerValue["caseExact"] = true
+	phoneNumbers := attr("phoneNumbers", "complex", "readWrite", false)
+	phoneNumbers["multiValued"] = true
+	phoneNumbers["description"] = "Only the mobile number is stored, and only when the connection maps phone numbers (map_phone)."
+	phoneNumbers["subAttributes"] = []fiber.Map{attr("value", "string", "readWrite", false), attr("type", "string", "readWrite", false), attr("primary", "boolean", "readWrite", false)}
 	manager := attr("manager", "complex", "readWrite", false)
 	manager["subAttributes"] = []fiber.Map{managerValue}
 	meta := func(id string) fiber.Map {
@@ -31,7 +35,7 @@ func scimDefinitions() []fiber.Map {
 	}
 	return []fiber.Map{
 		{"schemas": []string{scimSchemaSchema}, "id": scimUserSchema, "name": "User", "description": "User account", "meta": meta(scimUserSchema), "attributes": []fiber.Map{
-			userName, attr("displayName", "string", "readWrite", false), name, attr("active", "boolean", "readWrite", false), externalID, emails,
+			userName, attr("displayName", "string", "readWrite", false), name, attr("active", "boolean", "readWrite", false), externalID, emails, phoneNumbers,
 		}},
 		{"schemas": []string{scimSchemaSchema}, "id": scimEnterpriseSchema, "name": "EnterpriseUser", "description": "Enterprise user extension", "meta": meta(scimEnterpriseSchema), "attributes": []fiber.Map{manager}},
 		groupSchemaDefinition(attr),

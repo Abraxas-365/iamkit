@@ -2,6 +2,7 @@ package oauthhttp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -13,11 +14,13 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/httpx"
+	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/oauthsvc"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 	"github.com/ory/fosite"
@@ -47,6 +50,45 @@ type Handler struct {
 	// deviceDone renders the page shown once a device is approved (hosted
 	// module).
 	deviceDone func(c *fiber.Ctx, environment identity.EnvironmentID) error
+	claims     oauth.ProfileClaims
+	actions    oauth.Actions
+	usage      oauth.Usage
+}
+
+// Usage counts the access tokens fosite issues.
+func (h *Handler) Usage(u oauth.Usage) { h.usage = u }
+
+// issued counts one access token of client's environment.
+func (h *Handler) issued(ctx context.Context, client *oauth.Client) {
+	if h.usage != nil {
+		h.usage.Count(ctx, client.Environment, usage.MetricTokens, 1)
+	}
+}
+
+// ProfileClaims releases the user's profile and phone claims.
+func (h *Handler) ProfileClaims(claims oauth.ProfileClaims) { h.claims = claims }
+
+// customClaims are the user's claims when scopes grant profile or phone;
+// a failure leaves them out rather than failing the sign-in.
+func (h *Handler) customClaims(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, scopes []string) map[string]json.RawMessage {
+	if h.claims == nil || (!slices.Contains(scopes, "profile") && !slices.Contains(scopes, "phone")) {
+		return nil
+	}
+	claims, err := h.claims.Claims(ctx, environment, user, scopes)
+	if err != nil {
+		return nil
+	}
+	return claims
+}
+
+// addClaims puts custom claims into an ID token session.
+func addClaims(session *oauthfosite.Session, claims map[string]json.RawMessage) {
+	for name, value := range claims {
+		var v any
+		if json.Unmarshal(value, &v) == nil {
+			session.IDTokenClaims().Extra[name] = v
+		}
+	}
 }
 
 // Accounts enables grant_type=client_credentials for service accounts.
@@ -82,7 +124,7 @@ func (h *Handler) update(c *fiber.Ctx) error {
 		return errx.Validation("invalid request")
 	}
 	m := oauth.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
-	if err = h.commands.Update(c.Context(), m, clientID, input); err != nil {
+	if err = h.commands.Update(c.UserContext(), m, clientID, input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -92,7 +134,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, secret, err := h.commands.Create(c.Context(), env(c), input)
+	id, secret, err := h.commands.Create(c.UserContext(), env(c), input)
 	if err != nil {
 		return err
 	}
@@ -104,7 +146,7 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 		return errx.Validation("invalid client id")
 	}
 	m := oauth.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
-	if err := h.commands.Disable(c.Context(), m, clientID); err != nil {
+	if err := h.commands.Disable(c.UserContext(), m, clientID); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -114,7 +156,7 @@ func (h *Handler) find(c *fiber.Ctx) error {
 	if err != nil {
 		return errx.NotFound("OAuth client not found")
 	}
-	out, err := h.queries.Find(c.Context(), env(c), clientID)
+	out, err := h.queries.Find(c.UserContext(), env(c), clientID)
 	if err != nil {
 		return err
 	}
@@ -129,14 +171,14 @@ func (h *Handler) list(c *fiber.Ctx) error {
 		}
 		filter.Application = application
 	}
-	out, err := h.queries.List(c.Context(), env(c), filter, httpx.PaginationFromCtx(c))
+	out, err := h.queries.List(c.UserContext(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
 	return c.JSON(out)
 }
 func (h *Handler) load(c *fiber.Ctx, id identity.ClientID) (fosite.OAuth2Provider, *oauth.Client, *oauthfosite.Store, error) {
-	client, err := h.flows.Client(c.Context(), id)
+	client, err := h.flows.Client(c.UserContext(), id)
 	if err != nil {
 		return nil, nil, nil, errx.Wrap(err, "OAuth client lookup failed", errx.TypeInternal)
 	}
@@ -153,7 +195,7 @@ func (h *Handler) loadFromString(c *fiber.Ctx, raw string) (fosite.OAuth2Provide
 func request(c *fiber.Ctx) *http.Request {
 	req := httptest.NewRequest(c.Method(), "https://iamkit.invalid"+c.OriginalURL(), strings.NewReader(string(c.Body())))
 	c.Request().Header.VisitAll(func(k, v []byte) { req.Header.Set(string(k), string(v)) })
-	return req.WithContext(c.Context())
+	return req.WithContext(c.UserContext())
 }
 func response(c *fiber.Ctx, w *httptest.ResponseRecorder) error {
 	// Set, not Append: fiber presets Content-Type, and a doubled value
@@ -176,12 +218,12 @@ func (h *Handler) Register(app *fiber.App) {
 	})
 	app.Get("/oauth/authorize", h.authorize)
 	app.Post("/oauth/authorize/complete", h.complete)
-	app.Post("/oauth/token", endpointErrors(h.token))
+	app.Post("/oauth/token", endpointErrors, h.token)
 	if h.devices != nil {
-		app.Post("/oauth/device_authorization", endpointErrors(h.deviceAuthorization))
+		app.Post("/oauth/device_authorization", endpointErrors, h.deviceAuthorization)
 	}
-	app.Post("/oauth/revoke", endpointErrors(h.revoke))
-	app.Post("/oauth/introspect", endpointErrors(h.introspect))
+	app.Post("/oauth/revoke", endpointErrors, h.revoke)
+	app.Post("/oauth/introspect", endpointErrors, h.introspect)
 	app.Get("/oauth/userinfo", h.userinfo)
 	app.Post("/oauth/userinfo", h.userinfo)
 	app.Get("/oauth/end_session", h.endSession)
@@ -204,7 +246,7 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	if !ar.GetRequestedScopes().Has("openid") {
 		return errx.Validation("openid scope required")
 	}
-	ticket, binding, err := h.flows.Start(c.Context(), client, q.Encode())
+	ticket, binding, err := h.flows.Start(c.UserContext(), client, q.Encode())
 	if err != nil {
 		return err
 	}
@@ -223,7 +265,7 @@ func (h *Handler) complete(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	return h.finish(c, input.Ticket, input.Approve, func(client *oauth.Client) (oauth.Login, error) {
+	err := h.finish(c, input.Ticket, input.Approve, func(client *oauth.Client) (oauth.Login, error) {
 		access, err := h.tokens.Validate(c, client.Environment, client.Audience)
 		if err != nil {
 			return oauth.Login{}, errx.Forbidden("login does not match client")
@@ -233,6 +275,31 @@ func (h *Handler) complete(c *fiber.Ctx) error {
 		}
 		return oauth.Login{User: access.Subject, Organization: access.OrganizationID, Session: access.SessionID, Permissions: access.Permissions}, nil
 	})
+	if err != nil || !wantsJSON(c) {
+		return err
+	}
+	// A cross-origin fetch cannot read a redirect: hand it the target to
+	// navigate to instead (the code or error response for the client).
+	location := c.GetRespHeader(fiber.HeaderLocation)
+	if c.Response().StatusCode() != fiber.StatusSeeOther || location == "" {
+		return nil
+	}
+	c.Response().Header.Del(fiber.HeaderLocation)
+	c.Response().ResetBody()
+	return c.Status(fiber.StatusOK).JSON(Completion{RedirectTo: location})
+}
+
+// Completion is the JSON answer of /oauth/authorize/complete to a client
+// that asked for it (Accept: application/json): where to send the browser.
+type Completion struct {
+	RedirectTo string `json:"redirect_to"`
+}
+
+// wantsJSON reports whether the request accepts JSON but not HTML: a
+// script, not a form submission.
+func wantsJSON(c *fiber.Ctx) bool {
+	accept := c.Get(fiber.HeaderAccept)
+	return strings.Contains(accept, fiber.MIMEApplicationJSON) && !strings.Contains(accept, fiber.MIMETextHTML)
 }
 
 // Finish completes a hosted authorization with a session the hosted login
@@ -248,7 +315,7 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 	var ar fosite.AuthorizeRequester
 	var session *oauthfosite.Session
 	var device *oauth.Client
-	err := h.flows.Complete(c.Context(), ticket, c.Cookies("__Host-iamkit-authorization"), approve, func(row oauth.Ticket, tx oauth.Authorization) error {
+	err := h.flows.Complete(c.UserContext(), ticket, c.Cookies("__Host-iamkit-authorization"), approve, func(row oauth.Ticket, tx oauth.Authorization) error {
 		var client *oauth.Client
 		var err error
 		p, client, _, err = h.load(c, row.Client)
@@ -259,19 +326,23 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		if err != nil {
 			return err
 		}
+		// An authorization that named its organization completes only there.
+		if hint := oauth.FormOrganization(row.Form); !hint.IsZero() && access.Organization != hint {
+			return oauth.ErrOrganizationHint()
+		}
 		if row.Device != nil {
 			// A device ticket approves the device authorization; the device
 			// collects its tokens at the token endpoint.
-			if _, err = tx.Session(c.Context(), access.Session); err != nil {
+			if _, err = tx.Session(c.UserContext(), access.Session); err != nil {
 				return err
 			}
-			if err = tx.Bind(c.Context(), access.Session, client.ID); err != nil {
+			if err = tx.Bind(c.UserContext(), access.Session, client.ID); err != nil {
 				return err
 			}
 			device = client
-			return tx.ApproveDevice(c.Context(), client.Environment, row.Device, access)
+			return tx.ApproveDevice(c.UserContext(), client.Environment, row.Device, access)
 		}
-		req := httptest.NewRequest("GET", "https://iamkit.invalid/oauth/authorize?"+row.Form, nil).WithContext(c.Context())
+		req := httptest.NewRequest("GET", "https://iamkit.invalid/oauth/authorize?"+row.Form, nil).WithContext(c.UserContext())
 		ar, err = p.NewAuthorizeRequest(req.Context(), req)
 		if err != nil {
 			return errx.Validation("invalid authorization request")
@@ -280,15 +351,16 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 			ar.GrantScope(scope)
 		}
 		ar.GrantAudience(client.Audience)
-		info, err := tx.Session(c.Context(), access.Session)
+		info, err := tx.Session(c.UserContext(), access.Session)
 		if err != nil {
 			return err
 		}
-		if err = tx.Bind(c.Context(), access.Session, client.ID); err != nil {
+		if err = tx.Bind(c.UserContext(), access.Session, client.ID); err != nil {
 			return err
 		}
 		session = h.session(client, access, info, row.Requested)
-		return nil
+		addClaims(session, h.customClaims(c.UserContext(), client.Environment, access.User, ar.GetGrantedScopes()))
+		return h.tokenHooks(c.UserContext(), client, session, access.User, access.Organization, info.AMR, ar.GetGrantedScopes())
 	})
 	if err != nil {
 		return err
@@ -297,12 +369,12 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 	if device != nil {
 		return h.deviceApproved(c, device)
 	}
-	out, err := p.NewAuthorizeResponse(c.Context(), ar, session)
+	out, err := p.NewAuthorizeResponse(c.UserContext(), ar, session)
 	w := httptest.NewRecorder()
 	if err != nil {
-		p.WriteAuthorizeError(c.Context(), w, ar, err)
+		p.WriteAuthorizeError(c.UserContext(), w, ar, err)
 	} else {
-		p.WriteAuthorizeResponse(c.Context(), w, ar, out)
+		p.WriteAuthorizeResponse(c.UserContext(), w, ar, out)
 	}
 	return response(c, w)
 }
@@ -370,13 +442,14 @@ func clientError(c *fiber.Ctx, err error) error {
 	}
 	return oauthError(c, "invalid_client", 401)
 }
-func endpointErrors(next fiber.Handler) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		if err := next(c); err != nil {
-			return oauthError(c, "server_error", 500)
-		}
-		return nil
+
+// endpointErrors answers any error of the OAuth endpoint after it with an
+// OAuth server_error.
+func endpointErrors(c *fiber.Ctx) error {
+	if err := c.Next(); err != nil {
+		return oauthError(c, "server_error", 500)
 	}
+	return nil
 }
 func (h *Handler) token(c *fiber.Ctx) error {
 	req := request(c)
@@ -393,6 +466,9 @@ func (h *Handler) token(c *fiber.Ctx) error {
 	}
 	if grant == oauth.GrantTokenExchange && h.exchanges != nil {
 		return h.exchangeToken(c, req, rawID)
+	}
+	if grant == oauth.GrantJWTBearer && h.tokens != nil {
+		return h.keyGrant(c, req)
 	}
 	if grant != "authorization_code" && grant != "refresh_token" {
 		return oauthError(c, "unsupported_grant_type", 400)
@@ -438,6 +514,16 @@ func (h *Handler) token(c *fiber.Ctx) error {
 			return response(c, w)
 		}
 		extra["permissions"] = []string(access.Permissions)
+		// The code exchange issues what finish decided; a refresh asks
+		// pre_access_token again.
+		if grant == "refresh_token" {
+			if err = h.accessHook(ctx, client, session, func() action.Input {
+				return tokenInput(client, subjectID, orgID, stringList(extra["amr"]), ar.GetGrantedScopes())
+			}); err != nil {
+				p.WriteAccessError(ctx, w, ar, hookError(err))
+				return response(c, w)
+			}
+		}
 		session.AccessClaims.IssuedAt = time.Now()
 		session.AccessClaims.JTI = ""
 		session.SetExpiresAt(fosite.RefreshToken, session.Deadline)
@@ -446,6 +532,7 @@ func (h *Handler) token(c *fiber.Ctx) error {
 			p.WriteAccessError(ctx, w, ar, err)
 		} else {
 			p.WriteAccessResponse(ctx, w, ar, out)
+			h.issued(ctx, client)
 		}
 		return response(c, w)
 	})
@@ -469,6 +556,43 @@ func (h *Handler) clientCredentials(c *fiber.Ctx, req *http.Request, rawID strin
 	}
 	c.Set("Pragma", "no-cache")
 	return c.JSON(raw)
+}
+
+// keyGrant is the RFC 7523 JWT-bearer grant of machine users: the
+// assertion, signed with one of the user's keys, is the whole credential
+// (no client authentication); organization_id, application_id and
+// resource_id pick the session's boundary, environment_id is optional
+// (the key's). Failures are invalid_grant.
+func (h *Handler) keyGrant(c *fiber.Ctx, req *http.Request) error {
+	form := req.PostForm
+	assertion := form.Get("assertion")
+	if assertion == "" || form.Get("client_assertion") != "" {
+		return oauthError(c, "invalid_request", 400)
+	}
+	var boundary authentication.Context
+	var err error
+	if raw := form.Get("environment_id"); raw != "" {
+		if boundary.EnvironmentID, err = identity.ParseEnvironmentID(raw); err != nil {
+			return oauthError(c, "invalid_request", 400)
+		}
+	}
+	org, err1 := identity.ParseOrganizationID(form.Get("organization_id"))
+	app, err2 := identity.ParseApplicationID(form.Get("application_id"))
+	res, err3 := identity.ParseResourceID(form.Get("resource_id"))
+	if err1 != nil || err2 != nil || err3 != nil {
+		return oauthError(c, "invalid_request", 400)
+	}
+	boundary.OrganizationID, boundary.ApplicationID, boundary.ResourceID = org, app, res
+	out, err := h.tokens.KeyGrant(c, assertion, boundary)
+	if err != nil {
+		var custom *errx.Error
+		if errors.As(err, &custom) && custom != nil && custom.HTTPStatus >= 500 {
+			return oauthError(c, "server_error", 500)
+		}
+		return oauthError(c, "invalid_grant", 400)
+	}
+	c.Set("Pragma", "no-cache")
+	return c.JSON(out)
 }
 func (h *Handler) revoke(c *fiber.Ctx) error {
 	req := request(c)
@@ -552,7 +676,7 @@ func (h *Handler) liveIntrospection(c *fiber.Ctx, caller *oauth.Client, ir fosit
 	if err != nil {
 		return false
 	}
-	client, err := h.flows.Client(c.Context(), owner)
+	client, err := h.flows.Client(c.UserContext(), owner)
 	if err != nil || client.Environment != caller.Environment {
 		return false
 	}
@@ -562,7 +686,7 @@ func (h *Handler) liveIntrospection(c *fiber.Ctx, caller *oauth.Client, ir fosit
 	subject, _ := identity.ParseUserID(session.Subject)
 	sessionID, _ := identity.ParseSessionID(sid)
 	orgID, _ := identity.ParseOrganizationID(org)
-	access, err := h.flows.Access(c.Context(), client, subject, sessionID, orgID)
+	access, err := h.flows.Access(c.UserContext(), client, subject, sessionID, orgID)
 	if err != nil {
 		return false
 	}
@@ -606,6 +730,31 @@ func (h *Handler) userinfo(c *fiber.Ctx) error {
 		verified := profile.EmailVerified
 		out.Email, out.EmailVerified = profile.Email, &verified
 	}
+	custom := h.customClaims(c.UserContext(), token.EnvironmentID, token.Subject, token.Scopes)
+	if hooked, err := h.userInfoHook(c.UserContext(), token); err != nil {
+		return err
+	} else if len(hooked) > 0 {
+		if custom == nil {
+			custom = map[string]json.RawMessage{}
+		}
+		for name, value := range hooked {
+			if _, taken := custom[name]; !taken && !slices.Contains(userInfoClaims, name) {
+				custom[name] = value
+			}
+		}
+	}
+	if len(custom) > 0 {
+		body, err := json.Marshal(out)
+		if err != nil {
+			return err
+		}
+		merged := map[string]json.RawMessage{}
+		_ = json.Unmarshal(body, &merged)
+		for name, value := range custom {
+			merged[name] = value
+		}
+		return c.JSON(merged)
+	}
 	return c.JSON(out)
 }
 
@@ -622,7 +771,7 @@ func bearerToken(c *fiber.Ctx) string {
 // session and current permissions like introspection does.
 func (h *Handler) opaqueToken(c *fiber.Ctx, key, raw string) (authentication.Token, error) {
 	invalid := errx.Unauthorized("invalid OAuth token")
-	client, err := h.flows.AccessTokenClient(c.Context(), key)
+	client, err := h.flows.AccessTokenClient(c.UserContext(), key)
 	if err != nil {
 		return authentication.Token{}, invalid
 	}
@@ -630,7 +779,7 @@ func (h *Handler) opaqueToken(c *fiber.Ctx, key, raw string) (authentication.Tok
 	if err != nil {
 		return authentication.Token{}, invalid
 	}
-	use, ar, err := p.IntrospectToken(c.Context(), raw, fosite.AccessToken, oauthfosite.NewSession())
+	use, ar, err := p.IntrospectToken(c.UserContext(), raw, fosite.AccessToken, oauthfosite.NewSession())
 	if err != nil || use != fosite.AccessToken {
 		return authentication.Token{}, invalid
 	}
@@ -644,7 +793,7 @@ func (h *Handler) opaqueToken(c *fiber.Ctx, key, raw string) (authentication.Tok
 	subject, _ := identity.ParseUserID(session.Subject)
 	sessionID, _ := identity.ParseSessionID(sid)
 	orgID, _ := identity.ParseOrganizationID(org)
-	access, err := h.flows.Access(c.Context(), client, subject, sessionID, orgID)
+	access, err := h.flows.Access(c.UserContext(), client, subject, sessionID, orgID)
 	if err != nil {
 		return authentication.Token{}, invalid
 	}
@@ -670,7 +819,7 @@ func (h *Handler) endSession(c *fiber.Ctx) error {
 		}
 		input.Client = id
 	}
-	back, environment, err := h.flows.Logout(c.Context(), input)
+	back, environment, err := h.flows.Logout(c.UserContext(), input)
 	if err != nil {
 		return h.signedOutPage(c, environment, err)
 	}

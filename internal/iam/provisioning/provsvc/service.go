@@ -6,17 +6,22 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
 type Service struct {
 	repository provisioning.Repository
 	secrets    provisioning.Secrets
+	quota      provisioning.Quota
 }
 
 func New(repository provisioning.Repository, secrets provisioning.Secrets) *Service {
-	return &Service{repository, secrets}
+	return &Service{repository: repository, secrets: secrets}
 }
+
+// SetQuota enforces the environment's users limit on Create.
+func (s *Service) SetQuota(q provisioning.Quota) { s.quota = q }
 func (s *Service) Authenticate(ctx context.Context, raw string) (provisioning.Principal, error) {
 	if !strings.HasPrefix(raw, "ik_scim_") {
 		return provisioning.Principal{}, errx.Unauthorized("invalid credential")
@@ -58,6 +63,12 @@ func (s *Service) Create(ctx context.Context, p provisioning.Principal, input pr
 	if input.Aliases, err = normalizeAliases(email, input.Aliases); err != nil {
 		return input, err
 	}
+	input.Phone = directoryPhone(input.Phone)
+	if s.quota != nil {
+		if err = s.quota.Admit(ctx, p.Environment, usage.LimitUsers); err != nil {
+			return input, err
+		}
+	}
 	input.ID = identity.NewUserID()
 	input.ExternalSource = provisioning.AnchorClient
 	if input.External == "" {
@@ -91,6 +102,14 @@ func (s *Service) Update(ctx context.Context, p provisioning.Principal, id ident
 	if input.External != nil && strings.TrimSpace(*input.External) == "" {
 		input.External = nil
 	}
+	if input.Phone != nil {
+		phone := directoryPhone(*input.Phone)
+		if phone == "" && strings.TrimSpace(*input.Phone) != "" {
+			input.Phone = nil // not E.164: keep the current number
+		} else {
+			input.Phone = &phone
+		}
+	}
 	if input.Aliases != nil {
 		aliases, err := normalizeAliases(primary, *input.Aliases)
 		if err != nil {
@@ -105,6 +124,20 @@ func (s *Service) Delete(ctx context.Context, p provisioning.Principal, id ident
 		return errx.NotFound("user not found")
 	}
 	return s.repository.Deprovision(ctx, p, id)
+}
+
+// directoryPhone normalizes a directory's mobile number, "" when it is not
+// E.164: directories send whatever their users typed, and a sync must not
+// fail over it.
+func directoryPhone(raw string) string {
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	phone, err := identity.Phone(raw)
+	if err != nil {
+		return ""
+	}
+	return phone
 }
 
 func validManager(manager string) error {

@@ -43,7 +43,7 @@ func (h *PasswordPolicyHandler) GetOrganization(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.OrganizationPasswordPolicy(c.Context(), envParam(c), organization)
+	out, err := h.queries.OrganizationPasswordPolicy(c.UserContext(), envParam(c), organization)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (h *PasswordPolicyHandler) SetOrganization(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.SetOrganizationPasswordPolicy(c.Context(), h.mutation(c), organization, input)
+	out, err := h.commands.SetOrganizationPasswordPolicy(c.UserContext(), h.mutation(c), organization, input)
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ func (h *PasswordPolicyHandler) DeleteOrganization(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	if err := h.commands.DeleteOrganizationPasswordPolicy(c.Context(), h.mutation(c), organization); err != nil {
+	if err := h.commands.DeleteOrganizationPasswordPolicy(c.UserContext(), h.mutation(c), organization); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -81,7 +81,7 @@ func (h *PasswordPolicyHandler) DeleteOrganization(c *fiber.Ctx) error {
 
 // Get returns the effective policy (custom false for the default).
 func (h *PasswordPolicyHandler) Get(c *fiber.Ctx) error {
-	out, err := h.queries.PasswordPolicy(c.Context(), envParam(c))
+	out, err := h.queries.PasswordPolicy(c.UserContext(), envParam(c))
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (h *PasswordPolicyHandler) Set(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.SetPasswordPolicy(c.Context(), h.mutation(c), input)
+	out, err := h.commands.SetPasswordPolicy(c.UserContext(), h.mutation(c), input)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func (h *PasswordPolicyHandler) Set(c *fiber.Ctx) error {
 
 // Delete returns the environment to the default policy.
 func (h *PasswordPolicyHandler) Delete(c *fiber.Ctx) error {
-	if err := h.commands.DeletePasswordPolicy(c.Context(), h.mutation(c)); err != nil {
+	if err := h.commands.DeletePasswordPolicy(c.UserContext(), h.mutation(c)); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

@@ -32,9 +32,19 @@ func Respond(c *fiber.Ctx, out authentication.Result, issue func(*fiber.Ctx, aut
 	return c.JSON(fiber.Map{"mfa_required": true, "mfa_token": out.MFA.Token, "factors": out.MFA.Factors, "enrollment_required": out.MFA.EnrollmentRequired, "expires_in": int(config.MFALoginTTL.Seconds())})
 }
 
+// loginOf prefers the login field (email or username) over email.
+func loginOf(login, email string) string {
+	if login != "" {
+		return login
+	}
+	return email
+}
+
 func (h *Handler) Login(c *fiber.Ctx) error {
 	var input struct {
 		authentication.Context
+		// Login is an email or username; Email is the older name.
+		Login    string `json:"login"`
 		Email    string `json:"email"`
 		Password string `json:"password"`
 		// NewPassword replaces an expired password (PASSWORD_CHANGE_REQUIRED).
@@ -43,7 +53,7 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Login(c.Context(), input.Context, input.Email, input.Password, input.NewPassword)
+	out, err := h.commands.Login(c.UserContext(), input.Context, loginOf(input.Login, input.Email), input.Password, input.NewPassword)
 	if err != nil {
 		return err
 	}
@@ -61,7 +71,7 @@ func (h *Handler) VerifyMFA(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.mfa.VerifyMFA(c.Context(), input.Token, input.Proof)
+	out, err := h.mfa.VerifyMFA(c.UserContext(), input.Token, input.Proof)
 	if err != nil {
 		return err
 	}
@@ -76,7 +86,7 @@ func (h *Handler) EnrollMFA(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.mfa.EnrollMFA(c.Context(), input.Token)
+	out, err := h.mfa.EnrollMFA(c.UserContext(), input.Token)
 	if err != nil {
 		return err
 	}
@@ -93,7 +103,7 @@ func (h *Handler) ChallengeMFA(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.mfa.ChallengeMFA(c.Context(), input.Token, input.Factor)
+	out, err := h.mfa.ChallengeMFA(c.UserContext(), input.Token, input.Factor)
 	if err != nil {
 		return err
 	}
@@ -110,7 +120,7 @@ func (h *Handler) AssertMFA(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.mfa.AssertMFA(c.Context(), input.Token)
+	out, err := h.mfa.AssertMFA(c.UserContext(), input.Token)
 	if err != nil {
 		return err
 	}
@@ -133,7 +143,7 @@ func (h *Handler) BeginPasskey(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.passkeys.BeginPasskey(c.Context(), input.Environment)
+	out, err := h.passkeys.BeginPasskey(c.UserContext(), input.Environment)
 	if err != nil {
 		return err
 	}
@@ -148,18 +158,13 @@ func (h *Handler) FinishPasskey(c *fiber.Ctx) error {
 	}
 	var input struct {
 		authentication.Context
-		Session string `json:"webauthn_session"`
-	}
-	var raw struct {
+		Session    string          `json:"webauthn_session"`
 		Credential json.RawMessage `json:"credential"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := json.Unmarshal(c.Body(), &raw); err != nil {
-		return errx.Validation("invalid request")
-	}
-	out, err := h.passkeys.PasskeyLogin(c.Context(), input.Context, input.Session, raw.Credential)
+	out, err := h.passkeys.PasskeyLogin(c.UserContext(), input.Context, input.Session, input.Credential)
 	if err != nil {
 		return err
 	}
@@ -174,7 +179,7 @@ func (h *Handler) Refresh(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Refresh(c.Context(), input.Context, input.Token)
+	out, err := h.commands.Refresh(c.UserContext(), input.Context, input.Token)
 	if err != nil {
 		return err
 	}
@@ -183,15 +188,17 @@ func (h *Handler) Refresh(c *fiber.Ctx) error {
 func (h *Handler) InitiateChallenge(c *fiber.Ctx) error {
 	var input struct {
 		Environment identity.EnvironmentID `json:"environment_id"`
-		Email       string                 `json:"email"`
-		Purpose     string                 `json:"purpose"`
+		// Login is an email or username; Email is the older name.
+		Login   string `json:"login"`
+		Email   string `json:"email"`
+		Purpose string `json:"purpose"`
 		// Locale is the email language (a tag or list); optional.
 		Locale string `json:"locale"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.InitiateChallenge(c.Context(), input.Environment, input.Email, input.Purpose, input.Locale)
+	id, err := h.commands.InitiateChallenge(c.UserContext(), input.Environment, loginOf(input.Login, input.Email), input.Purpose, input.Locale)
 	if err != nil {
 		return err
 	}
@@ -209,7 +216,7 @@ func (h *Handler) VerifyChallenge(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.VerifyChallenge(c.Context(), input.Context, input.ID, input.Code, input.Purpose, input.Password)
+	out, err := h.commands.VerifyChallenge(c.UserContext(), input.Context, input.ID, input.Code, input.Purpose, input.Password)
 	if err != nil {
 		return err
 	}

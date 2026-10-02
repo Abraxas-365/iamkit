@@ -9,6 +9,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 )
@@ -20,6 +21,7 @@ type Service struct {
 	policy     invitation.PasswordPolicy // nil checks only the length
 	mailer     invitation.Mailer
 	now        invitation.Clock
+	quota      invitation.Quota
 }
 
 func New(r invitation.Repository, s invitation.Secrets, p invitation.Passwords, m invitation.Mailer, now invitation.Clock) *Service {
@@ -28,6 +30,10 @@ func New(r invitation.Repository, s invitation.Secrets, p invitation.Passwords, 
 	}
 	return &Service{repository: r, secrets: s, passwords: p, mailer: m, now: now}
 }
+
+// SetQuota enforces the environment's users limit when accepting creates
+// the account.
+func (s *Service) SetQuota(q invitation.Quota) { s.quota = q }
 
 // SetPasswordPolicy makes new accounts' passwords follow the environment's
 // policy and the inviting organization's requirements.
@@ -159,7 +165,7 @@ func (s *Service) issue(ctx context.Context, b invitation.Boundary, id identity.
 	if err != nil {
 		slog.ErrorContext(ctx, "invitation inviter lookup failed", "invitation", id, "err", err)
 	}
-	mail := invitation.Mail{Email: inv.Email, Token: token, Link: out.Link, Organization: orgName, Inviter: inviter, ExpiresAt: inv.ExpiresAt}
+	mail := invitation.Mail{Email: inv.Email, Token: token, Link: out.Link, Organization: orgName, OrganizationID: b.Organization, Inviter: inviter, ExpiresAt: inv.ExpiresAt}
 	if err = s.mailer.Send(ctx, b.Environment, mail); err != nil {
 		slog.ErrorContext(ctx, "invitation delivery failed", "invitation", id, "environment", b.Environment, "err", err)
 		out.Delivery = "failed"
@@ -223,6 +229,11 @@ func (s *Service) Accept(ctx context.Context, input invitation.Acceptance) (invi
 			return invitation.Accepted{}, errx.Validation("an existing account keeps its password; sign in after accepting")
 		}
 	} else {
+		if s.quota != nil {
+			if err = s.quota.Admit(ctx, t.Environment, usage.LimitUsers); err != nil {
+				return invitation.Accepted{}, err
+			}
+		}
 		j.User, j.NewUser, j.Name = identity.NewUserID(), true, input.Name
 		if j.Name == "" {
 			j.Name = t.Invitation.Email

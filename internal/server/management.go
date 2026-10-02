@@ -16,11 +16,20 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	}
 	e := r.Group("/environments/:environment", s.Control.Environment)
 	s.Users.Register(e)
+	if s.AccessTokens != nil {
+		s.AccessTokens.Register(e)
+	}
+	if s.UserKeys != nil {
+		s.UserKeys.Register(e)
+	}
 	if s.Factors != nil {
 		s.Factors.Register(e)
 	}
 	s.Organizations.Register(e)
 	s.Authorization.Register(e)
+	if s.ResourceGrants != nil {
+		s.ResourceGrants.Register(e)
+	}
 	s.Applications.Register(e)
 	s.ServiceAccounts.Register(e)
 	s.administrationRoutes(e)
@@ -49,7 +58,19 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	if s.SigningKeys != nil {
 		s.SigningKeys.Register(e)
 	}
+	if s.Features != nil {
+		s.Features.Register(e)
+	}
+	if s.Actions != nil {
+		s.Actions.Register(e)
+	}
+	if s.Limits != nil {
+		s.Limits.Register(e)
+	}
 	if s.SAML != nil {
 		s.SAML.Register(e)
+	}
+	if s.OrgAdminPortal != nil {
+		s.OrgAdminPortal.Register(e)
 	}
 }

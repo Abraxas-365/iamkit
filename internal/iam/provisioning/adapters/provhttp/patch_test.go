@@ -186,3 +186,33 @@ func deref[T any](p *T) any {
 	}
 	return *p
 }
+
+func TestApplyPatchPhone(t *testing.T) {
+	phone := func(raw string) *string {
+		t.Helper()
+		update, err := applyPatch(provisioning.User{Email: "a@example.com"}, ops(t, raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return update.Phone
+	}
+	cases := []struct {
+		name, raw string
+		want      *string
+	}{
+		{"filtered value", `{"Operations":[{"op":"replace","path":"phoneNumbers[type eq \"mobile\"].value","value":"+15551234567"}]}`, ptr("+15551234567")},
+		{"filtered element", `{"Operations":[{"op":"add","path":"phoneNumbers[type eq \"Mobile\"]","value":{"value":"+15551234567"}}]}`, ptr("+15551234567")},
+		{"filtered remove", `{"Operations":[{"op":"remove","path":"phoneNumbers[type eq \"mobile\"]"}]}`, ptr("")},
+		{"list replace", `{"Operations":[{"op":"replace","path":"phoneNumbers","value":[{"value":"+1555","type":"work"},{"value":"+15559876543","type":"mobile"}]}]}`, ptr("+15559876543")},
+		{"list replace without mobile clears", `{"Operations":[{"op":"replace","path":"phoneNumbers","value":[{"value":"+1555","type":"work"}]}]}`, ptr("")},
+		{"list add without mobile keeps", `{"Operations":[{"op":"add","path":"phoneNumbers","value":[{"value":"+1555","type":"work"}]}]}`, nil},
+		{"pathless", `{"Operations":[{"op":"replace","value":{"phoneNumbers":[{"value":"+15559876543","type":"mobile"}]}}]}`, ptr("+15559876543")},
+		{"other type ignored", `{"Operations":[{"op":"replace","path":"phoneNumbers[type eq \"work\"].value","value":"+1555"}]}`, nil},
+	}
+	for _, c := range cases {
+		got := phone(c.raw)
+		if (got == nil) != (c.want == nil) || (got != nil && *got != *c.want) {
+			t.Errorf("%s: phone = %v, want %v", c.name, deref(got), deref(c.want))
+		}
+	}
+}

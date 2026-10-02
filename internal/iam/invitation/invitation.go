@@ -133,9 +133,11 @@ type Mail struct {
 	Email        string
 	Token        string
 	Link         string
-	Organization string
-	Inviter      string
-	ExpiresAt    time.Time
+	Organization string // its name
+	// OrganizationID brands the email with the organization's overrides.
+	OrganizationID identity.OrganizationID
+	Inviter        string
+	ExpiresAt      time.Time
 }
 
 // Acceptance is the public accept payload.

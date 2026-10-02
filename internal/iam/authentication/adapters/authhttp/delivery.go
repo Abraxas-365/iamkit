@@ -68,7 +68,7 @@ func templateKey(c *fiber.Ctx) authentication.TemplateKey {
 }
 
 func (h *DeliveryHandler) ListTemplates(c *fiber.Ctx) error {
-	out, err := h.templates.queries.ListTemplates(c.Context(), envParam(c))
+	out, err := h.templates.queries.ListTemplates(c.UserContext(), envParam(c))
 	if err != nil {
 		return err
 	}
@@ -76,7 +76,7 @@ func (h *DeliveryHandler) ListTemplates(c *fiber.Ctx) error {
 }
 
 func (h *DeliveryHandler) GetTemplate(c *fiber.Ctx) error {
-	out, err := h.templates.queries.Template(c.Context(), envParam(c), templateKey(c))
+	out, err := h.templates.queries.Template(c.UserContext(), envParam(c), templateKey(c))
 	if err != nil {
 		return err
 	}
@@ -89,14 +89,14 @@ func (h *DeliveryHandler) SetTemplate(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.templates.commands.SetTemplate(c.Context(), h.mutation(c), templateKey(c), input); err != nil {
+	if err := h.templates.commands.SetTemplate(c.UserContext(), h.mutation(c), templateKey(c), input); err != nil {
 		return err
 	}
 	return h.GetTemplate(c)
 }
 
 func (h *DeliveryHandler) ResetTemplate(c *fiber.Ctx) error {
-	if err := h.templates.commands.ResetTemplate(c.Context(), h.mutation(c), templateKey(c)); err != nil {
+	if err := h.templates.commands.ResetTemplate(c.UserContext(), h.mutation(c), templateKey(c)); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -104,7 +104,7 @@ func (h *DeliveryHandler) ResetTemplate(c *fiber.Ctx) error {
 
 // SavedPreview renders a sample email with the saved branding and wording.
 func (h *DeliveryHandler) SavedPreview(c *fiber.Ctx) error {
-	out, err := h.queries.Preview(c.Context(), envParam(c), authentication.PreviewInput{Purpose: c.Query("purpose"), Locale: c.Query("locale")})
+	out, err := h.queries.Preview(c.UserContext(), envParam(c), authentication.PreviewInput{Purpose: c.Query("purpose"), Locale: c.Query("locale")})
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func (h *DeliveryHandler) DraftPreview(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.queries.Preview(c.Context(), envParam(c), input)
+	out, err := h.queries.Preview(c.UserContext(), envParam(c), input)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func envParam(c *fiber.Ctx) identity.EnvironmentID {
 func (h *DeliveryHandler) Limit(c *fiber.Ctx) error { return h.limit(c) }
 
 func (h *DeliveryHandler) Get(c *fiber.Ctx) error {
-	cfg, err := h.queries.DeliveryConfig(c.Context(), envParam(c))
+	cfg, err := h.queries.DeliveryConfig(c.UserContext(), envParam(c))
 	if err != nil {
 		return err
 	}
@@ -168,14 +168,14 @@ func (h *DeliveryHandler) Set(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	if err := h.commands.SetDeliveryConfig(c.Context(), h.mutation(c), input); err != nil {
+	if err := h.commands.SetDeliveryConfig(c.UserContext(), h.mutation(c), input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
 }
 
 func (h *DeliveryHandler) Delete(c *fiber.Ctx) error {
-	if err := h.commands.DeleteDeliveryConfig(c.Context(), h.mutation(c)); err != nil {
+	if err := h.commands.DeleteDeliveryConfig(c.UserContext(), h.mutation(c)); err != nil {
 		return err
 	}
 	return c.SendStatus(204)
@@ -188,7 +188,7 @@ func (h *DeliveryHandler) mutation(c *fiber.Ctx) authentication.Mutation {
 
 // Status reports the effective webhook source and recent delivery activity.
 func (h *DeliveryHandler) Status(c *fiber.Ctx) error {
-	out, err := h.queries.DeliveryStatus(c.Context(), envParam(c))
+	out, err := h.queries.DeliveryStatus(c.UserContext(), envParam(c))
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (h *DeliveryHandler) Test(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.TestDelivery(c.Context(), h.mutation(c), input)
+	out, err := h.commands.TestDelivery(c.UserContext(), h.mutation(c), input)
 	if err != nil {
 		return err
 	}
