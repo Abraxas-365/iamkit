@@ -1,0 +1,34 @@
+{
+  "name": "@iamkit/api",
+  "version": "0.1.0",
+  "description": "Typed client for the IAMKit HTTP API, generated from its OpenAPI document",
+  "type": "module",
+  "license": "SEE LICENSE IN ../../README.md",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "generate": "openapi-typescript ../../api/openapi.json -o src/schema.d.ts",
+    "check": "openapi-typescript ../../api/openapi.json -o src/schema.d.ts --check",
+    "build": "tsc -p tsconfig.build.json && cp src/schema.d.ts dist/schema.d.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

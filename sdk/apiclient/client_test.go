@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/sdk/apierror"
@@ -234,5 +235,35 @@ func TestAllAPIPaths(t *testing.T) {
 		if paths[i] != p {
 			t.Errorf("path[%d] = %q, want %q", i, paths[i], p)
 		}
+	}
+}
+
+func TestListsDecodeEnvelopeAndStates(t *testing.T) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.RequestURI())
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "POST" {
+			w.WriteHeader(204)
+			return
+		}
+		w.Write([]byte(`{"items":[{"id":"u1","email":"a@b.com","name":"A","active":true,"state":"locked"}],"page":{"total":1,"limit":20,"offset":0}}`))
+	}))
+	defer srv.Close()
+	ctx := context.Background()
+	env := New(srv.URL, "jwt").Environment("env-1")
+	users, err := env.Users(ctx)
+	if err != nil || len(users) != 1 || users[0].State != "locked" {
+		t.Fatalf("users = %+v %v", users, err)
+	}
+	if users, err = env.UsersInState(ctx, "locked"); err != nil || len(users) != 1 {
+		t.Fatalf("in state = %+v %v", users, err)
+	}
+	if env.DeactivateUser(ctx, "u1") != nil || env.ReactivateUser(ctx, "u1") != nil {
+		t.Fatal("state change failed")
+	}
+	want := "GET /api/v1/environments/env-1/users\nGET /api/v1/environments/env-1/users?state=locked\nPOST /api/v1/environments/env-1/users/u1/deactivate\nPOST /api/v1/environments/env-1/users/u1/reactivate"
+	if got := strings.Join(calls, "\n"); got != want {
+		t.Fatalf("calls:\n%s", got)
 	}
 }

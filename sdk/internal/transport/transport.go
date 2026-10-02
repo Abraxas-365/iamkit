@@ -69,6 +69,33 @@ func Do(client *http.Client, ctx context.Context, method, url string, headers []
 	return json.NewDecoder(io.LimitReader(res.Body, maxBody)).Decode(output)
 }
 
+// Stream sends a GET like Do and returns the open response body for the
+// caller to read (no size limit) and close.
+func Stream(client *http.Client, ctx context.Context, url string, headers []Header) (io.ReadCloser, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	for _, h := range headers {
+		req.Header.Set(h.Key, h.Value)
+	}
+	transport := client
+	if transport == nil {
+		transport = http.DefaultClient
+	}
+	safe := *transport
+	safe.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	res, err := safe.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
+		defer res.Body.Close()
+		return nil, decodeError(res)
+	}
+	return res.Body, nil
+}
+
 // decodeError attempts to read a structured error from the response body.
 // It handles the IAMKit {"error":{...}} envelope and falls back to a generic error.
 func decodeError(res *http.Response) error {

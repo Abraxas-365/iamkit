@@ -2,6 +2,7 @@ package iamclient
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -68,17 +69,58 @@ type Created struct {
 }
 
 type User struct {
-	ID     string `json:"id"`
-	Email  string `json:"email"`
-	Name   string `json:"name"`
-	Active bool   `json:"active"`
+	ID string `json:"id"`
+	// Kind is "human" or "machine" (no email, password or second factor;
+	// authenticates with personal access tokens only).
+	Kind  string `json:"kind,omitempty"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+	// Username is the optional second sign-in identifier ("" when none).
+	Username string `json:"username,omitempty"`
+	// AvatarURL is an https URL to the user's picture ("" when none).
+	AvatarURL string `json:"avatar_url,omitempty"`
+	// Phone is the user's number in E.164 ("" when none); PhoneVerified
+	// once the user entered a code texted to it or an operator marked it.
+	Phone         string `json:"phone,omitempty"`
+	PhoneVerified bool   `json:"phone_verified,omitempty"`
+	// HomeOrganizationID is the organization owning the record ("" when
+	// none): its administrators may edit the user.
+	HomeOrganizationID string `json:"home_organization_id,omitempty"`
+	Active             bool   `json:"active"`
+	// State is derived: suspended, locked, initial (never signed in),
+	// inactive (no active membership in an active organization) or active.
+	State          string     `json:"state,omitempty"`
+	LastSignedInAt *time.Time `json:"last_signed_in_at,omitempty"`
+	// TermsAcceptedAt is when the user accepted the terms at sign-up
+	// (SignInPolicy.RequireTerms).
+	TermsAcceptedAt *time.Time `json:"terms_accepted_at,omitempty"`
+	// Metadata and Profile are returned when one user is read.
+	Metadata map[string]any `json:"metadata,omitempty"`
+	Profile  map[string]any `json:"profile,omitempty"`
 }
+
+// User states (User.State, UsersInState).
+const (
+	UserSuspended = "suspended"
+	UserLocked    = "locked"
+	UserInitial   = "initial"
+	UserInactive  = "inactive"
+	UserActive    = "active"
+)
 
 type CreateUser struct {
 	OTPEnabled bool   `json:"otp_enabled"`
 	Email      string `json:"email"`
 	Name       string `json:"name"`
 	Password   string `json:"password"`
+	// AvatarURL is an https URL to the user's picture (optional).
+	AvatarURL string `json:"avatar_url,omitempty"`
+	// Username is optional: lowercase letters, digits, ".", "_" or "-",
+	// unique in the environment; users may sign in with it.
+	Username string `json:"username,omitempty"`
+	// HomeOrganizationID makes the user a member of that organization
+	// whose administrators may then edit the record (optional).
+	HomeOrganizationID string `json:"home_organization_id,omitempty"`
 }
 
 type Organization struct {
@@ -134,6 +176,31 @@ type Resource struct {
 	Name        string   `json:"name"`
 	Audience    string   `json:"audience"`
 	Permissions []string `json:"permissions"`
+	// OwnerOrganizationID is the vendor organization owning the resource
+	// ("" = the environment); RequireGrant limits access to the owner and
+	// organizations holding a ResourceGrant. Set both with SetResourceAccess.
+	OwnerOrganizationID string `json:"owner_organization_id,omitempty"`
+	RequireGrant        bool   `json:"require_grant,omitempty"`
+}
+
+// ResourceAccess sets a resource's owner organization (nil = the
+// environment) and grant requirement.
+type ResourceAccess struct {
+	OwnerOrganizationID *string `json:"owner_organization_id"`
+	RequireGrant        bool    `json:"require_grant"`
+}
+
+// ResourceGrant lets an organization use a resource it does not own; a nil
+// RoleIDs grants every role of the resource.
+type ResourceGrant struct {
+	ID               string   `json:"id,omitempty"`
+	ResourceID       string   `json:"resource_id"`
+	ResourceName     string   `json:"resource_name,omitempty"`
+	OrganizationID   string   `json:"organization_id"`
+	OrganizationName string   `json:"organization_name,omitempty"`
+	RoleIDs          []string `json:"role_ids"`
+	CreatedAt        string   `json:"created_at,omitempty"`
+	UpdatedAt        string   `json:"updated_at,omitempty"`
 }
 
 type Grant struct {
@@ -149,6 +216,10 @@ type Role struct {
 	Name        string   `json:"name"`
 	ResourceID  string   `json:"resource_id"`
 	Permissions []string `json:"permissions"`
+	// SystemRole names a built-in organization-administration role
+	// (org_owner, org_viewer, org_user_manager, org_settings_manager) of
+	// the IAM resource; those cannot be changed or deleted. Read-only.
+	SystemRole string `json:"system_role,omitempty"`
 }
 
 type RoleAssignment struct {
@@ -192,13 +263,162 @@ func (e Environment) UpdateUser(ctx context.Context, id string, input UserPatch)
 	return e.operation(ctx, "PATCH", []string{"users", id}, input, nil)
 }
 
+// UsersInState lists the first page of users in state (see UserActive…).
+func (e Environment) UsersInState(ctx context.Context, state string) ([]User, error) {
+	var out paginated[User]
+	if err := e.client.do(ctx, "GET", e.path("users"), url.Values{"state": {state}}, nil, &out); err != nil {
+		return nil, err
+	}
+	if out.Items == nil {
+		return []User{}, nil
+	}
+	return out.Items, nil
+}
+
 func (e Environment) SuspendUser(ctx context.Context, id string) error {
 	return e.operation(ctx, "DELETE", []string{"users", id}, nil, nil)
+}
+
+// DeactivateUser suspends the user (audited user.deactivated): sessions
+// end and nothing signs in until ReactivateUser.
+func (e Environment) DeactivateUser(ctx context.Context, id string) error {
+	return e.operation(ctx, "POST", []string{"users", id, "deactivate"}, nil, nil)
+}
+
+// ReactivateUser lifts a suspension (audited user.reactivated).
+func (e Environment) ReactivateUser(ctx context.Context, id string) error {
+	return e.operation(ctx, "POST", []string{"users", id, "reactivate"}, nil, nil)
 }
 
 // UnlockUser clears a user's wrong-password count and lockout.
 func (e Environment) UnlockUser(ctx context.Context, id string) error {
 	return e.operation(ctx, "POST", []string{"users", id, "unlock"}, nil, nil)
+}
+
+// ── Machine users ──
+
+// CreateMachineUser creates a user of kind "machine": no email, password
+// or second factor. It joins organizations and receives roles and grants
+// like a person and authenticates with personal access tokens.
+func (e Environment) CreateMachineUser(ctx context.Context, name, homeOrganization string) (Created, error) {
+	body := map[string]string{"kind": "machine", "name": name}
+	if homeOrganization != "" {
+		body["home_organization_id"] = homeOrganization
+	}
+	var out Created
+	err := e.client.Do(ctx, "POST", e.path("users"), body, &out)
+	return out, err
+}
+
+// MachineUsers lists the first page of machine users.
+func (e Environment) MachineUsers(ctx context.Context) ([]User, error) {
+	var out paginated[User]
+	if err := e.client.do(ctx, "GET", e.path("users"), url.Values{"kind": {"machine"}}, nil, &out); err != nil {
+		return nil, err
+	}
+	if out.Items == nil {
+		return []User{}, nil
+	}
+	return out.Items, nil
+}
+
+// AccessToken is a machine user's personal access token (never its secret).
+type AccessToken struct {
+	ID             string     `json:"id"`
+	UserID         string     `json:"user_id"`
+	OrganizationID string     `json:"organization_id"`
+	ApplicationID  string     `json:"application_id"`
+	ResourceID     string     `json:"resource_id"`
+	Name           string     `json:"name"`
+	ExpiresAt      time.Time  `json:"expires_at"`
+	LastUsedAt     *time.Time `json:"last_used_at"`
+	RevokedAt      *time.Time `json:"revoked_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	// Names are filled when tokens are listed.
+	OrganizationName string `json:"organization_name,omitempty"`
+	ApplicationName  string `json:"application_name,omitempty"`
+	ResourceName     string `json:"resource_name,omitempty"`
+}
+
+// IssuedAccessToken is a new personal access token; Token (ik_pat_…) is
+// returned only here.
+type IssuedAccessToken struct {
+	AccessToken
+	Token string `json:"token"`
+}
+
+// CreateAccessToken asks for a personal access token acting as the machine
+// user in OrganizationID (one it belongs to) for ResourceID of
+// ApplicationID. ExpiresIn is 1h–8760h or "never" (default 24h).
+type CreateAccessToken struct {
+	Name           string `json:"name"`
+	OrganizationID string `json:"organization_id"`
+	ApplicationID  string `json:"application_id"`
+	ResourceID     string `json:"resource_id"`
+	ExpiresIn      string `json:"expires_in,omitempty"`
+}
+
+// CreateAccessToken issues a personal access token for a machine user.
+// Use it as a bearer (live permissions, no session) or trade it for an
+// access JWT with authclient.Client.ExchangeAccessToken.
+func (e Environment) CreateAccessToken(ctx context.Context, user string, input CreateAccessToken) (IssuedAccessToken, error) {
+	var out IssuedAccessToken
+	err := e.operation(ctx, "POST", []string{"users", user, "access-tokens"}, input, &out)
+	return out, err
+}
+
+// AccessTokens lists the first page of a machine user's tokens.
+func (e Environment) AccessTokens(ctx context.Context, user string) ([]AccessToken, error) {
+	return listOp[AccessToken](e, ctx, []string{"users", user, "access-tokens"})
+}
+
+// RevokeAccessToken revokes a token and the sessions exchanged from it.
+func (e Environment) RevokeAccessToken(ctx context.Context, user, token string) error {
+	return e.operation(ctx, "DELETE", []string{"users", user, "access-tokens", token}, nil, nil)
+}
+
+// UserKey is a machine user's public key for the JWT-bearer grant; its ID
+// is the kid of the assertions it signs.
+type UserKey struct {
+	ID         string          `json:"id"`
+	UserID     string          `json:"user_id"`
+	PublicKey  json.RawMessage `json:"public_key"`
+	ExpiresAt  time.Time       `json:"expires_at"`
+	LastUsedAt *time.Time      `json:"last_used_at"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
+// IssuedUserKey is a new key; PrivateKey (PEM, PKCS #8) is set only when
+// IAMKit generated the pair, and returned only here.
+type IssuedUserKey struct {
+	UserKey
+	PrivateKey string `json:"private_key,omitempty"`
+}
+
+// AddUserKey asks for a key: PublicKey is an RSA (2048 bits or more) or EC
+// public JSON Web Key; leave it empty to have IAMKit generate an RSA pair.
+// ExpiresIn is 1h–8760h or "never" (default 8760h).
+type AddUserKey struct {
+	PublicKey json.RawMessage `json:"public_key,omitempty"`
+	ExpiresIn string          `json:"expires_in,omitempty"`
+}
+
+// AddUserKey adds a key to a machine user (at most 10). Sign in with it
+// using authclient.NewKeyLogin.
+func (e Environment) AddUserKey(ctx context.Context, user string, input AddUserKey) (IssuedUserKey, error) {
+	var out IssuedUserKey
+	err := e.operation(ctx, "POST", []string{"users", user, "keys"}, input, &out)
+	return out, err
+}
+
+// UserKeys lists the first page of a machine user's keys.
+func (e Environment) UserKeys(ctx context.Context, user string) ([]UserKey, error) {
+	return listOp[UserKey](e, ctx, []string{"users", user, "keys"})
+}
+
+// RemoveUserKey deletes a key and ends the sessions opened with it.
+func (e Environment) RemoveUserKey(ctx context.Context, user, key string) error {
+	return e.operation(ctx, "DELETE", []string{"users", user, "keys", key}, nil, nil)
 }
 
 // ── Organizations ──
@@ -351,6 +571,37 @@ func (e Environment) UnbindResource(ctx context.Context, application, resource s
 
 func (e Environment) ApplicationResources(ctx context.Context, application string) ([]Resource, error) {
 	return listOp[Resource](e, ctx, []string{"applications", application, "resources"})
+}
+
+// ── Resource grants ──
+
+// SetResourceAccess sets the resource's owner organization and whether it
+// requires a grant; organizations losing access have their sessions ended.
+func (e Environment) SetResourceAccess(ctx context.Context, resource string, input ResourceAccess) error {
+	return e.operation(ctx, "PUT", []string{"resources", resource, "access"}, input, nil)
+}
+
+// ResourceGrants lists every resource grant of the environment.
+func (e Environment) ResourceGrants(ctx context.Context) ([]ResourceGrant, error) {
+	return list[ResourceGrant](e, ctx, "resource-grants")
+}
+
+func (e Environment) ResourceGrant(ctx context.Context, id string) (ResourceGrant, error) {
+	var out ResourceGrant
+	err := e.operation(ctx, "GET", []string{"resource-grants", id}, nil, &out)
+	return out, err
+}
+
+// PutResourceGrant grants the resource to the organization, or replaces
+// the granted roles; narrowing ends the organization's sessions for it.
+func (e Environment) PutResourceGrant(ctx context.Context, input ResourceGrant) (ResourceGrant, error) {
+	var out ResourceGrant
+	err := e.client.Do(ctx, "PUT", e.path("resource-grants"), input, &out)
+	return out, err
+}
+
+func (e Environment) DeleteResourceGrant(ctx context.Context, id string) error {
+	return e.operation(ctx, "DELETE", []string{"resource-grants", id}, nil, nil)
 }
 
 // ── Grants ──
@@ -681,6 +932,49 @@ func (e Environment) DeleteOrganizationPasswordPolicy(ctx context.Context, organ
 	return e.operation(ctx, "DELETE", []string{"organizations", organization, "password-policy"}, nil, nil)
 }
 
+// ── Organization branding ──
+
+// OrganizationBranding is an organization's overrides of the hosted
+// sign-in and invitation pages. Nil fields inherit the OAuth client's
+// style or the environment default; Theme (the login-settings theme
+// object) replaces the inherited theme whole. Sign-in pages use it once
+// they know the organization: the authorize request's organization_id
+// parameter or urn:iamkit:org:id:<id> scope (which also limit the sign-in
+// to that organization), the organization the user chose, or a verified
+// domain of the typed email.
+type OrganizationBranding struct {
+	OrganizationID string          `json:"organization_id,omitempty"`
+	DisplayName    *string         `json:"display_name"`
+	LogoURL        *string         `json:"logo_url"`
+	AccentColor    *string         `json:"accent_color"`
+	Theme          json.RawMessage `json:"theme,omitempty"`
+	// Locale is the language of the organization's pages and invitation
+	// emails (one of the environment's enabled languages); nil inherits.
+	Locale    *string `json:"locale,omitempty"`
+	UpdatedAt string  `json:"updated_at,omitempty"`
+}
+
+// OrganizationBranding returns the organization's overrides (every field
+// nil when it has none).
+func (e Environment) OrganizationBranding(ctx context.Context, organization string) (OrganizationBranding, error) {
+	var out OrganizationBranding
+	err := e.operation(ctx, "GET", []string{"login-settings", "organizations", organization}, nil, &out)
+	return out, err
+}
+
+// SetOrganizationBranding replaces the organization's overrides.
+func (e Environment) SetOrganizationBranding(ctx context.Context, organization string, input OrganizationBranding) (OrganizationBranding, error) {
+	input.OrganizationID, input.UpdatedAt = "", ""
+	var out OrganizationBranding
+	err := e.operation(ctx, "PUT", []string{"login-settings", "organizations", organization}, input, &out)
+	return out, err
+}
+
+// DeleteOrganizationBranding removes the overrides (everything inherits).
+func (e Environment) DeleteOrganizationBranding(ctx context.Context, organization string) error {
+	return e.operation(ctx, "DELETE", []string{"login-settings", "organizations", organization}, nil, nil)
+}
+
 // ── Sign-in policy ──
 
 // SignInPolicy is which sign-in methods an environment allows and its
@@ -714,6 +1008,10 @@ type SignInPolicy struct {
 	AllowSignup          bool   `json:"allow_signup"`
 	SignupOrganizationID string `json:"signup_organization_id,omitempty"`
 	SignupGroupID        string `json:"signup_group_id,omitempty"`
+	// RequireTerms makes sign-up record the acceptance of the terms
+	// (authclient.SignupRequest.AcceptTerms; the hosted page links the
+	// branding's legal terms_url). Nil keeps the stored value.
+	RequireTerms *bool `json:"require_terms,omitempty"`
 	// Custom is false for the built-in default (everything allowed).
 	Custom    bool   `json:"custom,omitempty"`
 	UpdatedAt string `json:"updated_at,omitempty"`
@@ -739,6 +1037,40 @@ func (e Environment) SetSignInPolicy(ctx context.Context, input SignInPolicy) (S
 // sign_in_policy.delete.
 func (e Environment) DeleteSignInPolicy(ctx context.Context) error {
 	return e.client.Do(ctx, "DELETE", e.path("sign-in-policy"), nil, nil)
+}
+
+// OrgAdminPortal is the hosted organization admin portal of an
+// environment: when Enabled, organization administrators sign in at URL
+// with IAMKit's own public OAuth client (ClientID, on the IAM resource,
+// not editable) and manage their organization within their iam:org:*
+// permissions.
+type OrgAdminPortal struct {
+	Enabled       bool   `json:"enabled"`
+	ClientID      string `json:"client_id,omitempty"`
+	ApplicationID string `json:"application_id,omitempty"`
+	URL           string `json:"url,omitempty"`
+}
+
+// OrgAdminPortal reports whether the portal is on and where it is.
+func (e Environment) OrgAdminPortal(ctx context.Context) (OrgAdminPortal, error) {
+	var out OrgAdminPortal
+	err := e.client.Do(ctx, "GET", e.path("org-admin-portal"), nil, &out)
+	return out, err
+}
+
+// EnableOrgAdminPortal turns the portal on (idempotent). Audited as
+// org_admin_portal.enabled.
+func (e Environment) EnableOrgAdminPortal(ctx context.Context) (OrgAdminPortal, error) {
+	var out OrgAdminPortal
+	err := e.client.Do(ctx, "PUT", e.path("org-admin-portal"), struct{}{}, &out)
+	return out, err
+}
+
+// DisableOrgAdminPortal turns the portal off and ends its sessions at
+// once; the organization admin API keeps working. Audited as
+// org_admin_portal.disabled.
+func (e Environment) DisableOrgAdminPortal(ctx context.Context) error {
+	return e.client.Do(ctx, "DELETE", e.path("org-admin-portal"), nil, nil)
 }
 
 // DeliveryAttempt is the outcome of one delivery. Reason is a fixed,
@@ -972,8 +1304,24 @@ type LoginSettings struct {
 	// from Locales; "" = the server's EMAIL_LOCALE). Nil keeps the stored
 	// value; client styles have none. The name, logo and primary color of
 	// the default style also brand emails sent through smtp or resend.
-	Locale    *string `json:"locale,omitempty"`
-	UpdatedAt string  `json:"updated_at,omitempty"`
+	Locale *string `json:"locale,omitempty"`
+	// Languages are the languages the hosted pages may use (empty = every
+	// available one; environment default only). Nil keeps the stored list.
+	Languages []string `json:"languages"`
+	// Legal are the policy links of the sign-in and sign-up pages. Nil
+	// keeps the stored ones; a client style's empty links inherit the
+	// environment's.
+	Legal     *LoginLegal `json:"legal,omitempty"`
+	UpdatedAt string      `json:"updated_at,omitempty"`
+}
+
+// LoginLegal are the links to an application's policies: https URLs and a
+// support email address.
+type LoginLegal struct {
+	PrivacyURL   string `json:"privacy_url,omitempty"`
+	TermsURL     string `json:"terms_url,omitempty"`
+	HelpURL      string `json:"help_url,omitempty"`
+	SupportEmail string `json:"support_email,omitempty"`
 }
 
 // Locale is a language IAMKit has text for.
@@ -1010,6 +1358,18 @@ type LoginTheme struct {
 	// BackgroundOverlay (0-90 %) tints it with the background color.
 	BackgroundImageURL string `json:"background_image_url,omitempty"`
 	BackgroundOverlay  int    `json:"background_overlay,omitempty"`
+	// Font is the text typeface and HeadingFont the title's.
+	Font        LoginFont `json:"font"`
+	HeadingFont LoginFont `json:"heading_font"`
+}
+
+// LoginFont is a typeface: Family "system" (default; for HeadingFont,
+// the text font), one IAMKit serves itself ("inter", "roboto",
+// "open-sans", "lora"; no third-party request) or "custom" with URL, an
+// https .woff2 file.
+type LoginFont struct {
+	Family string `json:"family,omitempty"`
+	URL    string `json:"url,omitempty"`
 }
 
 // LoginPalette colors one scheme ("#rrggbb"; empty uses the default).

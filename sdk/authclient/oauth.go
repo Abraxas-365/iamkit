@@ -122,6 +122,12 @@ func (c *OAuthClient) request(ctx context.Context, path string, form url.Values,
 	case c.clientSecret != "":
 		basic = true
 	}
+	return c.send(ctx, path, form, basic, out)
+}
+
+// send posts form to /oauth/path (with HTTP Basic client authentication
+// when basic) and decodes the answer into out.
+func (c *OAuthClient) send(ctx context.Context, path string, form url.Values, basic bool, out any) error {
 	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/oauth/"+path, strings.NewReader(form.Encode()))
 	if err != nil {
 		return err

@@ -1,0 +1,7 @@
+node_modules/
+.next/
+next-env.d.ts
+e2e/.stack/
+test-results/
+playwright-report/
+tsconfig.tsbuildinfo

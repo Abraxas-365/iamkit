@@ -156,12 +156,12 @@ func parseList(data json.RawMessage) ([]map[string]any, map[string]any) {
 // sortedKeys returns map keys in a stable order.
 func sortedKeys(m map[string]any) []string {
 	// Preferred order for common fields
-	order := []string{"id", "name", "email", "prefix", "audience", "active",
+	order := []string{"id", "name", "email", "username", "prefix", "audience", "active",
 		"role", "permissions", "redirect_uris", "operator_id", "workspace_id",
 		"application_id", "application_name", "resource_id", "resource_name",
 		"organization_id", "organization_name", "user_id", "user_name",
 		"expires_at", "revoked_at", "created_at", "updated_at", "secret",
-		"otp_enabled", "email_verified", "phone", "phone_verified", "metadata", "issuer", "client_id",
+		"otp_enabled", "email_verified", "phone", "phone_verified", "avatar_url", "metadata", "issuer", "client_id",
 		"linked", "webhook_url"}
 	seen := map[string]bool{}
 	var result []string

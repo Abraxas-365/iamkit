@@ -11,8 +11,10 @@ func organizationsCmd() *cobra.Command {
 	cmd.AddCommand(orgsListCmd())
 	cmd.AddCommand(orgsGetCmd())
 	cmd.AddCommand(orgsCreateCmd())
+	cmd.AddCommand(metadataCmd("organizations", "organization"))
 	cmd.AddCommand(orgsUpdateCmd())
 	cmd.AddCommand(orgsMembersCmd())
+	cmd.AddCommand(orgsBrandingCmd())
 	return cmd
 }
 

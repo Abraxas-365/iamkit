@@ -30,12 +30,12 @@ func rolesListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			p.table(data, []string{"ID", "NAME", "RESOURCE", "PERMISSIONS"}, func(m map[string]any) []string {
+			p.table(data, []string{"ID", "NAME", "RESOURCE", "BUILT-IN", "PERMISSIONS"}, func(m map[string]any) []string {
 				res := str(m, "resource_name")
 				if res == "" {
 					res = str(m, "resource_id")
 				}
-				return []string{str(m, "id"), str(m, "name"), res, collapsePerms(m["permissions"])}
+				return []string{str(m, "id"), str(m, "name"), res, str(m, "system_role"), collapsePerms(m["permissions"])}
 			})
 			return nil
 		},

@@ -39,6 +39,8 @@ The SDK has **four client packages** with distinct API authority:
 Plus framework integrations:
 - `authclient/fiberauth` — Fiber v2 middleware for token validation
 - `authclient/httpauth` — framework-neutral `net/http` middleware for token validation
+- `webhook` — verify IAMKit event webhooks (Standard Webhooks signatures) on your endpoint
+- `action` — answer IAMKit actions on your endpoint: verify the signed input, deny, add token claims or patch a request
 
 ---
 
@@ -351,7 +353,7 @@ tokens, err := client.Login(ctx, authclient.PasswordLogin{
         ApplicationID:  "app-uuid",
         ResourceID:     "res-uuid",
     },
-    Email:    "alice@example.com",
+    Email:    "alice@example.com", // or Login: "alice" (email or username)
     Password: "password",
 })
 // tokens.AccessToken, tokens.RefreshToken
@@ -407,6 +409,8 @@ result, _ := client.StartFederation(ctx, authclient.FederationStart{
 ```go
 profile, _ := client.Profile(ctx, accessToken, "env-uuid", "audience")
 client.UpdateProfile(ctx, accessToken, "env-uuid", "audience", "New Name")
+avatar := "https://cdn.example.com/u/ada.png" // https only; "" removes it
+client.UpdateOwnProfile(ctx, accessToken, "env-uuid", "audience", authclient.ProfileChange{AvatarURL: &avatar})
 orgs, _ := client.Organizations(ctx, accessToken, "env-uuid", "audience")
 ```
 

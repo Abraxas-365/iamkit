@@ -2,8 +2,10 @@ package apiclient
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // Environment scopes API calls to a single IAMKit environment.
@@ -16,6 +18,37 @@ func (e Environment) path(segments ...string) string {
 	return "/environments/" + e.id + "/" + strings.Join(segments, "/")
 }
 
+// items decodes a list response: the paginated envelope
+// {"items":[...],"page":{...}} or a bare array.
+type items[T any] []T
+
+func (i *items[T]) UnmarshalJSON(raw []byte) error {
+	if trimmed := strings.TrimSpace(string(raw)); strings.HasPrefix(trimmed, "[") || trimmed == "null" {
+		var out []T
+		err := json.Unmarshal(raw, &out)
+		*i = out
+		return err
+	}
+	var page struct {
+		Items []T `json:"items"`
+	}
+	err := json.Unmarshal(raw, &page)
+	*i = page.Items
+	return err
+}
+
+// list GETs a collection (first page) and returns its items, never nil.
+func list[T any](ctx context.Context, c *Client, path string, query url.Values) ([]T, error) {
+	var out items[T]
+	if err := c.do(ctx, "GET", path, query, nil, &out); err != nil {
+		return nil, err
+	}
+	if out == nil {
+		return []T{}, nil
+	}
+	return []T(out), nil
+}
+
 // ── Shared types ──
 
 // Created is returned by endpoints that create a resource.
@@ -24,10 +57,28 @@ type Created struct {
 }
 
 type User struct {
-	ID     string `json:"id"`
-	Email  string `json:"email"`
-	Name   string `json:"name"`
-	Active bool   `json:"active"`
+	ID string `json:"id"`
+	// Kind is "human" or "machine" (authenticates with personal access
+	// tokens only).
+	Kind  string `json:"kind,omitempty"`
+	Email string `json:"email"`
+	Name  string `json:"name"`
+	// Username is the optional second sign-in identifier ("" when none).
+	Username string `json:"username,omitempty"`
+	// AvatarURL is an https URL to the user's picture ("" when none).
+	AvatarURL string `json:"avatar_url,omitempty"`
+	// Phone is the user's number in E.164 ("" when none).
+	Phone         string `json:"phone,omitempty"`
+	PhoneVerified bool   `json:"phone_verified,omitempty"`
+	// HomeOrganizationID is the organization owning the record ("" when
+	// none): its administrators may edit the user.
+	HomeOrganizationID string `json:"home_organization_id,omitempty"`
+	Active             bool   `json:"active"`
+	// State: suspended, locked, initial, inactive or active (derived).
+	State string `json:"state,omitempty"`
+	// Metadata and Profile are returned when one user is read.
+	Metadata map[string]any `json:"metadata,omitempty"`
+	Profile  map[string]any `json:"profile,omitempty"`
 }
 
 type CreateUser struct {
@@ -35,6 +86,14 @@ type CreateUser struct {
 	Email      string `json:"email"`
 	Name       string `json:"name"`
 	Password   string `json:"password"`
+	// AvatarURL is an https URL to the user's picture (optional).
+	AvatarURL string `json:"avatar_url,omitempty"`
+	// Username is optional: lowercase letters, digits, ".", "_" or "-",
+	// unique in the environment; users may sign in with it.
+	Username string `json:"username,omitempty"`
+	// HomeOrganizationID makes the user a member of that organization
+	// whose administrators may then edit the record (optional).
+	HomeOrganizationID string `json:"home_organization_id,omitempty"`
 }
 
 type UpdateUser struct {
@@ -42,8 +101,18 @@ type UpdateUser struct {
 	Name       *string        `json:"name,omitempty"`
 	Active     *bool          `json:"active,omitempty"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
-	// Phone sets the user's number in E.164 ("" clears it).
+	// Phone sets the user's number in E.164 ("" clears it); a changed
+	// number is unverified.
 	Phone *string `json:"phone,omitempty"`
+	// PhoneVerified marks the number verified or not (audited).
+	PhoneVerified *bool `json:"phone_verified,omitempty"`
+	// AvatarURL sets the picture, an https URL ("" removes it).
+	AvatarURL *string `json:"avatar_url,omitempty"`
+	// Username sets the username ("" removes it).
+	Username *string `json:"username,omitempty"`
+	// HomeOrganizationID moves the record to another organization the
+	// user belongs to ("" clears it).
+	HomeOrganizationID *string `json:"home_organization_id,omitempty"`
 }
 
 type Organization struct {
@@ -69,6 +138,30 @@ type Resource struct {
 	Name        string   `json:"name"`
 	Audience    string   `json:"audience"`
 	Permissions []string `json:"permissions"`
+	// OwnerOrganizationID is the vendor organization owning the resource
+	// ("" = the environment); RequireGrant limits access to the owner and
+	// organizations holding a ResourceGrant. Set both with SetResourceAccess.
+	OwnerOrganizationID string `json:"owner_organization_id,omitempty"`
+	RequireGrant        bool   `json:"require_grant,omitempty"`
+}
+
+// ResourceAccess sets a resource's owner organization and grant requirement.
+type ResourceAccess struct {
+	OwnerOrganizationID *string `json:"owner_organization_id"`
+	RequireGrant        bool    `json:"require_grant"`
+}
+
+// ResourceGrant lets an organization use a resource it does not own; a nil
+// RoleIDs grants every role of the resource.
+type ResourceGrant struct {
+	ID               string   `json:"id,omitempty"`
+	ResourceID       string   `json:"resource_id"`
+	ResourceName     string   `json:"resource_name,omitempty"`
+	OrganizationID   string   `json:"organization_id"`
+	OrganizationName string   `json:"organization_name,omitempty"`
+	RoleIDs          []string `json:"role_ids"`
+	CreatedAt        string   `json:"created_at,omitempty"`
+	UpdatedAt        string   `json:"updated_at,omitempty"`
 }
 
 type Role struct {
@@ -76,6 +169,10 @@ type Role struct {
 	Name        string   `json:"name"`
 	ResourceID  string   `json:"resource_id"`
 	Permissions []string `json:"permissions"`
+	// SystemRole names a built-in organization-administration role
+	// (org_owner, org_viewer, org_user_manager, org_settings_manager) of
+	// the IAM resource; those cannot be changed or deleted. Read-only.
+	SystemRole string `json:"system_role,omitempty"`
 }
 
 type RoleAssignment struct {
@@ -114,8 +211,7 @@ func (e Environment) CreateUser(ctx context.Context, input CreateUser) (Created,
 }
 
 func (e Environment) Users(ctx context.Context) ([]User, error) {
-	var out []User
-	return out, e.client.Do(ctx, "GET", e.path("users"), nil, &out)
+	return list[User](ctx, e.client, e.path("users"), nil)
 }
 
 func (e Environment) User(ctx context.Context, id string) (User, error) {
@@ -131,10 +227,137 @@ func (e Environment) SuspendUser(ctx context.Context, id string) error {
 	return e.client.Do(ctx, "DELETE", e.path("users", id), nil, nil)
 }
 
+// UsersInState lists the first page of users in state (suspended,
+// locked, initial, inactive or active).
+func (e Environment) UsersInState(ctx context.Context, state string) ([]User, error) {
+	return list[User](ctx, e.client, e.path("users"), url.Values{"state": {state}})
+}
+
+// DeactivateUser suspends a user; requires iam:users:write.
+func (e Environment) DeactivateUser(ctx context.Context, id string) error {
+	return e.client.Do(ctx, "POST", e.path("users", id, "deactivate"), nil, nil)
+}
+
+// ReactivateUser lifts a suspension; requires iam:users:write.
+func (e Environment) ReactivateUser(ctx context.Context, id string) error {
+	return e.client.Do(ctx, "POST", e.path("users", id, "reactivate"), nil, nil)
+}
+
 // UnlockUser clears a user's wrong-password count and lockout; requires
 // iam:users:write.
 func (e Environment) UnlockUser(ctx context.Context, id string) error {
 	return e.client.Do(ctx, "POST", e.path("users", id, "unlock"), nil, nil)
+}
+
+// ── Machine users ──
+
+// CreateMachineUser creates a user of kind "machine" (no email, password
+// or second factor); requires iam:users:write.
+func (e Environment) CreateMachineUser(ctx context.Context, name string) (Created, error) {
+	var out Created
+	return out, e.client.Do(ctx, "POST", e.path("users"), map[string]string{"kind": "machine", "name": name}, &out)
+}
+
+// MachineUsers lists the first page of machine users; requires iam:users:read.
+func (e Environment) MachineUsers(ctx context.Context) ([]User, error) {
+	return list[User](ctx, e.client, e.path("users"), url.Values{"kind": {"machine"}})
+}
+
+// AccessToken is a machine user's personal access token (never its secret).
+type AccessToken struct {
+	ID             string     `json:"id"`
+	UserID         string     `json:"user_id"`
+	OrganizationID string     `json:"organization_id"`
+	ApplicationID  string     `json:"application_id"`
+	ResourceID     string     `json:"resource_id"`
+	Name           string     `json:"name"`
+	ExpiresAt      time.Time  `json:"expires_at"`
+	LastUsedAt     *time.Time `json:"last_used_at"`
+	RevokedAt      *time.Time `json:"revoked_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	// Names are filled when tokens are listed.
+	OrganizationName string `json:"organization_name,omitempty"`
+	ApplicationName  string `json:"application_name,omitempty"`
+	ResourceName     string `json:"resource_name,omitempty"`
+}
+
+// IssuedAccessToken is a new personal access token; Token (ik_pat_…) is
+// returned only here.
+type IssuedAccessToken struct {
+	AccessToken
+	Token string `json:"token"`
+}
+
+// CreateAccessToken asks for a token acting as the machine user in
+// OrganizationID for ResourceID of ApplicationID; ExpiresIn is 1h–8760h or
+// "never" (default 24h).
+type CreateAccessToken struct {
+	Name           string `json:"name"`
+	OrganizationID string `json:"organization_id"`
+	ApplicationID  string `json:"application_id"`
+	ResourceID     string `json:"resource_id"`
+	ExpiresIn      string `json:"expires_in,omitempty"`
+}
+
+// CreateAccessToken issues a machine user's personal access token;
+// requires iam:users:write.
+func (e Environment) CreateAccessToken(ctx context.Context, user string, input CreateAccessToken) (IssuedAccessToken, error) {
+	var out IssuedAccessToken
+	return out, e.client.Do(ctx, "POST", e.path("users", user, "access-tokens"), input, &out)
+}
+
+// AccessTokens lists the first page of a machine user's tokens; requires
+// iam:users:read.
+func (e Environment) AccessTokens(ctx context.Context, user string) ([]AccessToken, error) {
+	return list[AccessToken](ctx, e.client, e.path("users", user, "access-tokens"), nil)
+}
+
+// RevokeAccessToken revokes a token and the sessions exchanged from it;
+// requires iam:users:write.
+func (e Environment) RevokeAccessToken(ctx context.Context, user, token string) error {
+	return e.client.Do(ctx, "DELETE", e.path("users", user, "access-tokens", token), nil, nil)
+}
+
+// UserKey is a machine user's public key for the JWT-bearer grant.
+type UserKey struct {
+	ID         string          `json:"id"`
+	UserID     string          `json:"user_id"`
+	PublicKey  json.RawMessage `json:"public_key"`
+	ExpiresAt  time.Time       `json:"expires_at"`
+	LastUsedAt *time.Time      `json:"last_used_at"`
+	CreatedAt  time.Time       `json:"created_at"`
+}
+
+// IssuedUserKey is a new key; PrivateKey (PEM) is set only for a pair
+// IAMKit generated, and returned only here.
+type IssuedUserKey struct {
+	UserKey
+	PrivateKey string `json:"private_key,omitempty"`
+}
+
+// AddUserKey asks for a key: an RSA or EC public JWK, or empty PublicKey
+// for a generated RSA pair; ExpiresIn is 1h–8760h or "never" (default 8760h).
+type AddUserKey struct {
+	PublicKey json.RawMessage `json:"public_key,omitempty"`
+	ExpiresIn string          `json:"expires_in,omitempty"`
+}
+
+// AddUserKey adds a key to a machine user; requires iam:users:write.
+func (e Environment) AddUserKey(ctx context.Context, user string, input AddUserKey) (IssuedUserKey, error) {
+	var out IssuedUserKey
+	return out, e.client.Do(ctx, "POST", e.path("users", user, "keys"), input, &out)
+}
+
+// UserKeys lists the first page of a machine user's keys; requires
+// iam:users:read.
+func (e Environment) UserKeys(ctx context.Context, user string) ([]UserKey, error) {
+	return list[UserKey](ctx, e.client, e.path("users", user, "keys"), nil)
+}
+
+// RemoveUserKey deletes a key and ends the sessions opened with it;
+// requires iam:users:write.
+func (e Environment) RemoveUserKey(ctx context.Context, user, key string) error {
+	return e.client.Do(ctx, "DELETE", e.path("users", user, "keys", key), nil, nil)
 }
 
 // ── Organizations ──
@@ -145,8 +368,7 @@ func (e Environment) CreateOrganization(ctx context.Context, name string) (Creat
 }
 
 func (e Environment) Organizations(ctx context.Context) ([]Organization, error) {
-	var out []Organization
-	return out, e.client.Do(ctx, "GET", e.path("organizations"), nil, &out)
+	return list[Organization](ctx, e.client, e.path("organizations"), nil)
 }
 
 func (e Environment) Organization(ctx context.Context, id string) (Organization, error) {
@@ -165,8 +387,7 @@ func (e Environment) AddMember(ctx context.Context, input Membership) error {
 }
 
 func (e Environment) Members(ctx context.Context, org string) ([]Membership, error) {
-	var out []Membership
-	return out, e.client.Do(ctx, "GET", e.path("organizations", org, "members"), nil, &out)
+	return list[Membership](ctx, e.client, e.path("organizations", org, "members"), nil)
 }
 
 func (e Environment) RemoveMember(ctx context.Context, org, user string) error {
@@ -181,8 +402,7 @@ func (e Environment) CreateApplication(ctx context.Context, input Application) (
 }
 
 func (e Environment) Applications(ctx context.Context) ([]Application, error) {
-	var out []Application
-	return out, e.client.Do(ctx, "GET", e.path("applications"), nil, &out)
+	return list[Application](ctx, e.client, e.path("applications"), nil)
 }
 
 func (e Environment) Application(ctx context.Context, id string) (Application, error) {
@@ -202,8 +422,7 @@ func (e Environment) CreateResource(ctx context.Context, input Resource) (Create
 }
 
 func (e Environment) Resources(ctx context.Context) ([]Resource, error) {
-	var out []Resource
-	return out, e.client.Do(ctx, "GET", e.path("resources"), nil, &out)
+	return list[Resource](ctx, e.client, e.path("resources"), nil)
 }
 
 func (e Environment) Resource(ctx context.Context, id string) (Resource, error) {
@@ -224,15 +443,13 @@ func (e Environment) UnbindResource(ctx context.Context, application, resource s
 }
 
 func (e Environment) ResourcesByApplication(ctx context.Context, application string) ([]Resource, error) {
-	var out []Resource
-	return out, e.client.Do(ctx, "GET", e.path("applications", application, "resources"), nil, &out)
+	return list[Resource](ctx, e.client, e.path("applications", application, "resources"), nil)
 }
 
 // ── Roles ──
 
 func (e Environment) Roles(ctx context.Context) ([]Role, error) {
-	var out []Role
-	return out, e.client.Do(ctx, "GET", e.path("roles"), nil, &out)
+	return list[Role](ctx, e.client, e.path("roles"), nil)
 }
 
 func (e Environment) CreateRole(ctx context.Context, input Role) (Created, error) {
@@ -253,8 +470,7 @@ func (e Environment) AssignRole(ctx context.Context, input RoleAssignment) error
 }
 
 func (e Environment) RoleAssignments(ctx context.Context) ([]RoleAssignment, error) {
-	var out []RoleAssignment
-	return out, e.client.Do(ctx, "GET", e.path("role-assignments"), nil, &out)
+	return list[RoleAssignment](ctx, e.client, e.path("role-assignments"), nil)
 }
 
 func (e Environment) UnassignRole(ctx context.Context, role, org, user string) error {
@@ -264,8 +480,7 @@ func (e Environment) UnassignRole(ctx context.Context, role, org, user string) e
 // ── Grants ──
 
 func (e Environment) Grants(ctx context.Context) ([]Grant, error) {
-	var out []Grant
-	return out, e.client.Do(ctx, "GET", e.path("grants"), nil, &out)
+	return list[Grant](ctx, e.client, e.path("grants"), nil)
 }
 
 func (e Environment) PutGrant(ctx context.Context, input Grant) error {
@@ -276,6 +491,43 @@ func (e Environment) DeleteGrant(ctx context.Context, id string) error {
 	return e.client.Do(ctx, "DELETE", e.path("grants", id), nil, nil)
 }
 
+// ── Resource grants (iam:roles:*; access needs iam:resources:write) ──
+
+// SetResourceAccess sets the resource's owner organization and whether it
+// requires a grant; organizations losing access have their sessions ended.
+func (e Environment) SetResourceAccess(ctx context.Context, resource string, input ResourceAccess) error {
+	return e.client.Do(ctx, "PUT", e.path("resources", resource, "access"), input, nil)
+}
+
+// ResourceGrants lists grants, optionally of one resource and/or to one
+// organization ("" = any).
+func (e Environment) ResourceGrants(ctx context.Context, resource, organization string) ([]ResourceGrant, error) {
+	q := url.Values{}
+	if resource != "" {
+		q.Set("resource_id", resource)
+	}
+	if organization != "" {
+		q.Set("organization_id", organization)
+	}
+	return list[ResourceGrant](ctx, e.client, e.path("resource-grants"), q)
+}
+
+func (e Environment) ResourceGrant(ctx context.Context, id string) (ResourceGrant, error) {
+	var out ResourceGrant
+	return out, e.client.Do(ctx, "GET", e.path("resource-grants", id), nil, &out)
+}
+
+// PutResourceGrant grants the resource to the organization, or replaces
+// the granted roles; narrowing ends the organization's sessions for it.
+func (e Environment) PutResourceGrant(ctx context.Context, input ResourceGrant) (ResourceGrant, error) {
+	var out ResourceGrant
+	return out, e.client.Do(ctx, "PUT", e.path("resource-grants"), input, &out)
+}
+
+func (e Environment) DeleteResourceGrant(ctx context.Context, id string) error {
+	return e.client.Do(ctx, "DELETE", e.path("resource-grants", id), nil, nil)
+}
+
 // ── Service Accounts ──
 
 func (e Environment) CreateServiceAccount(ctx context.Context, input ServiceAccount) (ServiceAccountKey, error) {
@@ -284,8 +536,7 @@ func (e Environment) CreateServiceAccount(ctx context.Context, input ServiceAcco
 }
 
 func (e Environment) ServiceAccounts(ctx context.Context) ([]ServiceAccount, error) {
-	var out []ServiceAccount
-	return out, e.client.Do(ctx, "GET", e.path("service-accounts"), nil, &out)
+	return list[ServiceAccount](ctx, e.client, e.path("service-accounts"), nil)
 }
 
 func (e Environment) RevokeServiceAccount(ctx context.Context, id string) error {

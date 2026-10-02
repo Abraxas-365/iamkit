@@ -344,3 +344,64 @@ func TestDirectoryLogin(t *testing.T) {
 		t.Fatalf("body %v", body)
 	}
 }
+
+func TestUpdateOwnProfile(t *testing.T) {
+	var bodies []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	avatar := "https://cdn.example/a.png"
+	if err := c.UpdateOwnProfile(context.Background(), "tok", "env", "aud", ProfileChange{AvatarURL: &avatar}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.UpdateProfile(context.Background(), "tok", "env", "aud", "Ada"); err != nil {
+		t.Fatal(err)
+	}
+	if bodies[0]["avatar_url"] != avatar || bodies[0]["name"] != nil || bodies[0]["environment_id"] != "env" {
+		t.Fatalf("avatar change = %v", bodies[0])
+	}
+	if bodies[1]["name"] != "Ada" || bodies[1]["avatar_url"] != nil {
+		t.Fatalf("name change = %v", bodies[1])
+	}
+}
+
+func TestPhoneVerification(t *testing.T) {
+	var calls []string
+	var bodies []map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		bodies = append(bodies, body)
+		if r.URL.Path == "/identity/v1/me/phone" && r.Method == "POST" {
+			w.WriteHeader(http.StatusAccepted)
+			_, _ = w.Write([]byte(`{"destination":"+1••••••••21","expires_at":"2026-09-01T12:05:00Z"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	c := New(srv.URL)
+	ctx := context.Background()
+	sent, err := c.StartPhoneVerification(ctx, "tok", "env", "aud", "+15557654321")
+	if err != nil || sent.Destination != "+1••••••••21" || sent.ExpiresAt.IsZero() {
+		t.Fatalf("start = %+v %v", sent, err)
+	}
+	if err = c.VerifyPhone(ctx, "tok", "env", "aud", "123456"); err != nil {
+		t.Fatal(err)
+	}
+	if err = c.RemovePhone(ctx, "tok", "env", "aud"); err != nil {
+		t.Fatal(err)
+	}
+	if bodies[0]["phone"] != "+15557654321" || bodies[0]["audience"] != "aud" || bodies[1]["code"] != "123456" {
+		t.Fatalf("bodies = %v", bodies)
+	}
+	if calls[1] != "POST /identity/v1/me/phone/verify?" || calls[2] != "DELETE /identity/v1/me/phone?environment_id=env&audience=aud" {
+		t.Fatalf("calls = %v", calls)
+	}
+}

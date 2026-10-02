@@ -54,7 +54,9 @@ type LoginContext struct {
 
 type PasswordLogin struct {
 	LoginContext
-	Email    string `json:"email"`
+	// Email or Login: Login accepts an email or a username.
+	Email    string `json:"email,omitempty"`
+	Login    string `json:"login,omitempty"`
 	Password string `json:"password"`
 	// NewPassword replaces an expired password. Login answers
 	// apierror.CodePasswordChangeRequired (403) when the environment's
@@ -252,6 +254,20 @@ func (c *Client) MachineToken(ctx context.Context, secret string) (TokenPair, er
 	}
 	var out TokenPair
 	err := c.request(ctx, "/machine-token", secret, nil, &out)
+	return out, err
+}
+
+// ExchangeAccessToken trades a machine user's personal access token
+// (ik_pat_) for an access token backed by a session: revoking the personal
+// access token or deactivating the machine user ends it. A personal access
+// token also works directly as a bearer on /api/v1 and introspection, but
+// Validator (local JWT checks) accepts only exchanged tokens.
+func (c *Client) ExchangeAccessToken(ctx context.Context, token string) (TokenPair, error) {
+	if !strings.HasPrefix(token, "ik_pat_") {
+		return TokenPair{}, &apierror.Error{Code: "VALIDATION", Message: "personal access token required", HTTPStatus: 400}
+	}
+	var out TokenPair
+	err := c.request(ctx, "/token-exchange", token, nil, &out)
 	return out, err
 }
 
@@ -488,9 +504,12 @@ func (c *Client) InitiateChallenge(ctx context.Context, environment, email, purp
 // (smtp, resend); the webhook payload is unchanged.
 type ChallengeRequest struct {
 	Environment string `json:"environment_id"`
-	Email       string `json:"email"`
-	Purpose     string `json:"purpose"`
-	Locale      string `json:"locale,omitempty"`
+	// Email or Login (an email or a username; the code goes to the
+	// account's email).
+	Email   string `json:"email,omitempty"`
+	Login   string `json:"login,omitempty"`
+	Purpose string `json:"purpose"`
+	Locale  string `json:"locale,omitempty"`
 }
 
 // InitiateChallengeWith is InitiateChallenge with every option.
@@ -518,6 +537,10 @@ type SignupRequest struct {
 	Name        string `json:"name"`
 	Password    string `json:"password,omitempty"`
 	Locale      string `json:"locale,omitempty"`
+	// AcceptTerms records that the person accepted the terms; required
+	// when the environment's sign-in policy sets require_terms (else 400
+	// TERMS_REQUIRED).
+	AcceptTerms bool `json:"accept_terms,omitempty"`
 }
 
 // SignedUp is the account a completed sign-up created.
@@ -599,7 +622,55 @@ func (c *Client) Profile(ctx context.Context, token, environment, audience strin
 
 // UpdateProfile changes the authenticated user's display name.
 func (c *Client) UpdateProfile(ctx context.Context, token, environment, audience, name string) error {
-	return c.requestMethod(ctx, "PATCH", "/me", token, map[string]string{"environment_id": environment, "audience": audience, "name": name}, nil)
+	return c.UpdateOwnProfile(ctx, token, environment, audience, ProfileChange{Name: &name})
+}
+
+// ProfileChange is what users change about themselves; nil fields stay.
+type ProfileChange struct {
+	Name *string `json:"name,omitempty"`
+	// AvatarURL is an https URL to the user's picture ("" removes it).
+	AvatarURL *string `json:"avatar_url,omitempty"`
+}
+
+// UpdateOwnProfile changes the authenticated user's name and/or avatar.
+func (c *Client) UpdateOwnProfile(ctx context.Context, token, environment, audience string, change ProfileChange) error {
+	body := map[string]any{"environment_id": environment, "audience": audience}
+	if change.Name != nil {
+		body["name"] = *change.Name
+	}
+	if change.AvatarURL != nil {
+		body["avatar_url"] = *change.AvatarURL
+	}
+	return c.requestMethod(ctx, "PATCH", "/me", token, body, nil)
+}
+
+// PhoneCodeSent answers StartPhoneVerification.
+type PhoneCodeSent struct {
+	// Destination is the masked number.
+	Destination string    `json:"destination"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+// StartPhoneVerification texts a 6-digit code to phone (E.164; spaces and
+// dashes are accepted). The user's phone changes only once VerifyPhone
+// receives the code. Needs a sign-in within the last few minutes
+// (REAUTHENTICATION_REQUIRED otherwise); CODE_COOLDOWN / CODE_LIMIT
+// answer resends that come too fast.
+func (c *Client) StartPhoneVerification(ctx context.Context, token, environment, audience, phone string) (PhoneCodeSent, error) {
+	var out PhoneCodeSent
+	err := c.requestMethod(ctx, "POST", "/me/phone", token, map[string]string{"environment_id": environment, "audience": audience, "phone": phone}, &out)
+	return out, err
+}
+
+// VerifyPhone enters the texted code; the number becomes the user's
+// verified phone. A wrong code answers INVALID_CODE.
+func (c *Client) VerifyPhone(ctx context.Context, token, environment, audience, code string) error {
+	return c.requestMethod(ctx, "POST", "/me/phone/verify", token, map[string]string{"environment_id": environment, "audience": audience, "code": code}, nil)
+}
+
+// RemovePhone clears the user's phone number.
+func (c *Client) RemovePhone(ctx context.Context, token, environment, audience string) error {
+	return c.requestMethod(ctx, "DELETE", "/me/phone?environment_id="+url.QueryEscape(environment)+"&audience="+url.QueryEscape(audience), token, nil, nil)
 }
 
 // Organizations returns the organizations the authenticated user belongs to.

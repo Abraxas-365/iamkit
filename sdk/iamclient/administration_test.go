@@ -507,3 +507,53 @@ func TestSAMLAppRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestResourceGrantRoutes(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+strings.TrimSpace(string(body)))
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/resource-grants"):
+			w.Write([]byte(`{"items":[{"id":"g1","resource_id":"r1","organization_id":"o2","role_ids":["x"]}],"page":{"total":1,"limit":50,"offset":0}}`))
+		case r.Method == "PUT" && strings.HasSuffix(r.URL.Path, "/access"), r.Method == "DELETE":
+			w.WriteHeader(204)
+		default:
+			w.Write([]byte(`{"id":"g1","resource_id":"r1","organization_id":"o2","role_ids":null}`))
+		}
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	if err := env.SetResourceAccess(ctx, "r1", ResourceAccess{RequireGrant: true}); err != nil {
+		t.Fatal(err)
+	}
+	grants, err := env.ResourceGrants(ctx)
+	if err != nil || len(grants) != 1 || grants[0].RoleIDs[0] != "x" {
+		t.Fatalf("grants = %+v, %v", grants, err)
+	}
+	if _, err := env.PutResourceGrant(ctx, ResourceGrant{ResourceID: "r1", OrganizationID: "o2", RoleIDs: []string{"x"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.ResourceGrant(ctx, "g1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := env.DeleteResourceGrant(ctx, "g1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := env.ResourceGrant(ctx, "../x"); err == nil {
+		t.Fatal("unsafe segment accepted")
+	}
+	base := "/management/v1/environments/env-1/"
+	want := []string{
+		"PUT " + base + `resources/r1/access {"owner_organization_id":null,"require_grant":true}`,
+		"GET " + base + "resource-grants ",
+		"PUT " + base + `resource-grants {"resource_id":"r1","organization_id":"o2","role_ids":["x"]}`,
+		"GET " + base + "resource-grants/g1 ",
+		"DELETE " + base + "resource-grants/g1 ",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("requests:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}

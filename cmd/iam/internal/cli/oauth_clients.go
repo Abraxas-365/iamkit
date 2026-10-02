@@ -99,7 +99,7 @@ func oauthClientsGetCmd() *cobra.Command {
 }
 
 func oauthClientsCreateCmd() *cobra.Command {
-	var app, resource, redirects, postLogout, format, backchannel, grants string
+	var app, resource, redirects, postLogout, origins, format, backchannel, grants string
 	var public, hosted, sessionRequired bool
 	var auth clientAuthFlags
 	cmd := &cobra.Command{
@@ -107,7 +107,7 @@ func oauthClientsCreateCmd() *cobra.Command {
 		Short: "Register an OAuth client (the secret is shown once)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
-			body := map[string]any{"application_id": app, "resource_id": resource, "redirect_uris": splitList(redirects), "post_logout_redirect_uris": splitList(postLogout), "public": public, "hosted_login": hosted}
+			body := map[string]any{"application_id": app, "resource_id": resource, "redirect_uris": splitList(redirects), "post_logout_redirect_uris": splitList(postLogout), "allowed_origins": splitList(origins), "public": public, "hosted_login": hosted}
 			if format != "" {
 				body["access_token_format"] = format
 			}
@@ -133,6 +133,7 @@ func oauthClientsCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&resource, "resource", "", "Resource ID (required)")
 	cmd.Flags().StringVar(&redirects, "redirect-uris", "", "Comma-separated redirect URIs (required for the authorization code grant)")
 	cmd.Flags().StringVar(&postLogout, "post-logout-redirect-uris", "", "Comma-separated URIs /oauth/end_session may return to")
+	cmd.Flags().StringVar(&origins, "allowed-origins", "", "Comma-separated browser origins of a custom sign-in UI or SPA (CORS)")
 	cmd.Flags().BoolVar(&public, "public", false, "Public client (PKCE, no secret)")
 	cmd.Flags().BoolVar(&hosted, "hosted-login", false, "Use IAMKit's hosted sign-in pages")
 	cmd.Flags().StringVar(&format, "access-token-format", "", "Access token format: jwt (default) or opaque (introspection/userinfo only)")
@@ -146,12 +147,12 @@ func oauthClientsCreateCmd() *cobra.Command {
 }
 
 func oauthClientsUpdateCmd() *cobra.Command {
-	var redirects, postLogout, format, backchannel, grants string
+	var redirects, postLogout, origins, format, backchannel, grants string
 	var hosted, sessionRequired bool
 	var auth clientAuthFlags
 	cmd := &cobra.Command{
 		Use:   "update CLIENT_ID",
-		Short: "Change an OAuth client's URIs, hosted login, grant types, access token format, back-channel logout or token endpoint authentication",
+		Short: "Change an OAuth client's URIs, allowed origins, hosted login, grant types, access token format, back-channel logout or token endpoint authentication",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
@@ -161,6 +162,9 @@ func oauthClientsUpdateCmd() *cobra.Command {
 			}
 			if cmd.Flags().Changed("post-logout-redirect-uris") {
 				body["post_logout_redirect_uris"] = splitList(postLogout)
+			}
+			if cmd.Flags().Changed("allowed-origins") {
+				body["allowed_origins"] = splitList(origins)
 			}
 			if cmd.Flags().Changed("hosted-login") {
 				body["hosted_login"] = hosted
@@ -189,6 +193,7 @@ func oauthClientsUpdateCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&redirects, "redirect-uris", "", "Comma-separated redirect URIs")
 	cmd.Flags().StringVar(&postLogout, "post-logout-redirect-uris", "", "Comma-separated post-logout URIs (empty clears)")
+	cmd.Flags().StringVar(&origins, "allowed-origins", "", "Comma-separated browser origins allowed with CORS (empty clears)")
 	cmd.Flags().BoolVar(&hosted, "hosted-login", false, "Use IAMKit's hosted sign-in pages")
 	cmd.Flags().StringVar(&format, "access-token-format", "", "Access token format: jwt or opaque (introspection/userinfo only)")
 	cmd.Flags().StringVar(&backchannel, "backchannel-logout-uri", "", "HTTPS URL that receives logout tokens (empty turns back-channel logout off)")

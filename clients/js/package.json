@@ -1,0 +1,31 @@
+{
+  "name": "@iamkit/js",
+  "version": "0.1.0",
+  "description": "Browser sign-in flows for custom IAMKit sign-in UIs: authorize tickets, password, codes, MFA, passkeys, federation, invitations, completing the authorization",
+  "type": "module",
+  "license": "SEE LICENSE IN ../../README.md",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@iamkit/api": "file:../typescript"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

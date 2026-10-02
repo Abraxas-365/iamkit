@@ -40,7 +40,7 @@ func signInPolicyGetCmd() *cobra.Command {
 }
 
 func signInPolicySetCmd() *cobra.Command {
-	var password, emailCode, social, passkey, reset, mfa, mfaFederated, signup bool
+	var password, emailCode, social, passkey, reset, mfa, mfaFederated, signup, terms bool
 	var signupOrganization, signupGroup string
 	var factors []string
 	cmd := &cobra.Command{
@@ -58,7 +58,9 @@ its own MFA policy.
 /identity/v1/signup, "Create account" on the hosted pages) after confirming
 their email. New accounts join --signup-organization (required) and
 optionally --signup-group (an operator-managed group of it). Pass "" to
-clear the group.
+clear the group. --require-terms makes sign-up record the acceptance of the
+terms ("accept_terms", users.terms_accepted_at); the hosted page links the
+branding's legal terms URL.
 
 --allow-passkey (default on) lets users sign in with a passkey alone (no
 password, no second factor: the passkey verified them); it needs "webauthn"
@@ -72,7 +74,8 @@ delivery with purpose "mfa" (a custom webhook must handle it); "sms" needs
 		Example: `  iam sign-in-policy set --allow-password=false --allow-password-reset=false
   iam sign-in-policy set --mfa-required
   iam sign-in-policy set --allowed-factors totp,webauthn,sms
-  iam sign-in-policy set --allow-signup --signup-organization <org-id> --signup-group <group-id>`,
+  iam sign-in-policy set --allow-signup --signup-organization <org-id> --signup-group <group-id>
+  iam sign-in-policy set --require-terms`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
 			path := envPath() + "/sign-in-policy"
@@ -90,6 +93,7 @@ delivery with purpose "mfa" (a custom webhook must handle it); "sms" needs
 			for flag, value := range map[string]bool{
 				"allow-password": password, "allow-email-code": emailCode, "allow-social": social, "allow-passkey": passkey,
 				"allow-password-reset": reset, "mfa-required": mfa, "mfa-for-federated": mfaFederated, "allow-signup": signup,
+				"require-terms": terms,
 			} {
 				if f.Changed(flag) {
 					body[jsonName(flag)] = value
@@ -121,6 +125,7 @@ delivery with purpose "mfa" (a custom webhook must handle it); "sms" needs
 	f.BoolVar(&mfa, "mfa-required", false, "Require a second factor in every organization")
 	f.BoolVar(&mfaFederated, "mfa-for-federated", false, "Also require it after SSO/social sign-in")
 	f.BoolVar(&signup, "allow-signup", false, "Let people create their own account")
+	f.BoolVar(&terms, "require-terms", false, "Require accepting the terms to sign up")
 	f.StringVar(&signupOrganization, "signup-organization", "", "Organization new accounts join (needed by --allow-signup)")
 	f.StringVar(&signupGroup, "signup-group", "", "Operator-managed group of it new accounts join")
 	f.StringSliceVar(&factors, "allowed-factors", nil, "Second factors users may enroll: totp, webauthn, sms, email (comma-separated)")

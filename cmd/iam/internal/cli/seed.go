@@ -10,19 +10,19 @@ import (
 
 func seedCmd() *cobra.Command {
 	var (
-		projectName     string
-		envName         string
-		orgName         string
-		appName         string
-		redirectURIs    string
-		resourceName    string
-		resourcePrefix  string
-		resourceAud     string
-		permissions     string
-		userName        string
-		userEmail       string
-		userPassword    string
-		grantPerms      string
+		projectName    string
+		envName        string
+		orgName        string
+		appName        string
+		redirectURIs   string
+		resourceName   string
+		resourcePrefix string
+		resourceAud    string
+		permissions    string
+		userName       string
+		userEmail      string
+		userPassword   string
+		grantPerms     string
 	)
 
 	cmd := &cobra.Command{

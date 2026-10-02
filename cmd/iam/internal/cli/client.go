@@ -148,6 +148,32 @@ func (c *client) do(method, path string, body any) (json.RawMessage, error) {
 	return json.RawMessage(raw), nil
 }
 
+// stream GETs path and copies the body to w (no buffering in memory).
+func (c *client) stream(path string, w io.Writer) error {
+	req, err := http.NewRequest("GET", c.base+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-API-Key", c.key)
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		var wrapped struct {
+			Error apiError `json:"error"`
+		}
+		if json.Unmarshal(raw, &wrapped) == nil && wrapped.Error.Message != "" {
+			return &wrapped.Error
+		}
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(raw))
+	}
+	_, err = io.Copy(w, resp.Body)
+	return err
+}
+
 // Convenience methods.
 func (c *client) get(path string) (json.RawMessage, error) { return c.do("GET", path, nil) }
 func (c *client) post(path string, body any) (json.RawMessage, error) {

@@ -1,5 +1,6 @@
 // Package apiclient calls IAMKit's permission-scoped API (/api/v1/*) using a
-// JWT obtained from authclient.MachineToken or a user login. The JWT carries
+// JWT obtained from authclient.MachineToken or a user login, or a machine
+// user's personal access token (ik_pat_) used directly. Either carries
 // fine-grained iam:* permissions and is sent as Authorization: Bearer.
 //
 //	tokens, _ := auth.MachineToken(ctx, "ik_svc_...")

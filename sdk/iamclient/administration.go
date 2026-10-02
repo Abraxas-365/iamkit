@@ -17,8 +17,18 @@ type UserPatch struct {
 	Active     *bool          `json:"active,omitempty"`
 	Metadata   map[string]any `json:"metadata,omitempty"`
 	// Phone sets the user's number in E.164 ("" clears it); a changed
-	// number is unverified until an SMS factor confirms it.
+	// number is unverified until the user confirms it with a texted code.
 	Phone *string `json:"phone,omitempty"`
+	// PhoneVerified marks the number verified or not (audited); true
+	// needs a number.
+	PhoneVerified *bool `json:"phone_verified,omitempty"`
+	// AvatarURL sets the picture, an https URL ("" removes it).
+	AvatarURL *string `json:"avatar_url,omitempty"`
+	// Username sets the username ("" removes it).
+	Username *string `json:"username,omitempty"`
+	// HomeOrganizationID moves the record to another organization the
+	// user belongs to ("" clears it).
+	HomeOrganizationID *string `json:"home_organization_id,omitempty"`
 }
 
 type MemberProfile struct {
@@ -82,6 +92,9 @@ type Credential struct {
 	// AdoptScope is "any" or "verified_domains" (adopt only emails on the
 	// organization's verified domains). nil keeps the current setting.
 	AdoptScope *string `json:"adopt_scope,omitempty"`
+	// MapPhone maps SCIM phoneNumbers[type eq "mobile"] to the user's
+	// phone number (off by default). nil keeps the current setting.
+	MapPhone *bool `json:"map_phone,omitempty"`
 }
 
 type OAuthClient struct {
@@ -95,6 +108,10 @@ type OAuthClient struct {
 	// PostLogoutRedirectURIs are where /oauth/end_session may send the
 	// browser back (exact match on post_logout_redirect_uri).
 	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris,omitempty"`
+	// AllowedOrigins are browser origins (https://app.example.com) of a
+	// custom sign-in UI or single-page application, allowed to call
+	// /identity/v1 and the browser-facing /oauth endpoints with CORS.
+	AllowedOrigins []string `json:"allowed_origins,omitempty"`
 	// AccessTokenFormat is AccessTokenJWT (default) or AccessTokenOpaque.
 	// Opaque tokens are resolved only by /oauth/introspect and
 	// /oauth/userinfo: resource APIs and authclient.Validator accept JWTs.
@@ -136,6 +153,8 @@ type OAuthClientPatch struct {
 	AccessTokenFormat      *string   `json:"access_token_format,omitempty"`
 	// GrantTypes replaces the client's grants.
 	GrantTypes *[]string `json:"grant_types,omitempty"`
+	// AllowedOrigins replaces the client's CORS origins.
+	AllowedOrigins *[]string `json:"allowed_origins,omitempty"`
 	// BackchannelLogoutURI "" turns back-channel logout off.
 	BackchannelLogoutURI             *string `json:"backchannel_logout_uri,omitempty"`
 	BackchannelLogoutSessionRequired *bool   `json:"backchannel_logout_session_required,omitempty"`
