@@ -962,6 +962,15 @@
           },
           "token_endpoint_auth_signing_alg": {
             "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ClientWarning"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           }
         },
         "required": [
@@ -982,7 +991,27 @@
           "resource_id",
           "resource_name",
           "token_endpoint_auth_method",
-          "token_endpoint_auth_signing_alg"
+          "token_endpoint_auth_signing_alg",
+          "warnings"
+        ],
+        "type": "object"
+      },
+      "ClientWarning": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "field": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "field",
+          "value"
         ],
         "type": "object"
       },
@@ -32134,12 +32163,22 @@
                     "id": {
                       "description": "UUID (empty when unset)",
                       "type": "string"
+                    },
+                    "warnings": {
+                      "items": {
+                        "$ref": "#/components/schemas/ClientWarning"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
                     "client_id",
                     "client_secret",
-                    "id"
+                    "id",
+                    "warnings"
                   ],
                   "type": "object"
                 }

@@ -112,7 +112,7 @@ func update[T any](value T, next *T) T {
 // validatePostLogout checks post_logout_redirect_uris like redirect URIs.
 func validatePostLogout(values []string) error {
 	if identity.ValidateRedirects(values) != nil {
-		return errx.Validation("post_logout_redirect_uris must be absolute HTTPS URLs without credentials or fragments")
+		return errx.Validation("post_logout_redirect_uris must be absolute HTTPS URLs (http only for localhost, 127.0.0.1 or [::1]) without credentials or fragments")
 	}
 	return nil
 }
@@ -183,13 +183,21 @@ func (s *Service) editable(ctx context.Context, environment identity.Environment
 	return current, nil
 }
 func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, filter oauth.ClientFilter, page query.Pagination) (query.Paginated[oauth.ClientView], error) {
-	return s.repository.List(ctx, environment, filter, page)
+	out, err := s.repository.List(ctx, environment, filter, page)
+	for i := range out.Items {
+		out.Items[i] = out.Items[i].Warned()
+	}
+	return out, err
 }
 func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID) (oauth.ClientView, error) {
 	if id.IsZero() {
 		return oauth.ClientView{}, errx.Validation("invalid client")
 	}
-	return s.repository.Find(ctx, environment, id)
+	out, err := s.repository.Find(ctx, environment, id)
+	if err != nil {
+		return oauth.ClientView{}, err
+	}
+	return out.Warned(), nil
 }
 
 // OriginAllowed reports whether a live client allows origin; a value that
@@ -307,13 +315,7 @@ func ValidateAuthorization(issuer string, client *oauth.Client, query map[string
 			return errx.Validation("invalid authorization request")
 		}
 	}
-	exact := false
-	for _, uri := range client.Redirects {
-		if uri == get("redirect_uri") {
-			exact = true
-		}
-	}
-	if !exact || get("response_type") != "code" || get("code_challenge_method") != "S256" || get("code_challenge") == "" || get("state") == "" || get("nonce") == "" || (get("response_mode") != "" && get("response_mode") != "query") {
+	if !client.RedirectRegistered(get("redirect_uri")) || get("response_type") != "code" || get("code_challenge_method") != "S256" || get("code_challenge") == "" || get("state") == "" || get("nonce") == "" || (get("response_mode") != "" && get("response_mode") != "query") {
 		return errx.Validation("code, exact redirect, S256, state and nonce required")
 	}
 	_, err := oauth.OrganizationHint(query)

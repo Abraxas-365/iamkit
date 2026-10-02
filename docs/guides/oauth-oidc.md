@@ -11,7 +11,12 @@ Operator POSTs `/management/v1/environments/ENV_UUID/oauth-clients` with
 `application_id`, `resource_id`, `redirect_uris`, `public` and optionally
 `hosted_login` and `post_logout_redirect_uris` (or `iam oauth-clients create
 --app … --resource … --redirect-uris … [--post-logout-redirect-uris …]`). The app/resource must
-be linked. Redirects must be exact HTTPS URLs. Capture `client_id`; a confidential
+be linked. Redirects must be exact HTTPS URLs; `http` is accepted only on loopback
+(`localhost`, `127.0.0.1`, `[::1]`) for local development and native/CLI apps
+(RFC 8252 §7.3) — a registered `127.0.0.1`/`[::1]` URI matches any port, so a CLI
+can listen on an ephemeral one. Such clients carry `warnings`
+(`{code:"loopback_redirect", field, value}`) on create, read and list, and the
+console flags them; a deployed web app must use https. Capture `client_id`; a confidential
 client also receives `client_secret` once. Never put a confidential secret in a SPA.
 
 A confidential client may instead authenticate with `private_key_jwt`

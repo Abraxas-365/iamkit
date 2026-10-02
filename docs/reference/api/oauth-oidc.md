@@ -216,8 +216,11 @@ newest first; `status=pending|delivered|failed`, `client_id`, `search` on user
 email or application name). POST `.../logout-deliveries/:id/retry` requeues a
 failed one (202, audited; 404 if it is not failed).
 
-Create also takes optional `post_logout_redirect_uris` (HTTPS, exact, like redirect URIs). Create returns 201
-`{id,client_id,client_secret}`; list uses a page with `hosted_login`; update and disable return 204.
+Create also takes optional `post_logout_redirect_uris` (HTTPS, exact, like redirect URIs; both accept `http` loopback URIs —
+`localhost`, `127.0.0.1`, `[::1]` — and a registered IP-literal loopback URI matches any port, RFC 8252 §7.3).
+`backchannel_logout_uri` is HTTPS only. Create returns 201
+`{id,client_id,client_secret,warnings}`; read and list items carry `warnings` too (`[]` when none; `code`
+`loopback_redirect`, `field`, `value`); list uses a page with `hosted_login`; update and disable return 204.
 Branding: GET/PUT `.../login-settings` `{display_name,logo_url,accent_color,theme}` (200), per-client styles under
 `.../login-settings/clients/:client` and previews at `.../login-settings/preview` (see [integrations](integrations.md)).
 

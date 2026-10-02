@@ -433,7 +433,8 @@ type UserID         = ID[userTag]
 | `Email(string) (string, error)` | Normalize + validate email |
 | `ValidatePermissions([]string, prefix)` | Permission catalog validation |
 | `ValidatePrefix(string)` | Resource prefix format |
-| `ValidateRedirects([]string)` | OAuth redirect URI validation |
+| `ValidateRedirects([]string)` | Browser redirect URIs (OAuth redirect/post-logout, application): https, or http on loopback (`LoopbackHTTP`, RFC 8252); `oauth.Client.RedirectRegistered` matches IP-literal loopback on any port and `oauth.Warnings` flags them (`ClientView.Warnings`, `loopback_redirect`) |
+| `ValidateHTTPS([]string)` | URLs kept https-only, no loopback exception (back-channel logout, SAML ACS) |
 | `Subset(requested, catalog []string)` | Permission subset check |
 | `ParseTTL(*string) (time.Duration, error)` | Credential TTL parsing |
 | `ValidateMetadata`, `MetadataKey`, `SetMetadata`, `DeleteMetadata`, `MetadataValue` | User/organization metadata limits (64 keys, 4 KiB values, 32 KiB total) and per-key edits |

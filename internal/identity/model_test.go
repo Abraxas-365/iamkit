@@ -73,10 +73,23 @@ func TestEmailAndRedirects(t *testing.T) {
 	if _, err := Email("Alice <alice@example.com>"); err == nil {
 		t.Fatal("display name accepted")
 	}
-	for _, u := range []string{"http://example.com/callback", "https://user:pass@example.com", "https://example.com/#fragment", "/callback"} {
+	for _, u := range []string{"http://example.com/callback", "http://localhost.example.com/cb", "http://10.0.0.1/cb", "https://user:pass@example.com", "https://example.com/#fragment", "http://localhost/#f", "/callback"} {
 		if ValidateRedirects([]string{u}) == nil {
 			t.Error(u)
 		}
+	}
+	for _, u := range []string{"https://app.example.com/callback", "http://localhost:3000/callback", "http://127.0.0.1:8765/cb", "http://[::1]/cb", "http://LOCALHOST/cb"} {
+		if err := ValidateRedirects([]string{u}); err != nil {
+			t.Errorf("%s: %v", u, err)
+		}
+	}
+	for _, u := range []string{"http://localhost/cb", "http://127.0.0.1/cb", "https://u:p@example.com", "/x"} {
+		if ValidateHTTPS([]string{u}) == nil {
+			t.Error("ValidateHTTPS accepted", u)
+		}
+	}
+	if err := ValidateHTTPS([]string{"https://sp.example.com/acs"}); err != nil {
+		t.Fatal(err)
 	}
 }
 

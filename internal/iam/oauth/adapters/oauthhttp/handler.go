@@ -138,7 +138,7 @@ func (h *Handler) create(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return c.Status(201).JSON(fiber.Map{"id": id, "client_id": id, "client_secret": secret})
+	return c.Status(201).JSON(fiber.Map{"id": id, "client_id": id, "client_secret": secret, "warnings": oauth.Warnings(input.Redirects, input.PostLogoutRedirects)})
 }
 func (h *Handler) disable(c *fiber.Ctx) error {
 	clientID, err := identity.ParseClientID(c.Params("id"))

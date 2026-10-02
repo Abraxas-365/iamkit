@@ -199,7 +199,7 @@ func ValidateACS(urls []string) error {
 		}
 		seen[v] = true
 	}
-	if err := identity.ValidateRedirects(urls); err != nil {
+	if err := identity.ValidateHTTPS(urls); err != nil {
 		return errx.Validation("acs_urls must be absolute HTTPS URLs without credentials or fragments")
 	}
 	return nil

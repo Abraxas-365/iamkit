@@ -37,7 +37,15 @@ type ClientView struct {
 	// System names a client IAMKit registers itself ("org_admin": the
 	// hosted organization admin portal); operators cannot change those.
 	System string `json:"system,omitempty"`
+	// Warnings are accepted settings to review (http loopback redirects).
+	Warnings []ClientWarning `json:"warnings"`
 	identity.ClientAuth
+}
+
+// Warned fills Warnings from the redirect URIs.
+func (v ClientView) Warned() ClientView {
+	v.Warnings = Warnings(v.Redirects, v.PostLogoutRedirects)
+	return v
 }
 
 type Registration struct {

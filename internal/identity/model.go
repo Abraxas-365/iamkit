@@ -236,12 +236,41 @@ func ParseTTL(raw *string) (time.Duration, error) {
 	return d, nil
 }
 
+// ValidateRedirects checks browser redirect targets (OAuth redirect and
+// post-logout URIs, application redirects): absolute https URLs, or http
+// on a loopback host (localhost, 127.0.0.1, [::1]) for development and
+// native apps (RFC 8252 §7.3), without credentials or fragments.
 func ValidateRedirects(values []string) error {
 	for _, v := range values {
 		u, err := url.Parse(v)
-		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
-			return errx.Validation("redirect URIs must be absolute HTTPS URLs without credentials or fragments")
+		if err != nil || (u.Scheme != "https" && !LoopbackHTTP(u)) || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+			return errx.Validation("redirect URIs must be absolute HTTPS URLs (http only for localhost, 127.0.0.1 or [::1]) without credentials or fragments")
 		}
 	}
 	return nil
+}
+
+// ValidateHTTPS checks URLs IAMKit or a browser must reach over TLS
+// whatever the deployment (back-channel logout, SAML ACS): absolute https
+// URLs without credentials or fragments.
+func ValidateHTTPS(values []string) error {
+	for _, v := range values {
+		u, err := url.Parse(v)
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+			return errx.Validation("URLs must be absolute HTTPS URLs without credentials or fragments")
+		}
+	}
+	return nil
+}
+
+// LoopbackHTTP reports an http URL on localhost, 127.0.0.1 or ::1.
+func LoopbackHTTP(u *url.URL) bool {
+	if u == nil || u.Scheme != "http" {
+		return false
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	}
+	return false
 }

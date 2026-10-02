@@ -36,7 +36,7 @@ func ValidateBackchannelURI(uri string) error {
 	if uri == "" {
 		return nil
 	}
-	if identity.ValidateRedirects([]string{uri}) != nil {
+	if identity.ValidateHTTPS([]string{uri}) != nil {
 		return errx.Validation("backchannel_logout_uri must be an absolute HTTPS URL without credentials or fragment")
 	}
 	return nil

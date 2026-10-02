@@ -5875,6 +5875,12 @@ export interface components {
             system?: string;
             token_endpoint_auth_method: string;
             token_endpoint_auth_signing_alg: string;
+            warnings: components["schemas"]["ClientWarning"][] | null;
+        };
+        ClientWarning: {
+            code: string;
+            field: string;
+            value: string;
         };
         CodeSent: {
             destination: string;
@@ -22667,6 +22673,7 @@ export interface operations {
                         client_secret: string;
                         /** @description UUID (empty when unset) */
                         id: string;
+                        warnings: components["schemas"]["ClientWarning"][] | null;
                     };
                 };
             };
