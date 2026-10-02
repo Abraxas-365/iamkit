@@ -7,8 +7,8 @@
 <button type="submit">{{.T "hosted.form.continue"}}</button>
 </form>
 {{end}}
+{{if and .SignIn.EmailForm (or .SignIn.Passkey .Connections)}}<div class="divider"{{if not .Connections}} data-webauthn-reveal hidden{{end}}>{{.T "hosted.form.or"}}</div>{{end}}
 {{if .SignIn.Passkey}}
-{{if .SignIn.EmailForm}}<div class="divider">{{.T "hosted.form.or"}}</div>{{end}}
 <div class="error" id="webauthn-error" role="alert" hidden></div>
 <form method="post" action="/hosted/login/passkey" id="passkey-form">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
@@ -18,7 +18,6 @@
 </form>
 {{end}}
 {{if .Connections}}
-{{if .SignIn.EmailForm}}<div class="divider">{{.T "hosted.form.or"}}</div>{{end}}
 {{range .Connections}}
 <form method="post" action="/hosted/login/sso">
 <input type="hidden" name="ticket" value="{{$.Ticket}}">

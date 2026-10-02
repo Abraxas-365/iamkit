@@ -310,6 +310,23 @@ func TestPreviewMethods(t *testing.T) {
 		out, err := document(page, &v)
 		return string(out), err
 	}
+	// Email form, passkey and buttons: one visible "or", not one per section.
+	v, _ := sample("identify", "en", nil)
+	v.Brand = brandOf(hosted.Settings{}, "")
+	if !v.SignIn.Passkey || !v.SignIn.EmailForm() || len(v.Connections) == 0 {
+		t.Fatalf("sample offers %+v with %d buttons", v.SignIn, len(v.Connections))
+	}
+	out, _ := document("identify", &v)
+	if n := strings.Count(string(out), `class="divider"`); n != 1 || !strings.Contains(string(out), `class="divider">or<`) {
+		t.Fatalf("%d dividers\n%s", n, out)
+	}
+	// Email form and passkey only: the "or" stays hidden until the script
+	// shows the passkey button (browsers without WebAuthn never do).
+	v.Connections = nil
+	out, _ = document("identify", &v)
+	if !strings.Contains(string(out), `class="divider" data-webauthn-reveal hidden`) {
+		t.Fatalf("passkey divider shown\n%s", out)
+	}
 	// Social only: no email form, no "or" divider, the listed buttons.
 	html, err := render("identify", Methods{Connections: []Button{{Name: "GitHub", Provider: "github"}, {Name: "Okta <Corp>", Provider: "oidc"}}})
 	if err != nil {

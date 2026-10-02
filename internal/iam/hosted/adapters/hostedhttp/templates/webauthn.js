@@ -73,6 +73,7 @@
       });
     });
   }
+  document.querySelectorAll("[data-webauthn-reveal]").forEach(function (el) { el.hidden = false; });
   document.querySelectorAll("button[data-webauthn]").forEach(function (button) {
     button.hidden = false;
     button.addEventListener("click", function (e) {
