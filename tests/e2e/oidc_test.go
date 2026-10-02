@@ -117,6 +117,12 @@ func oidcJourney(t *testing.T, app *App, call func(string, string, string, any, 
 	q.Set("prompt", "login")
 	request("GET", "/oauth/authorize?"+q.Encode(), "", "", "", nil, 400)
 	q.Del("prompt")
+	// fosite's reason reaches the caller instead of a bare refusal.
+	q.Set("state", "short")
+	if refused, _ := request("GET", "/oauth/authorize?"+q.Encode(), "", "", "", nil, 400); !strings.Contains(refused["error"].(map[string]any)["message"].(string), "'state' must be at least") {
+		t.Fatalf("short state refusal does not say why: %v", refused)
+	}
+	q.Set("state", "unpredictable-state-123456")
 	// Concurrent reuse must revoke the winning rotation too.
 	begin, res = request("GET", "/oauth/authorize?"+q.Encode(), "", "", "", nil, 200)
 	body, _ = json.Marshal(fiber.Map{"authorization_ticket": begin["authorization_ticket"], "approve": true})

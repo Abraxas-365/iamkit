@@ -241,7 +241,7 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	}
 	ar, err := p.NewAuthorizeRequest(req.Context(), req)
 	if err != nil {
-		return errx.Validation("invalid authorization request")
+		return authorizeError(err)
 	}
 	if !ar.GetRequestedScopes().Has("openid") {
 		return errx.Validation("openid scope required")
@@ -257,6 +257,17 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	}
 	return c.JSON(fiber.Map{"authorization_ticket": ticket, "client_id": client.ID, "environment_id": client.Environment, "application_id": client.Application, "resource_id": client.Resource, "audience": client.Audience, "scopes": ar.GetRequestedScopes()})
 }
+
+// authorizeError names what fosite refused in an authorization request (its
+// hint: a too short state, a scope the client may not request…), so the
+// caller is not left with a bare "invalid authorization request".
+func authorizeError(err error) error {
+	if hint := fosite.ErrorToRFC6749Error(err).HintField; hint != "" {
+		return errx.Validation("invalid authorization request: " + hint)
+	}
+	return errx.Validation("invalid authorization request")
+}
+
 func (h *Handler) complete(c *fiber.Ctx) error {
 	var input struct {
 		Ticket  string `json:"authorization_ticket"`

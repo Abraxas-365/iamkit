@@ -21,8 +21,9 @@ issuer, including the public HTTPS origin.
 | `GET,POST /saml/:environment/sso` | SAML AuthnRequest (HTTP-Redirect or HTTP-POST, `SAMLRequest`, `RelayState`) of a registered service provider; `303` to `/hosted/login?ticket=ik_samlreq_…` with the binding cookie; the hosted sign-in ends in a page posting the signed `SAMLResponse` to the ACS URL; 400 for an invalid or unregistered request |
 
 Authorize requires `client_id`, `response_type=code`, registered `redirect_uri`,
-`state`, `nonce`, `scope` including `openid`, `code_challenge_method=S256` and
+`state` (at least 8 characters), `nonce`, `scope` including `openid`, `code_challenge_method=S256` and
 `code_challenge`. Supported scopes: `openid profile email phone offline_access`.
+A refused request answers 400 naming the problem.
 An optional organization hint — `organization_id=<id>` or a
 `urn:iamkit:org:id:<id>` scope (the same organization when both; a malformed
 one is `invalid_request`) — brands the hosted pages with the
