@@ -34,6 +34,10 @@ beforeEach(() => {
     if (method === 'PATCH' || method === 'DELETE') return new Response(null, { status: 204 })
     if (path === '') return Response.json({ id: 'org1', name: 'Acme', mfa_required: false, mfa_for_federated: false, allow_password: true, allow_email_code: true, allow_social: true, allow_passkey: true })
     if (path === '/members') return Response.json(page([{ user_id: 'u1', user_name: 'Bob', user_email: 'bob@acme.test', active: true, sso_bypass: false }]))
+    if (path === '/events') return Response.json(page([
+      { id: '2', actor_id: 'u9', actor_kind: 'user', actor_label: 'alice@acme.test', action: 'user.deactivated', target_id: 'u2', created_at: '2026-09-29T10:00:00Z' },
+      { id: '1', actor_id: 'op-0000-uuid', actor_kind: 'operator', actor_label: '', action: 'POST', target_id: '/management/v1/environments/env1/organizations/org1/domains', created_at: '2026-09-29T09:00:00Z' },
+    ]))
     return Response.json(page([]))
   })
 })
@@ -92,4 +96,12 @@ it('turns away a member without administration roles', async () => {
   open('/org-admin/env1')
   expect(await screen.findByText(/does not administer this organization/)).toBeTruthy()
   expect(calls.some(c => c.url.startsWith('/api/v1/'))).toBe(false)
+})
+
+it('shows platform operators by kind in the activity, never by ID', async () => {
+  signedIn(['iam:org:read', 'iam:org:audit:read'])
+  open('/org-admin/env1/activity')
+  expect(await screen.findByText('alice@acme.test')).toBeTruthy()
+  expect(screen.getByText('Platform administrator')).toBeTruthy()
+  expect(screen.queryByText('op-0000-uuid')).toBeNull()
 })

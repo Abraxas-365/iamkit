@@ -30,7 +30,7 @@ interface Domain { id: string; domain: string; verified: boolean; verification: 
 interface Connection { id: string; name: string; provider: string; enforcement: string; active: boolean; linked: number }
 interface Resource { id: string; name: string; prefix: string; require_grant: boolean }
 interface ResourceGrant { id: string; resource_id: string; resource_name: string; organization_id: string; organization_name: string; role_ids: string[] | null; created_at: string }
-interface Event { id: string; actor_id: string; actor_label: string; action: string; target_id: string; created_at: string }
+interface Event { id: string; actor_id: string; actor_kind: string; actor_label: string; action: string; target_id: string; created_at: string }
 interface Overrides { display_name: string | null; logo_url: string | null; accent_color: string | null; theme: unknown; locale?: string | null; updated_at?: string }
 
 /** usePortalList pages through an /admin list with the portal's client. */
@@ -380,7 +380,16 @@ export function ActivityPage() {
     <div className="flex items-center gap-2"><label htmlFor="action-filter" className="text-sm">{t('Action starts with')}</label><Input id="action-filter" className="max-w-xs" value={action} placeholder="user." onChange={e => setAction(e.target.value)} /></div>
     <DataTable columns={[t('What'), t('Who'), { header: t('When'), nowrap: true }]} loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState title={t('No activity yet')} />}
-      rows={list.data.map(e => [<span className="font-medium">{describeAction(e.action, e.target_id)}</span>, <span title={e.actor_id}>{e.actor_label || e.actor_id}</span>, <Time value={e.created_at} />])} />
+      rows={list.data.map(e => [<span className="font-medium">{describeAction(e.action, e.target_id)}</span>, <Actor event={e} />, <Time value={e.created_at} />])} />
     <PaginationBar state={list} placeholder={t('Search…')} label={t('Search activity')} noun="events" />
   </>
+}
+
+// Who acted. Operators of the platform have no label here (their emails
+// are not the customer's), so they show by kind, never as a bare ID.
+const actorKinds: Record<string, string> = { operator: t('Platform administrator'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)'), user: t('User') }
+function Actor({ event: e }: { event: Event }) {
+  const kind = actorKinds[e.actor_kind]
+  if (e.actor_label) return <span title={kind}>{e.actor_label}</span>
+  return <span className="text-muted-foreground">{kind ?? '—'}</span>
 }
