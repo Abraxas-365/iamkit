@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { LogIn, Palette, RotateCcw } from 'lucide-react'
+import { Languages, LogIn, Palette, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -14,11 +14,13 @@ import { ConfirmDialog, DataTable, EntityRef, ErrorState, PageHeader, shortId } 
 import { RowActions } from '@/components/ui/menu'
 import { clientName, PreviewFrame } from '@/components/library/preview-frame'
 import { everyMethod, SignInDialog, summary, type SignIn } from './sign-in-options'
+import { OrgAdminPortalCard } from './org-admin-portal'
+import { formatDateTime, rich, t } from '@/lib/i18n'
 
 interface Client { id: string; application_name: string; resource_name: string; hosted_login: boolean; active: boolean }
 
-const description = 'Branding for the sign-in and invitation pages IAMKit hosts for OAuth clients with hosted login enabled.'
-const modes = { light: 'Light', dark: 'Dark', adaptive: 'Adaptive' }
+const description = t('Branding for the sign-in and invitation pages IAMKit hosts for OAuth clients with hosted login enabled.')
+const modes = { light: t('Light'), dark: t('Dark'), adaptive: t('Adaptive') }
 
 function Swatches({ style }: { style: Branding }) {
   const p = resolved(style, style.theme.mode === 'dark' ? 'dark' : 'light')
@@ -60,9 +62,9 @@ export default function HostedLoginPage() {
   }
   useEffect(load, [base])
 
-  const header = <PageHeader title="Hosted login" description={description} />
+  const header = <PageHeader title={t('Hosted login')} description={description} />
   if (error) return <div className="space-y-6">{header}<ErrorState error={error} retry={load} /></div>
-  if (loading || !fallback) return <div className="space-y-6">{header}<p role="status" className="text-sm text-muted-foreground">Loading…</p></div>
+  if (loading || !fallback) return <div className="space-y-6">{header}<p role="status" className="text-sm text-muted-foreground">{t('Loading…')}</p></div>
 
   const styled = new Map(styles.map(s => [s.client_id, s]))
   const offered = new Map(signIns.map(s => [s.client_id, s]))
@@ -77,60 +79,65 @@ export default function HostedLoginPage() {
         <div className="grid sm:grid-cols-[1fr_220px]">
           <div className="space-y-4 p-6">
             <div>
-              <h2 className="font-mono font-medium">Default style</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Invitation pages and every client without its own style.</p>
+              <h2 className="font-mono font-medium">{t('Default style')}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{t('Invitation pages and every client without its own style.')}</p>
             </div>
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-              <dt className="text-muted-foreground">Display name</dt><dd>{fallback.display_name || <span className="text-muted-foreground">—</span>}</dd>
-              <dt className="text-muted-foreground">Mode</dt><dd>{modes[fallback.theme.mode]}</dd>
-              <dt className="text-muted-foreground">Colors</dt><dd><Swatches style={fallback} /></dd>
-              <dt className="text-muted-foreground">Last saved</dt><dd>{fallback.updated_at ? new Date(fallback.updated_at).toLocaleString() : 'Never (IAMKit defaults)'}</dd>
+              <dt className="text-muted-foreground">{t('Display name')}</dt><dd>{fallback.display_name || <span className="text-muted-foreground">—</span>}</dd>
+              <dt className="text-muted-foreground">{t('Mode')}</dt><dd>{modes[fallback.theme.mode]}</dd>
+              <dt className="text-muted-foreground">{t('Colors')}</dt><dd><Swatches style={fallback} /></dd>
+              <dt className="text-muted-foreground">{t('Last saved')}</dt><dd>{fallback.updated_at ? formatDateTime(fallback.updated_at) : t('Never (IAMKit defaults)')}</dd>
             </dl>
-            <Link to={`${page}/default`} className={buttonVariants({ variant: canWrite ? 'default' : 'outline' })}><Palette className="size-4" /> {canWrite ? 'Edit default style' : 'View default style'}</Link>
+            <div className="flex flex-wrap gap-2">
+              <Link to={`${page}/default`} className={buttonVariants({ variant: canWrite ? 'default' : 'outline' })}><Palette className="size-4" /> {canWrite ? t('Edit default style') : t('View default style')}</Link>
+              <Link to={`${page}/texts`} className={buttonVariants({ variant: 'outline' })}><Languages className="size-4" /> {t('Sign-in texts')}</Link>
+            </div>
           </div>
           <div className="relative hidden h-full min-h-56 overflow-hidden border-l bg-muted/40 sm:block" aria-hidden>
-            {thumbnail && <div className="pointer-events-none absolute top-0 left-0 h-[250%] w-[250%] origin-top-left scale-[0.4]"><PreviewFrame html={thumbnail} className="h-full" title="Default style thumbnail" /></div>}
+            {thumbnail && <div className="pointer-events-none absolute top-0 left-0 h-[250%] w-[250%] origin-top-left scale-[0.4]"><PreviewFrame html={thumbnail} className="h-full" title={t('Default style thumbnail')} /></div>}
           </div>
         </div>
       </Card>
       <Card className="border-dashed">
-        <CardHeader><CardDescription>How it works</CardDescription><CardTitle className="text-sm font-normal">Enable “Hosted pages” on an OAuth client</CardTitle></CardHeader>
+        <CardHeader><CardDescription>{t('How it works')}</CardDescription><CardTitle className="text-sm font-normal">{t('Enable “Hosted pages” on an OAuth client')}</CardTitle></CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
-          <p><code className="text-xs">/oauth/authorize</code> then sends the browser to <code className="text-xs">/hosted/login</code> instead of returning the authorization ticket.</p>
-          <p>Users sign in with a password, an email code, social login or their organization's single sign-on, pick an organization when they belong to several, and return to your redirect URI with an authorization code.</p>
-          <p>Invitation links can point to <code className="text-xs">/hosted/invite</code>: set it as the invitation page in Notifications.</p>
+          <p>{rich('{{code}} then sends the browser to {{code2}} instead of returning the authorization ticket.', { code: <code className="text-xs">{'/oauth/authorize'}</code>, code2: <code className="text-xs">{'/hosted/login'}</code> })}</p>
+          <p>{t('Users sign in with a password, an email code, social login or their organization\'s single sign-on, pick an organization when they belong to several, and return to your redirect URI with an authorization code.')}</p>
+          <p>{rich('Invitation links can point to {{code}}: set it as the invitation page in Notifications.', { code: <code className="text-xs">{'/hosted/invite'}</code> })}</p>
         </CardContent>
       </Card>
     </div>
 
+    <OrgAdminPortalCard environment={environment ?? ''} canWrite={canWrite} />
+
     <section className="space-y-3">
       <div>
-        <h2 className="font-mono font-medium">Clients</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Give an OAuth client its own look and choose which sign-in methods it offers. Clients without their own use the default style and every method.</p>
+        <h2 className="font-mono font-medium">{t('Clients')}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{t('Give an OAuth client its own look and choose which sign-in methods it offers. Clients without their own use the default style and every method.')}</p>
       </div>
-      <DataTable columns={['Client', 'Style', { header: 'Sign-in methods', hideBelow: 'md' }, 'Actions']} loading={false} error="" retry={load}
+      <DataTable columns={[t('Client'), t('Style'), { header: t('Sign-in methods'), hideBelow: 'md' }, t('Actions')]} loading={false} error="" retry={load}
         rowHref={i => `${page}/clients/${rows[i].id}`}
         rows={rows.map(c => {
           const own = styled.get(c.id)
           const name = clientName(c) || shortId(c.id)
           return [
-            <EntityRef name={name} id={c.id} to={`${page}/clients/${c.id}`} secondary={!c.hosted_login ? 'Hosted pages off' : undefined} />,
-            <span className="inline-flex items-center gap-2 text-sm"><Swatches style={own ?? fallback} />{own ? <Badge className="bg-primary/10 text-primary">Custom</Badge> : <span className="text-muted-foreground">Default</span>}<span className="text-xs text-muted-foreground">{modes[(own ?? fallback).theme.mode]}</span></span>,
+            <EntityRef name={name} id={c.id} to={`${page}/clients/${c.id}`} secondary={!c.hosted_login ? t('Hosted pages off') : undefined} />,
+            <span className="inline-flex items-center gap-2 text-sm"><Swatches style={own ?? fallback} />{own ? <Badge className="bg-primary/10 text-primary">{t('Custom')}</Badge> : <span className="text-muted-foreground">{t('Default')}</span>}<span className="text-xs text-muted-foreground">{modes[(own ?? fallback).theme.mode]}</span></span>,
             <span className={`text-sm ${offered.has(c.id) ? '' : 'text-muted-foreground'}`}>{summary(offered.get(c.id) ?? everyMethod(c.id), connections)}</span>,
-            <RowActions label={`Actions for ${name}`} actions={[
-              { label: own ? (canWrite ? 'Edit style' : 'View style') : 'Customize style', icon: <Palette />, disabled: !own && !canWrite, onSelect: () => go(`${page}/clients/${c.id}`) },
-              { label: canWrite ? 'Choose sign-in methods' : 'View sign-in methods', icon: <LogIn />, onSelect: () => setMethods(c) },
-              ...(canWrite && own ? [{ label: 'Reset to default style', icon: <RotateCcw />, onSelect: () => setReset(own) }] : []),
-              ...(canWrite && offered.has(c.id) ? [{ label: 'Offer every method', icon: <RotateCcw />, onSelect: () => setResetMethods(c) }] : []),
+            <RowActions label={t('Actions for {{name}}', { name })} actions={[
+              { label: own ? (canWrite ? t('Edit style') : t('View style')) : t('Customize style'), icon: <Palette />, disabled: !own && !canWrite, onSelect: () => go(`${page}/clients/${c.id}`) },
+              { label: canWrite ? t('Choose sign-in methods') : t('View sign-in methods'), icon: <LogIn />, onSelect: () => setMethods(c) },
+              ...(canWrite && own ? [{ label: t('Reset to default style'), icon: <RotateCcw />, onSelect: () => setReset(own) }] : []),
+              ...(canWrite && offered.has(c.id) ? [{ label: t('Offer every method'), icon: <RotateCcw />, onSelect: () => setResetMethods(c) }] : []),
             ]} />,
           ]
         })} />
-      {rows.length === 0 && <p className="text-xs text-muted-foreground">Turn on hosted pages for an OAuth client to give it a style.</p>}
+      {rows.length === 0 && <p className="text-xs text-muted-foreground">{t('Turn on hosted pages for an OAuth client to give it a style.')}</p>}
     </section>
     {methods && <SignInDialog base={base} client={methods.id} name={clientName(methods) || methods.id} readOnly={!canWrite} onClose={() => setMethods(null)} onSaved={load} />}
-    {resetMethods && <ConfirmDialog title="Offer every sign-in method?" description="The client's sign-in options are deleted and its sign-in page offers every method again." confirmLabel="Reset" onClose={() => setResetMethods(null)}
-      confirm={async () => { await api.delete(`${base}/login-settings/clients/${resetMethods.id}/sign-in`); toast.success('Sign-in methods reset'); load() }} />}
-    {reset && <ConfirmDialog title="Reset to the default style?" description="The client's own style is deleted and its sign-in pages use the environment default again." confirmLabel="Reset" onClose={() => setReset(null)}
-      confirm={async () => { await api.delete(`${base}/login-settings/clients/${reset.client_id}`); toast.success('Client style reset'); load() }} />}
+    {resetMethods && <ConfirmDialog title={t('Offer every sign-in method?')} description={t('The client\'s sign-in options are deleted and its sign-in page offers every method again.')} confirmLabel={t('Reset')} onClose={() => setResetMethods(null)}
+      confirm={async () => { await api.delete(`${base}/login-settings/clients/${resetMethods.id}/sign-in`); toast.success(t('Sign-in methods reset')); load() }} />}
+    {reset && <ConfirmDialog title={t('Reset to the default style?')} description={t('The client\'s own style is deleted and its sign-in pages use the environment default again.')} confirmLabel={t('Reset')} onClose={() => setReset(null)}
+      confirm={async () => { await api.delete(`${base}/login-settings/clients/${reset.client_id}`); toast.success(t('Client style reset')); load() }} />}
   </div>
 }

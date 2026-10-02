@@ -1,19 +1,6 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
-import { ThemeProvider } from 'next-themes'
-import { Toaster } from '@/components/ui/sonner'
-import { AuthProvider } from '@/lib/auth'
-import App from './App'
-import './index.css'
-// next-themes renders an inline anti-flash <script> meant for server
-// rendering; in this client-only SPA React never runs it and warns. A
-// non-JavaScript type makes it an inert data block, which React accepts.
-const themeScript = { type: 'text/plain' }
-// A data router (rather than <BrowserRouter>) so editors can block in-app
-// navigation while they hold unsaved changes (useBlocker). App keeps its
-// own <Routes> tree under one catch-all route.
-const router = createBrowserRouter([{ path: '*', element: <AuthProvider><App /><Toaster /></AuthProvider> }])
-createRoot(document.getElementById('root')!).render(
-  <StrictMode><ThemeProvider attribute="class" defaultTheme="dark" enableSystem storageKey="iamkit-theme" scriptProps={themeScript}><RouterProvider router={router} /></ThemeProvider></StrictMode>,
-)
+import { loadLanguage } from '@/lib/i18n'
+
+// The catalog loads before any page module is evaluated, so module-level
+// tables built with t() (labels, column headers) are already translated.
+// A failed catalog load leaves English.
+void loadLanguage().catch(() => {}).finally(() => import('./boot'))

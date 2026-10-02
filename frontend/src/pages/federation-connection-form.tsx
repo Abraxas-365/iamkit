@@ -9,33 +9,34 @@ import { SearchSelect } from '@/components/ui/search-select'
 import { TagInput } from '@/components/ui/tag-input'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { ErrorState } from '@/components/library/patterns'
+import { rich, t } from '@/lib/i18n'
 
 export type Provider = 'oidc' | 'google' | 'microsoft' | 'github' | 'apple' | 'gitlab' | 'github_enterprise' | 'oauth2' | 'saml' | 'ldap'
 
 export const providers: { value: Provider; label: string; hint: string }[] = [
-  { value: 'google', label: 'Google', hint: 'Google accounts and Workspace. Create an OAuth client (Web application) in Google Cloud.' },
-  { value: 'microsoft', label: 'Microsoft', hint: 'Microsoft Entra ID work accounts and personal Microsoft accounts. Register an app in Entra.' },
-  { value: 'github', label: 'GitHub', hint: 'GitHub users (OAuth app). GitHub is OAuth 2.0, not OIDC: IAMKit reads the user and their verified primary email.' },
-  { value: 'apple', label: 'Apple', hint: 'Sign in with Apple. Needs a Services ID, your Team ID, and a Sign in with Apple private key (.p8).' },
-  { value: 'gitlab', label: 'GitLab', hint: 'gitlab.com or your self-managed GitLab (OpenID Connect). Create an application with the openid, profile and email scopes.' },
-  { value: 'github_enterprise', label: 'GitHub Enterprise', hint: 'GitHub Enterprise Server at your own URL (OAuth app). Read like GitHub: the user and their verified primary email.' },
-  { value: 'oidc', label: 'Other (OIDC)', hint: 'Any OpenID Connect provider with discovery (Okta, Auth0, Keycloak, ZITADEL, another IAMKit…).' },
-  { value: 'oauth2', label: 'Other (OAuth 2.0)', hint: 'A provider without OpenID Connect (Discord, Slack, a custom server…): give its endpoints and where its user API keeps the ID, email and name.' },
+  { value: 'google', label: t('Google'), hint: t('Google accounts and Workspace. Create an OAuth client (Web application) in Google Cloud.') },
+  { value: 'microsoft', label: t('Microsoft'), hint: t('Microsoft Entra ID work accounts and personal Microsoft accounts. Register an app in Entra.') },
+  { value: 'github', label: t('GitHub'), hint: t('GitHub users (OAuth app). GitHub is OAuth 2.0, not OIDC: IAMKit reads the user and their verified primary email.') },
+  { value: 'apple', label: t('Apple'), hint: t('Sign in with Apple. Needs a Services ID, your Team ID, and a Sign in with Apple private key (.p8).') },
+  { value: 'gitlab', label: t('GitLab'), hint: t('gitlab.com or your self-managed GitLab (OpenID Connect). Create an application with the openid, profile and email scopes.') },
+  { value: 'github_enterprise', label: t('GitHub Enterprise'), hint: t('GitHub Enterprise Server at your own URL (OAuth app). Read like GitHub: the user and their verified primary email.') },
+  { value: 'oidc', label: t('Other (OIDC)'), hint: t('Any OpenID Connect provider with discovery (Okta, Auth0, Keycloak, ZITADEL, another IAMKit…).') },
+  { value: 'oauth2', label: t('Other (OAuth 2.0)'), hint: t('A provider without OpenID Connect (Discord, Slack, a custom server…): give its endpoints and where its user API keeps the ID, email and name.') },
 ]
 
-export const providerLabel = (p: string) => p === 'saml' ? 'SAML 2.0' : p === 'ldap' ? 'LDAP / AD' : providers.find(x => x.value === p)?.label ?? 'OIDC'
+export const providerLabel = (p: string) => p === 'saml' ? t('SAML 2.0') : p === 'ldap' ? t('LDAP / AD') : providers.find(x => x.value === p)?.label ?? 'OIDC'
 
 // ssoProviders are the providers that can be an organization's own identity
 // provider: each can be limited to the organization's accounts (a Microsoft
 // tenant, Google Workspace domains, or an IdP that is the organization's
 // own). GitHub and Apple accounts are personal, so they stay social login.
 const ssoProviders: { value: Provider; label: string; hint: string }[] = [
-  { value: 'microsoft', label: 'Microsoft Entra ID', hint: "The organization's Entra tenant. Register an app in Entra and pick the tenant it accepts." },
-  { value: 'google', label: 'Google Workspace', hint: "The organization's Google Workspace. Only accounts of the Workspace domains below can sign in." },
-  { value: 'gitlab', label: 'GitLab self-managed', hint: "The organization's own GitLab instance. Give its URL below." },
-  { value: 'oidc', label: 'Other (OIDC)', hint: 'Okta, Auth0, Keycloak, OneLogin, ZITADEL, or any OpenID Connect provider with discovery.' },
-  { value: 'saml', label: 'SAML 2.0', hint: 'Okta, Entra ID, ADFS, OneLogin, PingFederate, Google Workspace or any SAML 2.0 identity provider. Paste its metadata URL or XML.' },
-  { value: 'ldap', label: 'LDAP / AD', hint: 'Active Directory, OpenLDAP, FreeIPA or any LDAP directory over TLS. Users type their directory password on the sign-in page; IAMKit checks it with the directory.' },
+  { value: 'microsoft', label: t('Microsoft Entra ID'), hint: t('The organization\'s Entra tenant. Register an app in Entra and pick the tenant it accepts.') },
+  { value: 'google', label: t('Google Workspace'), hint: t('The organization\'s Google Workspace. Only accounts of the Workspace domains below can sign in.') },
+  { value: 'gitlab', label: t('GitLab self-managed'), hint: t('The organization\'s own GitLab instance. Give its URL below.') },
+  { value: 'oidc', label: t('Other (OIDC)'), hint: t('Okta, Auth0, Keycloak, OneLogin, ZITADEL, or any OpenID Connect provider with discovery.') },
+  { value: 'saml', label: t('SAML 2.0'), hint: t('Okta, Entra ID, ADFS, OneLogin, PingFederate, Google Workspace or any SAML 2.0 identity provider. Paste its metadata URL or XML.') },
+  { value: 'ldap', label: t('LDAP / AD'), hint: t('Active Directory, OpenLDAP, FreeIPA or any LDAP directory over TLS. Users type their directory password on the sign-in page; IAMKit checks it with the directory.') },
 ]
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id) })
@@ -152,7 +153,15 @@ export function useCallbackURL() {
 
 export type ConnectionKind = 'social' | 'sso'
 
-export function CreateConnectionDialog({ base, kind, organization, onClose, onCreated }: { base: string; kind: ConnectionKind; organization?: { id: string; name: string }; onClose: () => void; onCreated: () => void }) {
+/** ConnectionTransport sends the dialog's requests. The console uses its
+ * operator session (default); the organization admin portal passes its own
+ * bearer client, with paths relative to the organization's /admin. */
+export interface ConnectionTransport {
+  domains: (signal: AbortSignal) => Promise<{ domain: string; verified: boolean }[]>
+  create: (body: Record<string, unknown>) => Promise<unknown>
+}
+
+export function CreateConnectionDialog({ base, kind, organization, onClose, onCreated, transport }: { base: string; kind: ConnectionKind; organization?: { id: string; name: string }; onClose: () => void; onCreated: () => void; transport?: ConnectionTransport }) {
   const id = useId()
   const callback = useCallbackURL()
   const sso = kind === 'sso' || !!organization
@@ -176,13 +185,14 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
   useEffect(() => {
     if (v.scope !== 'organization' || !v.organization_id) return
     const ctrl = new AbortController()
-    api.list<{ domain: string; verified: boolean }>(`${base}/organizations/${v.organization_id}/domains`, ctrl.signal).then(r => {
-      const domains = r.data.filter(d => d.verified).map(d => d.domain)
+    const load = transport ? transport.domains(ctrl.signal) : api.list<{ domain: string; verified: boolean }>(`${base}/organizations/${v.organization_id}/domains`, ctrl.signal).then(r => r.data)
+    load.then(data => {
+      const domains = data.filter(d => d.verified).map(d => d.domain)
       setVerified(domains)
       setV(prev => prev.domains.length ? prev : { ...prev, domains })
     }).catch(() => {})
     return () => ctrl.abort()
-  }, [base, v.scope, v.organization_id])
+  }, [base, v.scope, v.organization_id, transport])
   const field = (name: string, label: string, control: React.ReactNode, hint?: string) => <div className="space-y-1.5">
     <label className="text-sm font-medium" htmlFor={`${id}-${name}`}>{label}</label>
     {control}
@@ -195,169 +205,169 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
 
   return <Dialog open onOpenChange={open => { if (!open && !pending.current) onClose() }}>
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-      <DialogTitle className="pr-6 text-base font-semibold">{organization ? `Add SSO for ${organization.name}` : sso ? 'Add organization SSO' : 'Add social login'}</DialogTitle>
+      <DialogTitle className="pr-6 text-base font-semibold">{organization ? t('Add SSO for {{name}}', { name: organization.name }) : sso ? t('Add organization SSO') : t('Add social login')}</DialogTitle>
       <DialogDescription className="text-muted-foreground">{organization
-        ? `Let ${organization.name}'s employees sign in with their work account. Anyone whose email is on ${organization.name}'s verified domains is sent to this provider.`
+        ? t('Let {{name}}\'s employees sign in with their work account. Anyone whose email is on {{name2}}\'s verified domains is sent to this provider.', { name: organization.name, name2: organization.name })
         : sso
-          ? "Let one organization's employees sign in with their company's login (Entra ID, Google Workspace, Okta…). Anyone whose email is on that organization's verified domains is sent to it."
-          : 'Add a "Continue with …" button to the sign-in page. Anyone with an account at the provider can use it.'}</DialogDescription>
+          ? t('Let one organization\'s employees sign in with their company\'s login (Entra ID, Google Workspace, Okta…). Anyone whose email is on that organization\'s verified domains is sent to it.')
+          : t('Add a "Continue with …" button to the sign-in page. Anyone with an account at the provider can use it.')}</DialogDescription>
       <form className="space-y-4" onSubmit={async e => {
         e.preventDefault(); if (pending.current) return
-        if (workspace && !v.domains.length) { setError('Add at least one Workspace domain, so only the organization\'s Google accounts can sign in.'); return }
+        if (workspace && !v.domains.length) { setError(t('Add at least one Workspace domain, so only the organization\'s Google accounts can sign in.')); return }
         pending.current = true; setBusy(true); setError('')
-        try { await api.post(`${base}/federation-connections`, connectionBody(v)); toast.success(sso ? 'Organization SSO added' : 'Social login added'); onCreated(); onClose() } catch (err) { setError(message(err)) } finally { pending.current = false; setBusy(false) }
+        try { if (transport) await transport.create(connectionBody(v)); else await api.post(`${base}/federation-connections`, connectionBody(v)); toast.success(sso ? t('Organization SSO added') : t('Social login added')); onCreated(); onClose() } catch (err) { setError(message(err)) } finally { pending.current = false; setBusy(false) }
       }}>
         <fieldset className="space-y-2" disabled={busy}>
-          <legend className="text-sm font-medium">Provider</legend>
+          <legend className="text-sm font-medium">{t('Provider')}</legend>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {choices.map(p => <button key={p.value} type="button" aria-pressed={v.provider === p.value} onClick={() => pick(p.value)}
               className={`rounded-md border px-3 py-2 text-left text-sm transition-colors ${v.provider === p.value ? 'border-primary bg-primary/5 font-medium' : 'hover:bg-muted'}`}>{p.label}</button>)}
           </div>
           <p className="text-xs text-muted-foreground">{choices.find(p => p.value === v.provider)?.hint}</p>
-          {sso && <p className="text-xs text-muted-foreground">Company SSO needs a provider that can be limited to {organization ? `${organization.name}'s` : 'the organization\'s'} accounts. GitHub and Apple accounts are personal, so they are only offered as social login.</p>}
+          {sso && <p className="text-xs text-muted-foreground">{organization ? t('Company SSO needs a provider that can be limited to the accounts of {{organization}}. GitHub and Apple accounts are personal, so they are only offered as social login.', { organization: organization.name }) : t('Company SSO needs a provider that can be limited to the organization’s accounts. GitHub and Apple accounts are personal, so they are only offered as social login.')}</p>}
         </fieldset>
 
-        {sso && !organization && field('organization_id', 'Organization', <SearchSelect id={`${id}-organization_id`} name="organization_id" path={`${base}/organizations`} mapItem={named} required disabled={busy} placeholder="Search organizations…" onChange={value => setV(prev => ({ ...prev, organization_id: value, domains: [] }))} />,
-          'The company whose employees sign in with this provider. You can turn on automatic account creation and make SSO mandatory after creating it.')}
+        {sso && !organization && field('organization_id', t('Organization'), <SearchSelect id={`${id}-organization_id`} name="organization_id" path={`${base}/organizations`} mapItem={named} required disabled={busy} placeholder={t('Search organizations…')} onChange={value => setV(prev => ({ ...prev, organization_id: value, domains: [] }))} />,
+          t('The company whose employees sign in with this provider. You can turn on automatic account creation and make SSO mandatory after creating it.'))}
 
-        {field('name', 'Name', <Input id={`${id}-name`} value={v.name} required disabled={busy} placeholder={sso ? 'e.g. Globex Entra ID' : undefined} onChange={e => set('name', e.target.value)} />, social ? 'Shown on the button: "Continue with …".' : 'Helps you recognize it in this console.')}
-        {v.provider === 'oidc' && field('issuer', 'Issuer URL', <Input id={`${id}-issuer`} value={v.issuer} required disabled={busy} placeholder="https://idp.example.com" onChange={e => set('issuer', e.target.value)} />, 'HTTPS; IAMKit reads /.well-known/openid-configuration.')}
+        {field('name', t('Name'), <Input id={`${id}-name`} value={v.name} required disabled={busy} placeholder={sso ? t('e.g. Globex Entra ID') : undefined} onChange={e => set('name', e.target.value)} />, social ? t('Shown on the button: "Continue with …".') : t('Helps you recognize it in this console.'))}
+        {v.provider === 'oidc' && field('issuer', t('Issuer URL'), <Input id={`${id}-issuer`} value={v.issuer} required disabled={busy} placeholder="https://idp.example.com" onChange={e => set('issuer', e.target.value)} />, t('HTTPS; IAMKit reads /.well-known/openid-configuration.'))}
 
-        {(v.provider === 'gitlab' || v.provider === 'github_enterprise') && field('base_url', v.provider === 'gitlab' && !sso ? 'GitLab URL (optional)' : v.provider === 'gitlab' ? 'GitLab URL' : 'GitHub Enterprise URL',
+        {(v.provider === 'gitlab' || v.provider === 'github_enterprise') && field('base_url', v.provider === 'gitlab' && !sso ? t('GitLab URL (optional)') : v.provider === 'gitlab' ? t('GitLab URL') : t('GitHub Enterprise URL'),
           <Input id={`${id}-base_url`} value={v.base_url} required={v.provider === 'github_enterprise' || sso} disabled={busy} placeholder={v.provider === 'gitlab' ? 'https://gitlab.example.com' : 'https://github.example.com'} onChange={e => set('base_url', e.target.value)} />,
-          v.provider === 'gitlab' ? (sso ? 'HTTPS URL of the self-managed instance.' : 'Leave empty for gitlab.com.') : 'HTTPS URL of the server; IAMKit uses its /login/oauth and /api/v3 endpoints. It cannot change later.')}
+          v.provider === 'gitlab' ? (sso ? t('HTTPS URL of the self-managed instance.') : t('Leave empty for gitlab.com.')) : t('HTTPS URL of the server; IAMKit uses its /login/oauth and /api/v3 endpoints. It cannot change later.'))}
 
         {v.provider === 'oauth2' && <fieldset className="space-y-3 rounded-md border p-3" disabled={busy}>
-          <legend className="px-1 text-sm font-medium">Endpoints</legend>
-          {field('authorize_url', 'Authorization URL', <Input id={`${id}-authorize_url`} value={v.authorize_url} required placeholder="https://provider.example/oauth/authorize" onChange={e => set('authorize_url', e.target.value)} />, 'Its host identifies the provider and cannot change later.')}
-          {field('token_url', 'Token URL', <Input id={`${id}-token_url`} value={v.token_url} required placeholder="https://provider.example/oauth/token" onChange={e => set('token_url', e.target.value)} />)}
-          {field('userinfo_url', 'User info URL', <Input id={`${id}-userinfo_url`} value={v.userinfo_url} required placeholder="https://api.provider.example/me" onChange={e => set('userinfo_url', e.target.value)} />, 'Called with the access token; must answer JSON.')}
-          {field('scopes', 'Scopes (optional)', <TagInput id={`${id}-scopes`} name="scopes" defaultValue={v.scopes} disabled={busy} placeholder="Scope, then Enter…" onChange={tags => set('scopes', tags)} />)}
-          <p className="text-xs text-muted-foreground">Where the user info JSON keeps the identity. Use dots for nested members, e.g. <code>data.id</code>.</p>
+          <legend className="px-1 text-sm font-medium">{t('Endpoints')}</legend>
+          {field('authorize_url', t('Authorization URL'), <Input id={`${id}-authorize_url`} value={v.authorize_url} required placeholder="https://provider.example/oauth/authorize" onChange={e => set('authorize_url', e.target.value)} />, t('Its host identifies the provider and cannot change later.'))}
+          {field('token_url', t('Token URL'), <Input id={`${id}-token_url`} value={v.token_url} required placeholder="https://provider.example/oauth/token" onChange={e => set('token_url', e.target.value)} />)}
+          {field('userinfo_url', t('User info URL'), <Input id={`${id}-userinfo_url`} value={v.userinfo_url} required placeholder="https://api.provider.example/me" onChange={e => set('userinfo_url', e.target.value)} />, t('Called with the access token; must answer JSON.'))}
+          {field('scopes', t('Scopes (optional)'), <TagInput id={`${id}-scopes`} name="scopes" defaultValue={v.scopes} disabled={busy} placeholder={t('Scope, then Enter…')} onChange={tags => set('scopes', tags)} />)}
+          <p className="text-xs text-muted-foreground">{rich('Where the user info JSON keeps the identity. Use dots for nested members, e.g. {{code}}.', { code: <code>{'data.id'}</code> })}</p>
           <div className="grid grid-cols-2 gap-3">
-            {field('claim_subject', 'User ID', <Input id={`${id}-claim_subject`} value={v.claim_subject} required onChange={e => set('claim_subject', e.target.value)} />)}
-            {field('claim_name', 'Name', <Input id={`${id}-claim_name`} value={v.claim_name} onChange={e => set('claim_name', e.target.value)} />)}
-            {field('claim_email', 'Email', <Input id={`${id}-claim_email`} value={v.claim_email} onChange={e => set('claim_email', e.target.value)} />)}
-            {field('claim_email_verified', 'Email verified', <Input id={`${id}-claim_email_verified`} value={v.claim_email_verified} placeholder="e.g. verified" onChange={e => set('claim_email_verified', e.target.value)} />)}
+            {field('claim_subject', t('User ID'), <Input id={`${id}-claim_subject`} value={v.claim_subject} required onChange={e => set('claim_subject', e.target.value)} />)}
+            {field('claim_name', t('Name'), <Input id={`${id}-claim_name`} value={v.claim_name} onChange={e => set('claim_name', e.target.value)} />)}
+            {field('claim_email', t('Email'), <Input id={`${id}-claim_email`} value={v.claim_email} onChange={e => set('claim_email', e.target.value)} />)}
+            {field('claim_email_verified', t('Email verified'), <Input id={`${id}-claim_email_verified`} value={v.claim_email_verified} placeholder={t('e.g. verified')} onChange={e => set('claim_email_verified', e.target.value)} />)}
           </div>
-          <p className="text-xs text-muted-foreground">Without an “email verified” member the email is never trusted: it cannot create or link accounts.</p>
+          <p className="text-xs text-muted-foreground">{t('Without an “email verified” member the email is never trusted: it cannot create or link accounts.')}</p>
         </fieldset>}
 
         {v.provider === 'microsoft' && <>
-          {field('tenant', 'Accounts', <select id={`${id}-tenant`} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={v.tenant} disabled={busy} onChange={e => set('tenant', e.target.value)}>
-            <option value="common">Work, school and personal accounts (common)</option>
-            <option value="organizations">Work and school accounts (organizations)</option>
-            <option value="consumers">Personal Microsoft accounts (consumers)</option>
-            <option value="tenant">One tenant</option>
-          </select>, 'Must match the account types of the Entra app registration.')}
-          {v.tenant === 'tenant' && field('tenant_id', 'Tenant ID', <Input id={`${id}-tenant_id`} value={v.tenant_id} required disabled={busy} placeholder="00000000-0000-0000-0000-000000000000" onChange={e => set('tenant_id', e.target.value)} />)}
-          {(v.tenant === 'common' || v.tenant === 'organizations') && field('tenants', 'Allowed tenants (optional)', <TagInput id={`${id}-tenants`} name="tenants" defaultValue={v.tenants} disabled={busy} placeholder="Tenant ID, then Enter…" onChange={tags => set('tenants', tags)} />, 'Only these tenant IDs may sign in. Leave empty to accept any tenant.')}
+          {field('tenant', t('Accounts'), <select id={`${id}-tenant`} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={v.tenant} disabled={busy} onChange={e => set('tenant', e.target.value)}>
+            <option value="common">{t('Work, school and personal accounts (common)')}</option>
+            <option value="organizations">{t('Work and school accounts (organizations)')}</option>
+            <option value="consumers">{t('Personal Microsoft accounts (consumers)')}</option>
+            <option value="tenant">{t('One tenant')}</option>
+          </select>, t('Must match the account types of the Entra app registration.'))}
+          {v.tenant === 'tenant' && field('tenant_id', t('Tenant ID'), <Input id={`${id}-tenant_id`} value={v.tenant_id} required disabled={busy} placeholder="00000000-0000-0000-0000-000000000000" onChange={e => set('tenant_id', e.target.value)} />)}
+          {(v.tenant === 'common' || v.tenant === 'organizations') && field('tenants', t('Allowed tenants (optional)'), <TagInput id={`${id}-tenants`} name="tenants" defaultValue={v.tenants} disabled={busy} placeholder={t('Tenant ID, then Enter…')} onChange={tags => set('tenants', tags)} />, t('Only these tenant IDs may sign in. Leave empty to accept any tenant.'))}
         </>}
 
-        {v.provider === 'google' && field('domains', workspace ? 'Workspace domains' : 'Workspace domains (optional)',
-          <TagInput key={`${v.organization_id}:${verified.join(',')}`} id={`${id}-domains`} name="domains" defaultValue={v.domains} disabled={busy} placeholder="example.com, then Enter…" onChange={tags => set('domains', tags)} />,
+        {v.provider === 'google' && field('domains', workspace ? t('Workspace domains') : t('Workspace domains (optional)'),
+          <TagInput key={`${v.organization_id}:${verified.join(',')}`} id={`${id}-domains`} name="domains" defaultValue={v.domains} disabled={busy} placeholder={t('example.com, then Enter…')} onChange={tags => set('domains', tags)} />,
           workspace
-            ? verified.length ? "Only Google accounts of these Workspace domains can sign in. Filled in from the organization's verified domains." : "Only Google accounts of these Workspace domains can sign in. Personal Gmail accounts are refused."
-            : 'Only Google Workspace accounts of these domains can sign in. Leave empty to accept any Google account.')}
+            ? verified.length ? t("Only Google accounts of these Workspace domains can sign in. Filled in from the organization's verified domains.") : t("Only Google accounts of these Workspace domains can sign in. Personal Gmail accounts are refused.")
+            : t('Only Google Workspace accounts of these domains can sign in. Leave empty to accept any Google account.'))}
 
         {v.provider === 'apple' && <div className="grid grid-cols-2 gap-3">
-          {field('team_id', 'Team ID', <Input id={`${id}-team_id`} value={v.team_id} required disabled={busy} placeholder="ABCDE12345" onChange={e => set('team_id', e.target.value)} />)}
-          {field('key_id', 'Key ID', <Input id={`${id}-key_id`} value={v.key_id} required disabled={busy} placeholder="KEY1234567" onChange={e => set('key_id', e.target.value)} />)}
+          {field('team_id', t('Team ID'), <Input id={`${id}-team_id`} value={v.team_id} required disabled={busy} placeholder="ABCDE12345" onChange={e => set('team_id', e.target.value)} />)}
+          {field('key_id', t('Key ID'), <Input id={`${id}-key_id`} value={v.key_id} required disabled={busy} placeholder="KEY1234567" onChange={e => set('key_id', e.target.value)} />)}
         </div>}
 
         {v.provider === 'saml' && <fieldset className="space-y-3 rounded-md border p-3" disabled={busy}>
-          <legend className="px-1 text-sm font-medium">Identity provider</legend>
-          {field('metadata_url', 'Metadata URL', <Input id={`${id}-metadata_url`} value={v.metadata_url} required={!v.metadata_xml.trim()} disabled={busy || !!v.metadata_xml.trim()} placeholder="https://idp.example.com/app/…/sso/saml/metadata" onChange={e => set('metadata_url', e.target.value)} />,
-            'HTTPS; IAMKit fetches it now and when you update the connection. Or paste the XML below.')}
-          {field('metadata_xml', 'Metadata XML', <textarea id={`${id}-metadata_xml`} className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs" value={v.metadata_xml} disabled={busy || !!v.metadata_url.trim()} placeholder="<EntityDescriptor …>" onChange={e => set('metadata_xml', e.target.value)} />)}
-          {field('name_id_format', 'NameID format', <select id={`${id}-name_id_format`} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={v.name_id_format} disabled={busy} onChange={e => set('name_id_format', e.target.value)}>
-            <option value="unspecified">Unspecified (the provider decides)</option>
-            <option value="persistent">Persistent</option>
-            <option value="email">Email address</option>
-            <option value="transient">Transient (map a user ID attribute below)</option>
-          </select>, 'The NameID identifies the user unless a user ID attribute is mapped.')}
-          <p className="text-xs text-muted-foreground">Attribute names (optional). Leave empty to use the NameID and the usual email and name attributes.</p>
+          <legend className="px-1 text-sm font-medium">{t('Identity provider')}</legend>
+          {field('metadata_url', t('Metadata URL'), <Input id={`${id}-metadata_url`} value={v.metadata_url} required={!v.metadata_xml.trim()} disabled={busy || !!v.metadata_xml.trim()} placeholder="https://idp.example.com/app/…/sso/saml/metadata" onChange={e => set('metadata_url', e.target.value)} />,
+            t('HTTPS; IAMKit fetches it now and when you update the connection. Or paste the XML below.'))}
+          {field('metadata_xml', t('Metadata XML'), <textarea id={`${id}-metadata_xml`} className="min-h-20 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs" value={v.metadata_xml} disabled={busy || !!v.metadata_url.trim()} placeholder={t('<EntityDescriptor …>')} onChange={e => set('metadata_xml', e.target.value)} />)}
+          {field('name_id_format', t('NameID format'), <select id={`${id}-name_id_format`} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={v.name_id_format} disabled={busy} onChange={e => set('name_id_format', e.target.value)}>
+            <option value="unspecified">{t('Unspecified (the provider decides)')}</option>
+            <option value="persistent">{t('Persistent')}</option>
+            <option value="email">{t('Email address')}</option>
+            <option value="transient">{t('Transient (map a user ID attribute below)')}</option>
+          </select>, t('The NameID identifies the user unless a user ID attribute is mapped.'))}
+          <p className="text-xs text-muted-foreground">{t('Attribute names (optional). Leave empty to use the NameID and the usual email and name attributes.')}</p>
           <div className="grid grid-cols-3 gap-3">
-            {field('attr_subject', 'User ID', <Input id={`${id}-attr_subject`} value={v.attr_subject} required={v.name_id_format === 'transient'} placeholder="NameID" onChange={e => set('attr_subject', e.target.value)} />)}
-            {field('attr_email', 'Email', <Input id={`${id}-attr_email`} value={v.attr_email} placeholder="email" onChange={e => set('attr_email', e.target.value)} />)}
-            {field('attr_name', 'Name', <Input id={`${id}-attr_name`} value={v.attr_name} placeholder="displayName" onChange={e => set('attr_name', e.target.value)} />)}
+            {field('attr_subject', t('User ID'), <Input id={`${id}-attr_subject`} value={v.attr_subject} required={v.name_id_format === 'transient'} placeholder={t('NameID')} onChange={e => set('attr_subject', e.target.value)} />)}
+            {field('attr_email', t('Email'), <Input id={`${id}-attr_email`} value={v.attr_email} placeholder="email" onChange={e => set('attr_email', e.target.value)} />)}
+            {field('attr_name', t('Name'), <Input id={`${id}-attr_name`} value={v.attr_name} placeholder="displayName" onChange={e => set('attr_name', e.target.value)} />)}
           </div>
-          {check('sign_requests', 'Sign authentication requests', 'For identity providers that require signed AuthnRequests. IAMKit signs with the environment signing key.')}
+          {check('sign_requests', t('Sign authentication requests'), t('For identity providers that require signed AuthnRequests. IAMKit signs with the environment signing key.'))}
         </fieldset>}
 
         {v.provider === 'ldap' && <fieldset className="space-y-3 rounded-md border p-3" disabled={busy}>
-          <legend className="px-1 text-sm font-medium">Directory</legend>
-          {field('ldap_url', 'Server URL', <Input id={`${id}-ldap_url`} value={v.ldap_url} required disabled={busy} placeholder="ldaps://dc1.example.com" onChange={e => set('ldap_url', e.target.value)} />,
-            'ldaps:// (port 636), or ldap:// (port 389) with StartTLS. Plaintext is refused. The host cannot change later.')}
-          {v.ldap_url.trim().toLowerCase().startsWith('ldap://') && check('start_tls', 'Use StartTLS', 'Required for ldap:// URLs: the connection is upgraded to TLS before any password is sent.')}
-          {field('ca_pem', 'CA certificate (optional)', <textarea id={`${id}-ca_pem`} className="min-h-16 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs" value={v.ca_pem} disabled={busy} placeholder="-----BEGIN CERTIFICATE-----" onChange={e => set('ca_pem', e.target.value)} />,
-            "PEM of the CA that signed the directory's certificate, for a private CA. Leave empty to trust the system roots.")}
-          {field('bind_dn', 'Service account DN (optional)', <Input id={`${id}-bind_dn`} value={v.bind_dn} disabled={busy} placeholder="CN=iamkit,OU=Service Accounts,DC=example,DC=com" onChange={e => set('bind_dn', e.target.value)} />,
-            'The account IAMKit binds as to search for users. Leave empty if the directory allows anonymous search.')}
-          {v.bind_dn.trim() && field('client_secret', 'Service account password', <Input id={`${id}-client_secret`} type="password" autoComplete="new-password" value={v.client_secret} required disabled={busy} onChange={e => set('client_secret', e.target.value)} />,
-            'Stored encrypted; never shown again. Requires IAMKIT_ENCRYPTION_KEY.')}
-          {field('user_base_dn', 'User base DN', <Input id={`${id}-user_base_dn`} value={v.user_base_dn} required disabled={busy} placeholder="OU=People,DC=example,DC=com" onChange={e => set('user_base_dn', e.target.value)} />, 'The subtree searched for users. It cannot change later.')}
-          {field('user_filter', 'User filter (optional)', <Input id={`${id}-user_filter`} value={v.user_filter} disabled={busy} placeholder="(|(mail={email})(userPrincipalName={email}))" onChange={e => set('user_filter', e.target.value)} />,
-            '{email} is the typed email, {username} its part before @ (e.g. (sAMAccountName={username})). It must match exactly one entry.')}
-          <p className="text-xs text-muted-foreground">Attribute names (optional). Leave empty for objectGUID / entryUUID, mail or userPrincipalName, and displayName.</p>
+          <legend className="px-1 text-sm font-medium">{t('Directory')}</legend>
+          {field('ldap_url', t('Server URL'), <Input id={`${id}-ldap_url`} value={v.ldap_url} required disabled={busy} placeholder="ldaps://dc1.example.com" onChange={e => set('ldap_url', e.target.value)} />,
+            t('ldaps:// (port 636), or ldap:// (port 389) with StartTLS. Plaintext is refused. The host cannot change later.'))}
+          {v.ldap_url.trim().toLowerCase().startsWith('ldap://') && check('start_tls', t('Use StartTLS'), t('Required for ldap:// URLs: the connection is upgraded to TLS before any password is sent.'))}
+          {field('ca_pem', t('CA certificate (optional)'), <textarea id={`${id}-ca_pem`} className="min-h-16 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs" value={v.ca_pem} disabled={busy} placeholder={t('-----BEGIN CERTIFICATE-----')} onChange={e => set('ca_pem', e.target.value)} />,
+            t("PEM of the CA that signed the directory's certificate, for a private CA. Leave empty to trust the system roots."))}
+          {field('bind_dn', t('Service account DN (optional)'), <Input id={`${id}-bind_dn`} value={v.bind_dn} disabled={busy} placeholder={t('CN=iamkit,OU=Service Accounts,DC=example,DC=com')} onChange={e => set('bind_dn', e.target.value)} />,
+            t('The account IAMKit binds as to search for users. Leave empty if the directory allows anonymous search.'))}
+          {v.bind_dn.trim() && field('client_secret', t('Service account password'), <Input id={`${id}-client_secret`} type="password" autoComplete="new-password" value={v.client_secret} required disabled={busy} onChange={e => set('client_secret', e.target.value)} />,
+            t('Stored encrypted; never shown again. Requires IAMKIT_ENCRYPTION_KEY.'))}
+          {field('user_base_dn', t('User base DN'), <Input id={`${id}-user_base_dn`} value={v.user_base_dn} required disabled={busy} placeholder={t('OU=People,DC=example,DC=com')} onChange={e => set('user_base_dn', e.target.value)} />, t('The subtree searched for users. It cannot change later.'))}
+          {field('user_filter', t('User filter (optional)'), <Input id={`${id}-user_filter`} value={v.user_filter} disabled={busy} placeholder="(|(mail={email})(userPrincipalName={email}))" onChange={e => set('user_filter', e.target.value)} />,
+            t('{email} is the typed email, {username} its part before @ (e.g. (sAMAccountName={username})). It must match exactly one entry.'))}
+          <p className="text-xs text-muted-foreground">{t('Attribute names (optional). Leave empty for objectGUID / entryUUID, mail or userPrincipalName, and displayName.')}</p>
           <div className="grid grid-cols-3 gap-3">
-            {field('attr_subject', 'User ID', <Input id={`${id}-attr_subject`} value={v.attr_subject} placeholder="objectGUID" onChange={e => set('attr_subject', e.target.value)} />)}
-            {field('attr_email', 'Email', <Input id={`${id}-attr_email`} value={v.attr_email} placeholder="mail" onChange={e => set('attr_email', e.target.value)} />)}
-            {field('attr_name', 'Name', <Input id={`${id}-attr_name`} value={v.attr_name} placeholder="displayName" onChange={e => set('attr_name', e.target.value)} />)}
+            {field('attr_subject', t('User ID'), <Input id={`${id}-attr_subject`} value={v.attr_subject} placeholder="objectGUID" onChange={e => set('attr_subject', e.target.value)} />)}
+            {field('attr_email', t('Email'), <Input id={`${id}-attr_email`} value={v.attr_email} placeholder="mail" onChange={e => set('attr_email', e.target.value)} />)}
+            {field('attr_name', t('Name'), <Input id={`${id}-attr_name`} value={v.attr_name} placeholder="displayName" onChange={e => set('attr_name', e.target.value)} />)}
           </div>
         </fieldset>}
 
-        {v.provider !== 'saml' && v.provider !== 'ldap' && field('client_id', v.provider === 'apple' ? 'Services ID' : 'Client ID', <Input id={`${id}-client_id`} value={v.client_id} required disabled={busy} placeholder={v.provider === 'apple' ? 'com.example.web' : undefined} onChange={e => set('client_id', e.target.value)} />)}
+        {v.provider !== 'saml' && v.provider !== 'ldap' && field('client_id', v.provider === 'apple' ? t('Services ID') : t('Client ID'), <Input id={`${id}-client_id`} value={v.client_id} required disabled={busy} placeholder={v.provider === 'apple' ? 'com.example.web' : undefined} onChange={e => set('client_id', e.target.value)} />)}
         {v.provider === 'saml' || v.provider === 'ldap' ? null : v.provider === 'apple'
-          ? field('client_secret', 'Private key (.p8)', <textarea id={`${id}-client_secret`} className="min-h-24 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs" value={v.client_secret} required disabled={busy} placeholder="-----BEGIN PRIVATE KEY-----" onChange={e => set('client_secret', e.target.value)} />,
-            'Stored encrypted; IAMKit signs a short-lived client secret with it for each login.')
+          ? field('client_secret', t('Private key (.p8)'), <textarea id={`${id}-client_secret`} className="min-h-24 w-full rounded-md border border-input bg-background px-2 py-1.5 font-mono text-xs" value={v.client_secret} required disabled={busy} placeholder={t('-----BEGIN PRIVATE KEY-----')} onChange={e => set('client_secret', e.target.value)} />,
+            t('Stored encrypted; IAMKit signs a short-lived client secret with it for each login.'))
           : <>
-            {field('client_secret', 'Client secret', <Input id={`${id}-client_secret`} type="password" autoComplete="new-password" value={v.client_secret} required={!v.secret_env.trim()} disabled={busy || !!v.secret_env.trim()} onChange={e => set('client_secret', e.target.value)} />,
-              v.secret_env.trim() ? 'Not needed: the secret is read from the server variable below.' : 'Stored encrypted; never shown again. Requires IAMKIT_ENCRYPTION_KEY.')}
-            <div className="space-y-2">
+            {field('client_secret', t('Client secret'), <Input id={`${id}-client_secret`} type="password" autoComplete="new-password" value={v.client_secret} required={!v.secret_env.trim()} disabled={busy || !!v.secret_env.trim()} onChange={e => set('client_secret', e.target.value)} />,
+              v.secret_env.trim() ? t('Not needed: the secret is read from the server variable below.') : t('Stored encrypted; never shown again. Requires IAMKIT_ENCRYPTION_KEY.'))}
+            <div className={transport ? 'hidden' : 'space-y-2'}>
               <button type="button" aria-expanded={advanced} aria-controls={`${id}-advanced`} disabled={busy} onClick={() => setAdvanced(a => !a)}
                 className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
-                <ChevronRight className={`size-3.5 transition-transform ${advanced ? 'rotate-90' : ''}`} aria-hidden />Advanced
+                <ChevronRight className={`size-3.5 transition-transform ${advanced ? 'rotate-90' : ''}`} aria-hidden />{t('Advanced')}
               </button>
               {advanced && <div id={`${id}-advanced`} className="space-y-1.5 rounded-md border p-3">
-                {field('secret_env', 'Server environment variable (instead of the secret)', <Input id={`${id}-secret_env`} value={v.secret_env} disabled={busy || !!v.client_secret} placeholder="IAMKIT_PROVIDER_…" onChange={e => set('secret_env', e.target.value)} />,
+                {field('secret_env', t('Server environment variable (instead of the secret)'), <Input id={`${id}-secret_env`} value={v.secret_env} disabled={busy || !!v.client_secret} placeholder={t('IAMKIT_PROVIDER_…')} onChange={e => set('secret_env', e.target.value)} />,
                   v.client_secret
-                    ? 'Clear the client secret above to use this instead.'
-                    : 'Older setups only. The name of a variable on the IAMKit server that holds the secret, approved by your server admin. Most people should paste the client secret above.')}
+                    ? t('Clear the client secret above to use this instead.')
+                    : t('Older setups only. The name of a variable on the IAMKit server that holds the secret, approved by your server admin. Most people should paste the client secret above.'))}
               </div>}
             </div>
           </>}
 
         {social && <fieldset className="space-y-3 rounded-md border p-3" disabled={busy}>
-          <legend className="px-1 text-sm font-medium">First sign-in</legend>
-          {check('link_email', 'Link existing accounts by verified email', 'A user whose provider email is verified and matches an account signs in to that account.')}
-          {check('signup', 'Create accounts for new users', 'Unknown users with a verified email get an account in the organization below.')}
+          <legend className="px-1 text-sm font-medium">{t('First sign-in')}</legend>
+          {check('link_email', t('Link existing accounts by verified email'), t('A user whose provider email is verified and matches an account signs in to that account.'))}
+          {check('signup', t('Create accounts for new users'), t('Unknown users with a verified email get an account in the organization below.'))}
           {v.signup && <>
-            {field('signup_organization_id', 'Sign-up organization', <SearchSelect id={`${id}-signup_organization_id`} name="signup_organization_id" path={`${base}/organizations`} mapItem={named} required disabled={busy} placeholder="Search organizations…" onChange={value => setV(prev => ({ ...prev, signup_organization_id: value, signup_group_id: '' }))} />)}
-            {v.signup_organization_id && field('signup_group_id', 'Default group (optional)', <SearchSelect key={v.signup_organization_id} id={`${id}-signup_group_id`} name="signup_group_id" path={`${base}/organizations/${v.signup_organization_id}/groups`} mapItem={named} disabled={busy} placeholder="Search groups…" onChange={value => set('signup_group_id', value)} />, 'New users join this group and get its roles.')}
+            {field('signup_organization_id', t('Sign-up organization'), <SearchSelect id={`${id}-signup_organization_id`} name="signup_organization_id" path={`${base}/organizations`} mapItem={named} required disabled={busy} placeholder={t('Search organizations…')} onChange={value => setV(prev => ({ ...prev, signup_organization_id: value, signup_group_id: '' }))} />)}
+            {v.signup_organization_id && field('signup_group_id', t('Default group (optional)'), <SearchSelect key={v.signup_organization_id} id={`${id}-signup_group_id`} name="signup_group_id" path={`${base}/organizations/${v.signup_organization_id}/groups`} mapItem={named} disabled={busy} placeholder={t('Search groups…')} onChange={value => set('signup_group_id', value)} />, t('New users join this group and get its roles.'))}
           </>}
         </fieldset>}
 
-        {check('update_profile', 'Keep profiles in sync', "At every sign-in, update the user's name, and the email of accounts that sign in only through providers, from the provider.")}
+        {check('update_profile', t('Keep profiles in sync'), t("At every sign-in, update the user's name, and the email of accounts that sign in only through providers, from the provider."))}
 
         {v.provider === 'ldap'
           ? <div className="rounded-md bg-muted p-3 text-xs">
-            <p className="font-medium">How users sign in</p>
-            <p className="mt-1 text-muted-foreground">Emails on the organization's verified domains are asked for their directory password on the sign-in page. IAMKit must reach the server: private addresses need IAMKIT_LDAP_ALLOWED_HOSTS on the IAMKit server.</p>
+            <p className="font-medium">{t('How users sign in')}</p>
+            <p className="mt-1 text-muted-foreground">{t('Emails on the organization\'s verified domains are asked for their directory password on the sign-in page. IAMKit must reach the server: private addresses need IAMKIT_LDAP_ALLOWED_HOSTS on the IAMKit server.')}</p>
           </div>
           : v.provider === 'saml'
           ? <div className="rounded-md bg-muted p-3 text-xs">
-            <p className="font-medium">Service provider details</p>
-            <p className="mt-1 text-muted-foreground">After creating, the connection page shows the ACS URL, entity ID and metadata URL to register with the identity provider.</p>
+            <p className="font-medium">{t('Service provider details')}</p>
+            <p className="mt-1 text-muted-foreground">{t('After creating, the connection page shows the ACS URL, entity ID and metadata URL to register with the identity provider.')}</p>
           </div>
           : <div className="rounded-md bg-muted p-3 text-xs">
-            <p className="font-medium">Redirect URI to register with the provider</p>
+            <p className="font-medium">{t('Redirect URI to register with the provider')}</p>
             <code className="mt-1 block break-all select-all">{callback}</code>
           </div>}
         {error && <ErrorState error={error} />}
         <div className="flex justify-end gap-2 border-t pt-4">
-          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create'}</Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('Cancel')}</Button>
+          <Button type="submit" disabled={busy}>{busy ? t('Creating…') : t('Create')}</Button>
         </div>
       </form>
     </DialogContent>

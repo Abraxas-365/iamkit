@@ -14,6 +14,7 @@ import { ConfirmDialog, DataTable, EmptyState, EntityRef, ErrorState, FormDialog
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { RowActions } from '@/components/ui/menu'
 import { useOrganization } from './organization-layout'
+import { rich, t } from '@/lib/i18n'
 
 interface Member {
   user_id: string; user_name: string; user_email: string; active: boolean
@@ -64,12 +65,12 @@ export default function MembersPage() {
   return <div className="space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 className="text-lg font-semibold">Members of {org.name}</h2>
-        <p className="text-sm text-muted-foreground">People who can sign in to this organization.</p>
+        <h2 className="text-lg font-semibold">{t('Members of {{name}}', { name: org.name })}</h2>
+        <p className="text-sm text-muted-foreground">{t('People who can sign in to this organization.')}</p>
       </div>
       {canWrite && <div className="flex flex-wrap gap-2">
-        <Link to={`${orgsPath}/${orgId}/invitations`} className={buttonVariants({ variant: 'outline' })}><MailPlus className="size-4" /> Invite by email</Link>
-        <Button onClick={() => setAdding(true)}><UserPlus /> Add existing user</Button>
+        <Link to={`${orgsPath}/${orgId}/invitations`} className={buttonVariants({ variant: 'outline' })}><MailPlus className="size-4" /> {t('Invite by email')}</Link>
+        <Button onClick={() => setAdding(true)}><UserPlus /> {t('Add existing user')}</Button>
       </div>}
     </div>
 
@@ -83,51 +84,51 @@ export default function MembersPage() {
           path={path}
           mapItem={memberOption}
           defaultValue={managerFilter}
-          placeholder="Filter by manager…"
+          placeholder={t('Filter by manager…')}
           onChange={v => setManagerFilter(v)}
         />
       </div>
       <select
-        aria-label="Filter by status"
+        aria-label={t('Filter by status')}
         value={statusFilter}
         onChange={e => setStatusFilter(e.target.value)}
         className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
       >
-        <option value="">All statuses</option>
-        <option value="true">Active</option>
-        <option value="false">Inactive</option>
+        <option value="">{t('All statuses')}</option>
+        <option value="true">{t('Active')}</option>
+        <option value="false">{t('Inactive')}</option>
       </select>
-      {hasFilters && <Button variant="ghost" size="sm" onClick={clearFilters}><X className="size-3.5" /> Clear</Button>}
+      {hasFilters && <Button variant="ghost" size="sm" onClick={clearFilters}><X className="size-3.5" /> {t('Clear')}</Button>}
     </div>
 
     <DataTable
-      columns={['User', { header: 'Manager', hideBelow: 'md' }, 'Status', 'Actions']}
+      columns={[t('User'), { header: t('Manager'), hideBelow: 'md' }, t('Status'), t('Actions')]}
       loading={list.loading}
       error={list.error}
       retry={list.reload}
-      empty={<EmptyState icon={<Users />} title={hasFilters ? 'No members match these filters' : 'No members yet'} description={hasFilters ? undefined : `Invite people by email, add an existing user, or connect ${orgName}'s directory with SCIM.`} />}
+      empty={<EmptyState icon={<Users />} title={hasFilters ? t('No members match these filters') : t('No members yet')} description={hasFilters ? undefined : t('Invite people by email, add an existing user, or connect {{orgName}}\'s directory with SCIM.', { orgName })} />}
       rows={list.data.map(m => [
         <EntityRef name={m.user_name} id={m.user_id} to={`${envBase}/users/${m.user_id}`} secondary={m.user_email} />,
         m.manager_name
-          ? <button type="button" className="text-left text-sm text-primary hover:underline" title="Show this manager's reports" onClick={() => setManagerFilter(m.manager_id!)}>{m.manager_name}</button>
+          ? <button type="button" className="text-left text-sm text-primary hover:underline" title={t('Show this manager\'s reports')} onClick={() => setManagerFilter(m.manager_id!)}>{m.manager_name}</button>
           : <span className="text-xs text-muted-foreground">—</span>,
         <div className="flex flex-wrap items-center gap-1">
           <Status active={m.active} />
-          {m.sso_bypass && <Badge variant="outline" title="May sign in with a password even when SSO is enforced">SSO bypass</Badge>}
+          {m.sso_bypass && <Badge variant="outline" title={t('May sign in with a password even when SSO is enforced')}>{t('SSO bypass')}</Badge>}
         </div>,
-        <RowActions label={`Actions for ${m.user_name}`} actions={[
-          { label: 'View access', icon: <ShieldCheck />, onSelect: () => setInspecting(m) },
+        <RowActions label={t('Actions for {{user_name}}', { user_name: m.user_name })} actions={[
+          { label: t('View access'), icon: <ShieldCheck />, onSelect: () => setInspecting(m) },
           ...(canWrite && m.active ? [
-            { label: 'Set manager', icon: <Users />, onSelect: () => setSettingManager(m) },
-            { label: m.sso_bypass ? 'Revoke SSO bypass' : 'Allow password sign-in (SSO bypass)', icon: <KeyRound />, onSelect: () => setBypassing(m) },
-            { label: 'Remove from organization', icon: <UserMinus />, destructive: true, onSelect: () => setRemoving(m) },
+            { label: t('Set manager'), icon: <Users />, onSelect: () => setSettingManager(m) },
+            { label: m.sso_bypass ? t('Revoke SSO bypass') : t('Allow password sign-in (SSO bypass)'), icon: <KeyRound />, onSelect: () => setBypassing(m) },
+            { label: t('Remove from organization'), icon: <UserMinus />, destructive: true, onSelect: () => setRemoving(m) },
           ] : []),
         ]} />,
       ])}
     />
 
-    {adding && <FormDialog title={`Add a user to ${orgName}`} description="The user can sign in to this organization right away. Give them roles or grants afterwards." submitLabel="Add member" success="Member added" fields={[
-      { name: 'user_id', label: 'User', type: 'select', selectPath: `${base}/users`, selectMap: userOption },
+    {adding && <FormDialog title={t('Add a user to {{orgName}}', { orgName })} description={t('The user can sign in to this organization right away. Give them roles or grants afterwards.')} submitLabel={t('Add member')} success={t('Member added')} fields={[
+      { name: 'user_id', label: t('User'), type: 'select', selectPath: `${base}/users`, selectMap: userOption },
     ]} onClose={() => setAdding(false)} submit={async values => { await api.post(`${base}/memberships`, { organization_id: orgId, user_id: values.user_id }); list.reload() }} />}
 
     {inspecting && <MemberAccessDialog
@@ -140,13 +141,13 @@ export default function MembersPage() {
 
     {removing && (
       <ConfirmDialog
-        title={`Remove ${removing.user_name || 'member'} from ${orgName}?`}
-        description={`${removing.user_name || removing.user_id} can no longer sign in to ${orgName}. Their user account is kept.`}
-        confirmLabel="Remove member"
+        title={t('Remove {{member}} from {{organization}}?', { member: removing.user_name || t('member'), organization: orgName })}
+        description={t('{{value}} can no longer sign in to {{orgName}}. Their user account is kept.', { value: removing.user_name || removing.user_id, orgName })}
+        confirmLabel={t('Remove member')}
         onClose={() => setRemoving(null)}
         confirm={async () => {
           await api.delete(`${base}/organizations/${orgId}/members/${removing.user_id}`)
-          toast.success('Member removed')
+          toast.success(t('Member removed'))
           list.reload()
         }}
       />
@@ -154,15 +155,15 @@ export default function MembersPage() {
 
     {bypassing && (
       <ConfirmDialog
-        title={`${bypassing.sso_bypass ? 'Revoke' : 'Grant'} SSO bypass for ${bypassing.user_name || 'this member'}?`}
-        confirmLabel={bypassing.sso_bypass ? 'Revoke bypass' : 'Grant bypass'}
+        title={bypassing.sso_bypass ? t('Revoke SSO bypass for {{member}}?', { member: bypassing.user_name || t('this member') }) : t('Grant SSO bypass for {{member}}?', { member: bypassing.user_name || t('this member') })}
+        confirmLabel={bypassing.sso_bypass ? t('Revoke bypass') : t('Grant bypass')}
         description={bypassing.sso_bypass
-          ? `${bypassing.user_name || bypassing.user_id} will have to sign in through SSO when it is enforced.`
-          : `${bypassing.user_name || bypassing.user_id} will be able to sign in with a password even when SSO is enforced. Use for break-glass administrators only.`}
+          ? t('{{value}} will have to sign in through SSO when it is enforced.', { value: bypassing.user_name || bypassing.user_id })
+          : t('{{value}} will be able to sign in with a password even when SSO is enforced. Use for break-glass administrators only.', { value: bypassing.user_name || bypassing.user_id })}
         onClose={() => setBypassing(null)}
         confirm={async () => {
           await api.patch(`${base}/organizations/${orgId}/members/${bypassing.user_id}`, { sso_bypass: !bypassing.sso_bypass })
-          toast.success(bypassing.sso_bypass ? 'SSO bypass revoked' : 'SSO bypass granted')
+          toast.success(bypassing.sso_bypass ? t('SSO bypass revoked') : t('SSO bypass granted'))
           list.reload()
         }}
       />
@@ -193,39 +194,37 @@ function SetManagerDialog({ member, membersPath, profilePath, onClose, onSaved }
 
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
     <DialogContent>
-      <DialogTitle className="text-base font-semibold">Set manager</DialogTitle>
-      <DialogDescription className="text-muted-foreground">
-        Choose a manager for <strong>{member.user_name}</strong> in this organization. Leave empty to remove the current manager.
-      </DialogDescription>
+      <DialogTitle className="text-base font-semibold">{t('Set manager')}</DialogTitle>
+      <DialogDescription className="text-muted-foreground">{rich('Choose a manager for {{strong}} in this organization. Leave empty to remove the current manager.', { strong: <strong>{member.user_name}</strong> })}</DialogDescription>
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">Manager</label>
+          <label className="text-sm font-medium">{t('Manager')}</label>
           <SearchSelect
             name="manager_id"
             path={membersPath}
             mapItem={memberOption}
             defaultValue={managerId}
             disabled={busy}
-            placeholder="Search members…"
+            placeholder={t('Search members…')}
             onChange={setManagerId}
           />
           {managerId && <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setManagerId('')}>
-            Clear manager
+            {t('Clear manager')}
           </button>}
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex justify-end gap-2 border-t pt-4">
-          <Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
+          <Button variant="outline" disabled={busy} onClick={onClose}>{t('Cancel')}</Button>
           <Button disabled={busy} onClick={async () => {
             setBusy(true); setError('')
             try {
               await api.put(profilePath, {
                 manager_id: managerId || null,
               })
-              toast.success('Manager updated')
+              toast.success(t('Manager updated'))
               onSaved()
             } catch (e) { setError(message(e)) } finally { setBusy(false) }
-          }}>{busy ? 'Saving…' : 'Save'}</Button>
+          }}>{busy ? t('Saving…') : t('Save')}</Button>
         </div>
       </div>
     </DialogContent>
@@ -259,29 +258,29 @@ function MemberAccessDialog({ member, base, orgId, groupsPath, onClose }: {
 
   return <Dialog open onOpenChange={open => { if (!open) onClose() }}>
     <DialogContent className="sm:max-w-lg">
-      <DialogTitle className="text-base font-semibold">Access of {member.user_name}</DialogTitle>
+      <DialogTitle className="text-base font-semibold">{t('Access of {{user_name}}', { user_name: member.user_name })}</DialogTitle>
       <DialogDescription className="text-muted-foreground">
-        Effective roles in this organization: direct assignments plus roles inherited from groups. Grants are not shown.
+        {t('Effective roles in this organization: direct assignments plus roles inherited from groups. Grants are not shown.')}
       </DialogDescription>
-      {error ? <ErrorState error={error} /> : roles === null ? <p role="status" className="text-sm text-muted-foreground">Loading…</p> : <div className="space-y-4">
+      {error ? <ErrorState error={error} /> : roles === null ? <p role="status" className="text-sm text-muted-foreground">{t('Loading…')}</p> : <div className="space-y-4">
         <div className="space-y-2">
-          <h3 className="text-sm font-medium">Roles</h3>
-          {roles.length === 0 ? <p className="text-sm text-muted-foreground">No roles.</p> : <ul className="divide-y rounded-lg border">
+          <h3 className="text-sm font-medium">{t('Roles')}</h3>
+          {roles.length === 0 ? <p className="text-sm text-muted-foreground">{t('No roles.')}</p> : <ul className="divide-y rounded-lg border">
             {roles.map(r => <li key={`${r.role_id}:${r.source}:${r.group_id ?? ''}`} className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="min-w-0">
                 <p className="truncate font-medium">{r.role_name}</p>
                 <p className="truncate text-xs text-muted-foreground">{r.resource_name}</p>
               </div>
               {r.source === 'group'
-                ? <Link to={`${groupsPath}/${r.group_id}`} className="shrink-0"><Badge variant="secondary" className="bg-primary/10 text-primary">via {r.group_name}</Badge></Link>
-                : <Badge variant="secondary" className="shrink-0">Direct</Badge>}
+                ? <Link to={`${groupsPath}/${r.group_id}`} className="shrink-0"><Badge variant="secondary" className="bg-primary/10 text-primary">{t('via {{group}}', { group: r.group_name })}</Badge></Link>
+                : <Badge variant="secondary" className="shrink-0">{t('Direct')}</Badge>}
             </li>)}
           </ul>}
         </div>
         <div className="space-y-2">
-          <h3 className="text-sm font-medium">Groups</h3>
-          {groups.length === 0 ? <p className="text-sm text-muted-foreground">Not in any group.</p> : <div className="flex flex-wrap gap-2">
-            {groups.map(g => <Link key={g.id} to={`${groupsPath}/${g.id}`}><Badge variant="outline">{g.name}{g.connection_id ? ' · Directory' : ''}</Badge></Link>)}
+          <h3 className="text-sm font-medium">{t('Groups')}</h3>
+          {groups.length === 0 ? <p className="text-sm text-muted-foreground">{t('Not in any group.')}</p> : <div className="flex flex-wrap gap-2">
+            {groups.map(g => <Link key={g.id} to={`${groupsPath}/${g.id}`}><Badge variant="outline">{g.name}{g.connection_id ? (' ' + t('· Directory')) : ''}</Badge></Link>)}
           </div>}
         </div>
       </div>}

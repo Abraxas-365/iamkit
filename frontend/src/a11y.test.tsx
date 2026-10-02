@@ -33,6 +33,9 @@ const fixtures: Record<string, unknown> = {
   [`${env}/oauth-clients`]: page([client]),
   [`${env}/oauth-clients/c1`]: client,
   [`${env}/login-settings`]: { environment_id: 'env1', display_name: 'Acme', logo_url: '', accent_color: '' },
+  [`${env}/login-settings/texts/catalog`]: { locale: 'en', items: [{ key: 'hosted.form.continue', default: 'Continue', placeholders: [], max_length: 80 }] },
+  [`${env}/login-settings/texts/en`]: { locale: 'en', texts: {} },
+  [`${env}/events`]: { items: [{ id: 7, type: 'organization.updated', actor: { kind: 'operator', id: 'op1' }, subject: { kind: 'organization', id: 'o1' }, occurred_at: '2026-09-27T00:00:00Z' }], next: 0 },
   [`${env}/audit-events`]: page([{ id: 'e1', actor: 'owner@example.com', action: 'organization.updated', target_id: 'o1', target_label: 'Acme', created_at: '2026-09-27T00:00:00Z' }]),
 }
 
@@ -42,7 +45,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
     const path = url.replace('/management/v1', '').split('?')[0]
-    if (path.endsWith('/login-settings/preview')) return Response.json({ html: '<!doctype html><title>preview</title>' })
+    if (path.endsWith('/login-settings/preview') || path.endsWith('/login-settings/texts/preview')) return Response.json({ html: '<!doctype html><title>preview</title>' })
     if (init.method && init.method !== 'GET') return new Response(null, { status: 204 })
     return Response.json(path in fixtures ? fixtures[path] : page([]))
   })
@@ -69,8 +72,9 @@ const pages: [string, string, string][] = [
   ['organization members', `${base}/organizations/o1/members`, 'Jane Doe'],
   ['OAuth clients', `${base}/oauth-clients`, 'Web'],
   ['OAuth client detail', `${base}/oauth-clients/c1`, 'https://app.example/callback'],
-  ['audit events', `${base}/audit-events`, 'Acme'],
+  ['activity events', `${base}/audit-events`, 'Organization updated'],
   ['branding editor', `${base}/hosted-login/default`, 'Default style'],
+  ['sign-in texts', `${base}/hosted-login/texts`, 'hosted.form.continue'],
   ['operators', '/operators', 'ops@example.com'],
 ]
 
@@ -91,6 +95,6 @@ it('the command palette and row menus have no serious accessibility violations',
   await u.keyboard('{Escape}')
   await u.keyboard('{Control>}k{/Control}')
   await u.type(await screen.findByRole('combobox'), 'aud')
-  await screen.findByRole('option', { name: /Audit/ })
+  await screen.findByRole('option', { name: /audit/i })
   expect(await violations()).toEqual([])
 })

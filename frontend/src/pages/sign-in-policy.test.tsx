@@ -53,14 +53,20 @@ it('turns password sign-in off, which also turns off reset', async () => {
   const u = userEvent.setup()
   open('sign-in-policy')
   const password = await screen.findByRole('switch', { name: 'Password' })
-  expect(screen.getByText(/every method allowed/)).toBeTruthy()
+  expect(screen.getByText('Default policy')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Save methods' })).toBeNull() // the save bar appears with the first change
   await u.click(password)
-  expect((screen.getByRole('switch', { name: 'Password reset' }) as HTMLButtonElement).disabled).toBe(true)
+  const reset = screen.getByRole('switch', { name: 'Password reset' }) as HTMLInputElement
+  expect(reset.disabled).toBe(true)
+  expect(reset.getAttribute('aria-describedby')).toMatch(/note/)
+  expect(screen.getByText('Turn on password sign-in first.')).toBeTruthy()
+  expect(screen.getByText('Unsaved changes')).toBeTruthy()
   await u.click(screen.getByRole('switch', { name: 'Require a second factor everywhere' }))
   await u.click(screen.getByRole('button', { name: 'Save methods' }))
   const { custom: _custom, ...unchanged } = defaults
   await waitFor(() => expect(calls).toEqual([{ method: 'PUT', path: `${env}/sign-in-policy`, body: { ...unchanged, allow_password: false, allow_password_reset: false, mfa_required: true } }]))
-  expect(await screen.findByText(/Custom policy/)).toBeTruthy()
+  expect(await screen.findByText('Custom policy')).toBeTruthy()
+  expect(screen.queryByText('Unsaved changes')).toBeNull()
   await u.click(screen.getByRole('button', { name: 'Restore default' }))
   await u.click(await screen.findByRole('button', { name: 'Restore default' }))
   await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', path: `${env}/sign-in-policy`, body: undefined }))

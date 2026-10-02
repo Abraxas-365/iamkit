@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import { api, type ListResult } from '@/lib/api'
+import { t } from '@/lib/i18n'
 
 interface Option { id: string; label: string; inactive?: boolean; hint?: string }
 
@@ -100,14 +101,14 @@ export function SearchSelect({ path, params: extra, mapItem, name, id, defaultVa
         ? <ul style={dropdownStyle} className="z-[100] max-h-48 overflow-auto rounded-lg border bg-popover py-1 text-sm shadow-lg">
             {options.map(o => <li key={o.id} className={cn('cursor-pointer px-3 py-1.5 hover:bg-accent', o.id === selected && 'bg-accent font-medium')} onMouseDown={e => { e.preventDefault(); setSelected(o.id); setOpen(false); onChange?.(o.id) }}>
               <span>{o.label}</span>
-              {o.inactive && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">Inactive</span>}
+              {o.inactive && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{t('Inactive')}</span>}
               {o.hint && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{o.hint}</span>}
               <span className="ml-2 font-mono text-xs text-muted-foreground">{o.id.slice(0, 8)}…</span>
             </li>)}
           </ul>
         : !loading
-          ? <div style={dropdownStyle} className="z-[100] rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-lg">No matches found</div>
-          : <div style={dropdownStyle} className="z-[100] rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-lg">Searching…</div>
+          ? <div style={dropdownStyle} className="z-[100] rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-lg">{t('No matches found')}</div>
+          : <div style={dropdownStyle} className="z-[100] rounded-lg border bg-popover px-3 py-2 text-xs text-muted-foreground shadow-lg">{t('Searching…')}</div>
       }
     </div>
   )
@@ -123,7 +124,7 @@ export function SearchSelect({ path, params: extra, mapItem, name, id, defaultVa
       autoComplete="off"
       required={required && !selected}
       disabled={disabled || (loading && !open)}
-      placeholder={loading && !open ? 'Loading…' : placeholder ?? 'Search…'}
+      placeholder={loading && !open ? t('Loading…') : placeholder ?? t('Search…')}
       className={cn('h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30', className)}
       value={open ? query : (selectedLabel ? `${selectedLabel}${selectedOption?.inactive ? ' (inactive)' : ''} (${selected.slice(0, 8)}…)` : selected)}
       onFocus={() => { setOpen(true); setQuery('') }}

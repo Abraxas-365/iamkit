@@ -120,9 +120,31 @@ limiting are not implemented; use appropriate ingress and operator-access contro
 
 ```sh
 npm run build     # TypeScript + production bundle
-npm run lint
+npm run lint      # oxlint (react/jsx-no-literals) + en.json up to date
 npm test          # API client and rendered UI regression tests
 ```
+
+## Languages
+
+Every user-facing string goes through `t()` / `rich()` from `src/lib/i18n.ts`
+(i18next, headless). The key is the English sentence itself, so a missing
+translation shows English. Translate whole sentences with named placeholders
+(`t('Created {{thing}}', { thing })`) — never splice a translated word into an
+English sentence — and pass a `count` value for plurals (`_one`/`_other`, plus
+whatever CLDR forms the language needs, e.g. Spanish `_many`).
+
+- `npm run i18n` regenerates `src/locales/en.json` from the sources and reports
+  what other catalogs lack; `npm run lint` fails when en.json is stale, a key is
+  not a literal, or a page renders a raw JSX string.
+- `src/locales.test.ts` fails when a catalog misses or keeps stale keys or
+  changes a sentence's placeholders.
+- The language is picked before the app loads: the operator's saved choice
+  (`PUT /management/v1/preferences {locale}` → `operators.locale`, mirrored in
+  localStorage), else the browser's languages, else English. Changing it in the
+  sidebar menu reloads the page. Dates and numbers use `Intl` in that language
+  (`formatDateTime`, `formatNumber`).
+- Adding a language: add `src/locales/<code>.json`, list it in `LANGUAGES`
+  (`src/lib/i18n.ts`) and `management.ConsoleLocales` (Go).
 
 Go HTTP tests cover Host-cookie attributes, console CSRF checks, bearer access,
 and logout failure propagation. Run `go test ./...` from the repository root.
@@ -137,7 +159,8 @@ src/
   components/library/   page, table, form, confirmation and error patterns
   components/ui/        shadcn/Base UI primitives
   hooks/                cancellable list loading
-  lib/                  API client, auth context, utilities
+  lib/                  API client, auth context, i18n, utilities
+  locales/              console catalogs (en.json generated, es.json, …)
   pages/                workspace and environment management screens
   index.css             FreeRouter design tokens (dark default + light)
 ```

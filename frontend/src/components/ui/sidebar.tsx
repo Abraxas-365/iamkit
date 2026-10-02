@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { t } from '@/lib/i18n'
 
 // FreeRouter's inset/off-canvas sidebar, retaining the primitives used by IAM.
 const SidebarContext = React.createContext<{
@@ -16,7 +17,7 @@ const SidebarContext = React.createContext<{
 
 function useSidebar() {
   const context = React.useContext(SidebarContext)
-  if (!context) throw new Error('useSidebar must be used within a SidebarProvider.')
+  if (!context) throw new Error(t('useSidebar must be used within a SidebarProvider.'))
   return context
 }
 
@@ -47,7 +48,7 @@ function Sidebar({ children }: { children: React.ReactNode }) {
   const { open, openMobile, setOpenMobile, isMobile } = useSidebar()
   if (isMobile) return <Sheet open={openMobile} onOpenChange={setOpenMobile}>
     <SheetContent data-slot="sidebar" data-mobile="true" className="w-72 bg-sidebar p-0 text-sidebar-foreground">
-      <SheetHeader className="sr-only"><SheetTitle>Navigation</SheetTitle><SheetDescription>IAMKit console navigation.</SheetDescription></SheetHeader>
+      <SheetHeader className="sr-only"><SheetTitle>{t('Navigation')}</SheetTitle><SheetDescription>{t('IAMKit console navigation.')}</SheetDescription></SheetHeader>
       <div className="flex h-full w-full flex-col">{children}</div>
     </SheetContent>
   </Sheet>
@@ -61,11 +62,11 @@ function Sidebar({ children }: { children: React.ReactNode }) {
 
 function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
   const { toggleSidebar } = useSidebar()
-  return <Button data-slot="sidebar-trigger" variant="ghost" size="icon-sm" className={className} onClick={event => { onClick?.(event); toggleSidebar() }} {...props}><PanelLeftIcon /><span className="sr-only">Toggle Sidebar</span></Button>
+  return <Button data-slot="sidebar-trigger" variant="ghost" size="icon-sm" className={className} onClick={event => { onClick?.(event); toggleSidebar() }} {...props}><PanelLeftIcon /><span className="sr-only">{t('Toggle Sidebar')}</span></Button>
 }
 function SidebarRail() {
   const { toggleSidebar } = useSidebar()
-  return <button data-slot="sidebar-rail" aria-label="Toggle Sidebar" tabIndex={-1} onClick={toggleSidebar} title="Toggle Sidebar" className="absolute inset-y-0 -right-4 z-20 hidden w-4 -translate-x-1/2 cursor-w-resize transition-all ease-linear after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex" />
+  return <button data-slot="sidebar-rail" aria-label={t('Toggle Sidebar')} tabIndex={-1} onClick={toggleSidebar} title={t('Toggle Sidebar')} className="absolute inset-y-0 -right-4 z-20 hidden w-4 -translate-x-1/2 cursor-w-resize transition-all ease-linear after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border sm:flex" />
 }
 function SidebarInset({ className, ...props }: React.ComponentProps<'main'>) {
   return <main data-slot="sidebar-inset" className={cn('relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow-sm md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2', className)} {...props} />

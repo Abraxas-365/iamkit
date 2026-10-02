@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { t } from '@/lib/i18n'
 
 interface TagInputProps {
   id?: string
@@ -37,7 +38,7 @@ export function TagInput({ id, name, defaultValue, disabled, placeholder, classN
     if (!incoming.length) return
     setTags(prev => {
       const set = new Set(prev)
-      for (const t of incoming) set.add(t)
+      for (const tag of incoming) set.add(tag)
       return [...set]
     })
     setInput('')
@@ -52,7 +53,7 @@ export function TagInput({ id, name, defaultValue, disabled, placeholder, classN
         <span key={tag} className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 font-mono text-xs">
           {tag}
           {!disabled && (
-            <button type="button" className="ml-0.5 rounded-sm text-muted-foreground hover:text-foreground" onClick={e => { e.stopPropagation(); removeTag(i) }} aria-label={`Remove ${tag}`}>
+            <button type="button" className="ml-0.5 rounded-sm text-muted-foreground hover:text-foreground" onClick={e => { e.stopPropagation(); removeTag(i) }} aria-label={t('Remove {{tag}}', { tag })}>
               <X className="size-3" />
             </button>
           )}
@@ -64,7 +65,7 @@ export function TagInput({ id, name, defaultValue, disabled, placeholder, classN
         type="text"
         value={input}
         disabled={disabled}
-        placeholder={tags.length ? 'Add more…' : placeholder ?? (prefix ? `Type action (auto-prefixed as ${prefix}:…)` : 'Type and press Enter…')}
+        placeholder={tags.length ? t('Add more…') : placeholder ?? (prefix ? t('Type action (auto-prefixed as {{prefix}}:…)', { prefix }) : t('Type and press Enter…'))}
         className="min-w-[120px] flex-1 bg-transparent outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
         onChange={e => setInput(e.target.value)}
         onKeyDown={e => {

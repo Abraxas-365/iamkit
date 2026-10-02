@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { describeAction } from './activity'
+import { describeAction, describeEvent } from './activity'
 
 const env = '/management/v1/environments/83c2749c-cc53-4163-8008-8754b79943a7'
 const id = 'ee316dcb-4fd2-49d3-a381-41ce02ef58a7'
@@ -32,4 +32,12 @@ it('describes named events and keeps unknown ones as-is', () => {
   expect(describeAction('federation.email')).toBe('User linked by verified email through federation')
   expect(describeAction('federation.other')).toBe('User linked through federation')
   expect(describeAction('something.new')).toBe('something.new')
+})
+
+it('describes semantic event types', () => {
+  expect(describeEvent('user.created')).toBe('User created')
+  expect(describeEvent('oauth_client.disabled')).toBe('OAuth client disabled')
+  expect(describeEvent('login.failed')).toBe('Sign-in failed')
+  expect(describeEvent('membership.removed')).toBe('Membership removed')
+  expect(describeEvent('org_unit.created')).toBe('Org unit created')
 })

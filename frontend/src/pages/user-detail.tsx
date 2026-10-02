@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Ban, Building2, KeyRound, LockOpen, Pencil, Plus, RotateCcw, ShieldCheck, Smartphone, Trash2, UserX } from 'lucide-react'
+import { Ban, Bot, Building2, Home, KeyRound, LockOpen, Pencil, Plus, RotateCcw, ShieldCheck, Smartphone, Trash2, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -10,10 +10,17 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RowActions } from '@/components/ui/menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, FormDialog, Properties, Status, Time } from '@/components/library/patterns'
+import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, FormDialog, Properties, Time } from '@/components/library/patterns'
 import { AssignRoleDialog } from '@/components/library/assign-role'
+import { UserState } from '@/components/library/user-state'
+import { Avatar } from '@/components/library/avatar'
+import { MetadataEditor, ProfileAttributes } from '@/components/library/metadata-editor'
+import { AccessTokens } from './machine-tokens'
+import { UserKeys } from './machine-keys'
+import { HistorySection } from './history'
+import { rich, t } from '@/lib/i18n'
 
-interface User { id: string; name: string; email: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null }
+interface User { id: string; kind?: string; name: string; email: string; username?: string; avatar_url?: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; profile?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null; state?: string; last_signed_in_at?: string | null; home_organization_id?: string | null }
 interface Org { id: string; name: string; active: boolean }
 interface Factor { id: string; kind: string; name?: string; passkey?: boolean; phone?: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
@@ -40,75 +47,95 @@ export default function UserDetailPage() {
   const load = useCallback(() => { setError(''); api.get<User>(path).then(setUser).catch(e => setError(message(e))) }, [path])
   useEffect(load, [load])
 
-  if (error) return <div className="space-y-4"><BackLink to={`${console}/users`}>All users</BackLink><ErrorState error={error} retry={load} /></div>
-  if (!user) return <div role="status" className="space-y-4"><Skeleton className="h-9 w-64" /><Skeleton className="h-40" /><span className="sr-only">Loading user…</span></div>
+  if (error) return <div className="space-y-4"><BackLink to={`${console}/users`}>{t('All users')}</BackLink><ErrorState error={error} retry={load} /></div>
+  if (!user) return <div role="status" className="space-y-4"><Skeleton className="h-9 w-64" /><Skeleton className="h-40" /><span className="sr-only">{t('Loading user…')}</span></div>
   const label = user.name || user.email
-  const metadata = user.metadata && Object.keys(user.metadata).length ? JSON.stringify(user.metadata, null, 2) : ''
+  const machine = user.kind === 'machine'
 
   return <div className="space-y-6">
     <div className="space-y-3">
-      <BackLink to={`${console}/users`}>All users</BackLink>
+      <BackLink to={`${console}/users`}>{t('All users')}</BackLink>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Avatar src={user.avatar_url} name={label} className="size-10 text-sm" />
         <h1 className="font-mono text-2xl font-bold tracking-tight">{label}</h1>
-        <Status active={user.active} label={user.active ? 'Active' : 'Suspended'} />
-        {user.locked_until && <Badge variant="secondary" className="bg-destructive/10 text-destructive">Locked</Badge>}
+        <UserState state={user.state} active={user.active} />
+        {machine && <Badge variant="outline" className="gap-1" title={t('Signs in only with personal access tokens')}><Bot className="size-3" /> {t('Machine user')}</Badge>}
       </div>
-      <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground"><span>{user.email}</span><CopyText value={user.id} short label="Copy user ID" /></div>
+      <div className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">{!machine && <span>{user.email}</span>}<CopyText value={user.id} short label={t('Copy user ID')} /></div>
     </div>
 
     {user.locked_until && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 p-4 text-sm">
-      <div><p className="font-medium">Locked after {user.failed_logins} wrong passwords</p><p className="text-muted-foreground">Password sign-in is refused until <Time value={user.locked_until} />. A password reset also unlocks the account.</p></div>
-      {canWrite && <Button variant="outline" onClick={() => setUnlock(true)}><LockOpen /> Unlock</Button>}
+      <div><p className="font-medium">{t('Locked after {{failed_logins}} wrong passwords', { failed_logins: user.failed_logins })}</p><p className="text-muted-foreground">{rich('Password sign-in is refused until {{time}}. A password reset also unlocks the account.', { time: <Time value={user.locked_until} /> })}</p></div>
+      {canWrite && <Button variant="outline" onClick={() => setUnlock(true)}><LockOpen /> {t('Unlock')}</Button>}
     </div>}
 
-    <DetailSection title="Profile" actions={canWrite && <Button variant="outline" size="sm" onClick={() => setEditing(true)}><Pencil /> Edit</Button>}>
-      <Properties items={[
-        ['Name', user.name],
-        ['Email', <span className="inline-flex flex-wrap items-center gap-2">{user.email}{user.email_verified ? <Badge variant="secondary" className="bg-success/10 text-success">Verified</Badge> : <Badge variant="secondary">Not verified</Badge>}</span>],
-        ['Email code sign-in', user.otp_enabled ? 'Allowed' : 'Off'],
-        ['Phone', user.phone ? <span className="inline-flex flex-wrap items-center gap-2">{user.phone}{user.phone_verified ? <Badge variant="secondary" className="bg-success/10 text-success">Verified</Badge> : <Badge variant="secondary">Not verified</Badge>}</span> : <span className="text-muted-foreground">None</span>],
-        ['Metadata', metadata ? <pre className="max-h-48 overflow-auto rounded-md bg-muted/50 p-2 font-mono text-xs">{metadata}</pre> : <span className="text-muted-foreground">None</span>],
+    <DetailSection title={t('Profile')} actions={canWrite && <Button variant="outline" size="sm" onClick={() => setEditing(true)}><Pencil /> {t('Edit')}</Button>}>
+      <Properties items={machine ? [
+        [t('Name'), user.name],
+        [t('Kind'), t('Machine user: no email, password or second factor')],
+        [t('Last token use'), user.last_signed_in_at ? <Time value={user.last_signed_in_at} /> : <span className="text-muted-foreground">{t('Never')}</span>],
+      ] : [
+        [t('Name'), user.name],
+        [t('Username'), user.username ? <span className="font-mono">{user.username}</span> : <span className="text-muted-foreground">{t('None')}</span>],
+        [t('Email'), <span className="inline-flex flex-wrap items-center gap-2">{user.email}{user.email_verified ? <Badge variant="secondary" className="bg-success/10 text-success">{t('Verified')}</Badge> : <Badge variant="secondary">{t('Not verified')}</Badge>}</span>],
+        [t('Email code sign-in'), user.otp_enabled ? t('Allowed') : t('Off')],
+        [t('Last sign-in'), user.last_signed_in_at ? <Time value={user.last_signed_in_at} /> : <span className="text-muted-foreground">{t('Never')}</span>],
+        [t('Phone'), user.phone ? <span className="inline-flex flex-wrap items-center gap-2">{user.phone}{user.phone_verified ? <Badge variant="secondary" className="bg-success/10 text-success">{t('Verified')}</Badge> : <Badge variant="secondary">{t('Not verified')}</Badge>}</span> : <span className="text-muted-foreground">{t('None')}</span>],
       ]} />
     </DetailSection>
 
-    <Organizations base={base} console={console} user={user} canWrite={canWrite} />
-    <SecondFactors path={path} user={user} canWrite={canWrite} />
-    <Sessions base={base} console={console} user={user} canWrite={canWrite} />
+    <ProfileAttributes path={path} profile={user.profile} canWrite={canWrite} reload={load} />
+    <MetadataEditor path={path} metadata={user.metadata} canWrite={canWrite} reload={load} />
 
-    {canWrite && <DetailSection danger title="Danger zone">
+    <Organizations base={base} console={console} user={user} canWrite={canWrite} reload={load} />
+    {machine
+      ? <>
+        <AccessTokens base={base} console={console} user={{ id: user.id, name: label }} canWrite={canWrite} />
+        <UserKeys base={base} user={{ id: user.id, name: label }} canWrite={canWrite} />
+      </>
+      : <SecondFactors path={path} user={user} canWrite={canWrite} />}
+    <Sessions base={base} console={console} user={user} canWrite={canWrite} />
+    <HistorySection path={path} refresh={user} />
+
+    {canWrite && <DetailSection danger title={t('Danger zone')}>
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm"><p className="font-medium">{user.active ? 'Suspend user' : 'Reactivate user'}</p><p className="text-muted-foreground">{user.active ? 'Blocks sign-in everywhere and stops their sessions from refreshing. Nothing is deleted.' : 'Lets the user sign in again with their existing access.'}</p></div>
-          <Button variant="outline" onClick={() => setSuspend(true)}>{user.active ? <><UserX /> Suspend</> : <><RotateCcw /> Reactivate</>}</Button>
+          <div className="text-sm"><p className="font-medium">{user.active ? t('Suspend user') : t('Reactivate user')}</p><p className="text-muted-foreground">{user.active ? t('Blocks sign-in everywhere and stops their sessions from refreshing. Nothing is deleted.') : t('Lets the user sign in again with their existing access.')}</p></div>
+          <Button variant="outline" onClick={() => setSuspend(true)}>{user.active ? <><UserX /> {t('Suspend')}</> : <><RotateCcw /> {t('Reactivate')}</>}</Button>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-          <div className="text-sm"><p className="font-medium">Delete permanently</p><p className="text-muted-foreground">Erases the user with their memberships, roles, grants, sessions and linked identities. Use for erasure requests.</p></div>
-          <Button variant="destructive" onClick={() => setPurge(true)}><Trash2 /> Delete permanently</Button>
+          <div className="text-sm"><p className="font-medium">{t('Delete permanently')}</p><p className="text-muted-foreground">{t('Erases the user with their memberships, roles, grants, sessions and linked identities. Use for erasure requests.')}</p></div>
+          <Button variant="destructive" onClick={() => setPurge(true)}><Trash2 /> {t('Delete permanently')}</Button>
         </div>
       </div>
     </DetailSection>}
 
-    {editing && <FormDialog title="Edit user" description="Change the profile and sign-in options." fields={[
-      { name: 'name', label: 'Name', value: user.name },
-      { name: 'otp_enabled', label: 'Allow sign-in with an email code', type: 'checkbox', value: !!user.otp_enabled },
-      { name: 'phone', label: 'Phone', optional: true, value: user.phone ?? '', hint: 'International format, e.g. +14155550100. Changing it clears verification; an enrolled SMS factor keeps its number.' },
-      { name: 'metadata', label: 'Metadata (JSON)', optional: true, value: user.metadata ? JSON.stringify(user.metadata) : '', hint: 'Arbitrary JSON object, e.g. {"team":"billing"}' },
+    {editing && <FormDialog title={t('Edit user')} description={machine ? t('Change the machine user\'s name and picture.') : t('Change the profile and sign-in options.')} fields={machine ? [
+      { name: 'name', label: t('Name'), value: user.name },
+      { name: 'avatar_url', label: t('Avatar URL'), optional: true, value: user.avatar_url ?? '', hint: t('An https link to a picture.') },
+    ] : [
+      { name: 'name', label: t('Name'), value: user.name },
+      { name: 'username', label: t('Username'), optional: true, value: user.username ?? '', hint: t('Signs in like the email. Lowercase letters, digits, dots, dashes or underscores. Leave blank to remove it.') },
+      { name: 'otp_enabled', label: t('Allow sign-in with an email code'), type: 'checkbox', value: !!user.otp_enabled },
+      { name: 'phone', label: t('Phone'), optional: true, value: user.phone ?? '', hint: t('International format, e.g. +14155550100. Changing it clears verification; an enrolled SMS factor keeps its number.') },
+      { name: 'phone_verified', label: t('Phone number verified'), type: 'checkbox', value: !!user.phone_verified, hint: t('Mark the number as confirmed without texting a code (recorded in the audit log). A new number starts unverified.') },
+      { name: 'avatar_url', label: t('Avatar URL'), optional: true, value: user.avatar_url ?? '', hint: t('An https link to their picture. Users can change it themselves, and a social sign-in fills it when empty.') },
     ]} onClose={() => setEditing(false)} submit={async values => {
-      const body: Record<string, unknown> = { name: values.name, otp_enabled: values.otp_enabled, phone: String(values.phone ?? '') }
-      if (values.metadata) {
-        try { body.metadata = JSON.parse(String(values.metadata)) } catch { throw new Error('Metadata must be valid JSON') }
-      } else body.metadata = {}
-      await api.patch(path, body); load()
+      if (machine) { await api.patch(path, { name: values.name, avatar_url: String(values.avatar_url ?? '').trim() }); load(); return }
+      const phone = String(values.phone ?? '').trim()
+      const phoneChanged = phone !== (user.phone ?? '')
+      const verified = !!values.phone_verified && phone !== ''
+      await api.patch(path, { name: values.name, otp_enabled: values.otp_enabled, phone, ...(verified !== (!phoneChanged && !!user.phone_verified) ? { phone_verified: verified } : {}), avatar_url: String(values.avatar_url ?? '').trim(), username: String(values.username ?? '').trim() }); load()
     }} />}
     {suspend && (user.active
-      ? <ConfirmDialog title={`Suspend ${label}?`} description="They can no longer sign in and their sessions stop refreshing. You can reactivate them later." confirmLabel="Suspend" onClose={() => setSuspend(false)} confirm={async () => { await api.delete(path); toast.success('User suspended'); load() }} />
-      : <ConfirmDialog title={`Reactivate ${label}?`} description="They can sign in again with their existing memberships and roles." confirmLabel="Reactivate" onClose={() => setSuspend(false)} confirm={async () => { await api.patch(path, { active: true }); toast.success('User reactivated'); load() }} />)}
-    {unlock && <ConfirmDialog title={`Unlock ${label}?`} description="Clears the wrong-password count so they can sign in with their password again." confirmLabel="Unlock" onClose={() => setUnlock(false)} confirm={async () => { await api.post(`${path}/unlock`); toast.success('User unlocked'); load() }} />}
-    {purge && <ConfirmDialog title="Permanently delete user?" description={`This erases ${label} and every session, membership, grant, role assignment, and linked identity for them in this environment. This cannot be undone.`} confirmLabel="Delete permanently" confirmationText={label} onClose={() => setPurge(false)} confirm={async () => { await api.delete(`${path}/permanent`); toast.success('User deleted'); navigate(`${console}/users`) }} />}
+      ? <ConfirmDialog title={t('Suspend {{label}}?', { label })} description={t('They can no longer sign in and their sessions stop refreshing. You can reactivate them later.')} confirmLabel={t('Suspend')} onClose={() => setSuspend(false)} confirm={async () => { await api.post(`${path}/deactivate`); toast.success(t('User suspended')); load() }} />
+      : <ConfirmDialog title={t('Reactivate {{label}}?', { label })} description={t('They can sign in again with their existing memberships and roles.')} confirmLabel={t('Reactivate')} onClose={() => setSuspend(false)} confirm={async () => { await api.post(`${path}/reactivate`); toast.success(t('User reactivated')); load() }} />)}
+    {unlock && <ConfirmDialog title={t('Unlock {{label}}?', { label })} description={t('Clears the wrong-password count so they can sign in with their password again.')} confirmLabel={t('Unlock')} onClose={() => setUnlock(false)} confirm={async () => { await api.post(`${path}/unlock`); toast.success(t('User unlocked')); load() }} />}
+    {purge && <ConfirmDialog title={t('Permanently delete user?')} description={t('This erases {{label}} and every session, membership, grant, role assignment, and linked identity for them in this environment. This cannot be undone.', { label })} confirmLabel={t('Delete permanently')} confirmationText={label} onClose={() => setPurge(false)} confirm={async () => { await api.delete(`${path}/permanent`); toast.success(t('User deleted')); navigate(`${console}/users`) }} />}
   </div>
 }
 
-function Organizations({ base, console, user, canWrite }: { base: string; console: string; user: User; canWrite: boolean }) {
+function Organizations({ base, console, user, canWrite, reload }: { base: string; console: string; user: User; canWrite: boolean; reload: () => void }) {
   const params = useMemo(() => ({ user_id: user.id }), [user.id])
   const orgs = usePaginatedList<Org>(`${base}/organizations`, { extraParams: params, limit: 100 })
   const roles = useEffectiveRoles(base, user.id)
@@ -117,29 +144,33 @@ function Organizations({ base, console, user, canWrite }: { base: string; consol
   const [assigning, setAssigning] = useState<Org | null>(null)
   const [unassigning, setUnassigning] = useState<{ role: EffectiveRole; org: Org } | null>(null)
   const byOrg = (org: string) => roles.data.filter(r => r.organization_id === org)
-  const add = canWrite && <Button variant="outline" size="sm" onClick={() => setAdding(true)}><Plus /> Add to organization</Button>
-  return <DetailSection title="Organizations & roles" description="Where this user can sign in, and the roles they hold there: directly, or through a group. Grants are listed on each organization." actions={orgs.data.length > 0 && add}>
-    {roles.error && <ErrorState error={`Roles could not be loaded: ${roles.error}`} retry={roles.reload} />}
+  const add = canWrite && <Button variant="outline" size="sm" onClick={() => setAdding(true)}><Plus /> {t('Add to organization')}</Button>
+  const setHome = async (org: string) => { await api.patch(`${base}/users/${user.id}`, { home_organization_id: org }); toast.success(org ? t('Home organization set') : t('Home organization cleared')); reload() }
+  return <DetailSection title={t('Organizations & roles')} description={t('Where this user can sign in, and the roles they hold there: directly, or through a group. The home organization owns the record: its administrators may edit the user.')} actions={orgs.data.length > 0 && add}>
+    {roles.error && <ErrorState error={t('Roles could not be loaded: {{error}}', { error: roles.error })} retry={roles.reload} />}
     <DataTable
-      columns={['Organization', 'Roles', ...(canWrite ? ['Actions'] : [])]}
+      columns={[t('Organization'), t('Roles'), ...(canWrite ? [t('Actions')] : [])]}
       loading={orgs.loading} error={orgs.error} retry={orgs.reload}
-      empty={<EmptyState icon={<Building2 />} title="Not a member of any organization" description="Users need a membership to sign in to an organization." action={add} />}
+      empty={<EmptyState icon={<Building2 />} title={t('Not a member of any organization')} description={t('Users need a membership to sign in to an organization.')} action={add} />}
       rows={orgs.data.map(o => [
-        <EntityRef name={o.name} id={o.id} to={`${console}/organizations/${o.id}/members`} secondary={!o.active ? 'Organization inactive' : undefined} />,
-        roles.loading ? <span className="text-sm text-muted-foreground">Loading…</span>
-          : roles.error ? <span className="text-sm text-muted-foreground">Unavailable</span>
+        <span className="flex flex-wrap items-center gap-2"><EntityRef name={o.name} id={o.id} to={`${console}/organizations/${o.id}/members`} secondary={!o.active ? t('Organization inactive') : undefined} />{user.home_organization_id === o.id && <Badge variant="secondary" title={t('Its administrators may edit this user')}>{t('Home')}</Badge>}</span>,
+        roles.loading ? <span className="text-sm text-muted-foreground">{t('Loading…')}</span>
+          : roles.error ? <span className="text-sm text-muted-foreground">{t('Unavailable')}</span>
             : <OrgRoles console={console} org={o} roles={byOrg(o.id)} onRemove={canWrite ? role => setUnassigning({ role, org: o }) : undefined} />,
-        ...(canWrite ? [<RowActions label={`Actions for ${o.name}`} actions={[
-          { label: 'Assign role', icon: <ShieldCheck />, onSelect: () => setAssigning(o) },
-          { label: 'Remove from organization', icon: <Ban />, destructive: true, onSelect: () => setRemoving(o) },
+        ...(canWrite ? [<RowActions label={t('Actions for {{name}}', { name: o.name })} actions={[
+          { label: t('Assign role'), icon: <ShieldCheck />, onSelect: () => setAssigning(o) },
+          user.home_organization_id === o.id
+            ? { label: t('Clear home organization'), icon: <Home />, onSelect: () => { setHome('').catch(e => toast.error(message(e))) } }
+            : { label: t('Make home organization'), icon: <Home />, onSelect: () => { setHome(o.id).catch(e => toast.error(message(e))) } },
+          { label: t('Remove from organization'), icon: <Ban />, destructive: true, onSelect: () => setRemoving(o) },
         ]} />] : []),
       ])} />
-    {adding && <FormDialog title={`Add ${user.name || user.email} to an organization`} description="The user can sign in to it right away. Assign roles afterwards." submitLabel="Add" success="Added to organization" fields={[
-      { name: 'organization_id', label: 'Organization', type: 'select', selectPath: `${base}/organizations`, selectMap: named },
+    {adding && <FormDialog title={t('Add {{value}} to an organization', { value: user.name || user.email })} description={t('The user can sign in to it right away. Assign roles afterwards.')} submitLabel={t('Add')} success={t('Added to organization')} fields={[
+      { name: 'organization_id', label: t('Organization'), type: 'select', selectPath: `${base}/organizations`, selectMap: named },
     ]} onClose={() => setAdding(false)} submit={async values => { await api.post(`${base}/memberships`, { organization_id: values.organization_id, user_id: user.id }); orgs.reload() }} />}
     {assigning && <AssignRoleDialog base={base} organization={assigning} user={{ id: user.id, name: user.name || user.email }} onClose={() => setAssigning(null)} onAssigned={roles.reload} />}
-    {unassigning && <ConfirmDialog title={`Remove role ${unassigning.role.role_name}?`} description={`${user.name || user.email} loses this role in ${unassigning.org.name}. Roles from groups are not affected.`} confirmLabel="Remove role" onClose={() => setUnassigning(null)} confirm={async () => { await api.delete(`${base}/role-assignments/${unassigning.role.role_id}/${unassigning.org.id}/${user.id}`); toast.success('Role removed'); roles.reload() }} />}
-    {removing && <ConfirmDialog title={`Remove from ${removing.name}?`} description={`${user.name || user.email} can no longer sign in to ${removing.name}. Their account is kept.`} confirmLabel="Remove" onClose={() => setRemoving(null)} confirm={async () => { await api.delete(`${base}/organizations/${removing.id}/members/${user.id}`); toast.success('Removed from organization'); orgs.reload(); roles.reload() }} />}
+    {unassigning && <ConfirmDialog title={t('Remove role {{role_name}}?', { role_name: unassigning.role.role_name })} description={t('{{value}} loses this role in {{name}}. Roles from groups are not affected.', { value: user.name || user.email, name: unassigning.org.name })} confirmLabel={t('Remove role')} onClose={() => setUnassigning(null)} confirm={async () => { await api.delete(`${base}/role-assignments/${unassigning.role.role_id}/${unassigning.org.id}/${user.id}`); toast.success(t('Role removed')); roles.reload() }} />}
+    {removing && <ConfirmDialog title={t('Remove from {{name}}?', { name: removing.name })} description={t('{{value}} can no longer sign in to {{name}}. Their account is kept.', { value: user.name || user.email, name: removing.name })} confirmLabel={t('Remove')} onClose={() => setRemoving(null)} confirm={async () => { await api.delete(`${base}/organizations/${removing.id}/members/${user.id}`); toast.success(t('Removed from organization')); orgs.reload(); roles.reload() }} />}
   </DetailSection>
 }
 
@@ -164,21 +195,21 @@ function useEffectiveRoles(base: string, user: string) {
 /** OrgRoles lists a user's roles in one organization: direct ones (removable
  * here) and those inherited from groups (managed on the group). */
 function OrgRoles({ console, org, roles, onRemove }: { console: string; org: Org; roles: EffectiveRole[]; onRemove?: (role: EffectiveRole) => void }) {
-  if (!roles.length) return <span className="text-sm text-muted-foreground">No roles</span>
+  if (!roles.length) return <span className="text-sm text-muted-foreground">{t('No roles')}</span>
   return <span className="flex flex-wrap gap-1">
-    {roles.filter(r => r.source === 'direct').map(r => <Badge key={r.role_id} variant="secondary" title={r.resource_name} className="gap-1">{r.role_name}{onRemove && <button type="button" className="-mr-1 rounded-sm px-0.5 text-muted-foreground hover:text-destructive" aria-label={`Remove role ${r.role_name} in ${org.name}`} onClick={() => onRemove(r)}>×</button>}</Badge>)}
-    {roles.filter(r => r.source === 'group').map(r => <Link key={`${r.group_id}:${r.role_id}`} to={`${console}/organizations/${org.id}/groups/${r.group_id}`} title={`${r.resource_name}: inherited from the group ${r.group_name}; manage it on the group`}>
-      <Badge variant="outline" className="gap-1 hover:border-primary">{r.role_name}<span className="text-muted-foreground">via {r.group_name}</span></Badge>
+    {roles.filter(r => r.source === 'direct').map(r => <Badge key={r.role_id} variant="secondary" title={r.resource_name} className="gap-1">{r.role_name}{onRemove && <button type="button" className="-mr-1 rounded-sm px-0.5 text-muted-foreground hover:text-destructive" aria-label={t('Remove role {{role_name}} in {{name}}', { role_name: r.role_name, name: org.name })} onClick={() => onRemove(r)}>×</button>}</Badge>)}
+    {roles.filter(r => r.source === 'group').map(r => <Link key={`${r.group_id}:${r.role_id}`} to={`${console}/organizations/${org.id}/groups/${r.group_id}`} title={t('{{resource_name}}: inherited from the group {{group_name}}; manage it on the group', { resource_name: r.resource_name, group_name: r.group_name })}>
+      <Badge variant="outline" className="gap-1 hover:border-primary">{r.role_name}<span className="text-muted-foreground">{t('via {{group}}', { group: r.group_name })}</span></Badge>
     </Link>)}
   </span>
 }
 
 function factorLabel(f: Factor) {
   switch (f.kind) {
-    case 'totp': return 'Authenticator app (TOTP)'
-    case 'email': return 'Email code'
-    case 'sms': return `SMS code${f.phone ? ` · ${f.phone}` : ''}`
-    case 'webauthn': return `${f.passkey ? 'Passkey' : 'Security key'}${f.name ? ` · ${f.name}` : ''}`
+    case 'totp': return t('Authenticator app (TOTP)')
+    case 'email': return t('Email code')
+    case 'sms': return `${t('SMS code')}${f.phone ? ` · ${f.phone}` : ''}`
+    case 'webauthn': return `${f.passkey ? t('Passkey') : t('Security key')}${f.name ? ` · ${f.name}` : ''}`
     default: return f.kind
   }
 }
@@ -190,17 +221,17 @@ function SecondFactors({ path, user, canWrite }: { path: string; user: User; can
   const load = useCallback(() => { setError(''); api.get<Factors>(`${path}/factors`).then(setData, e => setError(message(e))) }, [path])
   useEffect(load, [load])
   const any = !!data && (data.factors.length > 0 || data.recovery_codes_remaining > 0)
-  return <DetailSection title="Second factors" description="Authenticators used for multi-factor sign-in. Secrets are never shown." actions={canWrite && any && <Button variant="outline" size="sm" onClick={() => setReset(true)}>Reset factors</Button>}>
+  return <DetailSection title={t('Second factors')} description={t('Authenticators used for multi-factor sign-in. Secrets are never shown.')} actions={canWrite && any && <Button variant="outline" size="sm" onClick={() => setReset(true)}>{t('Reset factors')}</Button>}>
     {error ? <ErrorState error={error} retry={load} /> : !data ? <Skeleton className="h-12" /> : <div className="space-y-3 text-sm">
-      {data.factors.length === 0 ? <p className="text-muted-foreground">No second factor enrolled.</p> : <ul className="space-y-2">{data.factors.map(f => <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border p-3">
+      {data.factors.length === 0 ? <p className="text-muted-foreground">{t('No second factor enrolled.')}</p> : <ul className="space-y-2">{data.factors.map(f => <li key={f.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border p-3">
         <Smartphone className="size-4 text-muted-foreground" />
         <span className="font-medium">{factorLabel(f)}</span>
-        {!f.confirmed_at && <Badge variant="secondary">Pending confirmation</Badge>}
-        <span className="text-xs text-muted-foreground">Added <Time value={f.created_at} /> · Last used <Time value={f.last_used_at} /></span>
+        {!f.confirmed_at && <Badge variant="secondary">{t('Pending confirmation')}</Badge>}
+        <span className="text-xs text-muted-foreground">{rich('Added {{time}} · Last used', { time: <Time value={f.created_at} /> })} <Time value={f.last_used_at} /></span>
       </li>)}</ul>}
-      <p>Recovery codes remaining: <strong>{data.recovery_codes_remaining}</strong></p>
+      <p>{rich('Recovery codes remaining: {{strong}}', { strong: <strong>{data.recovery_codes_remaining}</strong> })}</p>
     </div>}
-    {reset && <ConfirmDialog title="Reset second factors?" description={`This removes every authenticator and recovery code of ${user.name || user.email} (for a lost device). If their organization requires MFA they will enroll again at the next sign-in.`} confirmLabel="Reset" onClose={() => setReset(false)} confirm={async () => { await api.delete(`${path}/factors`); toast.success('Second factors reset'); load() }} />}
+    {reset && <ConfirmDialog title={t('Reset second factors?')} description={t('This removes every authenticator and recovery code of {{value}} (for a lost device). If their organization requires MFA they will enroll again at the next sign-in.', { value: user.name || user.email })} confirmLabel={t('Reset')} onClose={() => setReset(false)} confirm={async () => { await api.delete(`${path}/factors`); toast.success(t('Second factors reset')); load() }} />}
   </DetailSection>
 }
 
@@ -208,12 +239,12 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
   const params = useMemo(() => ({ user_id: user.id }), [user.id])
   const list = usePaginatedList<Session>(`${base}/sessions`, { extraParams: params, limit: 20 })
   const [revoke, setRevoke] = useState<Session | null>(null)
-  const state = (s: Session) => s.revoked_at ? ['Revoked', 'bg-destructive/10 text-destructive'] : Date.parse(s.expires_at) <= Date.now() ? ['Expired', 'bg-muted text-muted-foreground'] : ['Active', 'bg-success/10 text-success']
-  return <DetailSection title="Recent sessions" description="Sign-ins to your applications, newest first." actions={<Link to={`${console}/sessions`} className="text-sm text-primary hover:underline">All sessions</Link>}>
+  const state = (s: Session) => s.revoked_at ? [t('Revoked'), 'bg-destructive/10 text-destructive'] : Date.parse(s.expires_at) <= Date.now() ? [t('Expired'), 'bg-muted text-muted-foreground'] : [t('Active'), 'bg-success/10 text-success']
+  return <DetailSection title={t('Recent sessions')} description={t('Sign-ins to your applications, newest first.')} actions={<Link to={`${console}/sessions`} className="text-sm text-primary hover:underline">{t('All sessions')}</Link>}>
     <DataTable
-      columns={['Application', { header: 'Organization', hideBelow: 'md' }, { header: 'Expires', nowrap: true }, 'Status', ...(canWrite ? ['Actions'] : [])]}
+      columns={[t('Application'), { header: t('Organization'), hideBelow: 'md' }, { header: t('Expires'), nowrap: true }, t('Status'), ...(canWrite ? [t('Actions')] : [])]}
       loading={list.loading} error={list.error} retry={list.reload}
-      empty={<EmptyState icon={<KeyRound />} title="No sessions" description="Sessions appear when this user signs in to an application." />}
+      empty={<EmptyState icon={<KeyRound />} title={t('No sessions')} description={t('Sessions appear when this user signs in to an application.')} />}
       rows={list.data.map(s => {
         const [label, tone] = state(s)
         return [
@@ -221,9 +252,9 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
           s.organization_name || '—',
           <Time value={s.expires_at} />,
           <Badge variant="secondary" className={tone}>{label}</Badge>,
-          ...(canWrite ? [!s.revoked_at && <RowActions label={`Actions for session in ${s.application_name}`} actions={[{ label: 'Revoke session', icon: <Ban />, destructive: true, onSelect: () => setRevoke(s) }]} />] : []),
+          ...(canWrite ? [!s.revoked_at && <RowActions label={t('Actions for session in {{application_name}}', { application_name: s.application_name })} actions={[{ label: t('Revoke session'), icon: <Ban />, destructive: true, onSelect: () => setRevoke(s) }]} />] : []),
         ]
       })} />
-    {revoke && <ConfirmDialog title="Revoke this session?" description={`${user.email} is signed out of ${revoke.application_name || 'the application'} and must sign in again.`} confirmLabel="Revoke session" onClose={() => setRevoke(null)} confirm={async () => { await api.delete(`${base}/sessions/${revoke.id}`); toast.success('Session revoked'); list.reload() }} />}
+    {revoke && <ConfirmDialog title={t('Revoke this session?')} description={t('{{user}} is signed out of {{application}} and must sign in again.', { user: user.email, application: revoke.application_name || t('the application') })} confirmLabel={t('Revoke session')} onClose={() => setRevoke(null)} confirm={async () => { await api.delete(`${base}/sessions/${revoke.id}`); toast.success(t('Session revoked')); list.reload() }} />}
   </DetailSection>
 }

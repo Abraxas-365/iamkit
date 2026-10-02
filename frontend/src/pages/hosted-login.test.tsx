@@ -10,6 +10,7 @@ const fetchMock = vi.fn()
 let role = 'owner'
 let savedLocale = ''
 let localesFail = false
+let portalOn = false
 const client = { id: 'c1', application_id: 'a1', application_name: 'Web', resource_id: 'r1', resource_name: 'Billing', redirect_uris: ['https://app.example/callback'], public: true, hosted_login: false, active: true }
 const env = '/environments/env1'
 
@@ -17,11 +18,17 @@ beforeEach(() => {
   role = 'owner'
   savedLocale = ''
   localesFail = false
+  portalOn = false
   vi.stubGlobal('fetch', fetchMock)
   vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
     const path = url.replace('/management/v1', '').split('?')[0]
+    if (path === `${env}/org-admin-portal`) {
+      if (init.method === 'PUT') portalOn = true
+      if (init.method === 'DELETE') { portalOn = false; return new Response(null, { status: 204 }) }
+      return Response.json(portalOn ? { enabled: true, client_id: 'pc1', application_id: 'pa1', url: 'https://iam.example/org-admin/env1' } : { enabled: false })
+    }
     if (init.method === 'PATCH') return new Response(null, { status: 204 })
     if (init.method === 'PUT') {
       const body = JSON.parse(String(init.body))
@@ -35,7 +42,7 @@ beforeEach(() => {
       path === '/projects' ? [{ id: 'project1', name: 'Billing' }] :
         path === '/projects/project1/environments' ? [{ id: 'env1', name: 'Production' }] :
           path === `${env}/login-settings` ? { environment_id: 'env1', display_name: 'Acme', logo_url: '', accent_color: '', locale: savedLocale } :
-            path === `${env}/login-settings/locales` ? { items: [{ code: 'en', name: 'English' }, { code: 'es', name: 'Español' }] } :
+            path === `${env}/login-settings/locales` ? { items: [{ code: 'en', name: 'English' }, { code: 'es', name: 'Español' }, { code: 'ar', name: 'العربية', beta: true }] } :
             path === `${env}/login-settings/clients` ? page([{ environment_id: 'env1', client_id: 'c2', display_name: 'Admin', logo_url: '', accent_color: '#ff6600', theme: { mode: 'dark' } }]) :
               path === `${env}/login-settings/clients/c1` ? null :
                 path === `${env}/oauth-clients` ? page([client, { ...client, id: 'c2', application_name: 'Admin', hosted_login: true }, { ...client, id: 'c3', application_name: 'Portal', hosted_login: true }]) : page([])
@@ -69,6 +76,27 @@ it('lists the default style and client styles', async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Reset' }))
   await waitFor(() => expect(calls('DELETE')).toHaveLength(1))
   expect(calls('DELETE')[0].url).toContain(`${env}/login-settings/clients/c2`)
+})
+
+it('turns the organization admin portal on and off', async () => {
+  const user = userEvent.setup()
+  open('hosted-login')
+  const card = (await screen.findByRole('heading', { name: 'Organization admin portal' })).closest('div.space-y-4') as HTMLElement
+  await user.click(await within(card).findByRole('button', { name: 'Turn on' }))
+  expect(await within(card).findByText('https://iam.example/org-admin/env1')).toBeTruthy()
+  expect(calls('PUT').some(c => c.url.endsWith(`${env}/org-admin-portal`))).toBe(true)
+  await user.click(within(card).getByRole('button', { name: 'Turn off' }))
+  await user.click(await screen.findByRole('button', { name: 'Turn off' }))
+  await waitFor(() => expect(calls('DELETE').some(c => c.url.endsWith(`${env}/org-admin-portal`))).toBe(true))
+  expect(await within(card).findByRole('button', { name: 'Turn on' })).toBeTruthy()
+})
+
+it('shows viewers the portal state without the switch', async () => {
+  role = 'viewer'
+  portalOn = true
+  open('hosted-login')
+  expect(await screen.findByText('https://iam.example/org-admin/env1')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Turn off' })).toBeNull()
 })
 
 it('edits the default style with a live preview', async () => {
@@ -112,8 +140,25 @@ it('starts a client style from the default and warns on low contrast', async () 
   await userEvent.click(screen.getByRole('button', { name: 'Save' }))
   await waitFor(() => expect(calls('PUT')).toHaveLength(1))
   expect(calls('PUT')[0].url).toContain(`${env}/login-settings/clients/c1`)
-  expect(calls('PUT')[0].body).not.toHaveProperty('locale')
-  expect(screen.queryByLabelText('Language')).toBeNull()
+  // A client style inherits the environment language unless it picks one.
+  expect(calls('PUT')[0].body).toMatchObject({ locale: '' })
+  expect(calls('PUT')[0].body).not.toHaveProperty('languages')
+  expect((screen.getByLabelText('Language') as HTMLSelectElement).value).toBe('')
+  expect(screen.queryByRole('group', { name: 'Enabled languages' })).toBeNull()
+})
+
+it('enables languages and offers clients only those', async () => {
+  open('hosted-login/default')
+  const group = await screen.findByRole('group', { name: 'Enabled languages' })
+  await userEvent.click(within(group).getByLabelText('Español'))
+  const select = screen.getByLabelText('Language')
+  expect(within(select).queryByRole('option', { name: 'English' })).toBeNull()
+  await userEvent.selectOptions(select, 'es')
+  // The default cannot be switched off while chosen.
+  expect(within(group).getByLabelText('Español').matches(':disabled')).toBe(true)
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(calls('PUT')).toHaveLength(1))
+  expect(calls('PUT')[0].body).toMatchObject({ locale: 'es', languages: ['es'] })
 })
 
 it('previews only the chosen sign-in methods', async () => {
@@ -161,10 +206,32 @@ it('previews dark, another language and a background image of a light style', as
   expect(calls('PUT')[0].body.theme).toMatchObject({ mode: 'adaptive', background_image_url: 'https://cdn.example/bg.jpg', background_overlay: 0 })
 })
 
+it('picks fonts and sets legal links', async () => {
+  open('hosted-login/default')
+  await screen.findByLabelText('Display name')
+  await userEvent.click(screen.getByText('Fonts'))
+  await userEvent.selectOptions(screen.getByLabelText('Text font'), 'inter')
+  const heading = screen.getByLabelText('Heading font')
+  expect(within(heading).getByRole('option', { name: 'Same as text' })).toBeTruthy()
+  expect(screen.queryByLabelText('Heading font URL')).toBeNull()
+  await userEvent.selectOptions(heading, 'custom')
+  await userEvent.type(screen.getByLabelText('Heading font URL'), 'https://cdn.example/brand.woff2')
+  await userEvent.click(screen.getByText('Legal links'))
+  await userEvent.type(screen.getByLabelText('Terms of service URL'), 'https://acme.example/terms')
+  await userEvent.type(screen.getByLabelText('Support email'), 'help@acme.example')
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(calls('PUT')).toHaveLength(1))
+  const sent = calls('PUT')[0].body
+  expect(sent.theme).toMatchObject({ font: { family: 'inter' }, heading_font: { family: 'custom', url: 'https://cdn.example/brand.woff2' } })
+  expect(sent.legal).toEqual({ privacy_url: '', terms_url: 'https://acme.example/terms', help_url: '', support_email: 'help@acme.example' })
+})
+
 it('sets the language of the default style', async () => {
   open('hosted-login/default')
   const select = await screen.findByLabelText('Language')
   await waitFor(() => expect(within(select).getByRole('option', { name: 'Español' })).toBeTruthy())
+  // Machine-drafted languages are flagged until a native review.
+  expect(within(select).getByRole('option', { name: 'العربية (beta)' })).toBeTruthy()
   await userEvent.selectOptions(select, 'es')
   await userEvent.click(screen.getByRole('button', { name: 'Save' }))
   await waitFor(() => expect(calls('PUT')).toHaveLength(1))

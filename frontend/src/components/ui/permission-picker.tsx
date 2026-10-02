@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { t } from '@/lib/i18n'
 
 interface PermissionPickerProps {
   /** API path of the resource list, e.g. /environments/:id/resources */
@@ -59,20 +60,20 @@ export function PermissionPicker({ resourcesPath, resourceId, name, defaultValue
     <div className="space-y-2">
       <input type="hidden" name={name} value={[...selected].join(',')} />
       {!resourceId && (
-        <p className="text-xs text-muted-foreground">Select a resource first to see available permissions.</p>
+        <p className="text-xs text-muted-foreground">{t('Select a resource first to see available permissions.')}</p>
       )}
       {loading && (
-        <p className="text-xs text-muted-foreground">Loading permissions…</p>
+        <p className="text-xs text-muted-foreground">{t('Loading permissions…')}</p>
       )}
       {!loading && resourceId && catalog.length === 0 && (
-        <p className="text-xs text-muted-foreground">This resource has no permissions defined.</p>
+        <p className="text-xs text-muted-foreground">{t('This resource has no permissions defined.')}</p>
       )}
       {!loading && catalog.length > 0 && (
         <>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">{selected.size} of {catalog.length} selected</span>
-            <button type="button" className="text-xs text-primary hover:underline" onClick={selectAll} disabled={disabled}>All</button>
-            <button type="button" className="text-xs text-primary hover:underline" onClick={selectNone} disabled={disabled}>None</button>
+            <button type="button" className="text-xs text-primary hover:underline" onClick={selectAll} disabled={disabled}>{t('All')}</button>
+            <button type="button" className="text-xs text-primary hover:underline" onClick={selectNone} disabled={disabled}>{t('None')}</button>
           </div>
           <div className="grid gap-1.5 rounded-lg border border-input bg-transparent p-2.5">
             {catalog.map(perm => (

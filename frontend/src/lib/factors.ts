@@ -1,9 +1,10 @@
+import { t } from '@/lib/i18n'
 /** Second-factor kinds (identity.FactorKinds) and how the console names them. */
 export const FACTORS = [
-  { kind: 'totp', label: 'Authenticator app', hint: 'Time-based codes (TOTP) from an app such as Google Authenticator or 1Password.' },
-  { kind: 'webauthn', label: 'Security keys and passkeys', hint: 'WebAuthn: hardware keys, Touch ID, Windows Hello. Phishing-resistant.' },
-  { kind: 'sms', label: 'Code by text message (SMS)', hint: 'A code texted to a confirmed phone number. Needs an SMS provider under Notifications.' },
-  { kind: 'email', label: 'Code by email', hint: 'A code emailed to the account address. Not accepted after an email-code sign-in (same inbox).' },
+  { kind: 'totp', label: t('Authenticator app'), hint: t('Time-based codes (TOTP) from an app such as Google Authenticator or 1Password.') },
+  { kind: 'webauthn', label: t('Security keys and passkeys'), hint: t('WebAuthn: hardware keys, Touch ID, Windows Hello. Phishing-resistant.') },
+  { kind: 'sms', label: t('Code by text message (SMS)'), hint: t('A code texted to a confirmed phone number. Needs an SMS provider under Notifications.') },
+  { kind: 'email', label: t('Code by email'), hint: t('A code emailed to the account address. Not accepted after an email-code sign-in (same inbox).') },
 ] as const
 
 export type FactorKind = typeof FACTORS[number]['kind']

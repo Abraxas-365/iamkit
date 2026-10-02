@@ -2,6 +2,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { PaginatedState } from '@/hooks/use-paginated-list'
+import { t } from '@/lib/i18n'
 
 interface PaginationBarProps {
   /** The paginated state from usePaginatedList. */
@@ -20,22 +21,22 @@ export function PaginationBar({ state, placeholder, label, noun = 'records' }: P
   return (
     <div className="flex items-center justify-between gap-3">
       <Input
-        aria-label={label ?? `Search ${noun}`}
+        aria-label={label ?? t('Search {{noun}}', { noun })}
         className="max-w-sm"
-        placeholder={placeholder ?? `Search ${noun}…`}
+        placeholder={placeholder ?? t('Search {{noun}}…', { noun })}
         value={rawSearch}
         onChange={e => setSearch(e.target.value)}
       />
       <div className="flex items-center gap-2">
         <span className="whitespace-nowrap text-xs text-muted-foreground">
-          {total === 0 ? `0 ${noun}` : `${from}–${to} of ${total} ${noun}`}
+          {total === 0 ? `0 ${noun}` : t('{{from}}–{{to}} of {{total}} {{noun}}', { from, to, total, noun })}
         </span>
         {(hasPrev || hasNext) && (
           <>
-            <Button variant="outline" size="icon" className="size-7" disabled={!hasPrev} onClick={prevPage} aria-label="Previous page">
+            <Button variant="outline" size="icon" className="size-7" disabled={!hasPrev} onClick={prevPage} aria-label={t('Previous page')}>
               <ChevronLeft className="size-4" />
             </Button>
-            <Button variant="outline" size="icon" className="size-7" disabled={!hasNext} onClick={nextPage} aria-label="Next page">
+            <Button variant="outline" size="icon" className="size-7" disabled={!hasNext} onClick={nextPage} aria-label={t('Next page')}>
               <ChevronRight className="size-4" />
             </Button>
           </>

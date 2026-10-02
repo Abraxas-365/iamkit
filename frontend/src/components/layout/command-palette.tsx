@@ -4,12 +4,13 @@ import { Dialog as DialogPrimitive } from '@base-ui/react/dialog'
 import { Blocks, Building2, CornerDownLeft, FileText, Search, User } from 'lucide-react'
 import { requestList } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { t } from '@/lib/i18n'
 
 /** A destination the palette can open: a console page or a searched entity. */
 export interface PaletteItem { to: string; label: string; group: string; hint?: string }
 
 interface Named { id: string; name?: string; email?: string }
-const searched: [path: string, group: string, icon: typeof User][] = [['users', 'Users', User], ['organizations', 'Organizations', Building2], ['applications', 'Applications', Blocks]]
+const searched: [path: string, group: string, icon: typeof User][] = [['users', t('Users'), User], ['organizations', t('Organizations'), Building2], ['applications', t('Applications'), Blocks]]
 const icons: Record<string, typeof User> = Object.fromEntries(searched.map(([, group, icon]) => [group, icon]))
 
 /** CommandPalette (⌘K / Ctrl+K) jumps to any console page and, inside an
@@ -27,8 +28,8 @@ export function CommandPalette({ pages, envBase, environment }: { pages: Palette
   return <>
     <button type="button" onClick={() => setOpen(true)} aria-keyshortcuts={mac ? 'Meta+K' : 'Control+K'}
       className="inline-flex h-7 min-w-0 items-center gap-2 rounded-md border border-input bg-background px-2 text-xs text-muted-foreground transition-colors hover:text-foreground sm:w-56">
-      <Search className="size-3.5 shrink-0" /><span className="hidden truncate sm:inline">Search or jump to…</span><span className="sr-only sm:hidden">Search</span>
-      <kbd className="ml-auto hidden rounded border bg-muted px-1 font-mono text-[10px] sm:inline">{mac ? '⌘' : 'Ctrl'} K</kbd>
+      <Search className="size-3.5 shrink-0" /><span className="hidden truncate sm:inline">{t('Search or jump to…')}</span><span className="sr-only sm:hidden">{t('Search')}</span>
+      <kbd className="ml-auto hidden rounded border bg-muted px-1 font-mono text-[10px] sm:inline">{mac ? '⌘' : t('Ctrl')}{' K'}</kbd>
     </button>
     <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
       {open && <Palette pages={pages} envBase={envBase} environment={environment} close={() => setOpen(false)} />}
@@ -82,16 +83,16 @@ function Palette({ pages, envBase, environment, close }: { pages: PaletteItem[];
   })
   return <DialogPrimitive.Portal>
     <DialogPrimitive.Backdrop className="fixed inset-0 z-50 bg-black/40" />
-    <DialogPrimitive.Popup aria-label="Command palette" className="fixed top-[12vh] left-1/2 z-50 flex max-h-[70dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 flex-col overflow-hidden rounded-xl bg-popover text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/10 outline-none">
-      <DialogPrimitive.Title className="sr-only">Search or jump to</DialogPrimitive.Title>
+    <DialogPrimitive.Popup aria-label={t('Command palette')} className="fixed top-[12vh] left-1/2 z-50 flex max-h-[70dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 flex-col overflow-hidden rounded-xl bg-popover text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/10 outline-none">
+      <DialogPrimitive.Title className="sr-only">{t('Search or jump to')}</DialogPrimitive.Title>
       <div className="flex items-center gap-2 border-b px-3">
         <Search className="size-4 shrink-0 text-muted-foreground" />
         <input autoFocus value={text} onChange={e => setText(e.target.value)} onKeyDown={onKeyDown}
           role="combobox" aria-expanded aria-controls="palette-results" aria-activedescendant={results[active] ? `palette-${active}` : undefined} aria-autocomplete="list"
-          placeholder={environment ? 'Search users, organizations, applications, or pages…' : 'Jump to a page…'}
+          placeholder={environment ? t('Search users, organizations, applications, or pages…') : t('Jump to a page…')}
           className="h-11 w-full bg-transparent outline-none placeholder:text-muted-foreground" />
       </div>
-      <div ref={listRef} id="palette-results" role="listbox" aria-label="Results" className={cn('overflow-y-auto p-1.5', !results.length && 'hidden')}>
+      <div ref={listRef} id="palette-results" role="listbox" aria-label={t('Results')} className={cn('overflow-y-auto p-1.5', !results.length && 'hidden')}>
         {groups.map((g, gi) => <div key={`${gi}:${g.name}`} role="group" aria-labelledby={`palette-group-${gi}`}>
           <p id={`palette-group-${gi}`} className="px-2 pt-2 pb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{g.name}</p>
           {g.items.map(([item, i]) => {
@@ -107,9 +108,9 @@ function Palette({ pages, envBase, environment, close }: { pages: PaletteItem[];
           })}
         </div>)}
       </div>
-      {!results.length && !searching && <p className="px-3 py-6 text-center text-muted-foreground">{q.length >= 2 || !environment ? `Nothing matches “${text.trim()}”.` : 'Type at least two letters to search.'}</p>}
-      <p role="status" className={cn('px-3 text-xs text-muted-foreground', searching ? 'py-2' : 'sr-only')}>{searching ? 'Searching…' : `${results.length} result${results.length === 1 ? '' : 's'}`}</p>
-      <div className="flex gap-3 border-t px-3 py-2 text-[11px] text-muted-foreground"><span>↑↓ to move</span><span>↵ to open</span><span>esc to close</span></div>
+      {!results.length && !searching && <p className="px-3 py-6 text-center text-muted-foreground">{q.length >= 2 || !environment ? t('Nothing matches “{{search}}”.', { search: text.trim() }) : t('Type at least two letters to search.')}</p>}
+      <p role="status" className={cn('px-3 text-xs text-muted-foreground', searching ? 'py-2' : 'sr-only')}>{searching ? t('Searching…') : t('{{count}} results', { count: results.length })}</p>
+      <div className="flex gap-3 border-t px-3 py-2 text-[11px] text-muted-foreground"><span>{t('↑↓ to move')}</span><span>{t('↵ to open')}</span><span>{t('esc to close')}</span></div>
     </DialogPrimitive.Popup>
   </DialogPrimitive.Portal>
 }

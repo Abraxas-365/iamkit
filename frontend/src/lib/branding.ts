@@ -1,8 +1,16 @@
+import { t } from '@/lib/i18n'
 // Hosted login branding: the environment default and per-client styles.
 export type Mode = 'light' | 'dark' | 'adaptive'
 export type Scheme = 'light' | 'dark'
 export interface Palette { primary: string; background: string; card: string; text: string; header: string }
 export interface FooterLink { label: string; url: string }
+/** A typeface: 'system' (default; for headings, the text font), one IAMKit serves itself, or 'custom' with an https .woff2 url. */
+export interface Font { family: string; url?: string }
+export const fonts = [
+  ['system', t('System (default)')], ['inter', t('Inter')], ['roboto', t('Roboto')], ['open-sans', t('Open Sans')], ['lora', t('Lora (serif)')], ['custom', t('Custom (.woff2 URL)')],
+] as const
+/** Policy links shown on the sign-in and sign-up pages; a client style's empty links inherit the environment's. */
+export interface Legal { privacy_url: string; terms_url: string; help_url: string; support_email: string }
 export interface Theme {
   mode: Mode; radius: number; spacing: 'compact' | 'normal' | 'roomy'; align: 'center' | 'left' | 'right'
   light: Palette; dark: Palette
@@ -10,20 +18,24 @@ export interface Theme {
   header: { show: boolean }; footer: { text: string; links: FooterLink[] }
   /** HTTPS image behind the form, tinted by background_overlay % (0-90) of the background color. */
   background_image_url: string; background_overlay: number
+  font: Font; heading_font: Font
 }
 export interface Branding {
   environment_id?: string; client_id?: string
   display_name: string; logo_url: string; accent_color: string
   theme: Theme; updated_at?: string
-  /** Language of the environment's hosted pages and emails ('' = automatic); client styles have none. */
+  /** Default language of the hosted pages and emails ('' = automatic; on a client style, the environment's). */
   locale?: string
+  /** Languages the hosted pages may use (empty = every available one); environment default only. */
+  languages?: string[]
+  legal?: Legal
 }
 
 export const pages = [
-  ['identify', 'Sign in'], ['password', 'Password'], ['code', 'Email code'], ['reset', 'Reset password'],
-  ['organization', 'Choose organization'], ['mfa', 'Two-step verification'], ['enroll', 'Set up authenticator'],
-  ['recovery', 'Recovery codes'], ['invite', 'Invitation'], ['message', 'Message'],
-  ['signup', 'Create account'], ['signup-code', 'Confirm email'],
+  ['identify', t('Sign in')], ['password', t('Password')], ['code', t('Email code')], ['reset', t('Reset password')],
+  ['organization', t('Choose organization')], ['mfa', t('Two-step verification')], ['enroll', t('Set up authenticator')],
+  ['recovery', t('Recovery codes')], ['invite', t('Invitation')], ['message', t('Message')],
+  ['signup', t('Create account')], ['signup-code', t('Confirm email')],
 ] as const
 export type Page = typeof pages[number][0]
 
@@ -44,34 +56,45 @@ export const defaults: Record<Scheme, Palette> = {
   light: { primary: '#2563eb', background: '#f5f5f7', card: '#ffffff', text: '#1d1d1f', header: '' },
   dark: { primary: '', background: '#0f1115', card: '#1a1d23', text: '#f2f2f3', header: '' },
 }
+export const emptyLegal = (): Legal => ({ privacy_url: '', terms_url: '', help_url: '', support_email: '' })
 const emptyPalette = (): Palette => ({ primary: '', background: '', card: '', text: '', header: '' })
 export function emptyBranding(): Branding {
   return {
     display_name: '', logo_url: '', accent_color: '',
-    theme: { mode: 'light', radius: 12, spacing: 'normal', align: 'center', light: emptyPalette(), dark: emptyPalette(), logo_dark_url: '', favicon_url: '', logo_position: 'card', header: { show: false }, footer: { text: '', links: [] }, background_image_url: '', background_overlay: 0 },
+    theme: { mode: 'light', radius: 12, spacing: 'normal', align: 'center', light: emptyPalette(), dark: emptyPalette(), logo_dark_url: '', favicon_url: '', logo_position: 'card', header: { show: false }, footer: { text: '', links: [] }, background_image_url: '', background_overlay: 0, font: { family: 'system' }, heading_font: { family: 'system' } },
+    legal: emptyLegal(),
   }
 }
 
 // normalize fills what an older server or row may omit.
 export function normalize(b: Partial<Branding>): Branding {
   const base = emptyBranding()
-  const t: Partial<Theme> = b.theme ?? {}
+  const th: Partial<Theme> = b.theme ?? {}
   return {
     ...base, ...b,
     theme: {
-      ...base.theme, ...t,
-      light: { ...base.theme.light, ...t.light }, dark: { ...base.theme.dark, ...t.dark },
-      header: { ...base.theme.header, ...t.header },
-      footer: { text: t.footer?.text ?? '', links: t.footer?.links ?? [] },
+      ...base.theme, ...th,
+      light: { ...base.theme.light, ...th.light }, dark: { ...base.theme.dark, ...th.dark },
+      header: { ...base.theme.header, ...th.header },
+      footer: { text: th.footer?.text ?? '', links: th.footer?.links ?? [] },
+      font: { family: th.font?.family || 'system', ...(th.font?.url && { url: th.font.url }) },
+      heading_font: { family: th.heading_font?.family || 'system', ...(th.heading_font?.url && { url: th.heading_font.url }) },
     },
+    legal: { ...emptyLegal(), ...b.legal },
   }
 }
 
 // body is what the API stores: the style only (no ids or timestamps).
-// accent_color follows theme.light.primary on the server. The email
-// language belongs to the environment default only.
+// accent_color follows theme.light.primary on the server. The enabled
+// languages belong to the environment default only; an omitted language
+// keeps the stored one.
 export function body(b: Branding) {
-  return { display_name: b.display_name, logo_url: b.logo_url, accent_color: b.theme.light.primary, theme: b.theme, ...(b.locale !== undefined && !b.client_id && { locale: b.locale }) }
+  return {
+    display_name: b.display_name, logo_url: b.logo_url, accent_color: b.theme.light.primary, theme: b.theme,
+    ...(b.locale !== undefined && { locale: b.locale }),
+    ...(b.languages !== undefined && !b.client_id && { languages: b.languages }),
+    ...(b.legal !== undefined && { legal: b.legal }),
+  }
 }
 
 export function same(a: Branding, b: Branding) { return JSON.stringify(body(a)) === JSON.stringify(body(b)) }
@@ -109,8 +132,8 @@ export function readable(color: string) { return hex.test(color) && luminance(co
 export function warnings(b: Branding, scheme: Scheme): string[] {
   const p = resolved(b, scheme)
   const out: string[] = []
-  if (contrast(p.text, p.card) < 4.5) out.push(`Text on card contrast is ${contrast(p.text, p.card).toFixed(1)}:1 (needs 4.5:1).`)
-  if (contrast(p.primary, p.card) < 3) out.push(`Primary on card contrast is ${contrast(p.primary, p.card).toFixed(1)}:1 (links need 3:1).`)
-  if (contrast(readable(p.primary), p.primary) < 4.5) out.push('Button text is hard to read on the primary color.')
+  if (contrast(p.text, p.card) < 4.5) out.push(t('Text on card contrast is {{ratio}}:1 (needs 4.5:1).', { ratio: contrast(p.text, p.card).toFixed(1) }))
+  if (contrast(p.primary, p.card) < 3) out.push(t('Primary on card contrast is {{ratio}}:1 (links need 3:1).', { ratio: contrast(p.primary, p.card).toFixed(1) }))
+  if (contrast(readable(p.primary), p.primary) < 4.5) out.push(t('Button text is hard to read on the primary color.'))
   return out
 }

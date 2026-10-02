@@ -6,6 +6,7 @@ import { OverviewPage, ProjectsPage } from '@/pages/projects'
 import EntitiesPage from '@/pages/entities'
 import ActivityPage from '@/pages/activity'
 import LogoutDeliveriesPage from '@/pages/logout-deliveries'
+import WebhooksPage, { WebhookDetailPage } from '@/pages/webhooks'
 import { KeysPage, SettingsPage } from '@/pages/settings'
 import OperatorsPage from '@/pages/operators'
 import { ServiceAccountsPage, FederationPage, OAuthClientsPage, ProvisioningPage } from '@/pages/integrations'
@@ -21,13 +22,22 @@ import ApplicationDetailPage from '@/pages/application-detail'
 import FederationDetailPage from '@/pages/federation-detail'
 import NotificationsPage from '@/pages/notifications'
 import HostedLoginPage from '@/pages/hosted-login'
+import SignInTextsPage from '@/pages/sign-in-texts'
 import EnvironmentHomePage from '@/pages/environment-home'
 import OAuthClientDetailPage from '@/pages/oauth-client-detail'
 import BrandingEditorPage from '@/pages/branding-editor'
 import PasswordPolicyPage from '@/pages/password-policy'
+import UserSchemaPage from '@/pages/user-schema'
 import SignInPolicyPage from '@/pages/sign-in-policy'
 import SigningKeysPage from '@/pages/signing-keys'
+import FeaturesPage from '@/pages/features'
+import UsagePage from '@/pages/usage'
+import ActionsPage, { ActionTargetPage } from '@/pages/actions'
 import SAMLAppsPage from '@/pages/saml-apps'
+import ResourceDetailPage from '@/pages/resource-detail'
+import { OrganizationResourcesPage } from '@/pages/organization-resources'
+import { OrganizationBrandingPage } from '@/pages/organization-branding'
+import { t } from '@/lib/i18n'
 export default function App() {
   return <Routes>
     <Route path="/login" element={<LoginPage />} />
@@ -47,9 +57,13 @@ export default function App() {
           <Route path="domains" element={<DomainsPage />} />
           <Route path="invitations" element={<InvitationsPage />} />
           <Route path="connections" element={<OrganizationConnections />} />
+          <Route path="resources" element={<OrganizationResourcesPage />} />
+          <Route path="branding" element={<OrganizationBrandingPage />} />
         </Route>
         <Route path="users/:userId" element={<UserDetailPage />} />
+        <Route path="user-schema" element={<UserSchemaPage />} />
         <Route path="applications/:appId" element={<ApplicationDetailPage />} />
+        <Route path="resources/:resourceId" element={<ResourceDetailPage />} />
         <Route path="role-assignments" element={<RoleAssignmentsPage />} />
         <Route path="service-accounts" element={<ServiceAccountsPage />} />
         <Route path="federation" element={<FederationPage />} />
@@ -62,17 +76,24 @@ export default function App() {
         <Route path="password-policy" element={<PasswordPolicyPage />} />
         <Route path="sign-in-policy" element={<SignInPolicyPage />} />
         <Route path="signing-keys" element={<SigningKeysPage />} />
+        <Route path="features" element={<FeaturesPage />} />
+        <Route path="usage" element={<UsagePage />} />
         <Route path="saml-apps" element={<SAMLAppsPage />} />
         <Route path="hosted-login/default" element={<BrandingEditorPage key="default" />} />
+        <Route path="hosted-login/texts" element={<SignInTextsPage />} />
         <Route path="hosted-login/clients/:clientId" element={<BrandingEditorPage />} />
         <Route path="sessions" element={<ActivityPage />} />
         <Route path="audit-events" element={<ActivityPage audit />} />
         <Route path="logout-deliveries" element={<LogoutDeliveriesPage />} />
+        <Route path="webhooks" element={<WebhooksPage />} />
+        <Route path="webhooks/:webhook" element={<WebhookDetailPage />} />
+        <Route path="actions" element={<ActionsPage />} />
+        <Route path="actions/:target" element={<ActionTargetPage />} />
       </Route>
       <Route path="operators" element={<OperatorsPage />} />
       <Route path="keys" element={<KeysPage />} />
       <Route path="settings" element={<SettingsPage />} />
-      <Route path="*" element={<div className="space-y-4"><h1 className="text-xl font-semibold">Page not found</h1><Link className="text-primary underline" to="/">Back to overview</Link></div>} />
+      <Route path="*" element={<div className="space-y-4"><h1 className="text-xl font-semibold">{t('Page not found')}</h1><Link className="text-primary underline" to="/">{t('Back to overview')}</Link></div>} />
     </Route>
   </Routes>
 }

@@ -10,14 +10,15 @@ import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { ErrorState } from '@/components/library/patterns'
+import { t } from '@/lib/i18n'
 
 // Reasons the SSO callback sends back as /login?sso_error=… (mgmthttp/sso.go).
 const ssoErrors: Record<string, string> = {
-  expired: 'The sign-in expired or was started in another browser. Please try again.',
-  not_authorized: 'This account cannot sign in to the console. Ask a workspace owner to invite your work email.',
-  provider_unavailable: 'The identity provider could not be reached. Try again later.',
-  cancelled: 'Sign-in was cancelled at the identity provider.',
-  failed: 'Single sign-on failed. Please try again.',
+  expired: t('The sign-in expired or was started in another browser. Please try again.'),
+  not_authorized: t('This account cannot sign in to the console. Ask a workspace owner to invite your work email.'),
+  provider_unavailable: t('The identity provider could not be reached. Try again later.'),
+  cancelled: t('Sign-in was cancelled at the identity provider.'),
+  failed: t('Single sign-on failed. Please try again.'),
 }
 
 function GoogleIcon() {
@@ -29,7 +30,7 @@ function MicrosoftIcon() {
 function ProviderButton({ provider }: { provider: SSOProvider }) {
   const icon = provider.type === 'google' ? <GoogleIcon /> : provider.type === 'microsoft' ? <MicrosoftIcon /> : <KeyRound className="size-4" aria-hidden="true" />
   // A full-page navigation: the server redirects to the provider and sets a binding cookie.
-  return <a href={`/management/v1/sso/${encodeURIComponent(provider.id)}/start`} className={cn(buttonVariants({ variant: 'outline' }), 'w-full gap-2')}>{icon}Continue with {provider.name}</a>
+  return <a href={`/management/v1/sso/${encodeURIComponent(provider.id)}/start`} className={cn(buttonVariants({ variant: 'outline' }), 'w-full gap-2')}>{icon}{t('Continue with')} {provider.name}</a>
 }
 
 export default function LoginPage() {
@@ -41,39 +42,39 @@ export default function LoginPage() {
   // operator picks their own before the session starts.
   const [change, setChange] = useState<{ email: string; password: string } | null>(null)
   const pending = useRef(false)
-  if (auth.loading || !auth.options) return <p role="status" className="p-8">Loading session…</p>
+  if (auth.loading || !auth.options) return <p role="status" className="p-8">{t('Loading session…')}</p>
   if (auth.principal) return <Navigate to="/" replace />
   const { password, providers } = auth.options
   const ssoError = params.get('sso_error')
   const ssoMessage = ssoError ? ssoErrors[ssoError] ?? ssoErrors.failed : ''
   if (change) return <main className="flex min-h-dvh items-center justify-center bg-sidebar p-6"><Card className="w-full max-w-sm space-y-6 p-8">
     <Logo className="h-9 self-start" />
-    <div><h1 className="font-mono text-xl font-bold tracking-tight">Choose a new password</h1><p className="mt-2 text-sm text-muted-foreground">Your password was set for you. Choose your own to finish signing in as {change.email}.</p></div>
+    <div><h1 className="font-mono text-xl font-bold tracking-tight">{t('Choose a new password')}</h1><p className="mt-2 text-sm text-muted-foreground">{t('Your password was set for you. Choose your own to finish signing in as {{email}}.', { email: change.email })}</p></div>
     <form className="space-y-4" onSubmit={async event => {
       event.preventDefault(); if (pending.current) return
       const data = new FormData(event.currentTarget)
       const next = String(data.get('new_password'))
-      if (next !== data.get('confirm')) { setError('Passwords do not match.'); return }
+      if (next !== data.get('confirm')) { setError(t('Passwords do not match.')); return }
       const bytes = new TextEncoder().encode(next).length
-      if (bytes < 12 || bytes > 72) { setError('Password must be 12–72 characters long.'); return }
-      if (next === change.password) { setError('Choose a password different from the current one.'); return }
+      if (bytes < 12 || bytes > 72) { setError(t('Password must be 12–72 characters long.')); return }
+      if (next === change.password) { setError(t('Choose a password different from the current one.')); return }
       pending.current = true; setBusy(true); setError('')
       try { await auth.login(change.email, change.password, next) } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
     }}>
       <input type="text" name="email" autoComplete="username" value={change.email} readOnly hidden />
-      <div className="space-y-1.5"><label htmlFor="new-password">New password</label><Input id="new-password" name="new_password" type="password" required autoComplete="new-password" disabled={busy} /></div>
-      <div className="space-y-1.5"><label htmlFor="confirm-password">Confirm password</label><Input id="confirm-password" name="confirm" type="password" required autoComplete="new-password" disabled={busy} /></div>
-      <p className="text-xs text-muted-foreground">Use a unique password between 12 and 72 characters long.</p>
+      <div className="space-y-1.5"><label htmlFor="new-password">{t('New password')}</label><Input id="new-password" name="new_password" type="password" required autoComplete="new-password" disabled={busy} /></div>
+      <div className="space-y-1.5"><label htmlFor="confirm-password">{t('Confirm password')}</label><Input id="confirm-password" name="confirm" type="password" required autoComplete="new-password" disabled={busy} /></div>
+      <p className="text-xs text-muted-foreground">{t('Use a unique password between 12 and 72 characters long.')}</p>
       {error && <ErrorState error={error} />}
-      <div className="flex gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => { setChange(null); setError('') }}>Back</Button><Button className="flex-1" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Set password and sign in'}</Button></div>
+      <div className="flex gap-2"><Button type="button" variant="outline" disabled={busy} onClick={() => { setChange(null); setError('') }}>{t('Back')}</Button><Button className="flex-1" type="submit" disabled={busy}>{busy ? t('Saving…') : t('Set password and sign in')}</Button></div>
     </form>
   </Card></main>
   return <main className="flex min-h-dvh items-center justify-center bg-sidebar p-6"><Card className="w-full max-w-sm space-y-6 p-8">
     <Logo className="h-9 self-start" />
-    <div><h1 className="font-mono text-xl font-bold tracking-tight">Sign in to IAMKit</h1><p className="mt-2 text-sm text-muted-foreground">Manage your identities, access, and applications.</p></div>
+    <div><h1 className="font-mono text-xl font-bold tracking-tight">{t('Sign in to IAMKit')}</h1><p className="mt-2 text-sm text-muted-foreground">{t('Manage your identities, access, and applications.')}</p></div>
     {ssoMessage && <ErrorState error={ssoMessage} />}
     {providers.length > 0 && <div className="space-y-2">{providers.map(p => <ProviderButton key={p.id} provider={p} />)}</div>}
-    {providers.length > 0 && password && <div className="flex items-center gap-3 text-xs text-muted-foreground" role="separator" aria-label="or"><span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" /></div>}
+    {providers.length > 0 && password && <div className="flex items-center gap-3 text-xs text-muted-foreground" role="separator" aria-label={t('or')}><span className="h-px flex-1 bg-border" />{t('or')}<span className="h-px flex-1 bg-border" /></div>}
     {password && <form className="space-y-4" onSubmit={async event => {
       event.preventDefault(); if (pending.current) return
       const data = new FormData(event.currentTarget)
@@ -84,14 +85,14 @@ export default function LoginPage() {
         else setError(message(e))
       } finally { pending.current = false; setBusy(false) }
     }}>
-      <div className="space-y-1.5"><label htmlFor="email">Operator email</label><Input id="email" name="email" type="email" required autoComplete="username" disabled={busy} /></div>
-      <div className="space-y-1.5"><label htmlFor="password">Password</label><Input id="password" name="password" type="password" required autoComplete="current-password" disabled={busy} /></div>
+      <div className="space-y-1.5"><label htmlFor="email">{t('Operator email')}</label><Input id="email" name="email" type="email" required autoComplete="username" disabled={busy} /></div>
+      <div className="space-y-1.5"><label htmlFor="password">{t('Password')}</label><Input id="password" name="password" type="password" required autoComplete="current-password" disabled={busy} /></div>
       {(error || auth.error) && <ErrorState error={error || auth.error} />}
-      <Button className="w-full" type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
+      <Button className="w-full" type="submit" disabled={busy}>{busy ? t('Signing in…') : t('Sign in')}</Button>
     </form>}
     {!password && auth.error && <ErrorState error={auth.error} />}
     {password
-      ? <p className="text-xs text-muted-foreground">New operator? <Link to="/setup" className="text-primary underline">Set up your account</Link> with your API key.</p>
-      : <p className="text-xs text-muted-foreground">New operator? Ask a workspace owner to invite your work email, then sign in with single sign-on.</p>}
+      ? <p className="text-xs text-muted-foreground">{t('New operator?')} <Link to="/setup" className="text-primary underline">{t('Set up your account')}</Link> {t('with your API key.')}</p>
+      : <p className="text-xs text-muted-foreground">{t('New operator? Ask a workspace owner to invite your work email, then sign in with single sign-on.')}</p>}
   </Card></main>
 }

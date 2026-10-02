@@ -13,6 +13,7 @@ import { SearchSelect } from '@/components/ui/search-select'
 import { ConfirmDialog, DataTable, FormDialog, ID, PageHeader, Status, type Field } from '@/components/library/patterns'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { providerLabel, oauth2Options, samlOptions, ldapOptions } from './federation-connection-form'
+import { formatDateTime, t } from '@/lib/i18n'
 
 export interface ConnectionDetail {
   id: string; organization_id: string | null; name: string; issuer: string; client_id: string
@@ -36,8 +37,8 @@ interface ExternalIdentity {
   origin: 'linked' | 'jit' | 'email' | 'signup'; created_at: string
 }
 
-const origins: Record<string, string> = { jit: 'Just-in-time', email: 'Verified email', signup: 'Sign-up', linked: 'Linked' }
-const tenants: Record<string, string> = { common: 'Work, school and personal accounts', organizations: 'Work and school accounts', consumers: 'Personal accounts' }
+const origins: Record<string, string> = { jit: 'Just-in-time', email: t('Verified email'), signup: 'Sign-up', linked: t('Linked') }
+const tenants: Record<string, string> = { common: t('Work, school and personal accounts'), organizations: t('Work and school accounts'), consumers: t('Personal accounts') }
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id), inactive: item.active === false })
 
@@ -70,66 +71,66 @@ export default function FederationDetailPage() {
 
   if (loading) return <div className="space-y-6">
     <Link to={backPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-      <ArrowLeft className="size-3.5" />Back to sign-in providers
+      <ArrowLeft className="size-3.5" />{t('Back to sign-in providers')}
     </Link>
-    <p className="text-sm text-muted-foreground">Loading connection…</p>
+    <p className="text-sm text-muted-foreground">{t('Loading connection…')}</p>
   </div>
 
   if (error || !conn) return <div className="space-y-6">
     <Link to={backPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-      <ArrowLeft className="size-3.5" />Back to sign-in providers
+      <ArrowLeft className="size-3.5" />{t('Back to sign-in providers')}
     </Link>
-    <p className="text-sm text-destructive">{error || 'Connection not found'}</p>
+    <p className="text-sm text-destructive">{error || t('Connection not found')}</p>
   </div>
 
   return <div className="space-y-8">
     <div className="space-y-3">
       <Link to={backPath} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="size-3.5" />Back to sign-in providers
+        <ArrowLeft className="size-3.5" />{t('Back to sign-in providers')}
       </Link>
       <PageHeader title={conn.name} description={conn.id} actions={<div className="flex items-center gap-2">
         <Status active={conn.active} />
-        {canWrite && conn.active && <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="size-4" /> Edit</Button>}
+        {canWrite && conn.active && <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="size-4" /> {t('Edit')}</Button>}
       </div>} />
     </div>
 
     {/* Connection info */}
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      <InfoCard label="Provider" value={providerLabel(conn.provider ?? 'oidc')} />
-      <InfoCard label="Scope" value={conn.organization_id ? `Organization ${conn.organization_id}` : 'Environment-wide'} mono={!!conn.organization_id} />
-      <InfoCard label={conn.saml ? 'IdP entity ID' : conn.provider === 'ldap' ? 'Directory' : 'Issuer'} value={conn.issuer + (conn.options?.start_tls ? ' (StartTLS)' : '')} mono />
+      <InfoCard label={t('Provider')} value={providerLabel(conn.provider ?? 'oidc')} />
+      <InfoCard label={t('Scope')} value={conn.organization_id ? `Organization ${conn.organization_id}` : 'Environment-wide'} mono={!!conn.organization_id} />
+      <InfoCard label={conn.saml ? t('IdP entity ID') : conn.provider === 'ldap' ? t('Directory') : t('Issuer')} value={conn.issuer + (conn.options?.start_tls ? ' (StartTLS)' : '')} mono />
       {conn.provider === 'ldap' ? <>
-        <InfoCard label="User base DN" value={conn.options?.user_base_dn ?? ''} mono />
-        <InfoCard label="User filter" value={conn.options?.user_filter || '(|(mail={email})(userPrincipalName={email}))'} mono />
-        <InfoCard label="Service account" value={conn.options?.bind_dn || 'Anonymous search'} mono={!!conn.options?.bind_dn} />
-        <InfoCard label="Certificate trust" value={conn.options?.ca_pem ? 'Custom CA certificate' : 'System roots'} />
-        {conn.options?.attributes && <InfoCard label="Attributes" value={Object.entries(conn.options.attributes).map(([k, name]) => `${k} ← ${name}`).join(', ')} mono />}
+        <InfoCard label={t('User base DN')} value={conn.options?.user_base_dn ?? ''} mono />
+        <InfoCard label={t('User filter')} value={conn.options?.user_filter || '(|(mail={email})(userPrincipalName={email}))'} mono />
+        <InfoCard label={t('Service account')} value={conn.options?.bind_dn || t('Anonymous search')} mono={!!conn.options?.bind_dn} />
+        <InfoCard label={t('Certificate trust')} value={conn.options?.ca_pem ? t('Custom CA certificate') : t('System roots')} />
+        {conn.options?.attributes && <InfoCard label={t('Attributes')} value={Object.entries(conn.options.attributes).map(([k, name]) => `${k} ← ${name}`).join(', ')} mono />}
       </> : conn.saml ? <>
-        <InfoCard label="SP entity ID (audience)" value={conn.saml.entity_id} mono />
-        <InfoCard label="ACS URL (HTTP-POST)" value={conn.saml.acs_url} mono />
-        <InfoCard label="SP metadata URL" value={conn.saml.metadata_url} mono />
-        <InfoCard label="IdP metadata" value={conn.options?.metadata_url || 'Pasted XML'} mono={!!conn.options?.metadata_url} />
-        <InfoCard label="NameID / attributes" value={`${conn.options?.name_id_format || 'unspecified'}` + (conn.options?.attributes ? ' · ' + Object.entries(conn.options.attributes).map(([k, name]) => `${k} ← ${name}`).join(', ') : '') + (conn.options?.sign_requests ? ' · signed requests' : '')} mono />
-      </> : <InfoCard label={conn.provider === 'apple' ? 'Services ID' : 'Client ID'} value={conn.client_id} mono />}
-      {conn.provider === 'microsoft' && conn.options?.tenant && <InfoCard label="Accounts" value={(tenants[conn.options.tenant] ?? `Tenant ${conn.options.tenant}`) + (conn.options.tenants?.length ? ` · only ${conn.options.tenants.length} allowed tenant${conn.options.tenants.length > 1 ? 's' : ''}` : '')} />}
-      {conn.provider === 'apple' && <InfoCard label="Apple team / key" value={`${conn.options?.team_id ?? ''} / ${conn.options?.key_id ?? ''}`} mono />}
-      {conn.provider === 'google' && <InfoCard label="Accounts" value={conn.options?.domains?.length ? `Google Workspace: ${conn.options.domains.join(', ')}` : 'Any Google account'} />}
-      {conn.options?.base_url && <InfoCard label={conn.provider === 'gitlab' ? 'GitLab URL' : 'Server URL'} value={conn.options.base_url} mono />}
+        <InfoCard label={t('SP entity ID (audience)')} value={conn.saml.entity_id} mono />
+        <InfoCard label={t('ACS URL (HTTP-POST)')} value={conn.saml.acs_url} mono />
+        <InfoCard label={t('SP metadata URL')} value={conn.saml.metadata_url} mono />
+        <InfoCard label={t('IdP metadata')} value={conn.options?.metadata_url || t('Pasted XML')} mono={!!conn.options?.metadata_url} />
+        <InfoCard label={t('NameID / attributes')} value={`${conn.options?.name_id_format || t('unspecified')}` + (conn.options?.attributes ? ' · ' + Object.entries(conn.options.attributes).map(([k, name]) => `${k} ← ${name}`).join(', ') : '') + (conn.options?.sign_requests ? t(' · signed requests') : '')} mono />
+      </> : <InfoCard label={conn.provider === 'apple' ? t('Services ID') : t('Client ID')} value={conn.client_id} mono />}
+      {conn.provider === 'microsoft' && conn.options?.tenant && <InfoCard label={t('Accounts')} value={(tenants[conn.options.tenant] ?? t('Tenant {{tenant}}', { tenant: conn.options.tenant })) + (conn.options.tenants?.length ? ' · ' + t('only {{count}} allowed tenants', { count: conn.options.tenants.length }) : '')} />}
+      {conn.provider === 'apple' && <InfoCard label={t('Apple team / key')} value={`${conn.options?.team_id ?? ''} / ${conn.options?.key_id ?? ''}`} mono />}
+      {conn.provider === 'google' && <InfoCard label={t('Accounts')} value={conn.options?.domains?.length ? t('Google Workspace: {{domains}}', { domains: conn.options.domains.join(', ') }) : t('Any Google account')} />}
+      {conn.options?.base_url && <InfoCard label={conn.provider === 'gitlab' ? t('GitLab URL') : t('Server URL')} value={conn.options.base_url} mono />}
       {conn.provider === 'oauth2' && <>
-        <InfoCard label="Endpoints" value={`${conn.options?.authorize_url ?? ''} · ${conn.options?.token_url ?? ''} · ${conn.options?.userinfo_url ?? ''}`} mono />
-        <InfoCard label="Claim mapping" value={Object.entries(conn.options?.claims ?? {}).map(([k, path]) => `${k} ← ${path}`).join(', ') + (conn.options?.claims?.email_verified ? '' : ' (email never verified)')} mono />
+        <InfoCard label={t('Endpoints')} value={`${conn.options?.authorize_url ?? ''} · ${conn.options?.token_url ?? ''} · ${conn.options?.userinfo_url ?? ''}`} mono />
+        <InfoCard label={t('Claim mapping')} value={Object.entries(conn.options?.claims ?? {}).map(([k, path]) => `${k} ← ${path}`).join(', ') + (conn.options?.claims?.email_verified ? '' : t(' (email never verified)'))} mono />
       </>}
-      <InfoCard label="Profile sync" value={conn.update_profile ? 'On: name and passwordless emails follow the provider at every sign-in' : 'Off'} />
+      <InfoCard label={t('Profile sync')} value={conn.update_profile ? t('On: name and passwordless emails follow the provider at every sign-in') : t('Off')} />
       {!conn.organization_id && <>
-        <InfoCard label="Sign-up" value={conn.signup ? (conn.signup_group_id ? `On, joins organization ${conn.signup_organization_id} and group ${conn.signup_group_id}` : `On, joins organization ${conn.signup_organization_id}`) : 'Off: only existing or linked users'} />
-        <InfoCard label="Email linking" value={conn.link_email ? 'On: verified email signs in to the matching account' : 'Off'} />
+        <InfoCard label={t('Sign-up')} value={conn.signup ? (conn.signup_group_id ? t('On, joins organization {{organization}} and group {{group}}', { organization: conn.signup_organization_id, group: conn.signup_group_id }) : t('On, joins organization {{organization}}', { organization: conn.signup_organization_id })) : t('Off: only existing or linked users')} />
+        <InfoCard label={t('Email linking')} value={conn.link_email ? t('On: verified email signs in to the matching account') : t('Off')} />
       </>}
-      {conn.callback_url && !conn.saml && <InfoCard label="Redirect URI" value={conn.callback_url} mono />}
-      {conn.secret_source !== 'none' && <InfoCard label={conn.provider === 'ldap' ? 'Service account password' : 'Client secret'} value={conn.secret_source === 'sealed' ? 'Stored encrypted' : `Env variable ${conn.secret_env}`} mono={conn.secret_source !== 'sealed'} />}
+      {conn.callback_url && !conn.saml && <InfoCard label={t('Redirect URI')} value={conn.callback_url} mono />}
+      {conn.secret_source !== 'none' && <InfoCard label={conn.provider === 'ldap' ? t('Service account password') : t('Client secret')} value={conn.secret_source === 'sealed' ? t('Stored encrypted') : t('Env variable {{name}}', { name: conn.secret_env })} mono={conn.secret_source !== 'sealed'} />}
       {conn.organization_id && <>
-        <InfoCard label="Just-in-time provisioning" value={conn.jit_provisioning ? (conn.jit_group_id ? `On, joins group ${conn.jit_group_id}` : 'On, no default group') : 'Off'} />
-        <InfoCard label="Enforcement" value={conn.enforcement === 'enforced' ? 'Enforced: password login blocked for verified domains' : 'Optional'} />
-        <InfoCard label="Email linking" value={conn.link_email ? "On: members on the organization's verified domains are linked by email" : 'Off'} />
+        <InfoCard label={t('Just-in-time provisioning')} value={conn.jit_provisioning ? (conn.jit_group_id ? t('On, joins group {{group}}', { group: conn.jit_group_id }) : t('On, no default group')) : t('Off')} />
+        <InfoCard label={t('Enforcement')} value={conn.enforcement === 'enforced' ? t('Enforced: password login blocked for verified domains') : t('Optional')} />
+        <InfoCard label={t('Email linking')} value={conn.link_email ? t("On: members on the organization's verified domains are linked by email") : t('Off')} />
       </>}
     </div>
 
@@ -137,16 +138,16 @@ export default function FederationDetailPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-mono text-lg font-semibold">Linked identities</h2>
-          <p className="text-sm text-muted-foreground">Users authenticated through this provider.</p>
+          <h2 className="font-mono text-lg font-semibold">{t('Linked identities')}</h2>
+          <p className="text-sm text-muted-foreground">{t('Users authenticated through this provider.')}</p>
         </div>
-        {canWrite && <Button variant="outline" onClick={() => setLinking(true)}><Plus className="size-4" /> Link identity</Button>}
+        {canWrite && <Button variant="outline" onClick={() => setLinking(true)}><Plus className="size-4" /> {t('Link identity')}</Button>}
       </div>
 
       <PaginationBar state={identities} noun="identities" />
 
       <DataTable
-        columns={['User', 'Subject', 'Origin', ...(canWrite ? ['Actions'] : [])]}
+        columns={[t('User'), t('Subject'), t('Origin'), ...(canWrite ? [t('Actions')] : [])]}
         loading={identities.loading}
         error={identities.error}
         retry={identities.reload}
@@ -158,10 +159,10 @@ export default function FederationDetailPage() {
               <ID value={id.user_id} />
             </div>,
             <span className="break-all font-mono text-xs">{id.subject}</span>,
-            <span className="text-xs text-muted-foreground" title={id.created_at ? new Date(id.created_at).toLocaleString() : undefined}>{origins[id.origin] ?? 'Linked'}</span>,
+            <span className="text-xs text-muted-foreground" title={id.created_at ? formatDateTime(id.created_at) : undefined}>{origins[id.origin] ?? t('Linked')}</span>,
           ]
           if (canWrite) cells.push(
-            <Button variant="ghost" size="icon" aria-label={`Unlink ${id.user_name || id.user_id}`} onClick={() => setUnlinking(id)}>
+            <Button variant="ghost" size="icon" aria-label={t('Unlink {{value}}', { value: id.user_name || id.user_id })} onClick={() => setUnlinking(id)}>
               <Trash2 className="size-4" />
             </Button>,
           )
@@ -179,8 +180,8 @@ export default function FederationDetailPage() {
     />}
 
     {editing && <FormDialog
-      title="Edit connection"
-      description={conn.organization_id ? 'Leave the secret empty to keep the current one. Enforcement requires a verified domain.' : 'Leave the secret empty to keep the current one. Sign-up needs an organization for new users.'}
+      title={t('Edit connection')}
+      description={conn.organization_id ? t('Leave the secret empty to keep the current one. Enforcement requires a verified domain.') : t('Leave the secret empty to keep the current one. Sign-up needs an organization for new users.')}
       fields={editFields(conn, base)}
       onClose={() => setEditing(false)}
       submit={async values => {
@@ -192,13 +193,13 @@ export default function FederationDetailPage() {
     {/* Unlink confirm */}
     {unlinking && (
       <ConfirmDialog
-        title={`Unlink ${unlinking.user_name || 'this user'}?`}
-        description={`${unlinking.user_name || unlinking.user_id} can no longer sign in through this connection. Their user account and other sign-in methods are kept.`}
-        confirmLabel="Unlink"
+        title={t('Unlink {{user}}?', { user: unlinking.user_name || t('this user') })}
+        description={t('{{value}} can no longer sign in through this connection. Their user account and other sign-in methods are kept.', { value: unlinking.user_name || unlinking.user_id })}
+        confirmLabel={t('Unlink')}
         onClose={() => setUnlinking(null)}
         confirm={async () => {
           await api.delete(`${base}/external-identities/${connectionId}/${unlinking.user_id}`)
-          toast.success('Identity unlinked')
+          toast.success(t('Identity unlinked'))
           identities.reload()
           setConn(c => c ? { ...c, linked: Math.max(0, c.linked - 1) } : c)
         }}
@@ -209,67 +210,67 @@ export default function FederationDetailPage() {
 
 export function editFields(conn: ConnectionDetail, base: string): Field[] {
   const apple = conn.provider === 'apple'
-  const fields: Field[] = [{ name: 'name', label: 'Name', value: conn.name }]
+  const fields: Field[] = [{ name: 'name', label: t('Name'), value: conn.name }]
   if (conn.provider === 'saml') {
     const o = conn.options ?? {}
     fields.push(
-      { name: 'metadata_url', label: 'IdP metadata URL', optional: true, value: o.metadata_url ?? '', hint: 'Saving refetches it (a new signing certificate, for instance). Empty keeps the pasted XML unless you paste new XML below.' },
-      { name: 'metadata_xml', label: 'New IdP metadata XML', optional: true, value: '', hint: 'Replaces the metadata; the IdP entity ID must stay the same.' },
-      { name: 'name_id_format', label: 'NameID format', type: 'dropdown', value: o.name_id_format || 'unspecified', options: [{ label: 'Unspecified', value: 'unspecified' }, { label: 'Persistent', value: 'persistent' }, { label: 'Email address', value: 'email' }, { label: 'Transient', value: 'transient' }] },
-      { name: 'attr_subject', label: 'User ID attribute', optional: true, value: o.attributes?.subject ?? '', hint: 'Required with transient NameIDs.' },
-      { name: 'attr_email', label: 'Email attribute', optional: true, value: o.attributes?.email ?? '' },
-      { name: 'attr_name', label: 'Name attribute', optional: true, value: o.attributes?.name ?? '' },
-      { name: 'sign_requests', label: 'Sign authentication requests', type: 'checkbox', value: !!o.sign_requests },
+      { name: 'metadata_url', label: t('IdP metadata URL'), optional: true, value: o.metadata_url ?? '', hint: t('Saving refetches it (a new signing certificate, for instance). Empty keeps the pasted XML unless you paste new XML below.') },
+      { name: 'metadata_xml', label: t('New IdP metadata XML'), optional: true, value: '', hint: t('Replaces the metadata; the IdP entity ID must stay the same.') },
+      { name: 'name_id_format', label: t('NameID format'), type: 'dropdown', value: o.name_id_format || 'unspecified', options: [{ label: t('Unspecified'), value: 'unspecified' }, { label: t('Persistent'), value: 'persistent' }, { label: t('Email address'), value: 'email' }, { label: t('Transient'), value: 'transient' }] },
+      { name: 'attr_subject', label: t('User ID attribute'), optional: true, value: o.attributes?.subject ?? '', hint: t('Required with transient NameIDs.') },
+      { name: 'attr_email', label: t('Email attribute'), optional: true, value: o.attributes?.email ?? '' },
+      { name: 'attr_name', label: t('Name attribute'), optional: true, value: o.attributes?.name ?? '' },
+      { name: 'sign_requests', label: t('Sign authentication requests'), type: 'checkbox', value: !!o.sign_requests },
     )
   } else if (conn.provider === 'ldap') {
     const o = conn.options ?? {}
     fields.push(
-      { name: 'ldap_url', label: 'Server URL', value: o.url ?? conn.issuer, hint: 'Same host and port; ldaps:// or ldap:// with StartTLS.' },
-      { name: 'start_tls', label: 'Use StartTLS (ldap:// only)', type: 'checkbox', value: !!o.start_tls },
-      { name: 'user_base_dn', label: 'User base DN', value: o.user_base_dn ?? '', hint: 'Cannot change: create another connection for another subtree.' },
-      { name: 'user_filter', label: 'User filter', optional: true, value: o.user_filter ?? '', hint: 'With {email} or {username}; empty uses (|(mail={email})(userPrincipalName={email})).' },
-      { name: 'bind_dn', label: 'Service account DN', optional: true, value: o.bind_dn ?? '', hint: 'Empty searches anonymously.' },
-      { name: 'client_secret', label: conn.secret_source === 'sealed' ? 'New service account password' : 'Service account password', type: 'password', optional: true, hint: 'Stored encrypted. Needed when you set a service account DN for the first time.' },
-      { name: 'ca_pem', label: 'CA certificate (PEM)', optional: true, value: o.ca_pem ?? '', hint: 'Empty trusts the system roots.' },
-      { name: 'attr_subject', label: 'User ID attribute', optional: true, value: o.attributes?.subject ?? '', hint: 'Empty: objectGUID, entryUUID, else the DN.' },
-      { name: 'attr_email', label: 'Email attribute', optional: true, value: o.attributes?.email ?? '' },
-      { name: 'attr_name', label: 'Name attribute', optional: true, value: o.attributes?.name ?? '' },
+      { name: 'ldap_url', label: t('Server URL'), value: o.url ?? conn.issuer, hint: t('Same host and port; ldaps:// or ldap:// with StartTLS.') },
+      { name: 'start_tls', label: t('Use StartTLS (ldap:// only)'), type: 'checkbox', value: !!o.start_tls },
+      { name: 'user_base_dn', label: t('User base DN'), value: o.user_base_dn ?? '', hint: t('Cannot change: create another connection for another subtree.') },
+      { name: 'user_filter', label: t('User filter'), optional: true, value: o.user_filter ?? '', hint: t('With {email} or {username}; empty uses (|(mail={email})(userPrincipalName={email})).') },
+      { name: 'bind_dn', label: t('Service account DN'), optional: true, value: o.bind_dn ?? '', hint: t('Empty searches anonymously.') },
+      { name: 'client_secret', label: conn.secret_source === 'sealed' ? t('New service account password') : t('Service account password'), type: 'password', optional: true, hint: t('Stored encrypted. Needed when you set a service account DN for the first time.') },
+      { name: 'ca_pem', label: t('CA certificate (PEM)'), optional: true, value: o.ca_pem ?? '', hint: t('Empty trusts the system roots.') },
+      { name: 'attr_subject', label: t('User ID attribute'), optional: true, value: o.attributes?.subject ?? '', hint: t('Empty: objectGUID, entryUUID, else the DN.') },
+      { name: 'attr_email', label: t('Email attribute'), optional: true, value: o.attributes?.email ?? '' },
+      { name: 'attr_name', label: t('Name attribute'), optional: true, value: o.attributes?.name ?? '' },
     )
   } else fields.push(
-    { name: 'client_secret', label: apple ? 'New private key (.p8)' : conn.secret_source === 'sealed' ? 'New client secret' : 'Client secret (replaces env variable)', type: 'password', optional: true, hint: apple ? 'Paste the whole key, including the BEGIN and END lines. Stored encrypted.' : 'Stored encrypted.' },
+    { name: 'client_secret', label: apple ? t('New private key (.p8)') : conn.secret_source === 'sealed' ? t('New client secret') : t('Client secret (replaces env variable)'), type: 'password', optional: true, hint: apple ? t('Paste the whole key, including the BEGIN and END lines. Stored encrypted.') : t('Stored encrypted.') },
   )
-  if (apple) fields.push({ name: 'key_id', label: 'Key ID', value: conn.options?.key_id ?? '', hint: 'Change it together with the new private key.' })
+  if (apple) fields.push({ name: 'key_id', label: t('Key ID'), value: conn.options?.key_id ?? '', hint: t('Change it together with the new private key.') })
   if (conn.provider === 'microsoft' && (conn.options?.tenant === 'common' || conn.options?.tenant === 'organizations')) {
-    fields.push({ name: 'tenants', label: 'Allowed tenants', type: 'tags', optional: true, tags: conn.options?.tenants ?? [], hint: 'Only these tenant IDs may sign in; empty accepts any tenant.' })
+    fields.push({ name: 'tenants', label: t('Allowed tenants'), type: 'tags', optional: true, tags: conn.options?.tenants ?? [], hint: t('Only these tenant IDs may sign in; empty accepts any tenant.') })
   }
   if (conn.provider === 'google') {
-    fields.push({ name: 'domains', label: 'Workspace domains', type: 'tags', optional: true, tags: conn.options?.domains ?? [], hint: conn.organization_id ? "Only Google accounts of these Workspace domains can sign in. Keep the organization's domains here." : 'Only Google Workspace accounts of these domains can sign in; empty accepts any Google account.' })
+    fields.push({ name: 'domains', label: t('Workspace domains'), type: 'tags', optional: true, tags: conn.options?.domains ?? [], hint: conn.organization_id ? t('Only Google accounts of these Workspace domains can sign in. Keep the organization\'s domains here.') : t('Only Google Workspace accounts of these domains can sign in; empty accepts any Google account.') })
   }
   if (conn.provider === 'oauth2') {
     const o = conn.options ?? {}
     fields.push(
-      { name: 'authorize_url', label: 'Authorization URL', value: o.authorize_url ?? '', hint: 'Must stay on the same host.' },
-      { name: 'token_url', label: 'Token URL', value: o.token_url ?? '' },
-      { name: 'userinfo_url', label: 'User info URL', value: o.userinfo_url ?? '' },
-      { name: 'scopes', label: 'Scopes', type: 'tags', optional: true, tags: o.scopes ?? [] },
-      { name: 'claim_subject', label: 'User ID member', value: o.claims?.subject ?? '' },
-      { name: 'claim_email', label: 'Email member', optional: true, value: o.claims?.email ?? '' },
-      { name: 'claim_email_verified', label: 'Email verified member', optional: true, value: o.claims?.email_verified ?? '', hint: 'Empty: the email is never trusted.' },
-      { name: 'claim_name', label: 'Name member', optional: true, value: o.claims?.name ?? '' },
+      { name: 'authorize_url', label: t('Authorization URL'), value: o.authorize_url ?? '', hint: t('Must stay on the same host.') },
+      { name: 'token_url', label: t('Token URL'), value: o.token_url ?? '' },
+      { name: 'userinfo_url', label: t('User info URL'), value: o.userinfo_url ?? '' },
+      { name: 'scopes', label: t('Scopes'), type: 'tags', optional: true, tags: o.scopes ?? [] },
+      { name: 'claim_subject', label: t('User ID member'), value: o.claims?.subject ?? '' },
+      { name: 'claim_email', label: t('Email member'), optional: true, value: o.claims?.email ?? '' },
+      { name: 'claim_email_verified', label: t('Email verified member'), optional: true, value: o.claims?.email_verified ?? '', hint: t('Empty: the email is never trusted.') },
+      { name: 'claim_name', label: t('Name member'), optional: true, value: o.claims?.name ?? '' },
     )
   }
-  fields.push({ name: 'update_profile', label: 'Keep profiles in sync', type: 'checkbox', value: !!conn.update_profile, hint: "Update the user's name, and the email of passwordless accounts, at every sign-in." })
+  fields.push({ name: 'update_profile', label: t('Keep profiles in sync'), type: 'checkbox', value: !!conn.update_profile, hint: t('Update the user\'s name, and the email of passwordless accounts, at every sign-in.') })
   if (!conn.organization_id) return [...fields,
-    { name: 'link_email', label: 'Link existing accounts by verified email', type: 'checkbox', value: !!conn.link_email },
-    { name: 'signup', label: 'Create accounts for new users', type: 'checkbox', value: !!conn.signup },
-    { name: 'signup_organization_id', label: 'Sign-up organization', type: 'select', optional: true, value: conn.signup_organization_id ?? '', selectPath: `${base}/organizations`, selectMap: named, hint: 'Required for sign-up.' },
-    ...(conn.signup_organization_id ? [{ name: 'signup_group_id', label: 'Sign-up default group', type: 'select' as const, optional: true, value: conn.signup_group_id ?? '', selectPath: `${base}/organizations/${conn.signup_organization_id}/groups`, selectMap: named, hint: 'Save a new organization first to pick one of its groups.' }] : []),
+    { name: 'link_email', label: t('Link existing accounts by verified email'), type: 'checkbox', value: !!conn.link_email },
+    { name: 'signup', label: t('Create accounts for new users'), type: 'checkbox', value: !!conn.signup },
+    { name: 'signup_organization_id', label: t('Sign-up organization'), type: 'select', optional: true, value: conn.signup_organization_id ?? '', selectPath: `${base}/organizations`, selectMap: named, hint: t('Required for sign-up.') },
+    ...(conn.signup_organization_id ? [{ name: 'signup_group_id', label: t('Sign-up default group'), type: 'select' as const, optional: true, value: conn.signup_group_id ?? '', selectPath: `${base}/organizations/${conn.signup_organization_id}/groups`, selectMap: named, hint: t('Save a new organization first to pick one of its groups.') }] : []),
   ]
   return [...fields,
-    { name: 'jit_provisioning', label: 'Just-in-time provisioning', type: 'checkbox', value: conn.jit_provisioning },
-    { name: 'jit_group_id', label: 'Default group', type: 'select', optional: true, value: conn.jit_group_id ?? '', selectPath: `${base}/organizations/${conn.organization_id}/groups`, selectMap: named, hint: 'Users provisioned on first login join this operator-managed group.' },
-    { name: 'enforcement', label: 'Enforcement', type: 'dropdown', value: conn.enforcement, options: [{ label: 'Optional', value: 'optional' }, { label: 'Enforced', value: 'enforced' }] },
-    { name: 'link_email', label: 'Link members by email', type: 'checkbox', value: !!conn.link_email, hint: "A member whose provider email is on the organization's verified domains signs in to their account, even without just-in-time provisioning." },
+    { name: 'jit_provisioning', label: t('Just-in-time provisioning'), type: 'checkbox', value: conn.jit_provisioning },
+    { name: 'jit_group_id', label: t('Default group'), type: 'select', optional: true, value: conn.jit_group_id ?? '', selectPath: `${base}/organizations/${conn.organization_id}/groups`, selectMap: named, hint: t('Users provisioned on first login join this operator-managed group.') },
+    { name: 'enforcement', label: t('Enforcement'), type: 'dropdown', value: conn.enforcement, options: [{ label: t('Optional'), value: 'optional' }, { label: t('Enforced'), value: 'enforced' }] },
+    { name: 'link_email', label: t('Link members by email'), type: 'checkbox', value: !!conn.link_email, hint: t('A member whose provider email is on the organization\'s verified domains signs in to their account, even without just-in-time provisioning.') },
   ]
 }
 
@@ -281,7 +282,7 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
   if (values.client_secret) patch.client_secret = values.client_secret
   if (conn.provider === 'apple' && typeof values.key_id === 'string' && values.key_id !== (conn.options?.key_id ?? '')) patch.options = { ...conn.options, key_id: values.key_id }
   if (typeof values.tenants === 'string') {
-    const next = values.tenants.split(',').map(t => t.trim()).filter(Boolean)
+    const next = values.tenants.split(',').map(part => part.trim()).filter(Boolean)
     if (next.join(',') !== (conn.options?.tenants ?? []).join(',')) patch.options = { ...conn.options, tenants: next }
   }
   if (typeof values.domains === 'string') {
@@ -310,7 +311,7 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
     const str = (key: string) => typeof values[key] === 'string' ? values[key] as string : ''
     const next = oauth2Options({
       authorize_url: str('authorize_url'), token_url: str('token_url'), userinfo_url: str('userinfo_url'),
-      scopes: str('scopes').split(',').map(t => t.trim()).filter(Boolean),
+      scopes: str('scopes').split(',').map(part => part.trim()).filter(Boolean),
       claim_subject: str('claim_subject'), claim_email: str('claim_email'), claim_email_verified: str('claim_email_verified'), claim_name: str('claim_name'),
     })
     const was = conn.options ?? {}
@@ -349,32 +350,32 @@ function LinkIdentityDialog({ base, connectionId, onClose, onLinked }: { base: s
   const [error, setError] = useState('')
   return <Dialog open onOpenChange={open => { if (!open) onClose() }}>
     <DialogContent>
-      <DialogTitle className="text-base font-semibold">Link external identity</DialogTitle>
-      <DialogDescription className="text-muted-foreground">Link a user to this provider by their external subject identifier.</DialogDescription>
+      <DialogTitle className="text-base font-semibold">{t('Link external identity')}</DialogTitle>
+      <DialogDescription className="text-muted-foreground">{t('Link a user to this provider by their external subject identifier.')}</DialogDescription>
       <form className="space-y-4" onSubmit={async e => {
         e.preventDefault()
         if (!userId || !subject.trim() || busy) return
         setBusy(true); setError('')
         try {
           await api.post(`${base}/external-identities`, { connection_id: connectionId, user_id: userId, subject: subject.trim() })
-          toast.success('Identity linked')
+          toast.success(t('Identity linked'))
           onLinked()
         } catch (err) { setError(message(err)) } finally { setBusy(false) }
       }}>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">User</label>
+          <label className="text-sm font-medium">{t('User')}</label>
           <SearchSelect
             name="user_id"
             path={`${base}/users`}
             mapItem={named}
             required
             disabled={busy}
-            placeholder="Search users…"
+            placeholder={t('Search users…')}
             onChange={setUserId}
           />
         </div>
         <div className="space-y-1.5">
-          <label className="text-sm font-medium">External subject</label>
+          <label className="text-sm font-medium">{t('External subject')}</label>
           <Input
             value={subject}
             onChange={e => setSubject(e.target.value)}
@@ -382,12 +383,12 @@ function LinkIdentityDialog({ base, connectionId, onClose, onLinked }: { base: s
             disabled={busy}
             placeholder="e.g. 110248495921238986420"
           />
-          <p className="text-xs text-muted-foreground">The unique identifier from the identity provider (OIDC sub claim).</p>
+          <p className="text-xs text-muted-foreground">{t('The unique identifier from the identity provider (OIDC sub claim).')}</p>
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex justify-end gap-2 border-t pt-4">
-          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-          <Button type="submit" disabled={busy || !userId || !subject.trim()}>{busy ? 'Linking…' : 'Link'}</Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('Cancel')}</Button>
+          <Button type="submit" disabled={busy || !userId || !subject.trim()}>{busy ? t('Linking…') : t('Link')}</Button>
         </div>
       </form>
     </DialogContent>

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n'
 // Email delivery settings (see internal/iam/authentication/delivery.go).
 export type Provider = 'webhook' | 'smtp' | 'resend'
 export type Source = 'environment' | 'global' | 'none'
@@ -39,7 +40,11 @@ export interface DeliveryStatus {
   last_failure: Attempt | null
 }
 
-export interface Locale { code: string; name: string }
+// beta: machine-drafted wording still awaiting a native review.
+export interface Locale { code: string; name: string; beta?: boolean }
+
+// localeLabel names a language in pickers, flagging beta translations.
+export const localeLabel = (l: Locale) => l.beta ? `${l.name} (beta)` : l.name
 
 // Copy is the editable wording of one email; empty fields use the default.
 export interface Copy { subject: string; heading: string; body: string; action: string; footer: string }
@@ -65,29 +70,29 @@ export interface TemplateView extends TemplateSummary { template: Copy; defaults
 export interface Preview { subject: string; html: string; text: string }
 
 export const PROVIDERS: Record<Provider, { label: string; description: string }> = {
-  webhook: { label: 'Webhook', description: 'Your service receives the code as JSON and sends the email.' },
-  smtp: { label: 'SMTP', description: 'IAMKit writes the email and sends it through your mail server.' },
-  resend: { label: 'Resend', description: 'IAMKit writes the email and sends it with your Resend API key.' },
+  webhook: { label: t('Webhook'), description: t('Your service receives the code as JSON and sends the email.') },
+  smtp: { label: 'SMTP', description: t('IAMKit writes the email and sends it through your mail server.') },
+  resend: { label: t('Resend'), description: t('IAMKit writes the email and sends it with your Resend API key.') },
 }
 
 // Emails IAMKit renders, in display order (authentication.PreviewPurposes).
 export const EMAIL_PURPOSES: { purpose: string; label: string }[] = [
-  { purpose: 'login', label: 'Login code' },
-  { purpose: 'password_reset', label: 'Password reset' },
-  { purpose: 'email_verification', label: 'Email verification' },
-  { purpose: 'invitation', label: 'Invitation' },
-  { purpose: 'test', label: 'Test email' },
+  { purpose: 'login', label: t('Login code') },
+  { purpose: 'password_reset', label: t('Password reset') },
+  { purpose: 'email_verification', label: t('Email verification') },
+  { purpose: 'invitation', label: t('Invitation') },
+  { purpose: 'test', label: t('Test email') },
 ]
 export const purposeLabel = (purpose: string) => EMAIL_PURPOSES.find(p => p.purpose === purpose)?.label ?? purpose
 
 export interface SMTPPreset { id: string; label: string; host: string; port: number; tls: 'starttls' | 'tls'; username?: string; hint?: string }
 export const SMTP_PRESETS: SMTPPreset[] = [
-  { id: 'google', label: 'Google Workspace / Gmail', host: 'smtp.gmail.com', port: 587, tls: 'starttls', hint: 'Use an app password.' },
-  { id: 'microsoft', label: 'Microsoft 365', host: 'smtp.office365.com', port: 587, tls: 'starttls', hint: 'SMTP AUTH must be enabled for the mailbox.' },
-  { id: 'ses', label: 'Amazon SES', host: 'email-smtp.us-east-1.amazonaws.com', port: 587, tls: 'starttls', hint: 'Change the region in the host name; use SES SMTP credentials.' },
-  { id: 'sendgrid', label: 'SendGrid', host: 'smtp.sendgrid.net', port: 587, tls: 'starttls', username: 'apikey', hint: 'The password is your SendGrid API key.' },
-  { id: 'mailgun', label: 'Mailgun', host: 'smtp.mailgun.org', port: 587, tls: 'starttls' },
-  { id: 'postmark', label: 'Postmark', host: 'smtp.postmarkapp.com', port: 587, tls: 'starttls', hint: 'Username and password are both your server API token.' },
+  { id: 'google', label: t('Google Workspace / Gmail'), host: 'smtp.gmail.com', port: 587, tls: 'starttls', hint: t('Use an app password.') },
+  { id: 'microsoft', label: t('Microsoft 365'), host: 'smtp.office365.com', port: 587, tls: 'starttls', hint: t('SMTP AUTH must be enabled for the mailbox.') },
+  { id: 'ses', label: t('Amazon SES'), host: 'email-smtp.us-east-1.amazonaws.com', port: 587, tls: 'starttls', hint: t('Change the region in the host name; use SES SMTP credentials.') },
+  { id: 'sendgrid', label: t('SendGrid'), host: 'smtp.sendgrid.net', port: 587, tls: 'starttls', username: 'apikey', hint: t('The password is your SendGrid API key.') },
+  { id: 'mailgun', label: t('Mailgun'), host: 'smtp.mailgun.org', port: 587, tls: 'starttls' },
+  { id: 'postmark', label: t('Postmark'), host: 'smtp.postmarkapp.com', port: 587, tls: 'starttls', hint: t('Username and password are both your server API token.') },
 ]
 
 // DeliveryDraft is the delivery form: every provider's fields, of which
@@ -122,15 +127,15 @@ export function copySettings(d: DeliveryDraft, from: DeliveryConfig): DeliveryDr
 // provider's fields only (the server rejects the others). A blank secret
 // keeps the stored one.
 export function deliveryBody(d: DeliveryDraft): Record<string, unknown> {
-  const t = (s: string) => s.trim()
-  const invitation_url = t(d.invitation_url)
-  if (d.provider === 'webhook') return { provider: 'webhook', webhook_url: t(d.webhook_url), webhook_token: t(d.webhook_token), invitation_url }
-  const sender = { from_email: t(d.from_email), from_name: t(d.from_name), reply_to: t(d.reply_to) }
-  if (d.provider === 'resend') return { provider: 'resend', ...sender, ...(t(d.api_key) && { api_key: t(d.api_key) }), invitation_url }
+  const trim = (s: string) => s.trim()
+  const invitation_url = trim(d.invitation_url)
+  if (d.provider === 'webhook') return { provider: 'webhook', webhook_url: trim(d.webhook_url), webhook_token: trim(d.webhook_token), invitation_url }
+  const sender = { from_email: trim(d.from_email), from_name: trim(d.from_name), reply_to: trim(d.reply_to) }
+  if (d.provider === 'resend') return { provider: 'resend', ...sender, ...(trim(d.api_key) && { api_key: trim(d.api_key) }), invitation_url }
   return {
     provider: 'smtp', ...sender,
-    smtp_host: t(d.smtp_host), smtp_port: Number(d.smtp_port) || 587, smtp_tls: d.smtp_tls,
-    smtp_username: t(d.smtp_username), ...(d.smtp_password && t(d.smtp_username) && { smtp_password: d.smtp_password }),
+    smtp_host: trim(d.smtp_host), smtp_port: Number(d.smtp_port) || 587, smtp_tls: d.smtp_tls,
+    smtp_username: trim(d.smtp_username), ...(d.smtp_password && trim(d.smtp_username) && { smtp_password: d.smtp_password }),
     invitation_url,
   }
 }

@@ -9,6 +9,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   test: { setupFiles: ['./src/test-setup.ts'] },
+  // Fonts stay files: the org-admin portal's CSP (server/spa.go) allows
+  // font-src 'self' only, so an inlined data: font would be blocked.
+  build: { assetsInlineLimit: file => (file.endsWith('.woff2') ? false : undefined) },
   server: {
     host: 'localhost',
     https: process.env.CONSOLE_TLS_CERT && process.env.CONSOLE_TLS_KEY ? {

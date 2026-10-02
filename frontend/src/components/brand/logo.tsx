@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { t } from '@/lib/i18n'
 
 // The IAMKit logo: a keyhole cut from a rounded tile (it also reads as an "i"
 // and a person). Same paths as docs/assets/iamkit-*.svg; colors come from the
@@ -16,7 +17,7 @@ export function LogoMark({ className, label }: { className?: string; label?: str
 
 /** The symbol with the "IAMKit" wordmark. */
 export function Logo({ className }: { className?: string }) {
-  return <svg viewBox="0 0 224 64" className={cn('aspect-[224/64] h-8 w-auto shrink-0', className)} role="img" aria-label="IAMKit">
+  return <svg viewBox="0 0 224 64" className={cn('aspect-[224/64] h-8 w-auto shrink-0', className)} role="img" aria-label={t('IAMKit')}>
     <path className="fill-primary" fillRule="evenodd" d={tile} />
     <path className="fill-foreground" d={iam} />
     <path className="fill-primary" d={kit} />

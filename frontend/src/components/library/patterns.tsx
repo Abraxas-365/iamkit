@@ -15,8 +15,9 @@ export { PageHeader } from '@/components/layout/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { formatDateTime, language, rich, t } from '@/lib/i18n'
 export function ErrorState({ error, retry }: { error: string; retry?: () => void }) {
-  return <div role="alert" className="space-y-3 rounded-lg border border-destructive/30 p-4"><p className="text-sm text-destructive">{error}</p>{retry && <Button variant="outline" onClick={retry}>Try again</Button>}</div>
+  return <div role="alert" className="space-y-3 rounded-lg border border-destructive/30 p-4"><p className="text-sm text-destructive">{error}</p>{retry && <Button variant="outline" onClick={retry}>{t('Try again')}</Button>}</div>
 }
 export interface Field {
   name: string; label: string; type?: 'text' | 'email' | 'password' | 'list' | 'tags' | 'checkbox' | 'select' | 'dropdown' | 'radio';
@@ -36,16 +37,44 @@ export interface Option { label: string; value: string; description?: string }
 export const selectClass = 'h-8 w-full rounded-lg border border-input bg-transparent px-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30'
 
 /** SwitchField is a labelled on/off setting: text on the left, switch on
- * the right. Submits `name=on` when checked, like a checkbox. */
-export function SwitchField({ id, name, label, hint, disabled, checked, defaultChecked, onCheckedChange }: { id?: string; name?: string; label: string; hint?: ReactNode; disabled?: boolean; checked?: boolean; defaultChecked?: boolean; onCheckedChange?: (checked: boolean) => void }) {
+ * the right. Submits `name=on` when checked, like a checkbox. `variant="row"`
+ * drops the card border for use inside a SettingsList; `icon` leads the
+ * text and `note` explains why the switch is locked (shown under the hint). */
+export function SwitchField({ id, name, label, hint, note, icon, variant = 'card', disabled, checked, defaultChecked, onCheckedChange }: { id?: string; name?: string; label: string; hint?: ReactNode; note?: ReactNode; icon?: ReactNode; variant?: 'card' | 'row'; disabled?: boolean; checked?: boolean; defaultChecked?: boolean; onCheckedChange?: (checked: boolean) => void }) {
   const fallback = useId()
   const control = id ?? fallback
-  return <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
-    <div className="space-y-0.5">
-      <label htmlFor={control} className="text-sm font-medium">{label}</label>
-      {hint && <p id={`${control}-hint`} className="text-xs text-muted-foreground">{hint}</p>}
+  const described = [hint && `${control}-hint`, note && `${control}-note`].filter(Boolean).join(' ')
+  return <div className={cn('flex items-start justify-between gap-4', variant === 'card' ? 'rounded-lg border p-3' : 'px-4 py-3.5')}>
+    <div className="flex min-w-0 gap-3">
+      {icon && <span aria-hidden className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground [&>svg]:size-4">{icon}</span>}
+      <div className="min-w-0 space-y-0.5">
+        <label htmlFor={control} className="text-sm font-medium">{label}</label>
+        {hint && <p id={`${control}-hint`} className="text-xs text-muted-foreground">{hint}</p>}
+        {note && <p id={`${control}-note`} className="text-xs text-warning">{note}</p>}
+      </div>
     </div>
-    <Switch id={control} name={name} value="on" checked={checked} defaultChecked={defaultChecked} onCheckedChange={onCheckedChange} disabled={disabled} aria-describedby={hint ? `${control}-hint` : undefined} className="mt-0.5" />
+    <Switch id={control} name={name} value="on" checked={checked} defaultChecked={defaultChecked} onCheckedChange={onCheckedChange} disabled={disabled} aria-describedby={described || undefined} className="mt-0.5" />
+  </div>
+}
+
+/** SettingsSection is one group of a settings page: title and description
+ * in a left column from `lg` up, the controls in a card on the right. */
+export function SettingsSection({ id, title, description, children }: { id?: string; title: string; description?: ReactNode; children: ReactNode }) {
+  const heading = useId()
+  return <section id={id} aria-labelledby={heading} className="grid scroll-mt-6 gap-3 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] lg:gap-8">
+    <div className="space-y-1 lg:pt-2">
+      <h2 id={heading} className="text-sm font-semibold">{title}</h2>
+      {description && <p className="text-xs leading-relaxed text-muted-foreground">{description}</p>}
+    </div>
+    <div className="min-w-0 self-start overflow-hidden rounded-lg border bg-card">{children}</div>
+  </section>
+}
+
+/** SettingsList stacks SwitchField rows (variant="row") with dividers. */
+export function SettingsList({ label, children }: { label?: string; children: ReactNode }) {
+  return <div>
+    {label && <p className="border-b px-4 py-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>}
+    <div className="divide-y">{children}</div>
   </div>
 }
 
@@ -63,7 +92,7 @@ export function RadioCards({ name, label, hint, options, value, defaultValue, on
   </fieldset>
 }
 
-export function FormDialog({ title, description, fields, submit, onClose, success = 'Saved', submitLabel = 'Save' }: { title: string; description: string; fields: Field[]; submit: (data: Record<string, string | boolean>) => Promise<void>; onClose: () => void; success?: string; submitLabel?: string }) {
+export function FormDialog({ title, description, fields, submit, onClose, success = t('Saved'), submitLabel = t('Save') }: { title: string; description: string; fields: Field[]; submit: (data: Record<string, string | boolean>) => Promise<void>; onClose: () => void; success?: string; submitLabel?: string }) {
   const id = useId()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -80,19 +109,19 @@ export function FormDialog({ title, description, fields, submit, onClose, succes
       {fields.map(field => field.type === 'checkbox' ? <SwitchField key={field.name} id={`${id}-${field.name}`} name={field.name} label={field.label} hint={field.hint} defaultChecked={field.value === true} disabled={busy} /> :
         field.type === 'radio' && field.options ? <RadioCards key={field.name} name={field.name} label={field.label} hint={field.hint} options={field.options} defaultValue={String(field.value ?? field.options[0]?.value ?? '')} disabled={busy} /> :
         <div className="space-y-1.5" key={field.name}>
-        <label className="text-sm font-medium" htmlFor={`${id}-${field.name}`}>{field.label}{field.optional && <span className="ml-1 font-normal text-muted-foreground">(optional)</span>}</label>
+        <label className="text-sm font-medium" htmlFor={`${id}-${field.name}`}>{field.label}{field.optional && <span className="ml-1 font-normal text-muted-foreground">{t('(optional)')}</span>}</label>
         {field.type === 'dropdown' && field.options ? <select id={`${id}-${field.name}`} name={field.name} className={selectClass} defaultValue={String(field.value ?? field.options[0]?.value ?? '')} disabled={busy}>{field.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select> :
-          field.type === 'select' && field.selectPath && field.selectMap ? <SearchSelect id={`${id}-${field.name}`} name={field.name} path={field.selectPath} mapItem={field.selectMap} defaultValue={String(field.value ?? '')} required={!field.optional} disabled={busy} placeholder={`Search ${field.label.toLowerCase()}…`} /> :
-          field.type === 'tags' ? <TagInput id={`${id}-${field.name}`} name={field.name} defaultValue={field.tags ?? []} disabled={busy} placeholder="Type and press Enter…" prefix={field.prefix} /> :
+          field.type === 'select' && field.selectPath && field.selectMap ? <SearchSelect id={`${id}-${field.name}`} name={field.name} path={field.selectPath} mapItem={field.selectMap} defaultValue={String(field.value ?? '')} required={!field.optional} disabled={busy} placeholder={t('Search {{noun}}…', { noun: field.label.toLocaleLowerCase(language()) })} /> :
+          field.type === 'tags' ? <TagInput id={`${id}-${field.name}`} name={field.name} defaultValue={field.tags ?? []} disabled={busy} placeholder={t('Type and press Enter…')} prefix={field.prefix} /> :
           <Input id={`${id}-${field.name}`} name={field.name} type={field.type === 'list' ? 'text' : field.type ?? 'text'} defaultValue={String(field.value ?? '')} required={!field.optional} disabled={busy} autoComplete={field.type === 'password' ? 'new-password' : 'off'} />}
         {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
       </div>)}
       {error && <ErrorState error={error} />}
-      <div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button><Button type="submit" disabled={busy}>{busy ? 'Saving…' : submitLabel}</Button></div>
+      <div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('Cancel')}</Button><Button type="submit" disabled={busy}>{busy ? t('Saving…') : submitLabel}</Button></div>
     </form>
   </DialogContent></Dialog>
 }
-export function ConfirmDialog({ title, description, confirm, onClose, confirmLabel = 'Confirm', confirmationText }: { title: string; description: string; confirm: () => Promise<void>; onClose: () => void; confirmLabel?: string; confirmationText?: string }) {
+export function ConfirmDialog({ title, description, confirm, onClose, confirmLabel = t('Confirm'), confirmationText }: { title: string; description: string; confirm: () => Promise<void>; onClose: () => void; confirmLabel?: string; confirmationText?: string }) {
   const id = useId()
   const [confirmation, setConfirmation] = useState('')
   const confirmed = confirmationText === undefined || confirmation === confirmationText
@@ -102,11 +131,11 @@ export function ConfirmDialog({ title, description, confirm, onClose, confirmLab
   return <Dialog open onOpenChange={open => { if (!open && !pending.current) onClose() }}><DialogContent>
     <DialogTitle className="text-base font-semibold">{title}</DialogTitle><DialogDescription className="text-muted-foreground">{description}</DialogDescription>
     {confirmationText !== undefined && <div className="space-y-2">
-      <label htmlFor={id} className="text-sm">Type <strong className="break-all">{confirmationText}</strong> to confirm</label>
+      <label htmlFor={id} className="text-sm">{rich('Type {{strong}} to confirm', { strong: <strong className="break-all">{confirmationText}</strong> })}</label>
       <Input id={id} value={confirmation} onChange={e => setConfirmation(e.target.value)} disabled={busy} autoComplete="off" spellCheck={false} />
     </div>}
     {error && <ErrorState error={error} />}
-    <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={onClose}>Cancel</Button><Button variant="destructive" disabled={busy || !confirmed} onClick={async () => { if (pending.current || !confirmed) return; pending.current = true; setBusy(true); setError(''); try { await confirm(); onClose() } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) } }}>{busy ? 'Working…' : confirmLabel}</Button></div>
+    <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={onClose}>{t('Cancel')}</Button><Button variant="destructive" disabled={busy || !confirmed} onClick={async () => { if (pending.current || !confirmed) return; pending.current = true; setBusy(true); setError(''); try { await confirm(); onClose() } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) } }}>{busy ? t('Working…') : confirmLabel}</Button></div>
   </DialogContent></Dialog>
 }
 export interface Column {
@@ -129,12 +158,12 @@ const interactive = 'a,button,input,select,textarea,label,[role=menuitem],[role=
  * while focus is inside it. `empty` replaces the default empty message. */
 export function DataTable({ columns, rows, loading, error, retry, rowHref, empty }: { columns: (string | Column)[]; rows: ReactNode[][]; loading: boolean; error: string; retry: () => void; rowHref?: (index: number) => string; empty?: ReactNode }) {
   const navigate = useNavigate()
-  const specs = columns.map(c => typeof c === 'string' ? { header: c, align: c === 'Actions' || c === '' ? 'right' as const : undefined } : c)
-  if (loading) return <div role="status" className="space-y-3 py-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10" />)}<span className="sr-only">Loading data…</span></div>
+  const specs = columns.map(c => typeof c === 'string' ? { header: c, align: c === t('Actions') || c === '' ? 'right' as const : undefined } : c)
+  if (loading) return <div role="status" className="space-y-3 py-4">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10" />)}<span className="sr-only">{t('Loading data…')}</span></div>
   if (error) return <ErrorState error={error} retry={retry} />
-  if (!rows.length) return <>{empty ?? <EmptyState title="No results found" />}</>
+  if (!rows.length) return <>{empty ?? <EmptyState title={t('No results found')} />}</>
   return <div className="overflow-hidden rounded-lg border bg-card"><Table>
-    <TableHeader><TableRow className="hover:bg-transparent">{specs.map((c, i) => <TableHead key={i} className={cn(cellClass(c), 'whitespace-nowrap px-3 text-xs text-muted-foreground')}>{c.align === 'right' && (c.header === 'Actions' || !c.header) ? <span className="sr-only">Actions</span> : c.header}</TableHead>)}</TableRow></TableHeader>
+    <TableHeader><TableRow className="hover:bg-transparent">{specs.map((c, i) => <TableHead key={i} className={cn(cellClass(c), 'whitespace-nowrap px-3 text-xs text-muted-foreground')}>{c.align === 'right' && (c.header === t('Actions') || !c.header) ? <span className="sr-only">{t('Actions')}</span> : c.header}</TableHead>)}</TableRow></TableHeader>
     <TableBody>{rows.map((row, i) => {
       const href = rowHref?.(i)
       return <TableRow key={i} className={cn(href && 'cursor-pointer has-[:focus-visible]:bg-muted/50')} onClick={href ? e => { if (!(e.target as HTMLElement).closest(interactive) && !window.getSelection()?.toString()) navigate(href) } : undefined}>
@@ -154,7 +183,7 @@ export function EmptyState({ icon, title, description, action }: { icon?: ReactN
   </div>
 }
 
-export function Status({ active, label }: { active: boolean; label?: string }) { return <Badge variant="secondary" className={active ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}>{label ?? (active ? 'Active' : 'Inactive')}</Badge> }
+export function Status({ active, label }: { active: boolean; label?: string }) { return <Badge variant="secondary" className={active ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}>{label ?? (active ? t('Active') : t('Inactive'))}</Badge> }
 /** ID shows an identifier compactly (first block) with a copy button; the
  * full value is in the tooltip and on the clipboard. */
 export function ID({ value }: { value: string }) { return <CopyText value={value} short /> }
@@ -162,11 +191,11 @@ export function ID({ value }: { value: string }) { return <CopyText value={value
 /** shortId abbreviates a UUID to its first block for display. */
 export function shortId(value: string) { return /^[0-9a-f]{8}-/i.test(value) ? `${value.slice(0, 8)}…` : value }
 
-export function CopyButton({ value, label = 'Copy', className }: { value: string; label?: string; className?: string }) {
+export function CopyButton({ value, label = t('Copy'), className }: { value: string; label?: string; className?: string }) {
   const [copied, setCopied] = useState(false)
-  return <Button type="button" variant="ghost" size="icon-xs" className={className} aria-label={copied ? 'Copied' : label} title={copied ? 'Copied' : label} onClick={async e => {
+  return <Button type="button" variant="ghost" size="icon-xs" className={className} aria-label={copied ? t('Copied') : label} title={copied ? t('Copied') : label} onClick={async e => {
     e.stopPropagation()
-    try { await navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { toast.error('Copy failed — select the text instead') }
+    try { await navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { toast.error(t('Copy failed — select the text instead')) }
   }}>{copied ? <Check className="text-success" /> : <Copy />}</Button>
 }
 
@@ -175,7 +204,7 @@ export function CopyButton({ value, label = 'Copy', className }: { value: string
 export function CopyText({ value, short, label }: { value: string; short?: boolean; label?: string }) {
   return <span className="group/copy inline-flex max-w-full items-center gap-0.5">
     <span className="truncate font-mono text-xs text-muted-foreground" title={value}>{short ? shortId(value) : value}</span>
-    <CopyButton value={value} label={label ?? 'Copy ID'} className="opacity-60 group-hover/copy:opacity-100 focus-visible:opacity-100" />
+    <CopyButton value={value} label={label ?? t('Copy ID')} className="opacity-60 group-hover/copy:opacity-100 focus-visible:opacity-100" />
   </span>
 }
 
@@ -186,7 +215,7 @@ export function CopyField({ label, value, hint, secret }: { label: string; value
     <p className="text-sm font-medium">{label}</p>
     <div className={cn('flex items-start gap-2 rounded-lg border bg-muted/50 p-2', secret && 'border-warning/40')}>
       <code className="min-w-0 flex-1 break-all py-0.5 text-xs select-all">{value}</code>
-      <CopyButton value={value} label={`Copy ${label.toLowerCase()}`} />
+      <CopyButton value={value} label={t('Copy {{field}}', { field: label })} />
     </div>
     {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
   </div>
@@ -201,14 +230,15 @@ export function EntityRef({ name, id, to, secondary }: { name?: string | null; i
   return <span className="block min-w-0" title={id ?? undefined}>{main}{secondary && <span className="block text-xs text-muted-foreground">{secondary}</span>}</span>
 }
 
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+let relative: Intl.RelativeTimeFormat | undefined
 const units: [Intl.RelativeTimeFormatUnit, number][] = [['year', 31536e6], ['month', 2592e6], ['week', 6048e5], ['day', 864e5], ['hour', 36e5], ['minute', 6e4]]
 export function fromNow(date: Date, now = Date.now()) {
   const diff = date.getTime() - now
+  relative ??= new Intl.RelativeTimeFormat(language(), { numeric: 'auto' })
   for (const [unit, ms] of units) if (Math.abs(diff) >= ms) return relative.format(Math.round(diff / ms), unit)
-  return diff > 0 ? 'in a moment' : 'just now'
+  return diff > 0 ? t('in a moment') : t('just now')
 }
-export function formatDate(date: Date) { return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) }
+export function formatDate(date: Date) { return formatDateTime(date) }
 
 /** Time shows a relative time ("in 3 days") with the exact date on hover. */
 export function Time({ value, prefix }: { value: string | null | undefined; prefix?: string }) {

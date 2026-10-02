@@ -1,4 +1,5 @@
 import { useId, useState } from 'react'
+import { t } from '@/lib/i18n'
 
 const SCOPE_PREVIEW = 3
 
@@ -18,7 +19,7 @@ export function CollapsibleScopes({ scopes }: { scopes: string[] }) {
       aria-controls={id}
       onClick={() => setOpen(!open)}
     >
-      {open ? 'Show less' : `+${scopes.length - SCOPE_PREVIEW} more`}
+      {open ? t('Show less') : t('+{{value}} more', { value: scopes.length - SCOPE_PREVIEW })}
     </button>}
   </div>
 }

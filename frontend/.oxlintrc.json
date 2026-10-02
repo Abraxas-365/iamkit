@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "unicorn", "oxc"],
+  "rules": {
+    "react/jsx-key": "off",
+    "react/purity": "off",
+    "react/refs": "off",
+    "react/set-state-in-effect": "off",
+    "react-hooks/exhaustive-deps": "off",
+    "react/jsx-no-literals": ["error", {
+      "noStrings": false,
+      "ignoreProps": true,
+      "allowedStrings": ["—", "–", "·", "/", "×", "›", "‹", "↑", "↓", "→", "←", "…", ":", ",", ".", "(", ")", "+", "%", "#", "K", "⌘", "ms", "px", "iamkit", "IAMKit", "HTML", "SMS", "TLS", "STARTTLS", "OK", "TXT"]
+    }]
+  },
+  "overrides": [
+    { "files": ["**/*.test.tsx", "**/*.test.ts", "src/components/ui/**"], "rules": { "react/jsx-no-literals": "off" } }
+  ]
+}

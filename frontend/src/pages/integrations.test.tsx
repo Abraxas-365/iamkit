@@ -219,3 +219,17 @@ it('hides the impersonation switch from admins', async () => {
   expect(await screen.findByRole('menuitem', { name: 'Authentication' })).toBeTruthy()
   expect(screen.queryByRole('menuitem', { name: 'Allow impersonation' })).toBeNull()
 })
+
+it('turns on mobile phone sync when issuing another SCIM token', async () => {
+  const base = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => init.method === 'POST' && url.includes('/provisioning-credentials')
+    ? Response.json({ id: 'p2', secret: 'ik_scim_s3cret', expires_at: '2099-01-01T00:00:00Z', connection_id: 'sc1' }, { status: 201 })
+    : base(url, init))
+  open('provisioning')
+  await userEvent.click(await screen.findByRole('button', { name: 'Actions for Acme directory' }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Issue another token' }))
+  const dialog = await screen.findByRole('dialog')
+  await userEvent.click(within(dialog).getByRole('switch', { name: /Sync mobile phone numbers/ }))
+  await userEvent.click(within(dialog).getByRole('button', { name: /Issue token/ }))
+  await waitFor(() => expect(calls('POST')[0]?.body).toMatchObject({ connection_id: 'sc1', map_phone: true, adopt_existing_members: true }))
+})

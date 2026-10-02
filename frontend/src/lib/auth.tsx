@@ -2,6 +2,20 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import type { ReactNode } from 'react'
 import { api, ApiError } from './api'
 import { message } from './utils'
+import { remember, t } from '@/lib/i18n'
+// syncLanguage applies the operator's saved console language
+// (operators.locale), so the choice follows them to other browsers; the
+// page reloads only when it differs from the language already loaded.
+async function syncLanguage() {
+  try {
+    const { locale } = await api.get<{ locale: string | null }>('/preferences')
+    // At most one reload per tab: a catalog that fails to load must not loop.
+    if (remember(locale) && !sessionStorage.getItem('iamkit-locale-synced')) {
+      sessionStorage.setItem('iamkit-locale-synced', '1')
+      window.location.reload()
+    }
+  } catch { /* keep the browser's choice */ }
+}
 export interface Principal { operator_id: string; workspace_id: string; role: 'owner' | 'admin' | 'viewer'; method?: 'password' | 'sso' | 'key'; authenticated_at?: string }
 export interface SSOProvider { id: string; name: string; type: 'oidc' | 'google' | 'microsoft' }
 /** How operators sign in to this deployment (IAMKIT_OPERATOR_SSO_*, IAMKIT_OPERATOR_PASSWORD_LOGIN). */
@@ -27,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const reload = useCallback(async () => {
     const current = ++generation.current
     setLoading(true); setError('')
-    try { const p = await api.get<Principal>('/me'); if (current === generation.current) setPrincipal(p) }
+    try { const p = await api.get<Principal>('/me'); if (current === generation.current) { setPrincipal(p); void syncLanguage() } }
     catch (e) { if (current === generation.current) { setPrincipal(null); if (!(e instanceof ApiError && e.status === 401)) setError(message(e)) } }
     finally { if (current === generation.current) setLoading(false) }
   }, [])
@@ -45,8 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Verify the browser accepted the Secure cookie, rather than trusting the login response.
     const p = await api.get<Principal>('/me')
     ++generation.current; setPrincipal(p); setError('')
+    void syncLanguage()
   }
   async function logout() { await api.delete('/sessions/current'); ++generation.current; setPrincipal(null) }
   return <Context.Provider value={{ principal, options, loading, error, reload, login, logout }}>{children}</Context.Provider>
 }
-export function useAuth() { const value = useContext(Context); if (!value) throw new Error('AuthProvider required'); return value }
+export function useAuth() { const value = useContext(Context); if (!value) throw new Error(t('AuthProvider required')); return value }

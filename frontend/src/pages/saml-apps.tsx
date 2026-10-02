@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { RowActions } from '@/components/ui/menu'
 import { ConfirmDialog, CopyField, DataTable, EmptyState, FormDialog, PageHeader, type Field } from '@/components/library/patterns'
+import { t } from '@/lib/i18n'
 
 /** GET /saml/service-providers item (samlidp.ServiceProvider). */
 export interface ServiceProvider {
@@ -38,16 +39,16 @@ export function parseAttributes(tags: string[]): Record<string, string> {
   const out: Record<string, string> = {}
   for (const tag of tags) {
     const [name, source] = tag.split('=').map(s => s.trim())
-    if (!name || !source) throw new Error(`Attribute "${tag}" must be written name=source`)
-    if (!attributeSources.includes(source)) throw new Error(`Attribute "${name}": source must be one of ${attributeSources.join(', ')}`)
+    if (!name || !source) throw new Error(t('Attribute "{{tag}}" must be written name=source', { tag }))
+    if (!attributeSources.includes(source)) throw new Error(t('Attribute “{{name}}”: source must be one of {{sources}}', { name, sources: attributeSources.join(', ') }))
     out[name] = source
   }
   return out
 }
 
 const nameIDOptions = [
-  { value: 'email', label: 'Email address', description: 'NameID is the user\'s email (format emailAddress).' },
-  { value: 'persistent', label: 'User ID', description: 'NameID is IAMKit\'s stable user ID (format persistent).' },
+  { value: 'email', label: t('Email address'), description: t('NameID is the user\'s email (format emailAddress).') },
+  { value: 'persistent', label: t('User ID'), description: t('NameID is IAMKit\'s stable user ID (format persistent).') },
 ]
 
 /** SAMLAppsPage registers applications that sign users in with SAML 2.0,
@@ -69,15 +70,15 @@ export default function SAMLAppsPage() {
   const [removing, setRemoving] = useState<ServiceProvider | null>(null)
 
   const fields = (sp?: ServiceProvider): Field[] => [
-    { name: 'name', label: 'Name', value: sp?.name ?? '' },
+    { name: 'name', label: t('Name'), value: sp?.name ?? '' },
     ...(sp ? [] : [
-      { name: 'application_id', label: 'Application', type: 'select', selectPath: `${base}/applications`, selectMap: named } as Field,
-      { name: 'resource_id', label: 'Resource', type: 'select', selectPath: `${base}/resources`, selectMap: named, hint: 'Linked to the application; its permissions can be sent as an attribute.' } as Field,
-      { name: 'entity_id', label: 'Entity ID', hint: 'The service provider\'s entity ID (Issuer of its AuthnRequests), from its metadata.' } as Field,
+      { name: 'application_id', label: t('Application'), type: 'select', selectPath: `${base}/applications`, selectMap: named } as Field,
+      { name: 'resource_id', label: t('Resource'), type: 'select', selectPath: `${base}/resources`, selectMap: named, hint: t('Linked to the application; its permissions can be sent as an attribute.') } as Field,
+      { name: 'entity_id', label: t('Entity ID'), hint: t('The service provider\'s entity ID (Issuer of its AuthnRequests), from its metadata.') } as Field,
     ]),
-    { name: 'acs_urls', label: 'Assertion consumer service URLs', type: 'tags', tags: sp?.acs_urls ?? [], hint: 'HTTPS URLs the signed response may be posted to; the first is the default.' },
-    { name: 'name_id_format', label: 'NameID', type: 'radio', value: sp?.name_id_format ?? 'email', options: nameIDOptions },
-    { name: 'attributes', label: 'Attributes', type: 'tags', optional: true, tags: Object.entries(sp?.attributes ?? {}).map(([k, v]) => `${k}=${v}`), hint: `name=source, source one of ${attributeSources.join(', ')} (e.g. mail=email).` },
+    { name: 'acs_urls', label: t('Assertion consumer service URLs'), type: 'tags', tags: sp?.acs_urls ?? [], hint: t('HTTPS URLs the signed response may be posted to; the first is the default.') },
+    { name: 'name_id_format', label: t('NameID'), type: 'radio', value: sp?.name_id_format ?? 'email', options: nameIDOptions },
+    { name: 'attributes', label: t('Attributes'), type: 'tags', optional: true, tags: Object.entries(sp?.attributes ?? {}).map(([k, v]) => `${k}=${v}`), hint: t('name=source, source one of {{sources}} (e.g. mail=email).', { sources: attributeSources.join(', ') }) },
   ]
 
   const save = async (data: Record<string, string | boolean>) => {
@@ -88,30 +89,30 @@ export default function SAMLAppsPage() {
   }
 
   return <div className="space-y-6">
-    <PageHeader title="SAML applications" description="Applications that sign users in with SAML 2.0, IAMKit being their identity provider. Users sign in on the hosted pages and are sent back with a signed assertion."
-      actions={canWrite && <Button onClick={() => setEditing('new')}><Plus /> Add SAML application</Button>} />
-    {idp && <section aria-label="Identity provider settings" className="grid gap-3 rounded-lg border p-4 md:grid-cols-2">
-      <CopyField label="Metadata URL" value={idp.metadata_url} hint="Give this URL to the service provider, or the values below." />
-      <CopyField label="Single sign-on URL" value={idp.sso_url} />
-      <CopyField label="Entity ID (Issuer)" value={idp.entity_id} />
-      <CopyField label="Signing certificate" value={idp.certificate} hint="Changes when the environment's signing key is rotated; service providers reading the metadata pick it up." />
+    <PageHeader title={t('SAML applications')} description={t('Applications that sign users in with SAML 2.0, IAMKit being their identity provider. Users sign in on the hosted pages and are sent back with a signed assertion.')}
+      actions={canWrite && <Button onClick={() => setEditing('new')}><Plus /> {t('Add SAML application')}</Button>} />
+    {idp && <section aria-label={t('Identity provider settings')} className="grid gap-3 rounded-lg border p-4 md:grid-cols-2">
+      <CopyField label={t('Metadata URL')} value={idp.metadata_url} hint={t('Give this URL to the service provider, or the values below.')} />
+      <CopyField label={t('Single sign-on URL')} value={idp.sso_url} />
+      <CopyField label={t('Entity ID (Issuer)')} value={idp.entity_id} />
+      <CopyField label={t('Signing certificate')} value={idp.certificate} hint={t('Changes when the environment\'s signing key is rotated; service providers reading the metadata pick it up.')} />
     </section>}
-    <DataTable columns={['Name', 'Entity ID', 'Signs in to', 'NameID', 'Actions']} loading={providers.loading} error={providers.error} retry={providers.reload}
-      empty={<EmptyState icon={<AppWindow />} title="No SAML applications" description="Register a service provider with its entity ID and assertion consumer service URL." />}
+    <DataTable columns={[t('Name'), t('Entity ID'), t('Signs in to'), t('NameID'), t('Actions')]} loading={providers.loading} error={providers.error} retry={providers.reload}
+      empty={<EmptyState icon={<AppWindow />} title={t('No SAML applications')} description={t('Register a service provider with its entity ID and assertion consumer service URL.')} />}
       rows={providers.data.map(sp => [
         <span className="font-medium">{sp.name}</span>,
         <code className="break-all text-xs">{sp.entity_id}</code>,
         <span>{sp.application_name} · {sp.resource_name}</span>,
-        <Badge variant="secondary">{sp.name_id_format === 'email' ? 'Email' : 'User ID'}</Badge>,
-        canWrite && <RowActions label={`Actions for ${sp.name}`} actions={[
-          { label: 'Edit', icon: <Pencil />, onSelect: () => setEditing(sp) },
-          { label: 'Delete', icon: <Trash2 />, destructive: true, onSelect: () => setRemoving(sp) },
+        <Badge variant="secondary">{sp.name_id_format === 'email' ? t('Email') : t('User ID')}</Badge>,
+        canWrite && <RowActions label={t('Actions for {{name}}', { name: sp.name })} actions={[
+          { label: t('Edit'), icon: <Pencil />, onSelect: () => setEditing(sp) },
+          { label: t('Delete'), icon: <Trash2 />, destructive: true, onSelect: () => setRemoving(sp) },
         ]} />,
       ])} />
-    {editing && <FormDialog title={editing === 'new' ? 'Add SAML application' : `Edit ${editing.name}`} description="IAMKit accepts AuthnRequests only from this entity ID and posts responses only to these URLs."
-      fields={fields(editing === 'new' ? undefined : editing)} submit={save} onClose={() => setEditing(null)} success={editing === 'new' ? 'SAML application added' : 'SAML application saved'} />}
-    {removing && <ConfirmDialog title={`Delete ${removing.name}?`} description="Its users can no longer sign in to it through IAMKit. Sessions already open in the application are not affected."
-      confirmLabel="Delete application" onClose={() => setRemoving(null)}
-      confirm={async () => { await api.delete(`${path}/${removing.id}`); toast.success('SAML application deleted'); providers.reload() }} />}
+    {editing && <FormDialog title={editing === 'new' ? t('Add SAML application') : t('Edit {{name}}', { name: editing.name })} description={t('IAMKit accepts AuthnRequests only from this entity ID and posts responses only to these URLs.')}
+      fields={fields(editing === 'new' ? undefined : editing)} submit={save} onClose={() => setEditing(null)} success={editing === 'new' ? t('SAML application added') : t('SAML application saved')} />}
+    {removing && <ConfirmDialog title={t('Delete {{name}}?', { name: removing.name })} description={t('Its users can no longer sign in to it through IAMKit. Sessions already open in the application are not affected.')}
+      confirmLabel={t('Delete application')} onClose={() => setRemoving(null)}
+      confirm={async () => { await api.delete(`${path}/${removing.id}`); toast.success(t('SAML application deleted')); providers.reload() }} />}
   </div>
 }
