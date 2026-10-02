@@ -1,4 +1,4 @@
-name: Release CLI
+name: Release
 
 on:
   push:
@@ -25,3 +25,26 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  chart:
+    # The Helm chart as oci://ghcr.io/<owner>/charts/iamkit, versioned like
+    # the release (tag v1.2.3 → chart 1.2.3, image ghcr.io/<owner>/iamkit:1.2.3
+    # from publish.yml).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Package and push
+        env:
+          TAG: ${{ github.ref_name }}
+          OWNER: ${{ github.repository_owner }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=${TAG#v}
+          owner=$(echo "$OWNER" | tr '[:upper:]' '[:lower:]')
+          echo "$TOKEN" | helm registry login ghcr.io --username "$OWNER" --password-stdin
+          helm package deploy/helm/iamkit --version "$version" --app-version "$version" --destination "$RUNNER_TEMP"
+          helm push "$RUNNER_TEMP/iamkit-$version.tgz" "oci://ghcr.io/$owner/charts"

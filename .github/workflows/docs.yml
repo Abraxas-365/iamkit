@@ -35,3 +35,114 @@ jobs:
         run: docker build -t iamkit-docs-validation:local .
       - name: Run disposable onboarding and restart smoke test
         run: bash docs/examples/deployment/smoke.sh
+
+  api-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            clients/typescript/package-lock.json
+            clients/js/package-lock.json
+            clients/react/package-lock.json
+      - name: OpenAPI document is current
+        env:
+          GOWORK: 'off'
+        run: go test ./cmd/openapi
+      - name: TypeScript client matches the document, builds and passes its tests
+        working-directory: clients/typescript
+        run: |
+          npm ci
+          npm run check
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Sign-in SDK (@iamkit/js) typechecks, passes its tests and builds
+        working-directory: clients/js
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+      - name: React kit (@iamkit/react) typechecks, passes its tests and builds
+        working-directory: clients/react
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+  browser:
+    # The console, hosted pages and org-admin portal in headless Chromium:
+    # IAMKit built from the checkout on PostgreSQL + Mailpit testcontainers.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install the suite and Chromium
+        working-directory: tests/browser
+        run: |
+          npm ci
+          npm run typecheck
+          npx playwright install --with-deps chromium
+      - name: Browser journeys
+        working-directory: tests/browser
+        env:
+          GOWORK: 'off'
+        run: npx playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser
+          path: |
+            tests/browser/playwright-report
+            tests/browser/test-results
+            tests/browser/.stack/iamkit.log
+
+  custom-ui-parity:
+    # The Next.js custom sign-in example against a real IAMKit: the hosted
+    # journeys replayed through @iamkit/react in Chromium.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build the clients the example installs
+        run: |
+          (cd clients/typescript && npm ci && npm run build)
+          (cd clients/js && npm ci && npm run build)
+          (cd clients/react && npm ci && npm run build)
+      - name: Install the example and Chromium
+        working-directory: examples/nextjs-login
+        run: |
+          npm ci
+          npm run typecheck
+          npx playwright install --with-deps chromium
+      - name: Parity journeys on a disposable stack
+        working-directory: examples/nextjs-login
+        env:
+          GOWORK: 'off'
+        run: bash e2e/run.sh
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: custom-ui-parity
+          path: |
+            examples/nextjs-login/playwright-report
+            examples/nextjs-login/test-results
+            examples/nextjs-login/e2e/.stack/*.log

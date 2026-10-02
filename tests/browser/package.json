@@ -1,0 +1,17 @@
+{
+  "name": "iamkit-browser-tests",
+  "private": true,
+  "type": "module",
+  "description": "Headless browser journeys of the console, hosted pages and org-admin portal against a real IAMKit on testcontainers",
+  "scripts": {
+    "test": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@testcontainers/postgresql": "^12.2.0",
+    "@types/node": "^22.0.0",
+    "testcontainers": "^12.2.0",
+    "typescript": "^5.9.3"
+  }
+}
