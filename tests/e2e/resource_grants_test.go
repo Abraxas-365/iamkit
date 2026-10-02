@@ -63,6 +63,7 @@ func TestResourceGrants(t *testing.T) {
 	// Operator rules.
 	e.Must("PUT", e.Base+"/resources/"+iam+"/access", e.Owner, fiber.Map{"require_grant": true}, 422)
 	e.Must("PUT", e.Base+"/resource-grants", e.Owner, fiber.Map{"resource_id": iam, "organization_id": e.Org}, 422)
+	e.Must("PUT", e.Base+"/resources/"+iam, e.Owner, fiber.Map{"name": "IAM", "permissions": []string{}}, 422)
 	e.Must("PUT", e.Base+"/resource-grants", e.Owner, fiber.Map{"resource_id": e.Res, "organization_id": vendor}, 422)
 	e.Must("PUT", e.Base+"/resource-grants", e.Owner, fiber.Map{"resource_id": e.Res, "organization_id": e.Org, "role_ids": []string{otherRole}}, 400)
 	e.Must("PUT", e.Base+"/resources/"+e.Res+"/access", e.Owner, fiber.Map{"owner_organization_id": "00000000-0000-4000-8000-000000000001"}, 404)

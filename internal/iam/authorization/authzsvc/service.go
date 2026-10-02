@@ -49,6 +49,11 @@ func (s *Service) UpdateCatalog(ctx context.Context, m authorization.Mutation, i
 	if err != nil {
 		return err
 	}
+	// The IAM catalog is built in: shrinking it would strip the built-in
+	// organization roles and the service accounts using it.
+	if existing.Prefix == "iam" {
+		return errx.Business("the IAM resource's permissions are built in and cannot be changed")
+	}
 	if err := identity.ValidatePermissions(input.Permissions, existing.Prefix); err != nil {
 		return err
 	}

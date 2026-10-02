@@ -38,6 +38,7 @@ beforeEach(() => {
                     { id: 'r3', name: 'Writer', resource_id: 'res1' },
                     { id: 'r9', name: 'Other', resource_id: 'res9' },
                   ]) :
+                    path === `${env}/resources` ? page([resource, { id: 'iam1', name: 'IAM', prefix: 'iam', audience: 'urn:iamkit:environment:env1', permissions: ['iam:users:read'] }]) :
                     path === `${env}/resource-grants` ? page(url.includes('organization_id=o2') ? [grants[0]] : grants) : []
     return Response.json(data)
   })
@@ -97,6 +98,16 @@ it('revokes a grant', async () => {
   await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Revoke grant' }))
   await waitFor(() => expect(calls('DELETE')).toHaveLength(1))
   expect(calls('DELETE')[0].url).toContain(`${env}/resource-grants/g2`)
+})
+
+it('offers no edit for the built-in IAM resource', async () => {
+  open('/resources')
+  await userEvent.click(await screen.findByRole('button', { name: 'Actions for Invoices' }))
+  expect(await screen.findByRole('menuitem', { name: 'Edit' })).toBeTruthy()
+  await userEvent.keyboard('{Escape}')
+  await userEvent.click(screen.getByRole('button', { name: 'Actions for IAM' }))
+  expect(await screen.findByRole('menuitem', { name: 'Open' })).toBeTruthy()
+  expect(screen.queryByRole('menuitem', { name: 'Edit' })).toBeNull()
 })
 
 it('hides write actions from viewers', async () => {

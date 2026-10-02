@@ -14,7 +14,7 @@ Owner/admin writes; viewers read. Entity lists use the
 | `POST /resources` | `name`, `prefix`, `audience`, `permissions` array | 201 `{id}` |
 | `GET /resources` | — | 200 page |
 | `GET /resources/:id` | — | 200 resource |
-| `PUT /resources/:id` | `name`, `permissions` | 204 |
+| `PUT /resources/:id` | `name`, `permissions` | 204; permissions removed from the catalog are removed from roles, grants and service accounts too; 422 for the IAM resource (its catalog is built in) |
 | `PUT /resources/:id/access` | `owner_organization_id` (null = the environment), `require_grant` | 204; 422 for the IAM resource; organizations losing access have their sessions for the resource ended |
 | `PUT /resource-grants` | `resource_id`, `organization_id`, `role_ids` (null = every role) | 200 grant; replaces the roles of an existing grant; 422 for the owner organization or the IAM resource; 400 for a role of another resource |
 | `GET /resource-grants` | Optional `resource_id`, `organization_id`, list parameters | 200 page of `{id,resource_id,resource_name,organization_id,organization_name,role_ids,created_at,updated_at}` |

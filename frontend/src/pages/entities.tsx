@@ -267,6 +267,8 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
     if (!canWrite) return out
     if (kind === 'organizations') out.push({ label: t('Members'), icon: <Users />, onSelect: () => navigate(`${envBase}/organizations/${row.id}/members`) })
     if (kind === 'roles' && row.system_role) return out
+    // The IAM resource's catalog is built in (the API refuses edits).
+    if (kind === 'resources' && row.prefix === 'iam') return out
     if (kind !== 'organizations' && kind !== 'users') out.push({ label: t('Edit'), icon: <Pencil />, onSelect: () => openEdit(row) })
     if (kind === 'users') {
       out.push({ label: t('Edit'), icon: <Pencil />, onSelect: () => openEdit(row) })
