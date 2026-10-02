@@ -1,0 +1,52 @@
+# Prerequisites for chart-testing (ct install): a throwaway PostgreSQL and
+# the Secrets the chart references. Applied by CI before `ct install`;
+# not for production.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: iamkit-ci
+stringData:
+  DATABASE_URL: postgres://iamkit:ci-only@iamkit-ci-postgres:5432/iamkit?sslmode=disable
+  OIDC_HMAC_SECRET: ci-only-hmac-secret-0123456789abcdef
+  IAMKIT_ENCRYPTION_KEY: Y2ktb25seS0zMi1ieXRlLWtleS0wMTIzNDU2Nzg5YWI=
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iamkit-ci-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iamkit-ci-postgres
+  template:
+    metadata:
+      labels:
+        app: iamkit-ci-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_USER
+              value: iamkit
+            - name: POSTGRES_PASSWORD
+              value: ci-only
+            - name: POSTGRES_DB
+              value: iamkit
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "iamkit", "-d", "iamkit"]
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iamkit-ci-postgres
+spec:
+  selector:
+    app: iamkit-ci-postgres
+  ports:
+    - port: 5432

@@ -1,0 +1,16 @@
+# Caddy obtains and renews the certificate for {$IAMKIT_DOMAIN} and
+# redirects HTTP to HTTPS on its own.
+{
+	email {$ACME_EMAIL}
+}
+
+{$IAMKIT_DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy iamkit:8080 {
+		# Clients' own X-Forwarded-* headers are replaced (Caddy trusts no
+		# upstream proxy), so IAMKit sees the real client address.
+		health_uri /health
+		health_interval 10s
+	}
+}

@@ -1,0 +1,11 @@
+apiVersion: v2
+name: iamkit
+description: IAMKit — identity and access management (OAuth 2.0 / OIDC, SAML, SCIM) on PostgreSQL
+type: application
+version: 0.1.0
+appVersion: "latest"
+home: https://github.com/Abraxas-365/iamkit
+sources:
+  - https://github.com/Abraxas-365/iamkit
+keywords: [iam, oauth2, oidc, saml, scim, identity]
+kubeVersion: ">=1.25.0-0"

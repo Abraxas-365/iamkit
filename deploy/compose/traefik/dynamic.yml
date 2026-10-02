@@ -1,0 +1,31 @@
+# Traefik routes for IAMKit (file provider; Go templates read the
+# container's environment).
+http:
+  routers:
+    iamkit:
+      rule: 'Host(`{{ env "IAMKIT_DOMAIN" }}`)'
+      entryPoints: [websecure]
+      service: iamkit
+      middlewares: [hsts]
+      tls:
+        certResolver: '{{ env "IAMKIT_ACME_CHALLENGE" }}'
+
+  middlewares:
+    hsts:
+      headers:
+        stsSeconds: 31536000
+
+  services:
+    iamkit:
+      loadBalancer:
+        servers:
+          - url: http://iamkit:8080
+        healthCheck:
+          path: /health
+          interval: 10s
+          timeout: 3s
+
+tls:
+  options:
+    default:
+      minVersion: VersionTLS12

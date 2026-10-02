@@ -1,0 +1,129 @@
+# IAMKit Helm values. PostgreSQL is not part of the chart: point
+# database.existingSecret at a Secret holding DATABASE_URL.
+
+image:
+  repository: ghcr.io/abraxas-365/iamkit
+  # Defaults to the chart's appVersion. Prefer a digest in production.
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+replicaCount: 2
+
+# Public HTTPS origin; tokens name it as their issuer. Required. Changing it
+# invalidates every issued token.
+issuer: ""
+
+database:
+  # Secret with the PostgreSQL URL (postgres://user:pass@host:5432/iamkit?sslmode=require).
+  existingSecret: ""
+  key: DATABASE_URL
+
+# Required Secrets (create them before installing; see the chart README).
+secrets:
+  # RSA private key (PEM, 2048+ bits) mounted as a file.
+  signingKey:
+    existingSecret: ""
+    key: jwt.pem
+  # OAuth HMAC secret (32+ bytes), stable across replicas and upgrades.
+  hmac:
+    existingSecret: ""
+    key: OIDC_HMAC_SECRET
+  # AES-256 key for stored secrets (base64 of 32 bytes). Optional but needed
+  # for SSO connections, SMTP passwords, signing keys, webhooks. keyOld:
+  # previous keys during a rotation (comma-separated).
+  encryption:
+    existingSecret: ""
+    key: IAMKIT_ENCRYPTION_KEY
+    keyOld: ""
+
+# Optional Redis (REDIS_URL): shared rate limits and caches across replicas.
+redis:
+  existingSecret: ""
+  key: REDIS_URL
+
+# Plain environment (docs/reference/configuration.md), e.g.
+#   CORS_ALLOWED_ORIGINS: https://app.example.com
+#   IAMKIT_FEATURES: saml_idp=false
+#   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability:4318
+env: {}
+# Extra env entries (valueFrom secretKeyRef etc.), e.g. SMTP_PASSWORD.
+extraEnv: []
+# Secrets or ConfigMaps loaded whole as environment.
+envFrom: []
+
+# Reverse proxies (IPs/CIDRs) allowed to name the client in
+# X-Forwarded-For: your ingress controller's pod or node range. Empty
+# trusts no forwarded header; per-IP rate limits then see the proxy.
+trustedProxies: []
+
+# Background jobs (back-channel logout, webhooks, pruning) run on every
+# replica unless disabled here; they coordinate through the database.
+workers:
+  enabled: true
+
+migrations:
+  # Run `iamkit migrate` as a pre-install/pre-upgrade hook Job. Migrations
+  # take a PostgreSQL advisory lock, so a pod starting during the Job waits
+  # instead of racing (the server also migrates at start).
+  job: true
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  resources: {}
+
+# Prometheus listener (IAMKIT_METRICS_ADDR) on a separate port, never the
+# public one.
+metrics:
+  enabled: false
+  port: 9464
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # Defaults to the issuer's host.
+  host: ""
+  tls:
+    # Secret with the certificate (for cert-manager, set its annotation and
+    # this name).
+    secretName: ""
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+# Seconds to drain HTTP (10 s), workers and the usage flush before SIGKILL.
+terminationGracePeriodSeconds: 40

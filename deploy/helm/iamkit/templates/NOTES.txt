@@ -1,0 +1,17 @@
+IAMKit {{ .Chart.AppVersion }} is installed as {{ include "iamkit.fullname" . }}.
+
+Issuer: {{ include "iamkit.issuer" . }}
+{{- if not .Values.ingress.enabled }}
+No Ingress was created: route {{ include "iamkit.issuer" . }} to service {{ include "iamkit.fullname" . }}:{{ .Values.service.port }} over HTTPS.
+{{- end }}
+{{- if not .Values.trustedProxies }}
+trustedProxies is empty: IAMKit sees your ingress controller as every client (per-IP rate limits are shared). Set it to the controller's pod range.
+{{- end }}
+
+Check it:
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}
+
+Bootstrap the first workspace owner (once; the key file stays in the pod's /tmp):
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "iamkit.fullname" . }} -- \
+    iamkit bootstrap --email owner@example.com --workspace Default --output /tmp/owner.json
+  kubectl -n {{ .Release.Namespace }} exec deploy/{{ include "iamkit.fullname" . }} -- cat /tmp/owner.json

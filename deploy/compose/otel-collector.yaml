@@ -1,0 +1,31 @@
+# OpenTelemetry collector for the Compose deployments (profile "otel").
+# IAMKit sends traces and metrics over OTLP/HTTP to otel-collector:4318.
+# This configuration only logs a summary; replace the debug exporter with
+# your backend (otlphttp to Tempo/Honeycomb/Grafana Cloud, ...).
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch: {}
+
+exporters:
+  debug:
+    verbosity: basic
+  # otlphttp:
+  #   endpoint: https://otlp.example.com
+  #   headers:
+  #     authorization: Bearer ${env:OTLP_TOKEN}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

@@ -1,0 +1,22 @@
+# chart-testing values (ct lint/install): the Secret iamkit-ci comes from
+# deploy/helm/ci/prerequisites.yaml, the signing key Secret from CI.
+issuer: https://iam.ci.example
+replicaCount: 2
+database:
+  existingSecret: iamkit-ci
+secrets:
+  signingKey:
+    existingSecret: iamkit-ci-signing
+  hmac:
+    existingSecret: iamkit-ci
+  encryption:
+    existingSecret: iamkit-ci
+trustedProxies: [10.244.0.0/16]
+metrics:
+  enabled: true
+ingress:
+  enabled: true
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi

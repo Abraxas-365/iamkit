@@ -1,0 +1,8 @@
+# chart-testing configuration (ct lint / ct install).
+chart-dirs:
+  - deploy/helm
+target-branch: main
+validate-maintainers: false
+check-version-increment: false
+excluded-charts:
+  - ci

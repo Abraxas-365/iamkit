@@ -1,0 +1,54 @@
+{{- if .Values.migrations.job }}
+# Applies migrations before the Deployment changes (install and upgrade).
+# The hook runs before the release's own objects exist, so it uses the
+# namespace's default service account and needs only the database Secret.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "iamkit.fullname" . }}-migrate
+  labels:
+    {{- include "iamkit.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrations
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "0"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "iamkit.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrations
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- include "iamkit.podSecurityContext" . | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "iamkit.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["migrate"]
+          securityContext:
+            {{- include "iamkit.containerSecurityContext" . | nindent 12 }}
+          env:
+            {{- include "iamkit.databaseEnv" . | nindent 12 }}
+          {{- with .Values.migrations.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

@@ -1,0 +1,122 @@
+# IAMKit behind Caddy (automatic HTTPS from Let's Encrypt / ZeroSSL) — the
+# simplest TLS setup. PostgreSQL, and optionally Redis and an OpenTelemetry
+# collector, stay on an internal network.
+#
+#   ../setup.sh caddy iam.example.com ops@example.com
+#   docker compose up -d --wait
+#
+# See docs/operations/deployment.md#compose-with-tls.
+
+name: iamkit
+
+services:
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    environment:
+      IAMKIT_DOMAIN: ${IAMKIT_DOMAIN:?run ../setup.sh first}
+      ACME_EMAIL: ${ACME_EMAIL:?run ../setup.sh first}
+    ports:
+      - "${IAMKIT_HTTP_PORT:-80}:80"
+      - "${IAMKIT_HTTPS_PORT:-443}:443"
+      - "${IAMKIT_HTTPS_PORT:-443}:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - edge
+
+  # Copies secrets/jwt.pem into a volume readable only by the iamkit user
+  # (the container does not run as root), on every start.
+  keys:
+    image: ${IAMKIT_IMAGE:-ghcr.io/abraxas-365/iamkit:latest}
+    user: "0"
+    entrypoint: ["sh", "-c", "cp /input/jwt.pem /secrets/jwt.pem && chown iamkit:iamkit /secrets/jwt.pem && chmod 400 /secrets/jwt.pem"]
+    volumes:
+      - ./secrets/jwt.pem:/input/jwt.pem:ro
+      - keys:/secrets
+    network_mode: none
+
+  iamkit:
+    image: ${IAMKIT_IMAGE:-ghcr.io/abraxas-365/iamkit:latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://iamkit:${POSTGRES_PASSWORD:?run ../setup.sh first}@postgres:5432/iamkit?sslmode=disable
+      JWT_ISSUER: https://${IAMKIT_DOMAIN}
+      JWT_PRIVATE_KEY_PATH: /secrets/jwt.pem
+      SERVER_PORT: "8080"
+      # Only Caddy (on the edge network) may name the client.
+      IAMKIT_TRUSTED_PROXIES: ${EDGE_SUBNET:-10.89.251.0/24}
+    volumes:
+      - keys:/secrets:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 40s
+    depends_on:
+      keys:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    networks:
+      - edge
+      - backend
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: iamkit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: iamkit
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U iamkit -d iamkit"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    networks:
+      - backend
+
+  # Optional (COMPOSE_PROFILES=redis + REDIS_URL=redis://redis:6379/0).
+  redis:
+    image: redis:7-alpine
+    profiles: [redis]
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    networks:
+      - backend
+
+  # Optional (COMPOSE_PROFILES=otel +
+  # OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318).
+  otel-collector:
+    image: otel/opentelemetry-collector:0.120.0
+    profiles: [otel]
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ../otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    networks:
+      - backend
+      - egress
+
+networks:
+  # Caddy and IAMKit only: IAMKit trusts forwarded headers from it.
+  edge:
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:-10.89.251.0/24}
+  backend:
+    internal: true
+  egress: {}
+
+volumes:
+  caddy-data:
+  caddy-config:
+  keys:
+  pgdata:

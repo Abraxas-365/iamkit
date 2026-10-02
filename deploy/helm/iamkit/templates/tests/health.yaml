@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "iamkit.fullname" . }}-test
+  labels:
+    {{- include "iamkit.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  securityContext:
+    {{- include "iamkit.podSecurityContext" . | nindent 4 }}
+  containers:
+    - name: health
+      image: {{ include "iamkit.image" . }}
+      securityContext:
+        {{- include "iamkit.containerSecurityContext" . | nindent 8 }}
+      command: ["sh", "-c"]
+      args:
+        - >-
+          wget -qO- http://{{ include "iamkit.fullname" . }}:{{ .Values.service.port }}/health | grep -q '"status":"healthy"' &&
+          wget -qO- http://{{ include "iamkit.fullname" . }}:{{ .Values.service.port }}/.well-known/openid-configuration | grep -q '"issuer":"{{ include "iamkit.issuer" . }}"'
