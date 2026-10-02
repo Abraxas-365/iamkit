@@ -33,6 +33,21 @@ func conflict(err error) error {
 	return failure(err)
 }
 
+// resourceConflict names the taken field of a resource insert: prefix and
+// audience are unique per environment.
+func resourceConflict(err error) error {
+	var pg *pq.Error
+	if errors.As(err, &pg) && pg.Code == "23505" {
+		switch pg.Constraint {
+		case "resources_environment_id_prefix_key":
+			return errx.Conflict("prefix is already used by another resource of this environment")
+		case "resources_environment_id_audience_key":
+			return errx.Conflict("audience is already used by another resource of this environment")
+		}
+	}
+	return conflict(err)
+}
+
 // assignment maps the violations of a role assignment insert: a unique
 // violation means the role is already held, a foreign-key violation that the
 // subject is outside the organization. Both stay 409 Conflict.
@@ -80,7 +95,7 @@ func (row resourceRow) toDomain() authorization.Resource {
 func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, input authorization.Resource) error {
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO resources(id,environment_id,name,prefix,audience,permissions,owner_organization_id,require_grant) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`, input.ID, environment, input.Name, input.Prefix, input.Audience, array(input.Permissions), input.OwnerOrganization, input.RequireGrant); err != nil {
-			return conflict(err)
+			return resourceConflict(err)
 		}
 		data := map[string]any{"prefix": input.Prefix}
 		if input.OwnerOrganization != nil {

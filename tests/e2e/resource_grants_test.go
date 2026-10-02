@@ -1,6 +1,7 @@
 package e2e_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -38,6 +39,16 @@ func TestResourceGrants(t *testing.T) {
 	reader := e.ID("POST", e.Base+"/roles", fiber.Map{"name": "reader", "resource_id": e.Res, "permissions": []string{"invoices:read"}})
 	writer := e.ID("POST", e.Base+"/roles", fiber.Map{"name": "writer", "resource_id": e.Res, "permissions": []string{"invoices:write"}})
 	other := e.ID("POST", e.Base+"/resources", fiber.Map{"name": "CRM", "prefix": "crm", "audience": "https://crm.example", "permissions": []string{"crm:read"}})
+	// A taken prefix or audience is named.
+	for field, body := range map[string]fiber.Map{
+		"prefix":   {"name": "CRM 2", "prefix": "crm", "audience": "https://crm2.example"},
+		"audience": {"name": "CRM 2", "prefix": "crm2", "audience": "https://crm.example"},
+	} {
+		msg := e.Must("POST", e.Base+"/resources", e.Owner, body, 409).JSON["error"].(map[string]any)["message"].(string)
+		if !strings.HasPrefix(msg, field+" is already used") {
+			t.Fatalf("duplicate %s: %q", field, msg)
+		}
+	}
 	otherRole := e.ID("POST", e.Base+"/roles", fiber.Map{"name": "crm reader", "resource_id": other, "permissions": []string{"crm:read"}})
 
 	// Vendor owns Billing; Vic administers Vendor, Alice administers Acme.
