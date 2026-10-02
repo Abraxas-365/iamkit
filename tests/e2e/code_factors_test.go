@@ -274,6 +274,13 @@ func TestCodeFactors(t *testing.T) {
 	if pending.JSON["enrollment_required"] != true || !equal(strs(pending.JSON["factors"]), []string{"totp"}) {
 		t.Fatalf("no usable factor = %s", pending.Body)
 	}
+	// The organization keeps only a kind the environment refuses: no factor
+	// can be added, so the login is refused instead of parking one nothing
+	// finishes.
+	e.Must("PATCH", org, e.Owner, fiber.Map{"allowed_factors": []string{"email"}}, 204)
+	if r := e.Must("POST", "/identity/v1/login", "", e.LoginBody(e.AliceEmail, e.Pass), 403); r.JSON["error"].(map[string]any)["code"] != "FACTOR_NOT_ALLOWED" {
+		t.Fatalf("disjoint factors = %s", r.Body)
+	}
 
 	// Removing the SMS factor needs a code; operator reset clears the phone factor.
 	e.Must("PATCH", org, e.Owner, fiber.Map{"allowed_factors": []string{"totp", "email", "sms", "webauthn"}}, 204)

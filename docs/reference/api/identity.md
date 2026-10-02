@@ -6,7 +6,7 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 
 | Method/path | Input/authority | Success |
 | --- | --- | --- |
-| `POST /login` | boundary + `email` or `login` (email or [username](../../guides/user-profiles.md#usernames)), `password`; optional `new_password` to replace an expired one | 200 token pair, or an [MFA step](#multi-factor); 403 `PASSWORD_CHANGE_REQUIRED` when the [password policy](../../guides/password-policy.md) expired the password |
+| `POST /login` | boundary + `email` or `login` (email or [username](../../guides/user-profiles.md#usernames)), `password`; optional `new_password` to replace an expired one | 200 token pair, or an [MFA step](#multi-factor); 403 `PASSWORD_CHANGE_REQUIRED` when the [password policy](../../guides/password-policy.md) expired the password; 403 `FACTOR_NOT_ALLOWED` when the user must enroll a second factor but none the policies allow can be added at sign-in |
 | `POST /mfa/verify` | `mfa_token`, `code` (TOTP, emailed/texted code, or recovery), or `webauthn_session` + `credential` (security key) | 200 token pair (+ `recovery_codes` after enrollment); rate limited |
 | `POST /mfa/enroll` | `mfa_token` of a login with `enrollment_required` | 200 `{secret,otpauth_uri}`; rate limited |
 | `POST /mfa/challenge` | `mfa_token`, `factor` (`email`\|`sms`) | 202 `{factor,destination,expires_at}`; 422 `FACTOR_NOT_ALLOWED`; 429 `CODE_COOLDOWN`/`CODE_LIMIT`; rate limited |

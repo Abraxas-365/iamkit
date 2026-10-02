@@ -31,7 +31,12 @@ curl -X PATCH $IAM/management/v1/environments/$ENV/organizations/$ORG -H "X-API-
 Saving the sign-in policy without `allowed_factors` keeps the current list; an
 empty list or an unknown kind is refused with 400. A factor the user already
 has but that is no longer allowed is not offered at sign-in; when nothing
-usable is left the user enrolls an allowed kind.
+usable is left the user enrolls an allowed kind (an authenticator app or an
+emailed code). When neither is allowed in both the environment and the
+organization, for example an organization that keeps only `sms` or `webauthn`,
+or only a kind the environment refuses, the sign-in is refused with 403
+`FACTOR_NOT_ALLOWED`: users with no usable factor cannot sign in until you
+widen the lists.
 
 - **Email** codes go through the environment's [email delivery](email-delivery.md)
   with purpose `mfa` (template `mfa`, editable like the others). Your email

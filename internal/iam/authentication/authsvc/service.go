@@ -164,6 +164,13 @@ func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, bou
 			if err = tx.Commit(); err != nil {
 				return authentication.Result{}, err
 			}
+			// Like the hosted enrollment page: a login that must add a
+			// factor but may add none would park a login nothing finishes.
+			if req.Enroll && len(req.Factors) == 0 {
+				e := errx.Forbidden("no second factor this sign-in may add is allowed; contact your administrator")
+				e.Code = "FACTOR_NOT_ALLOWED"
+				return authentication.Result{}, e
+			}
 			token, err := s.second.Begin(ctx, boundary, user, amr, req.Enroll, passwordHash)
 			if err != nil {
 				return authentication.Result{}, err
