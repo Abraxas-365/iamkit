@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 func oidcJourney(t *testing.T, app *App, call func(string, string, string, any, int) map[string]any, owner, base, env, org, client, resource string) {
@@ -123,6 +124,14 @@ func oidcJourney(t *testing.T, app *App, call func(string, string, string, any, 
 		t.Fatalf("short state refusal does not say why: %v", refused)
 	}
 	q.Set("state", "unpredictable-state-123456")
+	// Unknown, malformed and nil client IDs are one refusal, not 401/404/400.
+	for _, id := range []string{uuid.NewString(), "not-a-client", "00000000-0000-0000-0000-000000000000"} {
+		q.Set("client_id", id)
+		if refused, _ := request("GET", "/oauth/authorize?"+q.Encode(), "", "", "", nil, 400); refused["error"].(map[string]any)["message"] != "unknown client_id" {
+			t.Fatalf("client_id %q refusal = %v", id, refused)
+		}
+	}
+	q.Set("client_id", clientID)
 	// Concurrent reuse must revoke the winning rotation too.
 	begin, res = request("GET", "/oauth/authorize?"+q.Encode(), "", "", "", nil, 200)
 	body, _ = json.Marshal(fiber.Map{"authorization_ticket": begin["authorization_ticket"], "approve": true})

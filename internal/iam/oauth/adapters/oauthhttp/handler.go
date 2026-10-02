@@ -234,7 +234,7 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	q := req.URL.Query()
 	p, client, _, err := h.loadFromString(c, q.Get("client_id"))
 	if err != nil {
-		return err
+		return authorizeClientError(err)
 	}
 	if err = oauthsvc.ValidateAuthorization(h.issuer, client, q); err != nil {
 		return err
@@ -256,6 +256,18 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 		return c.Redirect("/hosted/login?"+url.Values{"ticket": {ticket}}.Encode(), fiber.StatusSeeOther)
 	}
 	return c.JSON(fiber.Map{"authorization_ticket": ticket, "client_id": client.ID, "environment_id": client.Environment, "application_id": client.Application, "resource_id": client.Resource, "audience": client.Audience, "scopes": ar.GetRequestedScopes()})
+}
+
+// authorizeClientError answers an authorization request whose client_id is
+// malformed, unknown or disabled the same way (400 "unknown client_id"): the
+// request names no client that can be redirected to, and an outsider learns
+// nothing about which IDs exist. Other lookup failures keep their status.
+func authorizeClientError(err error) error {
+	var e *errx.Error
+	if errors.As(err, &e) && e.HTTPStatus >= 500 {
+		return err
+	}
+	return errx.Validation("unknown client_id")
 }
 
 // authorizeError names what fosite refused in an authorization request (its
