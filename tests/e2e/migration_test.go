@@ -2,6 +2,7 @@ package e2e_test
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 
@@ -44,7 +45,9 @@ func migrationJourney(t *testing.T, call func(string, string, string, any, int) 
 	root := create(orgbase+"/org-units", fiber.Map{"name": "Europe", "kind": "region"})
 	child := create(orgbase+"/org-units", fiber.Map{"name": "Spain", "kind": "country", "parent_id": root})
 	call("PUT", orgbase+"/org-units/"+root, owner, fiber.Map{"name": "Europe", "kind": "region", "parent_id": child}, 400)
-	call("DELETE", orgbase+"/org-units/"+root, owner, nil, 409)
+	if msg := call("DELETE", orgbase+"/org-units/"+root, owner, nil, 409)["error"].(map[string]any)["message"]; !strings.Contains(msg.(string), "delete-impact") {
+		t.Fatalf("unit in use: %v", msg)
+	}
 	call("PUT", orgbase+"/members/"+member+"/profile", owner, fiber.Map{"org_unit_id": child, "manager_id": user}, 204)
 	call("PUT", orgbase+"/members/"+user+"/profile", owner, fiber.Map{"manager_id": member}, 400)
 	call("GET", orgbase+"/org-units/"+child, owner, nil, 200)

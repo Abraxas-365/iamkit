@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/event"
@@ -11,6 +12,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 func (r *Repository) Exists(ctx context.Context, b organization.Boundary) (bool, error) {
@@ -117,7 +119,30 @@ func (r *Repository) SaveUnit(ctx context.Context, b organization.Boundary, m or
 	return failure(tx.Commit())
 }
 func (r *Repository) DeleteUnit(ctx context.Context, b organization.Boundary, m organization.Mutation, id identity.UnitID) error {
-	return r.mutate(ctx, m, `DELETE FROM org_units WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, b.Environment, b.Organization, id)
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `DELETE FROM org_units WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, b.Environment, b.Organization, id)
+	var pg *pq.Error
+	if errors.As(err, &pg) && pg.Code == "23503" {
+		return errx.Conflict("the unit still has child units, members or position assignments: move them first (see delete-impact)")
+	}
+	if err != nil {
+		return failure(err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return failure(err)
+	}
+	if n == 0 {
+		return errx.NotFound("resource not found")
+	}
+	if err = audit(ctx, tx, m); err != nil {
+		return err
+	}
+	return failure(tx.Commit())
 }
 func (r *Repository) SetProfile(ctx context.Context, b organization.Boundary, m organization.Mutation, user identity.UserID, input organization.Profile) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
