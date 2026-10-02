@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, Ban, Bot, Building2, Globe, KeyRound, Link2, LogIn, Plus, Server, UserCog } from 'lucide-react'
+import { ArrowRight, Ban, Bot, Building2, Globe, KeyRound, Link2, LogIn, Plus, Server, TriangleAlert, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -248,7 +248,32 @@ function ProviderMark({ provider }: { provider: string }) {
 }
 
 // --- OAuth Clients ---
-export interface OAuthClient extends ClientAuth { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; post_logout_redirect_uris?: string[] | null; allowed_origins?: string[] | null; public: boolean; hosted_login: boolean; active: boolean; access_token_format?: 'jwt' | 'opaque'; backchannel_logout_uri?: string; backchannel_logout_session_required?: boolean; grant_types?: string[] }
+/** ClientWarning is an accepted setting to review (code loopback_redirect). */
+export interface ClientWarning { code: string; field: string; value: string }
+export interface OAuthClient extends ClientAuth { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; post_logout_redirect_uris?: string[] | null; allowed_origins?: string[] | null; public: boolean; hosted_login: boolean; active: boolean; access_token_format?: 'jwt' | 'opaque'; backchannel_logout_uri?: string; backchannel_logout_session_required?: boolean; grant_types?: string[]; warnings?: ClientWarning[] | null }
+export const redirectHint = t('Where users return after signing in. HTTPS; http only for localhost, 127.0.0.1 or [::1] (development and native apps).')
+
+/** loopbackWarnings mirrors the server's warnings for URIs being edited. */
+export function loopbackWarnings(redirects: string[], postLogout: string[] = []): ClientWarning[] {
+  const loopback = (raw: string) => { try { const u = new URL(raw); return u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname.toLowerCase()) } catch { return false } }
+  return [...redirects.filter(loopback).map(value => ({ code: 'loopback_redirect', field: 'redirect_uris', value })),
+    ...postLogout.filter(loopback).map(value => ({ code: 'loopback_redirect', field: 'post_logout_redirect_uris', value }))]
+}
+
+/** RedirectWarnings explains http loopback redirect URIs: allowed for
+ * development and native apps, but not for a deployed web app. */
+export function RedirectWarnings({ warnings }: { warnings?: ClientWarning[] | null }) {
+  const loopback = (warnings ?? []).filter(w => w.code === 'loopback_redirect')
+  if (!loopback.length) return null
+  return <div role="note" aria-label={t('Redirect URI warning')} className="flex gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs">
+    <TriangleAlert aria-hidden className="mt-px size-4 shrink-0 text-warning" />
+    <div className="space-y-1">
+      <p className="font-medium">{t('Unencrypted http redirect URIs')}</p>
+      <p className="text-muted-foreground">{t('Fine for local development and native or CLI apps that receive the code on this device (a 127.0.0.1 or [::1] URI matches any port). A web app in production must use https.')}</p>
+      <ul className="space-y-0.5">{loopback.map(w => <li key={w.field + w.value}><code className="break-all">{w.value}</code>{w.field === 'post_logout_redirect_uris' && <span className="text-muted-foreground"> · {t('post-logout')}</span>}</li>)}</ul>
+    </div>
+  </div>
+}
 export const signInModes = [
   { value: 'hosted', label: t('Hosted sign-in page'), description: t('IAMKit shows the sign-in pages (branding, social login, MFA) and returns to your redirect URI.') },
   { value: 'custom', label: t('Your own sign-in UI'), description: t('Your app renders the login form and completes the authorization with the ticket.') },
@@ -281,14 +306,14 @@ export function OAuthClientsPage() {
   const preset = params.get('create') ?? ''
   const [add, setAdd] = useState(!!preset)
   const [disable, setDisable] = useState<OAuthClient | null>(null)
-  const [secret, setSecret] = useState<{ id: string; client_id: string; client_secret: string } | null>(null)
+  const [secret, setSecret] = useState<{ id: string; client_id: string; client_secret: string; warnings?: ClientWarning[] | null } | null>(null)
   const go = useNavigate()
   const detailPath = (id: string) => `${console}/oauth-clients/${id}`
 
   const createFields: Field[] = [
     { name: 'application_id', label: t('Application'), type: 'select', selectPath: `${base}/applications`, selectMap: named, value: preset, hint: t('The product users sign in to.') },
     { name: 'resource_id', label: t('Resource'), type: 'select', selectPath: `${base}/resources`, selectMap: named, hint: t('The API the issued access tokens are for. It must be linked to the application.') },
-    { name: 'redirect_uris', label: t('Redirect URIs'), type: 'tags', hint: t('Where users return after signing in. Type a full URL and press Enter.') },
+    { name: 'redirect_uris', label: t('Redirect URIs'), type: 'tags', hint: redirectHint },
     { name: 'type', label: t('Client type'), type: 'radio', value: 'public', options: clientTypes },
     { name: 'sign_in', label: t('Sign-in experience'), type: 'radio', value: 'hosted', options: signInModes },
   ]
@@ -307,7 +332,7 @@ export function OAuthClientsPage() {
         const cells: ReactNode[] = [
           <EntityRef name={c.application_name || shortId(c.application_id)} to={detailPath(c.id)} secondary={<span className="inline-flex flex-wrap items-center gap-x-2">{c.resource_name && <span>→ {c.resource_name}</span>}<span>{c.public ? t('Public') : t('Confidential')}</span><CopyText value={c.id} short label={t('Copy client ID')} /></span>} />,
           <Badge variant="outline">{c.hosted_login ? t('Hosted page') : t('Your UI')}</Badge>,
-          <RedirectList uris={c.redirect_uris} />,
+          <RedirectList uris={c.redirect_uris} warned={!!c.warnings?.length} />,
           <Status active={c.active} label={c.active ? t('Active') : t('Disabled')} />,
         ]
         if (canWrite) cells.push(<RowActions label={t('Actions for {{value}}', { value: c.application_name || c.id })} actions={[
@@ -321,7 +346,7 @@ export function OAuthClientsPage() {
       })} />
     {add && <FormDialog title={t('Create OAuth client')} description={t('Connect an application to sign-in.')} fields={createFields} submitLabel={t('Create client')} success={t('OAuth client created')} onClose={() => { setAdd(false); if (preset) setParams({}, { replace: true }) }} submit={async values => {
       const data = { application_id: values.application_id, resource_id: values.resource_id, redirect_uris: splitList(values.redirect_uris), public: values.type === 'public', hosted_login: values.sign_in === 'hosted' }
-      const result = await api.post<{ id: string; client_id: string; client_secret: string }>(path, data)
+      const result = await api.post<{ id: string; client_id: string; client_secret: string; warnings?: ClientWarning[] | null }>(path, data)
       setSecret(result)
       list.reload()
     }} />}
@@ -329,14 +354,16 @@ export function OAuthClientsPage() {
     {secret && <SecretDialog title={t('OAuth client created')} description={secret.client_secret ? t('Copy the client secret now — it is shown only once.') : t('This is a public client, so it has no secret.')} confirm={secret.client_secret ? t('I have saved the secret') : t('Done')} onClose={() => { setSecret(null); go(detailPath(secret.id)) }}>
       <CopyField label={t('Client ID')} value={secret.client_id} />
       {secret.client_secret && <CopyField label={t('Client secret')} value={secret.client_secret} secret />}
+      <RedirectWarnings warnings={secret.warnings} />
     </SecretDialog>}
   </div>
 }
 
-/** RedirectList shows the first redirect URI and how many more exist. */
-export function RedirectList({ uris }: { uris: string[] | null }) {
+/** RedirectList shows the first redirect URI and how many more exist;
+ * `warned` marks a client with http loopback redirects. */
+export function RedirectList({ uris, warned }: { uris: string[] | null; warned?: boolean }) {
   if (!uris?.length) return <span className="text-muted-foreground">—</span>
-  return <span className="block max-w-xs text-xs" title={uris.join('\n')}><span className="block truncate font-mono">{uris[0]}</span>{uris.length > 1 && <span className="text-muted-foreground">{t('+{{count}} more', { count: uris.length - 1 })}</span>}</span>
+  return <span className="block max-w-xs text-xs" title={uris.join('\n')}><span className="flex items-center gap-1">{warned && <TriangleAlert role="img" aria-label={t('Uses http redirect URIs')} className="size-3.5 shrink-0 text-warning" />}<span className="truncate font-mono">{uris[0]}</span></span>{uris.length > 1 && <span className="text-muted-foreground">{t('+{{count}} more', { count: uris.length - 1 })}</span>}</span>
 }
 
 // --- Provisioning (SCIM) Credentials ---

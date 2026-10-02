@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { TagInput } from '@/components/ui/tag-input'
 import { BackLink, ConfirmDialog, CopyField, DetailSection, EntityRef, ErrorState, PageHeader, Properties, RadioCards, Status, SwitchField } from '@/components/library/patterns'
 import { SignInDialog, summary, type SignIn } from './sign-in-options'
-import { defaultGrants, deviceGrant, exchangeGrant, signInModes, tokenFormats, type OAuthClient } from './integrations'
+import { defaultGrants, deviceGrant, exchangeGrant, loopbackWarnings, redirectHint, RedirectWarnings, signInModes, tokenFormats, type OAuthClient } from './integrations'
 import { ClientAuthDialog, authSummary } from '@/components/library/client-auth'
 import { HistorySection } from './history'
 import { t } from '@/lib/i18n'
@@ -94,11 +94,13 @@ export default function OAuthClientDetailPage() {
         if (await save({ redirect_uris: redirects }, t('Redirect URIs saved'))) setEditing(false)
       }}>
         <TagInput name="redirect_uris" defaultValue={client.redirect_uris ?? []} onChange={setRedirects} disabled={busy} placeholder="https://app.example.com/callback — press Enter" />
+        <p className="text-xs text-muted-foreground">{redirectHint}</p>
+        <RedirectWarnings warnings={loopbackWarnings(redirects)} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={() => { setEditing(false); setRedirects(client.redirect_uris ?? []) }}>{t('Cancel')}</Button>
           <Button type="submit" disabled={busy || redirects.length === 0}>{busy ? t('Saving…') : t('Save')}</Button>
         </div>
-      </form> : <ul className="space-y-1.5">{(client.redirect_uris ?? []).map(u => <li key={u}><code className="text-xs break-all">{u}</code></li>)}</ul>}
+      </form> : <div className="space-y-3"><ul className="space-y-1.5">{(client.redirect_uris ?? []).map(u => <li key={u}><code className="text-xs break-all">{u}</code></li>)}</ul><RedirectWarnings warnings={client.warnings} /></div>}
     </DetailSection>
 
     <DetailSection title={t('Post-logout redirect URIs')} description={t('Where /oauth/end_session may send users after signing out (post_logout_redirect_uri, exact match). Without one, IAMKit shows a signed-out page.')}
@@ -108,6 +110,7 @@ export default function OAuthClientDetailPage() {
         if (await save({ post_logout_redirect_uris: logoutURIs }, t('Post-logout redirect URIs saved'))) setEditingLogout(false)
       }}>
         <TagInput name="post_logout_redirect_uris" defaultValue={client.post_logout_redirect_uris ?? []} onChange={setLogoutURIs} disabled={busy} placeholder="https://app.example.com/signed-out — press Enter" />
+        <RedirectWarnings warnings={loopbackWarnings([], logoutURIs)} />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={() => { setEditingLogout(false); setLogoutURIs(client.post_logout_redirect_uris ?? []) }}>{t('Cancel')}</Button>
           <Button type="submit" disabled={busy}>{busy ? t('Saving…') : t('Save')}</Button>

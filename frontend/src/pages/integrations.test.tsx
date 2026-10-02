@@ -105,6 +105,31 @@ it('edits post-logout redirect URIs on the client page', async () => {
   await waitFor(() => expect(calls('PATCH')[0]?.body).toEqual({ post_logout_redirect_uris: ['https://app.example/bye'] }))
 })
 
+it('warns about http loopback redirect URIs without blocking them', async () => {
+  const loopback = { ...client, redirect_uris: ['http://127.0.0.1/callback'], warnings: [{ code: 'loopback_redirect', field: 'redirect_uris', value: 'http://127.0.0.1/callback' }] }
+  const base = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+    const path = url.replace('/management/v1', '').split('?')[0]
+    if (!init.method && path === `${env}/oauth-clients/c1`) return Response.json(loopback)
+    if (!init.method && path === `${env}/oauth-clients`) return Response.json({ items: [loopback], page: { total: 1, limit: 50, offset: 0 } })
+    return base(url, init)
+  })
+  open('oauth-clients')
+  expect(await screen.findByRole('img', { name: 'Uses http redirect URIs' })).toBeTruthy()
+  cleanup()
+  open('oauth-clients/c1')
+  const note = await screen.findByRole('note', { name: 'Redirect URI warning' })
+  expect(within(note).getByText('http://127.0.0.1/callback')).toBeTruthy()
+  // While editing, the warning follows the URIs being typed.
+  await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Remove http://127.0.0.1/callback' }))
+  await waitFor(() => expect(screen.queryByRole('note', { name: 'Redirect URI warning' })).toBeNull())
+  await userEvent.type(screen.getByPlaceholderText(/callback — press Enter/), 'http://localhost:3000/cb{Enter}')
+  expect(within(await screen.findByRole('note', { name: 'Redirect URI warning' })).getByText('http://localhost:3000/cb')).toBeTruthy()
+  await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(calls('PATCH')[0]?.body).toEqual({ redirect_uris: ['http://localhost:3000/cb'] }))
+})
+
 it('is read-only for viewers on the client page', async () => {
   role = 'viewer'
   open('oauth-clients/c1')
