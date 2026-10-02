@@ -10,7 +10,7 @@ Lists of users, organizations and members use the
 
 | Method/path | Input | Success |
 | --- | --- | --- |
-| `POST /users` | `name`, `email`; optional `password`, `otp_enabled`, `avatar_url`, `username`, `home_organization_id` (also adds the membership). `kind: "machine"` creates a [machine user](../../guides/machine-users.md): `name` and optional `avatar_url`/`home_organization_id` only | 201 `{id}`; 409 `username is taken` |
+| `POST /users` | `name`, `email`; optional `password`, `otp_enabled`, `avatar_url`, `username`, `home_organization_id` (also adds the membership). `kind: "machine"` creates a [machine user](../../guides/machine-users.md): `name` and optional `avatar_url`/`home_organization_id` only | 201 `{id}`; 409 `email is taken` or `username is taken` |
 | `GET /users` | List parameters (`search` matches name, email and username); optional `state`, `home_organization_id`, `kind` (`human`\|`machine`) | 200 page of users (each with `kind`) |
 | `GET /users/:id` | User ID | 200 user |
 | `PATCH /users/:id` | Optional `name`, `active`, `otp_enabled`, `metadata`, `phone` (E.164, `""` clears; a changed number is unverified), `phone_verified` (explicit, audited `user.phone_verified_set`; `true` needs a number, else 400), `avatar_url` (`""` removes), `username` (`""` removes), `home_organization_id` (an organization the user belongs to; `""` clears) | 204; 409 `username is taken` |

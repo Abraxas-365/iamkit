@@ -39,6 +39,12 @@ func usernameTaken(err error) bool {
 	return errors.As(err, &pg) && pg.Code == "23505" && pg.Constraint == "users_environment_username"
 }
 
+// emailTaken reports a duplicate email in the environment.
+func emailTaken(err error) bool {
+	var pg *pq.Error
+	return errors.As(err, &pg) && pg.Code == "23505" && pg.Constraint == "users_environment_id_email_key"
+}
+
 // phoneUnverifiable reports phone_verified without a number.
 func phoneUnverifiable(err error) bool {
 	var pg *pq.Error
@@ -57,6 +63,9 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 	_, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,otp_enabled,avatar_url,username,home_organization_id,kind) VALUES($1,$2,nullif($3,''),$4,$5,$6,$7,nullif($8,''),$9,$10)`, id, environment, input.Email, input.Name, hash, input.OTPEnabled, input.AvatarURL, input.Username, input.HomeOrganization, kind(input.Kind))
 	if usernameTaken(err) {
 		return id, errx.Conflict("username is taken")
+	}
+	if emailTaken(err) {
+		return id, errx.Conflict("email is taken")
 	}
 	if homeMissing(err) {
 		return id, errx.Validation("home_organization_id must be an organization of the environment")

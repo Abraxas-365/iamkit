@@ -22,6 +22,9 @@ func TestUsernames(t *testing.T) {
 		t.Fatalf("username = %v", got)
 	}
 	e.Must("POST", e.Base+"/users", e.Owner, fiber.Map{"email": "other@example.com", "name": "Other", "username": "ALICE.DOE"}, 409)
+	if got := e.Must("POST", e.Base+"/users", e.Owner, fiber.Map{"email": "ALICE@example.com", "name": "Dup"}, 409).Body; !strings.Contains(got, "email is taken") {
+		t.Fatalf("duplicate email = %s", got)
+	}
 	e.Must("POST", e.Base+"/users", e.Owner, fiber.Map{"email": "other@example.com", "name": "Other", "username": "bad name"}, 400)
 	other := e.Must("POST", e.Base+"/users", e.Owner, fiber.Map{"email": "other@example.com", "name": "Other", "username": "other_1"}, 201).JSON["id"].(string)
 	e.Must("PATCH", e.Base+"/users/"+other, e.Owner, fiber.Map{"username": "alice.doe"}, 409)
