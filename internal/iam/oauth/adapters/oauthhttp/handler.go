@@ -462,6 +462,13 @@ func endpointErrors(c *fiber.Ctx) error {
 	}
 	return nil
 }
+
+// endedGrant refuses a code or refresh token whose session ended, whose
+// access was lost or that belongs to another client's resource: RFC 6749
+// §5.2 invalid_grant (400), which tells the client to sign the user in
+// again, not access_denied (an authorization endpoint error).
+var endedGrant = fosite.ErrInvalidGrant.WithHint("The session of this grant ended or its access was revoked.")
+
 func (h *Handler) token(c *fiber.Ctx) error {
 	req := request(c)
 	rawID, err := tokenClient(req)
@@ -503,7 +510,7 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		}
 		session, ok := ar.GetSession().(*oauthfosite.Session)
 		if !ok || session.AccessClaims == nil || oauthsvc.ValidateSession(session.Deadline) != nil {
-			p.WriteAccessError(ctx, w, ar, fosite.ErrAccessDenied)
+			p.WriteAccessError(ctx, w, ar, endedGrant)
 			return response(c, w)
 		}
 		extra := session.AccessClaims.Extra
@@ -513,7 +520,7 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		appStr, _ := extra["application_id"].(string)
 		resStr, _ := extra["resource_id"].(string)
 		if envStr != client.Environment.String() || appStr != client.Application.String() || resStr != client.Resource.String() {
-			p.WriteAccessError(ctx, w, ar, fosite.ErrAccessDenied)
+			p.WriteAccessError(ctx, w, ar, endedGrant)
 			return response(c, w)
 		}
 		subjectID, _ := identity.ParseUserID(session.Subject)
@@ -521,7 +528,7 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		orgID, _ := identity.ParseOrganizationID(org)
 		access, err := h.flows.Access(ctx, client, subjectID, sessionID, orgID)
 		if err != nil {
-			p.WriteAccessError(ctx, w, ar, fosite.ErrAccessDenied)
+			p.WriteAccessError(ctx, w, ar, endedGrant)
 			return response(c, w)
 		}
 		extra["permissions"] = []string(access.Permissions)

@@ -193,8 +193,11 @@ func oidcJourney(t *testing.T, app *App, call func(string, string, string, any, 
 	grant["permissions"] = []string{"invoices:read"}
 	call("PUT", base+"/grants", owner, grant, 200)
 	// Grant updates revoke the session at the database boundary, so an
-	// outstanding authorization code must not produce any new token.
-	request("POST", "/oauth/token", "application/x-www-form-urlencoded", form.Encode(), "", nil, 403)
+	// outstanding authorization code must not produce any new token: the
+	// grant is invalid (RFC 6749 §5.2), not an authorization denial.
+	if ended, _ := request("POST", "/oauth/token", "application/x-www-form-urlencoded", form.Encode(), "", nil, 400); ended["error"] != "invalid_grant" {
+		t.Fatalf("code of an ended session = %v, want invalid_grant", ended)
+	}
 	grant["permissions"] = claims["permissions"]
 	call("PUT", base+"/grants", owner, grant, 200)
 	token = call("POST", "/identity/v1/login", "", login, 200)["access_token"].(string)

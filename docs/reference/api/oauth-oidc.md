@@ -174,7 +174,9 @@ confidential clients use `client_secret_basic` as advertised by discovery. Use a
 standards-aware library for form/Basic credential encoding.
 
 Authorization codes last five minutes; authorization tickets ten minutes; access and ID tokens fifteen minutes;
-refresh lifespan is constrained by session validity. Replay protection is not a
+refresh lifespan is constrained by session validity. A code or refresh token
+whose session ended (signed out, revoked, access changed) or whose user lost
+access is `400 invalid_grant`: sign the user in again. Replay protection is not a
 license to retry old rotating credentials indiscriminately. Token endpoint errors
 use OAuth fields (`error`, etc.), not the management JSON envelope.
 
