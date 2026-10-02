@@ -174,7 +174,7 @@ export default function SignInTextsPage() {
             {count > 0 && <Button variant="ghost" className="gap-1.5" onClick={() => setRemoving(true)}><RotateCcw className="size-4" />{t('Remove these texts')}</Button>}
           </div>}
         </section>
-        <TextsPreview base={base} scope={scope} locale={locale} texts={clean(draft)} />
+        <TextsPreview base={base} scope={scope} locale={locale} texts={clean(draft)} live={canWrite} />
       </div>}
     {removing && <ConfirmDialog title={t('Remove these texts?')} description={t('Every text of this language goes back to the inherited wording.')} confirmLabel={t('Remove')} onClose={() => setRemoving(false)}
       confirm={async () => { await api.delete(scopePath(base, scope, locale)); setSaved({}); setDraft({}); toast.success(t('Sign-in texts removed')); loadSets() }} />}
@@ -187,8 +187,9 @@ function clean(texts: Record<string, string>) {
 }
 
 // TextsPreview renders a hosted page with the unsaved texts over the saved
-// branding and the inherited texts of the scope.
-function TextsPreview({ base, scope, locale, texts }: { base: string; scope: string; locale: string; texts: Record<string, string> }) {
+// branding and the inherited texts of the scope. Viewers cannot edit, so
+// they read the saved preview (GET) instead of posting a draft.
+function TextsPreview({ base, scope, locale, texts, live }: { base: string; scope: string; locale: string; texts: Record<string, string>; live: boolean }) {
   const [page, setPage] = useState<Page>('identify')
   const [html, setHtml] = useState('')
   const [error, setError] = useState('')
@@ -197,11 +198,14 @@ function TextsPreview({ base, scope, locale, texts }: { base: string; scope: str
     let stale = false
     const [kind, id] = scope.split(':')
     const timer = window.setTimeout(() => {
-      api.post<{ html: string }>(`${base}/login-settings/texts/preview`, { page, locale, texts: JSON.parse(body), ...(kind === 'client' && { client_id: id }), ...(kind === 'organization' && { organization_id: id }) })
-        .then(r => { if (!stale) { setHtml(r.html); setError('') } }).catch(e => { if (!stale) setError(message(e)) })
+      const saved = new URLSearchParams({ page, locale, ...(kind === 'client' && { client: id }), ...(kind === 'organization' && { organization: id }) })
+      const call = live
+        ? api.post<{ html: string }>(`${base}/login-settings/texts/preview`, { page, locale, texts: JSON.parse(body), ...(kind === 'client' && { client_id: id }), ...(kind === 'organization' && { organization_id: id }) })
+        : api.get<{ html: string }>(`${base}/login-settings/preview?${saved}`)
+      call.then(r => { if (!stale) { setHtml(r.html); setError('') } }).catch(e => { if (!stale) setError(message(e)) })
     }, 300)
     return () => { stale = true; window.clearTimeout(timer) }
-  }, [base, scope, locale, page, body])
+  }, [base, scope, locale, page, body, live])
   return <section aria-label={t('Preview')} className="min-w-0 space-y-3 xl:sticky xl:top-4">
     <select aria-label={t('Preview page')} className={cn(selectClass, 'w-auto')} value={page} onChange={e => setPage(e.target.value as Page)}>
       {pages.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
