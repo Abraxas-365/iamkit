@@ -836,7 +836,7 @@ func (h *Handler) invitePage(c *fiber.Ctx, token string, preview invitation.Prev
 		code, text := failed(c, view{Lang: lang}, err)
 		return message(c, lang, code, i18n.T(lang, "hosted.invitation.title"), text)
 	}
-	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, ""), Token: token, Invite: &preview}
+	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, ""), Token: token, Invite: &preview, Name: c.FormValue("name")}
 	h.word(c, &v, preview.Environment, hosted.TextScope{Organization: preview.Organization})
 	v.Title, v.Subtitle = v.T("hosted.invitation.join", preview.OrganizationName), v.T("hosted.invitation.invited", preview.OrganizationName)
 	if preview.SSORequired {

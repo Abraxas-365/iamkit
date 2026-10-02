@@ -45,6 +45,11 @@ func TestPagesRenderAndEscape(t *testing.T) {
 		}
 	}
 	var out bytes.Buffer
+	_ = pages["invite"].ExecuteTemplate(&out, "layout", view{Token: "t", Name: "Ada <i>", Invite: &invitation.Preview{PasswordRequired: true}})
+	if !strings.Contains(out.String(), `name="name" value="Ada &lt;i&gt;"`) {
+		t.Fatal("invitation page keeps the typed name, escaped, after an error")
+	}
+	out.Reset()
 	_ = pages["organization"].ExecuteTemplate(&out, "layout", v)
 	if !strings.Contains(out.String(), "Org &lt;b&gt;") {
 		t.Fatal("organization name not escaped")

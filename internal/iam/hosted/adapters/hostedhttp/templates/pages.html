@@ -267,7 +267,7 @@
 <input type="hidden" name="token" value="{{.Token}}">
 <p class="muted">{{.Invite.Email}}</p>
 <label for="name">{{.T "hosted.form.name"}}</label>
-<input id="name" type="text" name="name" maxlength="200" autocomplete="name" autofocus>
+<input id="name" type="text" name="name" value="{{.Name}}" maxlength="200" autocomplete="name" autofocus>
 {{if .Invite.PasswordRequired}}
 <label for="password">{{.T "hosted.form.password"}}</label>
 <input id="password" type="password" name="password" minlength="8" maxlength="72" autocomplete="new-password" required>
