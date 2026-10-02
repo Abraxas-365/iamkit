@@ -6177,6 +6177,7 @@ export interface components {
             value: string;
         };
         EffectiveRoleView: {
+            granted: boolean;
             /** @description UUID (empty when unset) */
             group_id?: string | null;
             group_name?: string | null;

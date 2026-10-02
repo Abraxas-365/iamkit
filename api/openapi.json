@@ -2164,6 +2164,9 @@
       },
       "EffectiveRoleView": {
         "properties": {
+          "granted": {
+            "type": "boolean"
+          },
           "group_id": {
             "description": "UUID (empty when unset)",
             "type": [
@@ -2200,6 +2203,7 @@
           }
         },
         "required": [
+          "granted",
           "organization_id",
           "resource_id",
           "resource_name",

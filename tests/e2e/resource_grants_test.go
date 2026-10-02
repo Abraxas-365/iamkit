@@ -114,6 +114,15 @@ func TestResourceGrants(t *testing.T) {
 	if got := e.permissions(e.Login(e.AliceEmail)); !equal(got, []string{"invoices:read"}) {
 		t.Fatalf("permissions with an ungranted role = %v", got)
 	}
+	// effective-roles explains it: the writer role is held but not granted.
+	granted := map[string]any{}
+	for _, it := range e.Must("GET", e.Base+"/effective-roles?organization_id="+e.Org+"&user_id="+e.Alice, e.Owner, nil, 200).JSON["items"].([]any) {
+		item := it.(map[string]any)
+		granted[item["role_id"].(string)] = item["granted"]
+	}
+	if granted[writer] != false || granted[owner] != true {
+		t.Fatalf("effective-roles granted = %v", granted)
+	}
 	// Acme's administrator assigns the granted role only.
 	if roles := ids(e.Must("GET", acme+"/roles", aliceAdmin, nil, 200), "id"); !contains(roles, reader) || contains(roles, writer) || contains(roles, otherRole) {
 		t.Fatalf("assignable roles = %v", roles)

@@ -32,8 +32,8 @@ beforeEach(() => {
                       path === `${env}/users/u1` ? { id: 'u1', name: 'Jane', email: 'jane@example.com', active: true } :
                         path === `${env}/users/u1/factors` ? { factors: [], recovery_codes_remaining: 0 } :
                           path === `${env}/effective-roles` ? (effectiveFails ? new Response(JSON.stringify({ error: { message: 'database unavailable' } }), { status: 500 }) : { items: [
-                            { organization_id: 'org1', role_id: 'role2', role_name: 'admin', resource_id: 'r1', resource_name: 'Billing API', source: 'direct' },
-                            { organization_id: 'org1', role_id: 'role1', role_name: 'reader', resource_id: 'r1', resource_name: 'Billing API', source: 'group', group_id: 'g1', group_name: 'Finance' },
+                            { organization_id: 'org1', role_id: 'role2', role_name: 'admin', resource_id: 'r1', resource_name: 'Billing API', source: 'direct', granted: true },
+                            { organization_id: 'org1', role_id: 'role1', role_name: 'reader', resource_id: 'r1', resource_name: 'Billing API', source: 'group', granted: true, group_id: 'g1', group_name: 'Finance' },
                           ] }) :
                             path === `${env}/users` ? page([{ id: 'u1', name: 'Jane', email: 'jane@example.com', active: true }]) : page([])
     return data instanceof Response ? data : Response.json(data)

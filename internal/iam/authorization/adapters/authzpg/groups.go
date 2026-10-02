@@ -74,17 +74,23 @@ func (r *Repository) GroupRoleAssignments(ctx context.Context, environment ident
 func (r *Repository) EffectiveRoles(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) ([]authorization.EffectiveRoleView, error) {
 	rows := []authorization.EffectiveRoleView{}
 	err := r.db.SelectContext(ctx, &rows, `
-		SELECT a.organization_id,ro.id AS role_id,ro.name AS role_name,res.id AS resource_id,res.name AS resource_name,
-			'direct' AS source,NULL::uuid AS group_id,NULL::text AS group_name
-		FROM role_assignments a JOIN roles ro ON ro.id=a.role_id JOIN resources res ON res.id=a.resource_id
-		WHERE a.environment_id=$1 AND ($2::uuid IS NULL OR a.organization_id=$2) AND a.user_id=$3
-		UNION ALL
-		SELECT gm.organization_id,ro.id,ro.name,res.id,res.name,'group',g.id,g.name
-		FROM group_members gm
-		JOIN groups g ON g.id=gm.group_id
-		JOIN group_role_assignments ga ON ga.group_id=gm.group_id
-		JOIN roles ro ON ro.id=ga.role_id JOIN resources res ON res.id=ga.resource_id
-		WHERE gm.environment_id=$1 AND ($2::uuid IS NULL OR gm.organization_id=$2) AND gm.user_id=$3
-		ORDER BY organization_id,resource_name,role_name,source,group_name`, environment, organization, user)
+		SELECT e.organization_id,e.role_id,e.role_name,e.resource_id,res.name AS resource_name,e.source,e.group_id,e.group_name,
+			(NOT res.require_grant OR res.owner_organization_id=e.organization_id
+				OR EXISTS (SELECT 1 FROM resource_grants rg WHERE rg.resource_id=e.resource_id AND rg.organization_id=e.organization_id
+					AND (rg.role_ids IS NULL OR e.role_id=ANY(rg.role_ids)))) AS granted
+		FROM (
+			SELECT a.organization_id,ro.id AS role_id,ro.name AS role_name,a.resource_id,
+				'direct' AS source,NULL::uuid AS group_id,NULL::text AS group_name
+			FROM role_assignments a JOIN roles ro ON ro.id=a.role_id
+			WHERE a.environment_id=$1 AND ($2::uuid IS NULL OR a.organization_id=$2) AND a.user_id=$3
+			UNION ALL
+			SELECT gm.organization_id,ro.id,ro.name,ga.resource_id,'group',g.id,g.name
+			FROM group_members gm
+			JOIN groups g ON g.id=gm.group_id
+			JOIN group_role_assignments ga ON ga.group_id=gm.group_id
+			JOIN roles ro ON ro.id=ga.role_id
+			WHERE gm.environment_id=$1 AND ($2::uuid IS NULL OR gm.organization_id=$2) AND gm.user_id=$3
+		) e JOIN resources res ON res.id=e.resource_id
+		ORDER BY e.organization_id,resource_name,e.role_name,e.source,e.group_name`, environment, organization, user)
 	return rows, failure(err)
 }

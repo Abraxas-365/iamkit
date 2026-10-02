@@ -67,10 +67,14 @@ roles in every organization at once; each item names its `organization_id`.
 
 ```json
 {"items":[
-  {"organization_id":"…","role_id":"…","role_name":"reader","resource_id":"…","resource_name":"Invoices API","source":"group","group_id":"…","group_name":"Finance"},
-  {"organization_id":"…","role_id":"…","role_name":"admin","resource_id":"…","resource_name":"Invoices API","source":"direct"}
+  {"organization_id":"…","role_id":"…","role_name":"reader","resource_id":"…","resource_name":"Invoices API","source":"group","granted":true,"group_id":"…","group_name":"Finance"},
+  {"organization_id":"…","role_id":"…","role_name":"admin","resource_id":"…","resource_name":"Invoices API","source":"direct","granted":false}
 ]}
 ```
+
+`granted` is false when the resource requires a grant (`require_grant`) that
+the organization lacks for this role: the role stays assigned but adds no
+permissions to tokens until the owner grants it.
 
 Direct grants (`PUT /grants`) are not included; inspect them separately.
 Tokens do not carry a `groups` claim; they carry the resulting permissions.

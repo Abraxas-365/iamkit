@@ -149,7 +149,9 @@ const (
 
 // EffectiveRoleView is one reason a member holds a role: a direct assignment
 // or membership in a group bound to the role. A role held both ways appears
-// once per source.
+// once per source. Granted is false when the resource requires a grant the
+// organization lacks for this role: the role is held but adds nothing to
+// tokens (see ResourceAccess).
 type EffectiveRoleView struct {
 	Organization identity.OrganizationID `json:"organization_id" db:"organization_id"`
 	Role         identity.RoleID         `json:"role_id" db:"role_id"`
@@ -157,6 +159,7 @@ type EffectiveRoleView struct {
 	Resource     identity.ResourceID     `json:"resource_id" db:"resource_id"`
 	ResourceName string                  `json:"resource_name" db:"resource_name"`
 	Source       string                  `json:"source" db:"source"`
+	Granted      bool                    `json:"granted" db:"granted"`
 	Group        *identity.GroupID       `json:"group_id,omitempty" db:"group_id"`
 	GroupName    *string                 `json:"group_name,omitempty" db:"group_name"`
 }

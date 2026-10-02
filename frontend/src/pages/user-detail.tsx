@@ -174,7 +174,10 @@ function Organizations({ base, console, user, canWrite, reload }: { base: string
   </DetailSection>
 }
 
-interface EffectiveRole { organization_id: string; role_id: string; role_name: string; resource_name: string; source: 'direct' | 'group'; group_id?: string; group_name?: string }
+interface EffectiveRole { organization_id: string; role_id: string; role_name: string; resource_name: string; source: 'direct' | 'group'; granted: boolean; group_id?: string; group_name?: string }
+
+/** notGranted says why a held role adds nothing to tokens. */
+const notGranted = () => t('The resource requires a grant this organization does not have for this role, so the role adds no permissions to tokens.')
 
 /** useEffectiveRoles loads every role the user holds, in all organizations,
  * with its source (direct or a group), in one request. */
@@ -197,9 +200,9 @@ function useEffectiveRoles(base: string, user: string) {
 function OrgRoles({ console, org, roles, onRemove }: { console: string; org: Org; roles: EffectiveRole[]; onRemove?: (role: EffectiveRole) => void }) {
   if (!roles.length) return <span className="text-sm text-muted-foreground">{t('No roles')}</span>
   return <span className="flex flex-wrap gap-1">
-    {roles.filter(r => r.source === 'direct').map(r => <Badge key={r.role_id} variant="secondary" title={r.resource_name} className="gap-1">{r.role_name}{onRemove && <button type="button" className="-mr-1 rounded-sm px-0.5 text-muted-foreground hover:text-destructive" aria-label={t('Remove role {{role_name}} in {{name}}', { role_name: r.role_name, name: org.name })} onClick={() => onRemove(r)}>×</button>}</Badge>)}
-    {roles.filter(r => r.source === 'group').map(r => <Link key={`${r.group_id}:${r.role_id}`} to={`${console}/organizations/${org.id}/groups/${r.group_id}`} title={t('{{resource_name}}: inherited from the group {{group_name}}; manage it on the group', { resource_name: r.resource_name, group_name: r.group_name })}>
-      <Badge variant="outline" className="gap-1 hover:border-primary">{r.role_name}<span className="text-muted-foreground">{t('via {{group}}', { group: r.group_name })}</span></Badge>
+    {roles.filter(r => r.source === 'direct').map(r => <Badge key={r.role_id} variant="secondary" title={r.granted ? r.resource_name : `${r.resource_name}: ${notGranted()}`} className="gap-1">{r.role_name}{!r.granted && <span className="text-amber-700 dark:text-amber-400">{t('Not granted')}</span>}{onRemove && <button type="button" className="-mr-1 rounded-sm px-0.5 text-muted-foreground hover:text-destructive" aria-label={t('Remove role {{role_name}} in {{name}}', { role_name: r.role_name, name: org.name })} onClick={() => onRemove(r)}>×</button>}</Badge>)}
+    {roles.filter(r => r.source === 'group').map(r => <Link key={`${r.group_id}:${r.role_id}`} to={`${console}/organizations/${org.id}/groups/${r.group_id}`} title={(r.granted ? '' : notGranted() + ' ') + t('{{resource_name}}: inherited from the group {{group_name}}; manage it on the group', { resource_name: r.resource_name, group_name: r.group_name })}>
+      <Badge variant="outline" className="gap-1 hover:border-primary">{r.role_name}<span className="text-muted-foreground">{t('via {{group}}', { group: r.group_name })}</span>{!r.granted && <span className="text-amber-700 dark:text-amber-400">{t('Not granted')}</span>}</Badge>
     </Link>)}
   </span>
 }

@@ -37,8 +37,8 @@ beforeEach(() => {
                     path === '/environments/env1/group-role-assignments' ? { items: [{ group_id: 'g1', group_name: 'Finance', organization_id: 'org1', resource_id: 'r1', resource_name: 'Billing API', role_id: 'role1', role_name: 'reader' }], page: { total: roleTotal, limit: 50, offset: 0 } } :
                       path === `${org}/members` ? page([{ user_id: 'u1', user_name: 'Jane', user_email: 'jane@example.com', active: true, manager_id: null, manager_name: null }]) :
                         path === '/environments/env1/effective-roles' ? { items: [
-                          { role_id: 'role1', role_name: 'reader', resource_id: 'r1', resource_name: 'Billing API', source: 'group', group_id: 'g1', group_name: 'Finance' },
-                          { role_id: 'role2', role_name: 'admin', resource_id: 'r1', resource_name: 'Billing API', source: 'direct' },
+                          { role_id: 'role1', role_name: 'reader', resource_id: 'r1', resource_name: 'Billing API', source: 'group', granted: true, group_id: 'g1', group_name: 'Finance' },
+                          { role_id: 'role2', role_name: 'admin', resource_id: 'r1', resource_name: 'Billing API', source: 'direct', granted: false },
                         ] } :
                           path === `${org}/members/u1/groups` ? page([manual]) : []
     return Response.json(data)
@@ -170,6 +170,9 @@ it('shows a member effective roles with their source', async () => {
   await within(dialog).findByText('reader')
   expect(within(dialog).getByText('via Finance')).toBeTruthy()
   expect(within(dialog).getByText('Direct')).toBeTruthy()
+  // Only the role whose resource grant is missing is flagged.
+  expect(within(dialog).getAllByText('Not granted')).toHaveLength(1)
+  expect(within(dialog).getByText('admin').textContent).toContain('Not granted')
   expect(within(dialog).getAllByText('Finance').length).toBeGreaterThan(0)
   const effective = fetchMock.mock.calls.map(([url]) => String(url)).find(url => url.includes('/effective-roles'))!
   expect(effective).toContain('organization_id=org1')

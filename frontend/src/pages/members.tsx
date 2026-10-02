@@ -233,7 +233,7 @@ function SetManagerDialog({ member, membersPath, profilePath, onClose, onSaved }
 
 interface EffectiveRole {
   role_id: string; role_name: string; resource_id: string; resource_name: string
-  source: 'direct' | 'group'; group_id?: string; group_name?: string
+  source: 'direct' | 'group'; granted: boolean; group_id?: string; group_name?: string
 }
 interface MemberGroup { id: string; name: string; connection_id: string | null }
 
@@ -268,7 +268,7 @@ function MemberAccessDialog({ member, base, orgId, groupsPath, onClose }: {
           {roles.length === 0 ? <p className="text-sm text-muted-foreground">{t('No roles.')}</p> : <ul className="divide-y rounded-lg border">
             {roles.map(r => <li key={`${r.role_id}:${r.source}:${r.group_id ?? ''}`} className="flex items-center justify-between gap-3 px-3 py-2">
               <div className="min-w-0">
-                <p className="truncate font-medium">{r.role_name}</p>
+                <p className="truncate font-medium">{r.role_name}{!r.granted && <Badge variant="outline" className="ml-1.5 border-amber-500/50 text-amber-700 dark:text-amber-400" title={t('The resource requires a grant this organization does not have for this role, so the role adds no permissions to tokens.')}>{t('Not granted')}</Badge>}</p>
                 <p className="truncate text-xs text-muted-foreground">{r.resource_name}</p>
               </div>
               {r.source === 'group'

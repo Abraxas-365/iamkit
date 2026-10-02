@@ -93,7 +93,7 @@ it('shows a machine user with its tokens instead of second factors and revokes o
 })
 
 it('warns in the token dialog when the machine user holds no role on the resource', async () => {
-  effective = [{ organization_id: 'o1', role_id: 'role1', role_name: 'Reader', resource_id: 'r1', resource_name: 'Billing API', source: 'direct' }]
+  effective = [{ organization_id: 'o1', role_id: 'role1', role_name: 'Reader', resource_id: 'r1', resource_name: 'Billing API', source: 'direct', granted: true }]
   const u = userEvent.setup()
   open('users/m1')
   expect(await screen.findByText('nightly')).toBeTruthy()
