@@ -85,10 +85,18 @@ The [sign-in methods](../../guides/sign-in-methods.md) policy uses
 `allow_password_reset`, `mfa_required`, `mfa_for_federated`,
 `allowed_factors` (second-factor kinds, default `["totp","webauthn"]`;
 omitted = keep — see [MFA](../../guides/mfa.md#allowed-factors)),
-`allow_signup`, `signup_organization_id`, `signup_group_id` — see
+`allow_signup`, `signup_organization_id`, `signup_group_id`, `require_terms`
+(omitted = keep) — see
 [sign-up](../../guides/signup-and-onboarding.md#self-service-sign-up);
 `custom: false` for the default), audited as
 `sign_in_policy.update`/`sign_in_policy.delete`.
+
+The [organization admin portal](../../guides/organization-administration.md#hosted-portal)
+uses `GET|PUT|DELETE /org-admin-portal` (`enabled`, `client_id`,
+`application_id`, `url`; `PUT` takes an empty body and is idempotent;
+`DELETE` ends the portal's sessions), audited as
+`org_admin_portal.enabled`/`.disabled`. Its OAuth client lists with
+`system: "org_admin"`; `PATCH`/`DELETE` on it answer 409.
 
 The SMS provider for [email and SMS second factors](../../guides/mfa.md#sms-provider)
 uses `GET|PUT|DELETE /sms` (`provider` `twilio` with `account_sid`,
@@ -111,12 +119,47 @@ retired), `GET /signing-keys/:kid`, `POST /signing-keys` (201 `next` key; 422
 without `force`). Writes need owner/admin and are audited
 `signing_key.create`/`.activate`/`.retire`. A `kid` of another environment is 404.
 
+### Features
+
+[Feature flags](../../guides/feature-flags.md): `GET /features`
+(`{"items":[…]}` of `name,description,scope,default,deployment,environment,
+enabled,updated_at`; `deployment`/`environment` are `null` when unset),
+`GET /features/:name` (404 `UNKNOWN_FEATURE`), `PUT /features/:name`
+(`{"enabled":bool}`; 400 for a `deployment`-scoped feature) and
+`DELETE /features/:name` (removes the override; 200 with the feature).
+Writes need owner/admin and are audited `feature.updated`/`feature.reset`.
+
+### Usage and limits
+
+[Usage and limits](../../guides/usage-limits.md): `GET /limits`
+(`{deployment, environment, effective, updated_at}`, maps of limit name to
+value; a missing name is unlimited), `PUT /limits` (a map of limit name to a
+number or `null`; replaces the environment's limits; workspace owners only,
+403 otherwise; audited `limits.updated`) and `GET /usage?days=` (1–366,
+default 30: `days`, `totals`, `now`). Creates past a total limit answer 422
+`QUOTA_EXCEEDED`; rate limits answer 429 `QUOTA_EXCEEDED`.
+
+### Actions
+
+[Actions](../../guides/actions.md#api): `GET /action-conditions`,
+`…/action-targets` (CRUD; create and `POST /:id/rotate-secret` return the
+`whsec_` secret once; `POST /:id/test`), `GET /action-executions`,
+`PUT`/`DELETE /action-executions/:condition` (`{"targets":[…]}` in call
+order) and `GET /action-calls` (7-day call log). Writes need owner/admin and
+are audited `action_target.*`/`action_execution.*`. Management API only.
+
 Administrative inventories include `GET /sessions` (optional `user_id` filter), `DELETE /sessions/:id` and
-`GET /audit-events` under this prefix. Sessions carry display labels
+`GET /audit-events` under this prefix, plus `GET /events`, the typed
+[event log](../events.md) (cursor-paged by event id; `GET /events/export`
+streams it as NDJSON, and `GET /<users|organizations|applications|oauth-clients|roles|resources>/:id/history`
+is one entity's [change history](../events.md#change-history)), and `…/webhooks`,
+[event webhook](../event-webhooks.md) subscriptions with their delivery log. Sessions carry display labels
 `user_name,user_email,organization_name,application_name,resource_name` and
 audit events an `actor_label` (operator or end-user email; empty when unknown)
 and a `target_label` (current name of the innermost entity in `target_id`, e.g.
-the member for a membership path; empty when deleted or unnamed).
+the member for a membership path; empty when deleted or unnamed), its
+`actor_kind` (`operator`, `user`, `service_account` or `system`) and the
+`organization_id` its target lies in (null when none).
 `GET /logout-deliveries` and `POST /logout-deliveries/:id/retry` expose
 [back-channel logout](oauth-oidc.md) deliveries (a revoked session of a client
 with a `backchannel_logout_uri` queues one). Session revocation affects online checks

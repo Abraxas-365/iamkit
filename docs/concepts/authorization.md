@@ -27,6 +27,12 @@ only what the group supplied. `GET /effective-roles` shows which path supplies
 each role; the console shows the same on each user's page. To set groups up,
 see [groups and group roles](../guides/organizations.md#groups-and-group-roles).
 
+A resource can also belong to a vendor organization and **require a grant**:
+then only its owner and the organizations it is granted to (optionally just
+some of its roles) receive its permissions, whatever roles or direct grants
+exist elsewhere. See
+[resource grants](../guides/organization-administration.md#resource-grants-vendor-organizations).
+
 Permissions are exact strings, not wildcard patterns. Use the resource's catalog;
 `iam:users:write` belongs to the built-in IAM resource, not the invoice catalog.
 IAM administrative permissions deserve separate service credentials and review.

@@ -91,7 +91,7 @@ non-member, an unknown email or another domain gets 401. The identity has
 `origin: "email"` and the link is audited `federation.email`. With JIT on as
 well, JIT's adopt-or-create applies instead.
 
-`"update_profile": true` refreshes a linked user's name at every sign-in, and
+`"update_profile": true` refreshes a linked user's name and avatar at every sign-in, and
 their email when it changes to another verified-domain address and the
 account is passwordless and not SCIM-managed (see
 [social login](social-login.md#keeping-profiles-in-sync)).
@@ -167,10 +167,30 @@ IAMKit → browser: local scoped token pair (JSON)
 The start route is `/identity/v1/federation/start`; for an organization
 connection the boundary's `organization_id` must be the connection's. Preserve
 the cookie in the same browser that completes the callback. The server verifies
-state, nonce, PKCE, issuer/client and subject link. Callback currently returns
-JSON tokens; implement a controlled same-origin/BFF handoff if your product
-needs a redirect. Do not redirect tokens in query strings or expect a built-in
-login UI.
+state, nonce, PKCE, issuer/client and subject link. Without `return_to` the
+callback answers JSON tokens at IAMKit's own URL; do not redirect tokens in
+query strings.
+
+### Returning to a custom sign-in UI
+
+A sign-in UI on another origin (the `@iamkit/js` `federation` flow) adds
+`return_to` and `code_challenge` to the start body:
+
+```text
+UI → IAMKit /federation/start: boundary + connection_id + return_to + code_challenge (S256)
+… provider round trip as above …
+IAMKit → browser: 303 return_to?federation_result=ik_fedres_…  (or ?error=CODE&error_description=…)
+UI → IAMKit POST /federation/result: federation_result + code_verifier → like /login
+```
+
+`return_to` must be an absolute `https` URL (http only on localhost) on an
+origin some active OAuth client of the boundary's application lists in
+`allowed_origins`; anything else is 400. The callback stores no token: it
+parks the verified identity for one minute under a one-time handle. Only the
+holder of the verifier (kept by the UI, e.g. in `sessionStorage`) redeems it;
+a wrong verifier spends the handle (401). Redemption issues the session then,
+so a second factor, a refused method or missing access answers exactly like
+`/identity/v1/login` (MFA pending token, 403).
 
 ## Operations and verification
 

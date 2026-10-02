@@ -80,9 +80,16 @@ Per environment, `PUT /management/v1/environments/$ENV/login-settings`:
     "favicon_url": "https://cdn.acme.example/favicon.ico",
     "header": {"show": true}, "logo_position": "header",
     "footer": {"text": "© Acme Inc.", "links": [{"label": "Privacy", "url": "https://acme.example/privacy"}]},
-    "background_image_url": "https://cdn.acme.example/background.jpg", "background_overlay": 40
+    "background_image_url": "https://cdn.acme.example/background.jpg", "background_overlay": 40,
+    "font": {"family": "inter"},
+    "heading_font": {"family": "custom", "url": "https://cdn.acme.example/brand.woff2"}
   },
-  "locale": "es"
+  "legal": {
+    "privacy_url": "https://acme.example/privacy", "terms_url": "https://acme.example/terms",
+    "help_url": "https://help.acme.example", "support_email": "support@acme.example"
+  },
+  "locale": "es",
+  "languages": ["es", "en"]
 }
 ```
 
@@ -98,7 +105,10 @@ Per environment, `PUT /management/v1/environments/$ENV/login-settings`:
 | `theme.header.show`, `theme.logo_position` | optional header bar; `header` moves the logo and name into it |
 | `theme.footer` | `text` ≤200 chars, up to 5 `links` (`label` ≤40, HTTPS or `mailto:`), opened in a new tab |
 | `theme.background_image_url`, `theme.background_overlay` | optional HTTPS image covering the page behind the form (no quotes, parentheses, backslashes or spaces); tinted by 0–90 % of the scheme's background color |
-| `locale` | Default style only: the environment's [language](#language), for the hosted pages and the [emails](email-delivery.md#emails-iamkit-writes-smtp-resend) (`en`, `es`; `""` = automatic; `GET .../login-settings/locales` lists them). Omitted on `PUT`: unchanged |
+| `theme.font`, `theme.heading_font` | [Fonts](#fonts): `family` `system` (default; for headings, the text font), `inter`, `roboto`, `open-sans`, `lora`, or `custom` with `url` (HTTPS `.woff2`) |
+| `legal` | [Legal links](#legal-links): `privacy_url`, `terms_url`, `help_url` (HTTPS) and `support_email`; all optional. Omitted on `PUT`: unchanged |
+| `locale` | The default [language](#language) of the hosted pages — and, on the default style, of the [emails](email-delivery.md#emails-iamkit-writes-smtp-resend); one of the enabled `languages` (`GET .../login-settings/locales` lists the available ones). `""` = automatic (default style) or the environment's (client style). Omitted on `PUT`: unchanged |
+| `languages` | Default style only: the languages hosted pages may use (≤64 codes, normalized and deduplicated); `[]` = every available one. Omitted on `PUT`: unchanged |
 
 The default style also brands the emails IAMKit writes (SMTP, Resend): its
 display name, logo and primary color.
@@ -106,26 +116,161 @@ display name, logo and primary color.
 Button text is black or white, whichever reads better on the primary color;
 the console warns about text and link colors below WCAG contrast.
 
+### Fonts
+
+`theme.font` sets the text typeface and `theme.heading_font` the page
+title's. Inter, Roboto, Open Sans and Lora are served by IAMKit itself
+(`/hosted/fonts/`, latin and latin-ext subsets, SIL Open Font License), so
+the page makes no third-party request. `custom` loads your own HTTPS
+`.woff2` file (no quotes, parentheses, backslashes or spaces; served with
+CORS, since browsers fetch fonts in CORS mode). The page's CSP gains
+`font-src 'self'` and/or `font-src https:` only when a font needs it;
+without fonts nothing changes.
+
+### Legal links
+
+`legal` puts links to your privacy policy, terms of service, help page and
+support email (`mailto:`) under the sign-in and sign-up forms, in the page
+language. On a client style, empty links inherit the environment default's.
+They are separate from the free-form footer links.
+
+When the [sign-in policy](sign-in-methods.md) sets `require_terms`, sign-up
+asks people to accept the terms (a checkbox linking `terms_url` and
+`privacy_url`) and records `terms_accepted_at` on the new user — see
+[sign-up](signup-and-onboarding.md).
+
 ### Language
 
 Hosted pages (titles, labels, buttons, and the errors people can act on) are
-in, first match wins:
+in, first match wins, among the environment's **enabled languages**
+(`languages`; all when empty):
 
 1. the application's `ui_locales` on `/oauth/authorize` (e.g. `es-MX en`);
-2. the environment's `locale` (the **Language** setting of the default style;
-   client styles have none);
-3. the visitor's browser (`Accept-Language`), then English.
+2. the organization's `locale` once the page knows the organization
+   ([organization branding](#organization-branding)), else the client
+   style's `locale`, else the environment's `locale`;
+3. the visitor's browser (`Accept-Language`), then English when enabled,
+   else the first enabled language.
 
-Invitation pages use steps 2–3. Available languages: `en`, `es`.
+Codes match by language and region: `es-MX` picks `es`, `zh-Hant` and
+`zh-HK` pick `zh-TW`, `zh` picks `zh-CN`, `pt-PT` picks `pt`, and a bare
+code picks the one catalog of that language.
+Invitation pages and emails use steps 2–3 (the organization's language
+first). Available languages: `GET .../login-settings/locales` →
+`{"items": [{"code", "name", "dir", "beta"}]}` (English first, then by code).
+
+IAMKit ships 23 languages: `en`, `es`, and (beta) `ar`, `bg`, `cs`, `de`,
+`fr`, `hu`, `id`, `it`, `ja`, `ko`, `nl`, `pl`, `pt`, `pt-BR`, `ro`, `ru`,
+`sv`, `tr`, `uk`, `zh-CN`, `zh-TW`. Beta catalogs were machine-drafted and
+carry `"beta": true` in the locales list (the console marks them) until a
+native speaker reviews them; [sign-in texts](#sign-in-texts) and email
+templates reword anything in the meantime. Arabic pages and emails are laid
+out right to left (`<html dir="rtl">`); emails, passwords and codes stay
+left to right inside them. Corrections are welcome as pull requests to
+`internal/i18n/locales/<code>.json` (every catalog must keep English's keys
+and placeholders; `go test ./internal/i18n` checks it). The
+[`beta_languages` feature](feature-flags.md) (on by default) can hide the
+beta languages from environments that have not listed their languages.
+
+A wrong second-factor code on the hosted pages says how many tries are left
+(`WRONG_CODE`, 401). Errors carry machine codes (`LOGIN_INVALID`,
+`SSO_ONLY`, `SSO_NOT_OFFERED`, `SSO_EMAIL`, `PASSWORD_REQUIRED`,
+`CHOOSE_ORGANIZATION`, `ORGANIZATION_CHOSEN`, `FACTOR_REQUIRED`,
+`NO_ACCESS`, …) that the pages translate.
+
+### Sign-in texts
+
+Every text of the hosted pages — titles, labels, buttons, notices, error
+messages, device and invitation pages — can be reworded per language
+(console: Hosted login → Sign-in texts, with a live preview), for the
+environment, one OAuth client or one organization:
+
+```bash
+curl -X PUT "$IAM/management/v1/environments/$ENV/login-settings/texts/en" \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"texts":{"hosted.title.sign_in":"Welcome back","hosted.form.continue":"Next"}}'
+```
+
+Paths: `.../login-settings/texts/$LOCALE` (environment),
+`.../login-settings/clients/$CLIENT/texts/$LOCALE` and
+`.../login-settings/organizations/$ORG/texts/$LOCALE`. `PUT` replaces the
+scope's texts in that language (keys left out or empty inherit; at least one
+text — `DELETE` returns every text to the inherited wording, 404 when there
+are none); `GET` answers `{"texts":{}}` when there are none;
+`GET .../login-settings/texts` lists every scope and language with texts.
+A page resolves each key: organization (once the page knows it, as for
+[branding](#organization-branding)) › client › environment › IAMKit's
+wording in the page [language](#language) › English. Emails are worded with
+[email templates](email-delivery.md#emails-iamkit-writes-smtp-resend).
+
+`GET .../login-settings/texts/catalog?locale=es` lists the customizable
+keys with IAMKit's wording, the `placeholders` a custom text must keep
+(`%s`, `%d`, `{count}` — same ones, a literal percent sign is `%%`) and its
+`max_length` (three times the original, 80–1000 characters). Texts are
+plain, one-line text, always HTML-escaped on the pages. A text whose key
+leaves the catalog, or whose placeholders change in a later version, is
+ignored (the page shows IAMKit's wording). Every change is audited and emits
+a `sign_in_texts.updated` / `sign_in_texts.deleted` event; deleting the
+client or organization deletes its texts. CLI: `iam sign-in-texts
+catalog|list|get|set|delete`.
+
+`POST .../login-settings/texts/preview`
+`{"page","locale","texts","client_id"?,"organization_id"?}` renders a page
+with unsaved texts over the scope's saved branding and inherited texts.
 
 ### Per-client styles
 
 An OAuth client can have its own complete style:
 `PUT .../login-settings/clients/$CLIENT` (same body). Its sign-in pages use it;
-other clients and **invitation pages** (which have no client) use the default.
+other clients and **invitation pages** (which have no client) use the default
+(or the organization's [branding](#organization-branding)).
 `DELETE .../login-settings/clients/$CLIENT` returns the client to the default,
 `GET .../login-settings/clients` lists the clients with their own style.
 Deleting a client deletes its style.
+
+### Organization branding
+
+An organization can override parts of the style for its own users
+(console: Organizations → the organization → Branding):
+
+```bash
+curl -X PUT "$IAM/management/v1/environments/$ENV/login-settings/organizations/$ORG" \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"display_name":"Acme Corp","logo_url":"https://cdn.acme.example/logo.png","accent_color":"#aa0000"}'
+```
+
+The body has `display_name`, `logo_url`, `accent_color`, `theme` (same
+rules as the default) and `locale` (the language of its pages and
+invitation emails, one of the enabled languages); a missing or `null` field **inherits**, field by
+field: environment default ← client style ← organization. A `theme` replaces
+the inherited theme whole (an unset `theme.light.primary` takes
+`accent_color`). `GET` answers every field `null` when the organization has
+none; `DELETE` removes them all (404 when there are none). Deleting the
+organization deletes them. The organization's own administrators manage the
+same overrides at `…/admin/branding` ([organization
+administration](organization-administration.md)); CLI:
+`iam organizations branding get|set|delete ORG_ID`.
+
+Sign-in pages use it once they know the organization, in this order:
+
+1. **The application's hint** — the authorize request's `organization_id`
+   parameter or a `urn:iamkit:org:id:<id>` scope (both must name the same
+   organization; a malformed one is refused). The hint also **limits the
+   sign-in**: the chooser is skipped for that organization, a user who cannot
+   enter it cannot continue, and authorization refuses a session of another
+   organization (403).
+2. The organization the user **chose** (the pages after the chooser).
+3. A **verified domain** of the email typed on the first page (the password
+   and code pages). Unverified domains never brand.
+
+```text
+https://iam.example/oauth/authorize?client_id=…&response_type=code&…&organization_id=$ORG
+https://iam.example/oauth/authorize?client_id=…&response_type=code&scope=openid%20urn:iamkit:org:id:$ORG&…
+```
+
+Invitation pages and invitation **emails** into the organization use its
+branding; verification codes and other emails keep the environment's (users
+are environment-wide). The email language stays the environment's.
 
 ### Previews
 
@@ -136,7 +281,10 @@ unsaved style (validated like a save, stored nowhere; operators with write
 access). Pages: `identify`, `password`, `code`, `reset`, `organization`, `mfa`,
 `enroll`, `recovery`, `invite`, `message`, `signup`, `signup-code`. `scheme` may be either one whatever
 the mode; `locale` (`?locale=` on `GET`) picks the language, by default the
-environment's.
+environment's. `?organization=$ORG` on `GET` shows an organization's saved
+overrides (over `?client=` or the default); `POST` with `"organization":
+{…overrides}` instead of `settings` previews unsaved ones over the saved
+default.
 
 An optional `sign_in` (a body field, or `?sign_in=` as JSON on `GET`) shows
 only some methods on the `identify` and `password` pages, e.g. social login
@@ -222,11 +370,11 @@ sign-in finishes they show "Device connected" instead of redirecting.
 
 - Pages are server-rendered HTML without JavaScript. Every response carries a
   strict CSP (`default-src 'none'`, per-response style nonce, `img-src https: data:` for the enrollment QR code,
-  `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `no-store` and
+  `font-src` only when the theme sets a [font](#fonts), `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `no-store` and
   `Referrer-Policy: no-referrer`.
 - Every form action re-validates the ticket and its browser binding; a stolen
   ticket cannot be used from another browser.
-- Page views are limited to 60/min and form posts to 30/min per IP and route
+- Page views are limited to 60/min (font files: 600/min) and form posts to 30/min per IP and route
   (device code entry: 10/min).
 - Error messages do not reveal whether an account exists beyond what the
   identity API already does.

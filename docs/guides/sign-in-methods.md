@@ -23,6 +23,7 @@ Manage it in the console (**Sign-in → Sign-in methods**), with the
 | `mfa_required` | A [second factor](mfa.md) in every organization, on top of the organization's own `mfa_required` |
 | `mfa_for_federated` | The same after social and SSO sign-ins |
 | `allow_signup` | [Self-service sign-up](signup-and-onboarding.md#self-service-sign-up) into `signup_organization_id` (required) and optionally `signup_group_id` |
+| `require_terms` | Sign-up needs `accept_terms` and records `terms_accepted_at` on the user ([terms](signup-and-onboarding.md#terms-acceptance)); omitted on `PUT` keeps the current value |
 
 `allowed_factors` lists the [second-factor kinds](mfa.md#allowed-factors)
 users may enroll and sign in with (`totp`, `email`, `sms`, `webauthn`; default

@@ -1,5 +1,8 @@
 # Email webhook contract
 
+This page covers email and SMS delivery webhooks. To receive the
+[event log](events.md) as signed webhooks, see [event webhooks](event-webhooks.md).
+
 This applies to the `webhook` provider (the default). With `smtp` or `resend`,
 IAMKit writes and sends the email itself; see [email delivery](../guides/email-delivery.md).
 

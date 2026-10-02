@@ -21,11 +21,15 @@ only to work around the old 403s.
 
 These are environment-wide administrative permissions, not organization-limited
 ones: a token with `iam:users:write` can change any user of its environment.
-Keep such tokens on trusted backends.
+Keep such tokens on trusted backends. Organization-limited administration uses
+the `iam:org:*` permissions under `/organizations/:organization/admin`; see
+[organization administration](../../guides/organization-administration.md).
 
 The setup is an application binding to the built-in IAM resource and a
 service account with selected IAM permissions. Its credential is exchanged at
-`/identity/v1/machine-token` for a JWT.
+`/identity/v1/machine-token` for a JWT. A [machine user](../../guides/machine-users.md)'s
+personal access token for the IAM resource is accepted directly as the bearer,
+with the IAM permissions the machine user holds in the token's organization.
 
 Every environment has an IAM resource with prefix `iam` and audience
 `urn:iamkit:environment:ENV_UUID`. Discover its ID through the resources list;
@@ -38,14 +42,18 @@ GET/HEAD select the read permission; mutations select write.
 
 | Routes | Permissions |
 | --- | --- |
-| `/users`, `/users/:id`, `/users/:id/permanent`, `/users/:id/factors`, `/users/:id/unlock` (create/list/get/patch/suspend/delete, factor list/reset, password unlock) | `iam:users:read`, `iam:users:write` |
-| `/organizations`, `/organizations/:id` (create/list/get/patch) | `iam:orgs:read`, `iam:orgs:write` |
+| `/users`, `/users/:id`, `/users/:id/permanent`, `/users/:id/factors`, `/users/:id/unlock`, `/users/:id/deactivate`, `/users/:id/reactivate`, `/users/:id/access-tokens`, `/users/:id/access-tokens/:token`, `/users/:id/keys`, `/users/:id/keys/:key`, `/users/:id/metadata/:key`, `/users/:id/profile`, `/user-schema` (create/list/get/patch/suspend/delete, factor list/reset, password unlock, deactivate/reactivate, metadata, profile, user schema) | `iam:users:read`, `iam:users:write` |
+| `/organizations`, `/organizations/:id`, `/organizations/:id/metadata/:key` (create/list/get/patch, metadata) | `iam:orgs:read`, `iam:orgs:write` |
 | `/memberships`, `/organizations/:organization/members`, member removal, structure and group routes | `iam:members:read`, `iam:members:write` |
 | `/applications`, `/applications/:id` (create/list/get/patch) | `iam:apps:read`, `iam:apps:write` |
-| Resources, application-resource bindings, application resource lists | `iam:resources:read`, `iam:resources:write` |
-| Roles, role assignments, group role assignments, effective roles | `iam:roles:read`, `iam:roles:write` |
+| Resources, `PUT /resources/:id/access`, application-resource bindings, application resource lists | `iam:resources:read`, `iam:resources:write` |
+| Roles, role assignments, group role assignments, effective roles, `/resource-grants` | `iam:roles:read`, `iam:roles:write` |
 | Grants | `iam:grants:read`, `iam:grants:write` |
 | Service accounts (create/list/get/authentication/revoke) | `iam:service-accounts:read`, `iam:service-accounts:write` |
+| Event log (`GET /events`, `GET /events/export`, see [event log](../events.md)) | `iam:events:read` |
+| Entity history (`GET /users/:id/history`, also `organizations`, `applications`, `roles`, `resources`; see [change history](../events.md#change-history)) | `iam:events:read` and the collection's read permission |
+| Event webhooks (`/webhooks…`, see [event webhooks](../event-webhooks.md)) | `iam:webhooks:read` / `iam:webhooks:write` |
+| Daily usage (`GET /usage`, see [usage and limits](../../guides/usage-limits.md)) | `iam:usage:read` |
 | Delivery configuration (`GET`, `PUT`, `DELETE /delivery`; `GET /delivery/status`; `POST /delivery/test`; `GET`, `POST /delivery/preview`; `GET /delivery/templates`; `GET`, `PUT`, `DELETE /delivery/templates/:purpose/:locale`) | `iam:delivery:read` (`GET`), `iam:delivery:write` (others, including draft `POST /delivery/preview`) |
 
 There are no workspace/operator, federation, OAuth-client or SCIM-credential

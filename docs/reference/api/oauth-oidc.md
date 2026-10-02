@@ -7,12 +7,12 @@ issuer, including the public HTTPS origin.
 | Endpoint | Contract |
 | --- | --- |
 | `GET /oauth/authorize` | Authorization code request; returns JSON ticket/context and Secure binding cookie, or `303` to `/hosted/login?ticket=…` for `hosted_login` clients |
-| `POST /oauth/authorize/complete` | JSON `authorization_ticket`, `approve`; requires browser cookie and matching user Bearer token |
+| `POST /oauth/authorize/complete` | JSON `authorization_ticket`, `approve`; requires browser cookie and matching user Bearer token; `303` to the client, or `200 {redirect_to}` for `Accept: application/json` without `text/html` ([custom sign-in UI](../../guides/custom-sign-in-ui.md)); 403 `ORGANIZATION_HINT` for a session in another organization than the request named |
 | `GET /hosted/login`, `POST /hosted/login/*` | [Hosted sign-in pages](../../guides/hosted-login.md) (HTML forms); every step requires the ticket and binding cookie |
 | `GET,POST /hosted/invite` | Hosted invitation preview/accept (`token`) |
 | `POST /oauth/device_authorization` | RFC 8628; form `client_id` (+ client authentication), optional `scope`; `{device_code,user_code,verification_uri,verification_uri_complete,expires_in,interval}` |
 | `GET,POST /hosted/device`, `POST /hosted/device/approve`, `POST /hosted/device/deny` | Hosted device approval: enter the user code, confirm, then the hosted sign-in |
-| `POST /oauth/token` | Form-encoded code, refresh, `client_credentials`, device code or token exchange grant; OAuth token response |
+| `POST /oauth/token` | Form-encoded code, refresh, `client_credentials`, device code, token exchange or JWT-bearer grant; OAuth token response |
 | `POST /oauth/revoke` | Form-encoded `token`, client authentication; protocol revocation response |
 | `GET,POST /oauth/userinfo` | OIDC UserInfo; Bearer OAuth access token (or `access_token` form field on POST); `401` + `WWW-Authenticate: Bearer error="invalid_token"` otherwise |
 | `POST /oauth/introspect` | RFC 7662; form `token` (+ optional `token_type_hint`), `client_secret_basic` of a confidential client |
@@ -22,7 +22,13 @@ issuer, including the public HTTPS origin.
 
 Authorize requires `client_id`, `response_type=code`, registered `redirect_uri`,
 `state`, `nonce`, `scope` including `openid`, `code_challenge_method=S256` and
-`code_challenge`. Supported scopes: `openid profile email offline_access`.
+`code_challenge`. Supported scopes: `openid profile email phone offline_access`.
+An optional organization hint — `organization_id=<id>` or a
+`urn:iamkit:org:id:<id>` scope (the same organization when both; a malformed
+one is `invalid_request`) — brands the hosted pages with the
+[organization's overrides](../../guides/hosted-login.md#organization-branding)
+and limits the sign-in to that organization (another organization's session
+is refused, 403).
 No implicit or password grant is advertised. `prompt`/`max_age` are unsupported.
 
 Discovery advertises `userinfo_endpoint`, `introspection_endpoint`,
@@ -32,7 +38,9 @@ Discovery advertises `userinfo_endpoint`, `introspection_endpoint`,
 are only ever added.
 
 **UserInfo** answers `sub`, `environment_id` and `organization_id` always,
-`name` with the `profile` scope, `email` + `email_verified` with `email`. It
+`name`, `picture` (when the user has an avatar) and `preferred_username` (when they have a username) with the `profile` scope (plus the [user schema's](../../guides/user-profiles.md) `x-iamkit-claim`
+attributes, also added to ID tokens), `email` + `email_verified` with `email`,
+`phone_number` + `phone_number_verified` with `phone` (when the user has a phone; also in ID tokens). It
 needs an access token IAMKit issued at `/oauth/token` with the `openid` scope
 (identity-API tokens from `/identity/v1/login` are refused) whose grant,
 client and user session are still live.
@@ -66,7 +74,7 @@ session 30/min, device authorization the general limit, user-code entry
 **Device authorization grant** ([RFC 8628](https://www.rfc-editor.org/rfc/rfc8628)).
 Clients need `hosted_login` and `urn:ietf:params:oauth:grant-type:device_code`
 in `grant_types`; others get `400 unauthorized_client`. `scope` must be a
-subset of `openid profile email offline_access` (else `invalid_scope`). The
+subset of `openid profile email phone offline_access` (else `invalid_scope`). The
 device code (`ik_device_…`) and the user code (8 letters from
 `BCDFGHJKLMNPQRSTVWXZ`, shown `XXXX-XXXX`, case, spaces and dashes ignored)
 are stored hashed; both expire after 10 minutes. On `/hosted/device` the user
@@ -119,6 +127,20 @@ token_type: Bearer, expires_in}`, `Cache-Control: no-store`. Two subject types:
   organization (`invalid_request`). The token (15 minutes, no refresh, no
   `auth_time`) carries `act: {"sub": "<account id>"}`; its session records
   `actor_account_id` and the reason, audited `oauth.impersonated`.
+
+**JWT bearer** ([RFC 7523](https://www.rfc-editor.org/rfc/rfc7523) §2.1,
+`grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`, advertised in
+discovery) signs in a [machine user](../../guides/machine-users.md#keys-jwt-bearer-login)
+with one of its keys; no client authentication (a `client_assertion` is
+`invalid_request`). Fields: `assertion` (header `kid` = key ID; `iss` = `sub`
+= the machine user ID; `aud` = the issuer or its token endpoint; `exp` at most
+one hour ahead; a `jti`, single use — shared replay table with
+`private_key_jwt`), `organization_id`, `application_id`, `resource_id`, and
+optional `environment_id` (the key's). Answer: `{access_token, token_type:
+Bearer, expires_in}`, `Cache-Control: no-store`, no refresh or ID token; the
+application JWT's session (`amr` `swk`) is reused per key and boundary and
+ends when the key is removed. Every refusal (unknown or expired key, bad
+signature or claims, replay, inactive user, no access) is `400 invalid_grant`.
 
 **Client credentials** (`grant_type=client_credentials`) is for
 [service accounts](../../guides/service-accounts.md): `client_id` is the

@@ -21,10 +21,18 @@ containers after changes. Keep secrets outside source control and frontend build
 | `IAMKIT_LDAP_ALLOWED_HOSTS` | Empty: public addresses only | Comma-separated hosts or `host:port` of [LDAP directories](../guides/ldap.md) on private networks that IAMKit may dial; every other directory must resolve to a public address |
 | `IAMKIT_WEBAUTHN_ORIGINS` | Empty: only the issuer's origin | Comma-separated extra origins (custom sign-in UIs) allowed to run [security key and passkey](../guides/mfa.md#security-keys-and-passkeys) ceremonies; the relying-party ID stays the issuer's host |
 | `CORS_ALLOWED_ORIGINS` | Empty: no CORS middleware | Comma-separated allowed origins; enables credentials, so never use untrusted origins or wildcard |
-| `RATE_LIMIT_PER_MINUTE` | 120 | Per-IP, per-process limit on authenticated management and scoped API routes; invalid/non-positive values fall back to default |
+| `IAMKIT_TRUSTED_PROXIES` | Empty: the socket address is the client | Comma-separated IPs/CIDRs of the reverse proxies whose `X-Forwarded-For` names the client (and whose `X-Forwarded-Proto`/`-Host` are read); see [forwarded headers](../operations/reverse-proxy.md#forwarded-headers). An invalid entry stops start-up |
+| `RATE_LIMIT_PER_MINUTE` | 120 | Per-IP limit on authenticated management and scoped API routes, per process (shared by the replicas with `REDIS_URL`); invalid/non-positive values fall back to default |
+| `REDIS_URL` | Unset: everything per process, no cache | Optional `redis://` or `rediss://` URL. Replicas then share per-IP rate limits and per-minute [usage limits](../guides/usage-limits.md), and cache a few hot reads; PostgreSQL stays the source of truth. See [scaling](../operations/scaling-and-abuse.md#redis-optional). An invalid URL stops start-up; an unreachable server does not |
 | `IAMKIT_BOOTSTRAP_EMAIL` | Unset: no automatic bootstrap | First-boot owner email; automatic bootstrap logs a one-time key |
 | `IAMKIT_BOOTSTRAP_WORKSPACE` | `Default` | First-boot workspace name |
 | `IAMKIT_BOOTSTRAP_PASSWORD` | Optional | Sets a temporary password only when bootstrap creates the owner: the first console sign-in must replace it. Not a reset mechanism; remove it after bootstrap (a warning is logged while it stays set) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` and other standard `OTEL_*` | Unset: no traces or metrics exported | OpenTelemetry export over OTLP/HTTP; see [observability](../operations/observability.md#tracing-and-metrics) |
+| `IAMKIT_EVENT_RETENTION` | `2160h` (90 days) | How long the [event log](events.md) keeps events (Go duration, at least `1h`); older ones are pruned hourly |
+| `IAMKIT_WORKERS` | `true` | `false` turns off background jobs (back-channel logout delivery, event pruning) on this replica; keep them on in at least one. See [background jobs](../operations/observability.md#background-jobs) |
+| `IAMKIT_FEATURES` | — | Deployment values of IAMKit's [feature flags](../guides/feature-flags.md): `name=true\|false,…` (e.g. `saml_idp=false`); unknown names are logged and ignored |
+| `IAMKIT_LIMITS` | — | Deployment caps of the [usage limits](../guides/usage-limits.md): `name=value,…` (e.g. `users_max=10000,requests_per_minute=600`); environments can only tighten them. Unknown names or invalid values stop start-up |
+| `IAMKIT_METRICS_ADDR` | Unset: no Prometheus listener | Address (for example `127.0.0.1:9464`) of a separate listener serving Prometheus `/metrics`; never the public port |
 
 ## Email
 
@@ -44,7 +52,7 @@ startup; an invalid one stops the server naming the variable.
 | `SMTP_TLS` | `tls` on 465, else `starttls` | `starttls` or `tls` (implicit); plaintext is not supported |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Optional; password required with a username | Server-only secret |
 | `RESEND_API_KEY` | resend: required | Server-only secret |
-| `EMAIL_LOCALE` | English | Default language of emails IAMKit writes: `en`, `es` |
+| `EMAIL_LOCALE` | English | Default language of emails IAMKit writes: any available [language](../guides/hosted-login.md#language) code (`en`, `es`, `de`, `fr`, …) |
 
 Per-environment configurations are stored in PostgreSQL and managed through
 `/management/v1/environments/:environment/delivery`. Deleting one restores global

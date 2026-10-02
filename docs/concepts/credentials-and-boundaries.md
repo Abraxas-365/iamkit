@@ -7,6 +7,8 @@
 | User access JWT | Bearer on identity consumers/protected APIs | Environment/org/app/resource and permissions |
 | Machine access JWT | Bearer on protected APIs, including authorized `/api/v1` routes | Environment/app/resource and permissions; no organization |
 | `ik_svc_…` | Bearer on `/identity/v1/machine-token` | Exchange for bound machine JWT |
+| `ik_pat_…` | Bearer on `/api/v1`, `/identity/v1/introspect`, `/identity/v1/token-exchange` | A machine user in one organization for one resource; live permissions |
+| Machine user key assertion | `assertion` of the `jwt-bearer` grant at `/oauth/token` | A machine user; the boundary is chosen per sign-in; single use |
 | `ik_scim_…` | `Authorization: Bearer` or `X-API-Key` on `/scim/v2` | Provisioning connection/organization |
 | Refresh token | `/identity/v1/refresh` with full original boundary | Rotate an existing user session |
 | OAuth client secret | OAuth token/revocation protocol | Authenticate a confidential client, not an operator |

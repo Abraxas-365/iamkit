@@ -13,6 +13,10 @@ JSON APIs use `Content-Type: application/json`; OAuth token endpoints use form d
 | `/oauth`, `/.well-known` | OAuth client/protocol credentials; discovery public | [OAuth/OIDC](oauth-oidc.md) |
 | `/scim/v2` | Connection-scoped Bearer or X-API-Key | [SCIM](scim.md) |
 
+The whole HTTP API is also described by an OpenAPI 3.1 document at
+`GET /openapi.json`, kept in step with the code by the test suite, with a
+generated TypeScript client — see [OpenAPI and TypeScript client](openapi.md).
+
 The references describe current routes and significant constraints. Endpoint
 examples with capitalized IDs are request templates, not executable seed data;
 use [onboarding](../../start/first-application.md) to obtain actual IDs.

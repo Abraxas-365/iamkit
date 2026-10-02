@@ -20,11 +20,12 @@ Turn it on in the environment's [sign-in methods](sign-in-methods.md)
 | `allow_signup` | Offer sign-up; needs `allow_password` or `allow_email_code` |
 | `signup_organization_id` | Required with `allow_signup`: the organization every new account joins |
 | `signup_group_id` | Optional group of that organization (not a SCIM-provisioned one) the account joins; give the group roles to grant access |
+| `require_terms` | Sign-up must accept the terms ([below](#terms-acceptance)); `iam sign-in-policy set --require-terms` |
 
 The flow, headless ([identity API](../reference/api/identity.md)) or hosted:
 
 1. `POST /identity/v1/signup` `{environment_id, email, name, password?,
-   locale?}` → 202 `{challenge_id, expires_in}` and an `email_verification`
+   locale?, accept_terms?}` → 202 `{challenge_id, expires_in}` and an `email_verification`
    code by email. The password follows the [password
    policy](password-policy.md) of the sign-up organization; without one the
    account signs in with email codes (only when the organization allows them).
@@ -46,6 +47,17 @@ On the [hosted pages](hosted-login.md) the sign-in page shows **Create
 account**. A client can hide it (`"signup": false` in its sign-in methods).
 When the new account's group grants nothing in the client's application, the
 page says the account was created and access is pending.
+
+### Terms acceptance
+
+With `require_terms`, a sign-up without `"accept_terms": true` answers 400
+`TERMS_REQUIRED` before anything is sent. The acceptance time is kept with
+the pending sign-up and written to the user as `terms_accepted_at` (`GET
+/users/:id`) once the email is confirmed. The hosted sign-up page shows a
+required checkbox linking the branding's [legal](hosted-login.md#legal-links)
+`terms_url` (and `privacy_url`); set them before turning this on. Accounts
+created otherwise (operators, invitations, SCIM, federation) have no
+`terms_accepted_at`.
 
 Accounts created this way get only what the organization and group give. For
 anything conditional, use backend onboarding instead.

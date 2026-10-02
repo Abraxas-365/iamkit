@@ -2,7 +2,9 @@
 
 An organization is a tenant/business boundary within an environment. Add users
 through management on a trusted backend, or through the
-[scoped IAM API](../reference/api/scoped-iam.md) with `iam:members:write`. Adding a
+[scoped IAM API](../reference/api/scoped-iam.md) with `iam:members:write`. To let
+a customer's own administrators manage their organization, see
+[organization administration](organization-administration.md). Adding a
 membership does not assign invoice permissions; grant those separately.
 
 1. Create organization and capture its ID.

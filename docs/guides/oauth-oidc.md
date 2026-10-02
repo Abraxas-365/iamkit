@@ -37,7 +37,9 @@ without a user use [service accounts](service-accounts.md) and
    [hosted login](hosted-login.md) and skip to step 5.
 4. Your interaction UI signs the user in to the same app/resource and displays
    consent. POST `/oauth/authorize/complete` with the user access token, browser
-   cookie and `{authorization_ticket,approve:true}`.
+   cookie and `{authorization_ticket,approve:true}`. The
+   [custom sign-in UI guide](custom-sign-in-ui.md) covers this step with
+   `@iamkit/js`/`@iamkit/react`, `allowed_origins` and the security model.
 5. Follow the authorization response to the registered callback. Verify state,
    then exchange the code with the original verifier at `/oauth/token`.
 6. Validate the ID token's issuer/audience/nonce for client identity; use only the
@@ -53,7 +55,8 @@ when refresh is needed and manage refresh rotation/replay carefully.
 Standard OIDC libraries find these through discovery:
 
 - **UserInfo** — `GET /oauth/userinfo` with the OAuth access token returns
-  `sub`, `name` (scope `profile`), `email`/`email_verified` (scope `email`),
+  `sub`, `name`, `picture` and `preferred_username` (scope `profile`), `email`/`email_verified` (scope `email`),
+  `phone_number`/`phone_number_verified` (scope `phone`, when the user has one),
   `environment_id` and `organization_id`.
 - **Introspection** — a resource server holding a *confidential* client of the
   same environment posts `token=…` to `/oauth/introspect` with HTTP Basic. The

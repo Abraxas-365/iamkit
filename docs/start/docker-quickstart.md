@@ -52,7 +52,7 @@ docker compose --env-file .env.docker -f docker-compose.production.yml up -d --w
 curl --fail --silent --show-error http://localhost:8080/health
 ```
 
-Expected: `{"status":"healthy","service":"iamkit"}`. Startup applies embedded
+Expected: `{"status":"healthy","service":"iamkit","workers":"running","cache":"none"}`. Startup applies embedded
 migrations. Use an empty database; do not point this tutorial at an existing
 application schema. Data lives in the Compose named volume, not in the image.
 

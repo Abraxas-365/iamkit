@@ -42,6 +42,16 @@ of the organization's verified domains (Organization → Members → Domains).
 Disable adoption by issuing a credential on the same connection with
 `"adopt_existing_members": false`; every change is audited.
 
+## Phone numbers
+
+Directories send phone numbers, but IAMKit keeps them only when asked:
+issue the connection's credential with `"map_phone": true` (console: *Sync
+mobile phone numbers*). The user's `mobile` number then becomes their phone
+(unverified — users confirm it themselves, or operators mark it verified);
+other types are ignored and invalid numbers leave the phone as it was.
+Without it, a directory never reads, sets or clears phones, so turning on SCIM
+for an existing organization cannot wipe numbers users verified.
+
 ## Groups
 
 Enable group push in the directory (Entra: *Provision Microsoft Entra ID

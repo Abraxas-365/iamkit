@@ -3,10 +3,18 @@
 `authclient.New(baseURL, authclient.WithHTTPClient(httpClient))` calls identity
 routes. Supply deadlines and never log token-pair values.
 
-- `Login(ctx, PasswordLogin{LoginContext: boundary, Email: email, Password: password})`
+- `Login(ctx, PasswordLogin{LoginContext: boundary, Email: email, Password: password})`;
+  set `Login` instead of `Email` to accept an email or a username.
 - `Refresh(ctx, boundary, refreshToken)`; serialize and store replacements.
 - `MachineToken(ctx, serviceSecret)`; no user refresh token.
-- `InitiateChallenge(ctx, environment, email, purpose)` and
+- `ExchangeAccessToken(ctx, personalAccessToken)` trades a machine user's `ik_pat_`
+  token for an access token (no refresh); `Validator` never accepts the raw `ik_pat_`.
+- `NewKeyLogin(url, machineUserID, keyID, key)` then `Token(ctx, KeyBoundary{...})`
+  signs a machine user in with one of its [keys](../../guides/machine-users.md#keys-jwt-bearer-login)
+  (RFC 7523 JWT-bearer grant, fresh one-minute assertion per call, no refresh);
+  `ParsePrivateKey(pem)` reads the private key IAMKit generated.
+- `InitiateChallenge(ctx, environment, email, purpose)` (or `InitiateChallengeWith`
+  with `ChallengeRequest.Login` for an email or username) and
   `VerifyChallenge(ctx, ChallengeVerification{...})`.
 - `StartFederation(ctx, FederationStart{...})`; browser-cookie handling is still
   your integration's responsibility, not a headless substitute for browser binding.

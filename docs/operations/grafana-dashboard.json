@@ -1,0 +1,163 @@
+{
+  "title": "IAMKit",
+  "uid": "iamkit",
+  "description": "IAMKit HTTP, sign-in, token, delivery and database metrics from the Prometheus listener (IAMKIT_METRICS_ADDR).",
+  "tags": ["iamkit"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": {"from": "now-6h", "to": "now"},
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {"name": "datasource", "label": "Prometheus", "type": "datasource", "query": "prometheus"},
+      {
+        "name": "instance", "label": "Instance", "type": "query",
+        "datasource": {"type": "prometheus", "uid": "${datasource}"},
+        "query": "label_values(target_info{service_name=\"iamkit\"}, instance)",
+        "includeAll": true, "multi": true, "current": {"text": "All", "value": "$__all"}
+      }
+    ]
+  },
+  "panels": [
+    {"type": "row", "title": "HTTP", "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}, "collapsed": false, "panels": []},
+    {
+      "type": "timeseries", "title": "Requests per second by route", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{http_request_method}} {{http_route}}",
+        "expr": "topk(15, sum by (http_request_method, http_route) (rate(http_server_request_duration_seconds_count{instance=~\"$instance\"}[$__rate_interval])))"}]
+    },
+    {
+      "type": "timeseries", "title": "Error ratio (5xx, 4xx, 429)", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0}, "overrides": []},
+      "targets": [
+        {"refId": "A", "legendFormat": "5xx",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{instance=~\"$instance\",http_response_status_code=~\"5..\"}[$__rate_interval])) / sum(rate(http_server_request_duration_seconds_count{instance=~\"$instance\"}[$__rate_interval]))"},
+        {"refId": "B", "legendFormat": "4xx",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{instance=~\"$instance\",http_response_status_code=~\"4..\"}[$__rate_interval])) / sum(rate(http_server_request_duration_seconds_count{instance=~\"$instance\"}[$__rate_interval]))"},
+        {"refId": "C", "legendFormat": "429",
+          "expr": "sum(rate(http_server_request_duration_seconds_count{instance=~\"$instance\",http_response_status_code=\"429\"}[$__rate_interval])) / sum(rate(http_server_request_duration_seconds_count{instance=~\"$instance\"}[$__rate_interval]))"}
+      ]
+    },
+    {
+      "type": "timeseries", "title": "p95 latency by route", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{http_route}}",
+        "expr": "topk(10, histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket{instance=~\"$instance\"}[$__rate_interval]))))"}]
+    },
+    {
+      "type": "timeseries", "title": "Server errors by route", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{http_route}} {{http_response_status_code}}",
+        "expr": "sum by (http_route, http_response_status_code) (rate(http_server_request_duration_seconds_count{instance=~\"$instance\",http_response_status_code=~\"5..\"}[$__rate_interval])) > 0"}]
+    },
+    {"type": "row", "title": "Sign-in and tokens", "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17}, "collapsed": false, "panels": []},
+    {
+      "type": "timeseries", "title": "Sign-ins by method and result", "gridPos": {"h": 8, "w": 8, "x": 0, "y": 18},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{method}} {{result}}",
+        "expr": "sum by (method, result) (rate(iamkit_sign_ins_total{instance=~\"$instance\"}[$__rate_interval]))"}]
+    },
+    {
+      "type": "timeseries", "title": "Sign-in failure ratio and MFA failures", "gridPos": {"h": 8, "w": 8, "x": 8, "y": 18},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "targets": [
+        {"refId": "A", "legendFormat": "failure ratio",
+          "expr": "sum(rate(iamkit_sign_ins_total{instance=~\"$instance\",result=\"failure\"}[$__rate_interval])) / sum(rate(iamkit_sign_ins_total{instance=~\"$instance\"}[$__rate_interval]))"},
+        {"refId": "B", "legendFormat": "MFA failures/s",
+          "expr": "sum(rate(iamkit_mfa_failures_total{instance=~\"$instance\"}[$__rate_interval]))"}
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Token requests by grant", "gridPos": {"h": 8, "w": 8, "x": 16, "y": 18},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{grant_type}} {{result}}",
+        "expr": "sum by (grant_type, result) (rate(iamkit_oauth_token_requests_total{instance=~\"$instance\"}[$__rate_interval]))"}]
+    },
+    {"type": "row", "title": "Delivery and outbound calls", "gridPos": {"h": 1, "w": 24, "x": 0, "y": 26}, "collapsed": false, "panels": []},
+    {
+      "type": "timeseries", "title": "Email/SMS delivery attempts", "gridPos": {"h": 8, "w": 8, "x": 0, "y": 27},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{channel}} {{source}} {{result}}",
+        "expr": "sum by (channel, source, result) (rate(iamkit_delivery_attempts_total{instance=~\"$instance\"}[$__rate_interval]))"}]
+    },
+    {
+      "type": "timeseries", "title": "Delivery p95 latency", "gridPos": {"h": 8, "w": 8, "x": 8, "y": 27},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{channel}} {{source}}",
+        "expr": "histogram_quantile(0.95, sum by (le, channel, source) (rate(iamkit_delivery_duration_seconds_bucket{instance=~\"$instance\"}[$__rate_interval])))"}]
+    },
+    {
+      "type": "timeseries", "title": "Back-channel logout deliveries", "gridPos": {"h": 8, "w": 8, "x": 16, "y": 27},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{result}}",
+        "expr": "sum by (result) (rate(iamkit_logout_deliveries_total{instance=~\"$instance\"}[$__rate_interval]))"}]
+    },
+    {
+      "type": "timeseries", "title": "Outbound HTTP p95 by host", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 35},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{server_address}}",
+        "expr": "topk(10, histogram_quantile(0.95, sum by (le, server_address) (rate(http_client_request_duration_seconds_bucket{instance=~\"$instance\"}[$__rate_interval]))))"}]
+    },
+    {
+      "type": "timeseries", "title": "Outbound HTTP errors by host", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 35},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+      "targets": [
+        {"refId": "A", "legendFormat": "{{server_address}} {{error_type}}",
+          "expr": "sum by (server_address, error_type) (rate(http_client_request_duration_seconds_count{instance=~\"$instance\",error_type!=\"\"}[$__rate_interval])) > 0"},
+        {"refId": "B", "legendFormat": "{{server_address}} {{http_response_status_code}}",
+          "expr": "sum by (server_address, http_response_status_code) (rate(http_client_request_duration_seconds_count{instance=~\"$instance\",http_response_status_code=~\"5..\"}[$__rate_interval])) > 0"}
+      ]
+    },
+    {"type": "row", "title": "Database and runtime", "gridPos": {"h": 1, "w": 24, "x": 0, "y": 43}, "collapsed": false, "panels": []},
+    {
+      "type": "timeseries", "title": "Connection pool", "gridPos": {"h": 8, "w": 8, "x": 0, "y": 44},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "targets": [
+        {"refId": "A", "legendFormat": "{{status}}", "expr": "sum by (status) (db_sql_connection_open{instance=~\"$instance\"})"},
+        {"refId": "B", "legendFormat": "max open", "expr": "sum(db_sql_connection_max_open{instance=~\"$instance\"})"}
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Waiting for a connection", "gridPos": {"h": 8, "w": 8, "x": 8, "y": 44},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "waits/s",
+        "expr": "sum(rate(db_sql_connection_wait_total{instance=~\"$instance\"}[$__rate_interval]))"}]
+    },
+    {
+      "type": "timeseries", "title": "Query p95 by operation", "gridPos": {"h": 8, "w": 8, "x": 16, "y": 44},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+      "targets": [{"refId": "A", "legendFormat": "{{db_operation_name}}",
+        "expr": "histogram_quantile(0.95, sum by (le, db_operation_name) (rate(db_client_operation_duration_seconds_bucket{instance=~\"$instance\"}[$__rate_interval])))"}]
+    },
+    {
+      "type": "timeseries", "title": "Goroutines and heap", "gridPos": {"h": 8, "w": 12, "x": 0, "y": 52},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": [{"matcher": {"id": "byName", "options": "heap in use"}, "properties": [{"id": "unit", "value": "bytes"}, {"id": "custom.axisPlacement", "value": "right"}]}]},
+      "targets": [
+        {"refId": "A", "legendFormat": "goroutines", "expr": "sum(go_goroutines{instance=~\"$instance\"})"},
+        {"refId": "B", "legendFormat": "heap in use", "expr": "sum(go_memstats_heap_inuse_bytes{instance=~\"$instance\"})"}
+      ]
+    },
+    {
+      "type": "stat", "title": "Up instances", "gridPos": {"h": 8, "w": 12, "x": 12, "y": 52},
+      "datasource": {"type": "prometheus", "uid": "${datasource}"},
+      "targets": [{"refId": "A", "expr": "count(target_info{service_name=\"iamkit\",instance=~\"$instance\"})"}]
+    }
+  ]
+}

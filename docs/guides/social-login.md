@@ -180,8 +180,12 @@ and [email linking of members](federation.md#linking-members-by-email).
 
 ## Keeping profiles in sync
 
+A provider's `picture` claim (GitHub: `avatar_url`; `oauth2`: the mapped
+`picture` member) becomes a new user's avatar, and fills an existing
+account's when it has none; only `https://` pictures are kept.
+
 With `"update_profile": true` every sign-in refreshes the linked user's name
-from the provider. The email follows too when the provider verifies a new
+and avatar from the provider. The email follows too when the provider verifies a new
 address, the account has no password (the provider is how it signs in), no
 SCIM directory manages it and no other account has the address; the change is
 audited `federation.profile_updated`. Off by default.

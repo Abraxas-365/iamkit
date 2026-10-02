@@ -1,9 +1,31 @@
 # Reverse proxy, TLS and CORS
 
 Use a stable public HTTPS origin matching `JWT_ISSUER`. IAMKit listens HTTP behind
-your trusted TLS terminator. Forward the original host and appropriate forwarding
-headers, but do not assume arbitrary client-supplied proxy headers are trustworthy.
-Configure trusted hops at the edge and validate which client IP IAMKit actually sees.
+your trusted TLS terminator. Ready-made setups: [Compose with Traefik or
+Caddy](deployment.md#compose-with-tls) and the [Helm chart](deployment.md#kubernetes-helm).
+
+## Forwarded headers
+
+By default IAMKit takes the client address from the TCP connection, so behind
+a proxy every request seems to come from the proxy: per-IP rate limits are
+then shared by all clients, and request logs show the proxy. Set
+`IAMKIT_TRUSTED_PROXIES` to the proxies' addresses (IPs or CIDRs,
+comma-separated):
+
+- From those addresses only, the client is the first valid address of
+  `X-Forwarded-For`, and `X-Forwarded-Proto`/`X-Forwarded-Host` are read.
+- From any other address, forwarded headers are ignored and the socket address
+  is the client — a client reaching IAMKit directly cannot pick its own address.
+- The edge proxy must **replace** `X-Forwarded-For` with the address it saw,
+  not append to what the client sent (Traefik and Caddy do so when they trust
+  no upstream; nginx: `proxy_set_header X-Forwarded-For $remote_addr;`). With
+  several hops, every inner proxy must keep the value the edge set.
+
+List only addresses that cannot be reached by clients: the proxy network of
+the Compose files, or the ingress controller's pod range in Kubernetes. An
+invalid entry stops start-up. Check the result in the request log (`ip=`):
+it must be the client's public address, and must not change when the client
+sends its own `X-Forwarded-For`.
 
 ## Routing
 
@@ -36,5 +58,6 @@ browser flow, not only curl with manually copied cookies.
 Check HTTPS issuer discovery, cookie Secure/HttpOnly/SameSite/path attributes,
 callback round-trip and origin rejection. Confirm 401 without credentials and 403
 without permissions. Test forwarded-IP behavior under the real ingress before
-relying on per-IP rate limits. Your reverse-proxy configuration depends on the
-hosting platform; record and test it alongside your deployment manifest.
+relying on per-IP rate limits (`deploy/compose/smoke.sh` does both checks for
+the Compose files). Your reverse-proxy configuration depends on the hosting
+platform; record and test it alongside your deployment manifest.

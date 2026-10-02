@@ -15,6 +15,11 @@ Owner/admin writes; viewers read. Entity lists use the
 | `GET /resources` | — | 200 page |
 | `GET /resources/:id` | — | 200 resource |
 | `PUT /resources/:id` | `name`, `permissions` | 204 |
+| `PUT /resources/:id/access` | `owner_organization_id` (null = the environment), `require_grant` | 204; 422 for the IAM resource; organizations losing access have their sessions for the resource ended |
+| `PUT /resource-grants` | `resource_id`, `organization_id`, `role_ids` (null = every role) | 200 grant; replaces the roles of an existing grant; 422 for the owner organization or the IAM resource; 400 for a role of another resource |
+| `GET /resource-grants` | Optional `resource_id`, `organization_id`, list parameters | 200 page of `{id,resource_id,resource_name,organization_id,organization_name,role_ids,created_at,updated_at}` |
+| `GET /resource-grants/:id` | — | 200 grant |
+| `DELETE /resource-grants/:id` | — | 204 |
 | `POST /application-resources` | `application_id`, `resource_id` | 201 |
 | `DELETE /application-resources/:application/:resource` | — | 204; 409 while sessions, OAuth clients, service accounts or SAML applications use the pair |
 | `GET /applications/:application/resources` | — | 200 page |
@@ -70,6 +75,18 @@ roles in every organization at once; each item names its `organization_id`.
 Direct grants (`PUT /grants`) are not included; inspect them separately.
 Tokens do not carry a `groups` claim; they carry the resulting permissions.
 
+## Resource grants
+
+Resources carry `owner_organization_id` and `require_grant`. With
+`require_grant` false (the default) any organization may hold the resource's
+roles and permissions. With it true, tokens, roles and direct grants for the
+resource count only in the owner organization and in organizations holding a
+resource grant — and, in the latter, only the granted roles (`role_ids`,
+`null` = all). Owner organizations' administrators manage grants of their
+resources themselves ([organization administration](../../guides/organization-administration.md#resource-grants-vendor-organizations)).
+Resource grant routes need `iam:roles:read`/`iam:roles:write` on `/api/v1`;
+`PUT /resources/:id/access` needs `iam:resources:write`.
+
 ## Catalog rules
 
 A resource defines an immutable audience and prefix. Permissions must belong to
@@ -96,4 +113,4 @@ validation failure. Test another organization's token against the protected API
 and expect denial even when it has the same permission string.
 
 Source: `internal/iam/application/adapters/apphttp/handler.go`,
-`authorization/adapters/authzhttp/{handler,grants,groups}.go`, authorization domain types.
+`authorization/adapters/authzhttp/{handler,grants,groups,resource_grants}.go`, authorization domain types.

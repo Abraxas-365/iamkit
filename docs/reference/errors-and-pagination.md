@@ -14,7 +14,9 @@ the environment or organization does not allow that
 that the environment does not offer password reset. `SIGNUP_DISABLED` (403)
 means [sign-up](../guides/signup-and-onboarding.md#self-service-sign-up) is off;
 `ACCOUNT_EXISTS` (409) that the email got an account before the sign-up was
-confirmed.
+confirmed. `ACTION_DENIED` (403) means an [action](../guides/actions.md) refused
+the request (its message is the receiver's); `ACTION_FAILED` (502) that an
+action target set to interrupt on error failed.
 
 | Status | Typical action |
 | --- | --- |

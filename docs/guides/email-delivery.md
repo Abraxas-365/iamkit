@@ -220,7 +220,8 @@ do not apply) and **language**:
    server default; `GET …/login-settings/locales` lists the choices);
 3. `EMAIL_LOCALE`, then English.
 
-Available languages: `en`, `es`. Invitations use steps 2–3.
+Available languages: the 23 of the [hosted pages](hosted-login.md#language)
+(`GET …/login-settings/locales`). Invitations use steps 2–3.
 
 `GET /delivery/preview?purpose=invitation&locale=es` returns
 `{"subject","html","text"}`: a sample email with the saved branding and wording

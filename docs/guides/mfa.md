@@ -40,9 +40,10 @@ usable is left the user enrolls an allowed kind.
   second factor — same inbox.
 - **SMS** needs an SMS provider for the environment (below). Users add a phone
   number from self-service; the first code confirms it (`users.phone`,
-  `phone_verified`). Operators can set `phone` (`PATCH /users/:id`, the user
-  page, `iam users update --phone`); a changed number is unverified and never
-  changes an enrolled SMS factor.
+  `phone_verified`); users can also verify a phone without a factor
+  ([phone numbers](user-profiles.md#phone-numbers)). Operators can set `phone`
+  (`PATCH /users/:id`, the user page, `iam users update --phone`); a changed
+  number is unverified and never changes an enrolled SMS factor.
 - Codes last 5 minutes and are single use. One factor gets a new code at
   most every 30 seconds (429 `CODE_COOLDOWN`) and 10 per hour (429
   `CODE_LIMIT`). A failed delivery answers 502 and keeps the previous code.
@@ -69,7 +70,7 @@ later save to keep the stored one. A webhook receives
 `test`) with `Authorization: Bearer <token>` and a Standard Webhooks
 signature (`webhook-id`, `webhook-timestamp`, `webhook-signature`, the token
 as secret), like [email webhooks](email-delivery.md); answer 2xx. Twilio sends
-`body`, translated (English and Spanish) to the environment's language.
+`body`, translated to the environment's [language](hosted-login.md#language).
 
 | Method/path | Result |
 | --- | --- |

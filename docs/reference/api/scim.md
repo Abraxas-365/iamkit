@@ -124,8 +124,14 @@ path-less object value. Stored attributes: `active`, `displayName`,
 resets, `remove` clears the aliases; `emails[value eq "x"]` and
 `emails[type eq "t"].value` target one alias, and `emails[primary eq true].value`
 renames. Read-only (`id`, `meta`, `schemas`) and unstored attributes
-(`name.givenName`, `title`, `department`, `phoneNumbers`, …) are accepted and
-ignored, so a directory's full attribute mapping does not fail the sync. Other
+(`name.givenName`, `title`, `department`, …) are accepted and ignored, so a
+directory's full attribute mapping does not fail the sync. `phoneNumbers` is
+stored only for connections issued with `map_phone: true`: the element of
+`type` `mobile` (`phoneNumbers[type eq "mobile"]`, `….value`, or a whole list)
+becomes the user's unverified `phone`, a list without one or `remove` clears
+it, and a number that is not E.164 is ignored. Such connections also return it
+in `phoneNumbers` and a full `PUT` without it clears the phone; other
+connections never read or change phones. Other
 operations return 400 `invalidSyntax`. A PATCH racing another update of the same
 user is re-applied on the latest state; persistent contention returns 409.
 
