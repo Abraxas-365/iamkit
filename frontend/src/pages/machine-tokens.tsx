@@ -1,6 +1,6 @@
-import { useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Ban, KeyRound, Plus } from 'lucide-react'
+import { Ban, KeyRound, Plus, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
@@ -57,11 +57,14 @@ export function AccessTokens({ base, console, user, canWrite }: { base: string; 
 
 function TokenForm({ base, user, path, onClose, onCreated }: { base: string; user: string; path: string; onClose: () => void; onCreated: (tok: Issued) => void }) {
   const id = useId()
+  const [organization, setOrganization] = useState('')
   const [application, setApplication] = useState('')
+  const [resource, setResource] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
   const memberOf = useMemo(() => ({ user_id: user }), [user])
+  const unauthorized = useNoRoles(base, user, organization, resource)
   return <Dialog open onOpenChange={open => { if (!open && !pending.current) onClose() }}>
     <DialogContent>
       <DialogTitle className="pr-6 text-base font-semibold">{t('Create personal access token')}</DialogTitle>
@@ -88,18 +91,25 @@ function TokenForm({ base, user, path, onClose, onCreated }: { base: string; use
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor={`${id}-org`}>{t('Organization')}</label>
-          <SearchSelect id={`${id}-org`} name="organization_id" path={`${base}/organizations`} params={memberOf} mapItem={named} required disabled={busy} placeholder={t('Search its organizations…')} />
+          <SearchSelect id={`${id}-org`} name="organization_id" path={`${base}/organizations`} params={memberOf} mapItem={named} required disabled={busy} placeholder={t('Search its organizations…')} onChange={setOrganization} />
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor={`${id}-app`}>{t('Application')}</label>
-          <SearchSelect id={`${id}-app`} name="application_id" path={`${base}/applications`} mapItem={named} required disabled={busy} placeholder={t('Search applications…')} onChange={setApplication} />
+          <SearchSelect id={`${id}-app`} name="application_id" path={`${base}/applications`} mapItem={named} required disabled={busy} placeholder={t('Search applications…')} onChange={value => { setApplication(value); setResource('') }} />
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor={`${id}-res`}>{t('Resource')}</label>
           {application
-            ? <SearchSelect key={application} id={`${id}-res`} name="resource_id" path={`${base}/applications/${application}/resources`} mapItem={named} required disabled={busy} placeholder={t('Search the application\'s resources…')} />
+            ? <SearchSelect key={application} id={`${id}-res`} name="resource_id" path={`${base}/applications/${application}/resources`} mapItem={named} required disabled={busy} placeholder={t('Search the application\'s resources…')} onChange={setResource} />
             : <p className="text-sm text-muted-foreground">{t('Choose an application first.')}</p>}
         </div>
+        {unauthorized && <div role="note" aria-label={t('No roles on this resource')} className="flex gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-xs">
+          <TriangleAlert aria-hidden className="mt-px size-4 shrink-0 text-warning" />
+          <div className="space-y-1">
+            <p className="font-medium">{t('The machine user holds no role on this resource in this organization')}</p>
+            <p className="text-muted-foreground">{t('The token is refused (401) until it gets one. Assign a role, directly or through a group, before or after creating the token.')}</p>
+          </div>
+        </div>}
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor={`${id}-ttl`}>{t('Expires in')}</label>
           <select id={`${id}-ttl`} name="expires_in" className={selectClass} defaultValue="720h" disabled={busy}>
@@ -119,4 +129,21 @@ function TokenForm({ base, user, path, onClose, onCreated }: { base: string; use
       </form>
     </DialogContent>
   </Dialog>
+}
+
+/** useNoRoles reports whether the user holds no role (direct or through a
+ * group) on the resource in the organization, once both are chosen: a token
+ * for it would be refused at every use. A failed lookup warns nothing. */
+function useNoRoles(base: string, user: string, organization: string, resource: string) {
+  const [none, setNone] = useState(false)
+  useEffect(() => {
+    setNone(false)
+    if (!organization || !resource) return
+    const controller = new AbortController()
+    api.list<{ resource_id: string }>(`${base}/effective-roles?organization_id=${organization}&user_id=${user}`, controller.signal)
+      .then(r => setNone(!r.data.some(role => role.resource_id === resource)))
+      .catch(() => {})
+    return () => controller.abort()
+  }, [base, user, organization, resource])
+  return none
 }

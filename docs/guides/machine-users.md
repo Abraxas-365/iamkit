@@ -57,6 +57,11 @@ curl -X POST "$IAMKIT_URL/management/v1/environments/$ENV/users/$USER/access-tok
 Creating and revoking are audited `user.access_token_created` and
 `user.access_token_revoked`. CLI: `iam machine-users tokens create|list|revoke`.
 
+Creating a token does not need the machine user to hold a role on the resource,
+but every use is refused (401) until it does. The console's **Create token**
+dialog warns when the user holds no role (direct or through a group) on the
+chosen resource in the chosen organization.
+
 ### Use it directly
 
 Send the token as `Authorization: Bearer ik_pat_…`:
