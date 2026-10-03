@@ -21992,6 +21992,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "ticket",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -22000,6 +22007,9 @@
               "schema": {
                 "properties": {
                   "email": {
+                    "type": "string"
+                  },
+                  "ticket": {
                     "type": "string"
                   }
                 },

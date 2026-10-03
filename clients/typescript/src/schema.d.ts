@@ -16246,6 +16246,7 @@ export interface operations {
             query?: {
                 code?: string;
                 state?: string;
+                ticket?: string;
             };
             header?: never;
             path?: never;
@@ -16255,6 +16256,7 @@ export interface operations {
             content: {
                 "application/x-www-form-urlencoded": {
                     email?: string;
+                    ticket?: string;
                 };
             };
         };
