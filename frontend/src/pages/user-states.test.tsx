@@ -70,3 +70,13 @@ it('suspends and reactivates a user', async () => {
   await waitFor(() => expect(calls).toContainEqual({ method: 'POST', path: `${env}/users/u1/reactivate` }))
   expect(await screen.findByText('Active')).toBeTruthy()
 })
+
+it('shows when a signed-up user accepted the terms, and nothing otherwise', async () => {
+  open('users/u1')
+  expect(await screen.findByText('Never signed in')).toBeTruthy()
+  expect(screen.queryByText('Terms accepted')).toBeNull()
+  cleanup()
+  user = { ...user, terms_accepted_at: '2026-10-03T01:27:16Z' }
+  open('users/u1')
+  expect(await screen.findByText('Terms accepted')).toBeTruthy()
+})

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Ban, Bot, Building2, Home, KeyRound, LockOpen, Pencil, Plus, RotateCcw, ShieldCheck, Smartphone, Trash2, UserX } from 'lucide-react'
 import { toast } from 'sonner'
@@ -20,7 +20,7 @@ import { UserKeys } from './machine-keys'
 import { HistorySection } from './history'
 import { rich, t } from '@/lib/i18n'
 
-interface User { id: string; kind?: string; name: string; email: string; username?: string; avatar_url?: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; profile?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null; state?: string; last_signed_in_at?: string | null; home_organization_id?: string | null }
+interface User { id: string; kind?: string; name: string; email: string; username?: string; avatar_url?: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; profile?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null; state?: string; last_signed_in_at?: string | null; terms_accepted_at?: string | null; home_organization_id?: string | null }
 interface Org { id: string; name: string; active: boolean }
 interface Factor { id: string; kind: string; name?: string; passkey?: boolean; phone?: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
@@ -81,6 +81,7 @@ export default function UserDetailPage() {
         [t('Email code sign-in'), user.otp_enabled ? t('Allowed') : t('Off')],
         [t('Last sign-in'), user.last_signed_in_at ? <Time value={user.last_signed_in_at} /> : <span className="text-muted-foreground">{t('Never')}</span>],
         [t('Phone'), user.phone ? <span className="inline-flex flex-wrap items-center gap-2">{user.phone}{user.phone_verified ? <Badge variant="secondary" className="bg-success/10 text-success">{t('Verified')}</Badge> : <Badge variant="secondary">{t('Not verified')}</Badge>}</span> : <span className="text-muted-foreground">{t('None')}</span>],
+        ...(user.terms_accepted_at ? [[t('Terms accepted'), <Time value={user.terms_accepted_at} />] as [string, ReactNode]] : []),
       ]} />
     </DetailSection>
 
