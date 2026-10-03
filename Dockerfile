@@ -32,7 +32,9 @@ COPY --from=build /iamkit /usr/local/bin/iamkit
 USER iamkit
 EXPOSE 8080
 
+# 127.0.0.1, not localhost: the server listens on IPv4 and busybox wget
+# does not fall back from ::1 where the container has IPv6 loopback.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD ["wget", "-qO-", "http://localhost:8080/health"]
+    CMD ["wget", "-qO-", "http://127.0.0.1:8080/health"]
 
 ENTRYPOINT ["iamkit"]
