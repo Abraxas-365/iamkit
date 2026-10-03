@@ -154,7 +154,7 @@ func (s *Service) Enroll(ctx context.Context, token string) (authentication.Enro
 	if !slices.Contains(policy.Enrollable(p.AMR), mfa.KindTOTP) {
 		return authentication.Enrollment{}, factorNotAllowed(mfa.KindTOTP)
 	}
-	e, err := s.Start(ctx, p.Boundary.EnvironmentID, p.User)
+	e, err := s.start(ctx, p.Boundary.EnvironmentID, p.User)
 	return authentication.Enrollment{Secret: e.Secret, URI: e.URI}, err
 }
 
@@ -374,7 +374,7 @@ func (s *Service) Enrolling(ctx context.Context, environment identity.Environmen
 			return authentication.Enrollment{Secret: string(secret), URI: s.totp.URI(string(secret), account)}, nil
 		}
 	}
-	e, err := s.Start(ctx, environment, user)
+	e, err := s.start(ctx, environment, user)
 	return authentication.Enrollment{Secret: e.Secret, URI: e.URI}, err
 }
 
@@ -579,14 +579,16 @@ func kind(k string) (string, error) {
 	return "", errx.Validation("factor must be totp, email or sms")
 }
 
-// allowed checks that the environment lets users add factors of kind.
-func (s *Service) allowed(ctx context.Context, environment identity.EnvironmentID, kind string) error {
-	kinds, err := s.repository.Allowed(ctx, environment)
+// allowed checks that the environment and the boundary's organization let
+// users add factors of kind (a zero organization reads the environment's
+// rules only).
+func (s *Service) allowed(ctx context.Context, boundary authentication.Context, user identity.UserID, kind string) error {
+	policy, err := s.repository.Policy(ctx, boundary, user)
 	if err != nil {
 		return err
 	}
 	switch {
-	case !slices.Contains(kinds, kind),
+	case !slices.Contains(policy.Allowed, kind),
 		(kind == mfa.KindEmail || kind == mfa.KindSMS) && s.sender == nil,
 		kind == mfa.KindWebAuthn && !s.keys():
 		return factorNotAllowed(kind)
@@ -594,7 +596,21 @@ func (s *Service) allowed(ctx context.Context, environment identity.EnvironmentI
 	return nil
 }
 
-func (s *Service) Start(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (mfa.Enrollment, error) {
+// Start begins a self-service authenticator enrollment for a user signed in
+// to boundary.
+func (s *Service) Start(ctx context.Context, boundary authentication.Context, user identity.UserID) (mfa.Enrollment, error) {
+	if boundary.EnvironmentID.IsZero() || user.IsZero() {
+		return mfa.Enrollment{}, errx.Validation("user_id is required")
+	}
+	if err := s.allowed(ctx, boundary, user, mfa.KindTOTP); err != nil {
+		return mfa.Enrollment{}, err
+	}
+	return s.start(ctx, boundary.EnvironmentID, user)
+}
+
+// start creates the unconfirmed TOTP factor; login enrollment checks the
+// policy itself before calling it.
+func (s *Service) start(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (mfa.Enrollment, error) {
 	if environment.IsZero() || user.IsZero() {
 		return mfa.Enrollment{}, errx.Validation("user_id is required")
 	}
@@ -620,7 +636,8 @@ func (s *Service) Start(ctx context.Context, environment identity.EnvironmentID,
 	return mfa.Enrollment{Factor: id, Secret: secret, URI: s.totp.URI(secret, account)}, nil
 }
 
-func (s *Service) StartCode(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, k, phone string) (authentication.CodeSent, error) {
+func (s *Service) StartCode(ctx context.Context, boundary authentication.Context, user identity.UserID, k, phone string) (authentication.CodeSent, error) {
+	environment := boundary.EnvironmentID
 	if environment.IsZero() || user.IsZero() {
 		return authentication.CodeSent{}, errx.Validation("user_id is required")
 	}
@@ -635,7 +652,7 @@ func (s *Service) StartCode(ctx context.Context, environment identity.Environmen
 	} else {
 		phone = ""
 	}
-	if err := s.allowed(ctx, environment, k); err != nil {
+	if err := s.allowed(ctx, boundary, user, k); err != nil {
 		return authentication.CodeSent{}, err
 	}
 	tx, err := s.repository.Begin(ctx)

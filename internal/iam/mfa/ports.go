@@ -51,11 +51,13 @@ type Logins interface {
 // totp, email or sms.
 type Commands interface {
 	// Start creates an unconfirmed TOTP factor, replacing an earlier
-	// unconfirmed one; a user with an active one must remove it first.
-	Start(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (Enrollment, error)
+	// unconfirmed one; a user with an active one must remove it first. The
+	// environment and the boundary's organization must allow it.
+	Start(ctx context.Context, boundary authentication.Context, user identity.UserID) (Enrollment, error)
 	// StartCode creates (or refreshes) an unconfirmed email factor for the
-	// user's address, or SMS factor for phone, and sends it a code.
-	StartCode(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, kind, phone string) (authentication.CodeSent, error)
+	// user's address, or SMS factor for phone, and sends it a code; the kind
+	// must be allowed like Start's.
+	StartCode(ctx context.Context, boundary authentication.Context, user identity.UserID, kind, phone string) (authentication.CodeSent, error)
 	// Confirm activates the unconfirmed factor of kind with its first code
 	// and returns the recovery codes (first factor only). A wrong code fails
 	// with 422, not 401: the caller's access token is fine.
@@ -70,8 +72,9 @@ type Commands interface {
 	Regenerate(ctx context.Context, m Mutation, user identity.UserID, proof authentication.Proof) ([]string, error)
 	// Reset deletes every factor and recovery code of a user (operator).
 	Reset(ctx context.Context, m Mutation, user identity.UserID) error
-	// StartWebAuthn begins registering a security key or passkey.
-	StartWebAuthn(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, input StartRegistration) (authentication.WebAuthnOptions, error)
+	// StartWebAuthn begins registering a security key or passkey, allowed
+	// like Start's.
+	StartWebAuthn(ctx context.Context, boundary authentication.Context, user identity.UserID, input StartRegistration) (authentication.WebAuthnOptions, error)
 	// FinishWebAuthn verifies the browser's attestation and adds the key;
 	// the user's first factor also returns recovery codes.
 	FinishWebAuthn(ctx context.Context, m Mutation, user identity.UserID, session string, credential []byte) (Registration, error)

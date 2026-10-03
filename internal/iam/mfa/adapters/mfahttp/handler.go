@@ -117,6 +117,12 @@ func mutation(token authentication.Token) mfa.Mutation {
 	return mfa.Mutation{Environment: token.EnvironmentID, Actor: token.Subject.String(), Target: token.Subject.String()}
 }
 
+// boundary is where the token's session signed in: a new factor must be
+// allowed by its organization as well as the environment.
+func boundary(token authentication.Token) authentication.Context {
+	return authentication.Context{EnvironmentID: token.EnvironmentID, OrganizationID: token.OrganizationID, ApplicationID: token.ApplicationID, ResourceID: token.ResourceID}
+}
+
 func (h *Handler) List(c *fiber.Ctx) error {
 	environment, _ := identity.ParseEnvironmentID(c.Query("environment_id"))
 	token, err := h.self(c, environment, c.Query("audience"))
@@ -139,13 +145,13 @@ func (h *Handler) Start(c *fiber.Ctx, kind string) error {
 	}
 	c.Set("Cache-Control", "no-store")
 	if kind != mfa.KindTOTP {
-		sent, err := h.commands.StartCode(c.UserContext(), token.EnvironmentID, token.Subject, kind, input.Phone)
+		sent, err := h.commands.StartCode(c.UserContext(), boundary(token), token.Subject, kind, input.Phone)
 		if err != nil {
 			return err
 		}
 		return c.Status(fiber.StatusAccepted).JSON(sent)
 	}
-	out, err := h.commands.Start(c.UserContext(), token.EnvironmentID, token.Subject)
+	out, err := h.commands.Start(c.UserContext(), boundary(token), token.Subject)
 	if err != nil {
 		return err
 	}
@@ -210,7 +216,7 @@ func (h *Handler) StartWebAuthn(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.commands.StartWebAuthn(c.UserContext(), token.EnvironmentID, token.Subject, mfa.StartRegistration{Name: input.Name, Passkey: input.Passkey})
+	out, err := h.commands.StartWebAuthn(c.UserContext(), boundary(token), token.Subject, mfa.StartRegistration{Name: input.Name, Passkey: input.Passkey})
 	if err != nil {
 		return err
 	}

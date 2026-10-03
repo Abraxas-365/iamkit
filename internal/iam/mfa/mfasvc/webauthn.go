@@ -41,9 +41,11 @@ func (s *Service) take(ctx context.Context, tx mfa.Transaction, environment iden
 	return tx.TakeCeremony(ctx, s.secrets.Hash(session), environment, purpose)
 }
 
-// StartWebAuthn begins registering a key: the environment must allow the
-// webauthn factor and the user may hold config.WebAuthnKeys keys.
-func (s *Service) StartWebAuthn(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, input mfa.StartRegistration) (authentication.WebAuthnOptions, error) {
+// StartWebAuthn begins registering a key: the environment and the boundary's
+// organization must allow the webauthn factor and the user may hold
+// config.WebAuthnKeys keys.
+func (s *Service) StartWebAuthn(ctx context.Context, boundary authentication.Context, user identity.UserID, input mfa.StartRegistration) (authentication.WebAuthnOptions, error) {
+	environment := boundary.EnvironmentID
 	if environment.IsZero() || user.IsZero() {
 		return authentication.WebAuthnOptions{}, errx.Validation("user_id is required")
 	}
@@ -51,7 +53,7 @@ func (s *Service) StartWebAuthn(ctx context.Context, environment identity.Enviro
 		return authentication.WebAuthnOptions{}, err
 	}
 	input = input.Normalized()
-	if err := s.allowed(ctx, environment, mfa.KindWebAuthn); err != nil {
+	if err := s.allowed(ctx, boundary, user, mfa.KindWebAuthn); err != nil {
 		return authentication.WebAuthnOptions{}, err
 	}
 	summary, err := s.repository.Summary(ctx, environment, user)

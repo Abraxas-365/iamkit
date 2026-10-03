@@ -28,7 +28,7 @@ func setupKeys(t *testing.T) (*Service, *memory) {
 func registerKey(t *testing.T, s *Service, name string, passkey bool) (*softkey.Key, mfa.Registration) {
 	t.Helper()
 	ctx := context.Background()
-	start, err := s.StartWebAuthn(ctx, env, user, mfa.StartRegistration{Name: name, Passkey: passkey})
+	start, err := s.StartWebAuthn(ctx, boundary, user, mfa.StartRegistration{Name: name, Passkey: passkey})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestSecurityKeyRegistrationAndLogin(t *testing.T) {
 		t.Fatalf("registration %+v", reg)
 	}
 	// The ceremony is single use.
-	start, _ := s.StartWebAuthn(ctx, env, user, mfa.StartRegistration{Name: "Second"})
+	start, _ := s.StartWebAuthn(ctx, boundary, user, mfa.StartRegistration{Name: "Second"})
 	_, answer, _ := softkey.Create(start.Options, origin, false)
 	if _, err := s.FinishWebAuthn(ctx, mfa.Mutation{Environment: env}, user, "ik_wa_unknown", answer); status(err) != 422 {
 		t.Fatalf("unknown ceremony: %v", err)
@@ -169,7 +169,7 @@ func TestWebAuthnUnavailable(t *testing.T) {
 	s, repo, _ := setup(t)
 	repo.allowed = append(repo.allowed, mfa.KindWebAuthn)
 	s.SetRelying(mfawebauthn.New("", nil))
-	if _, err := s.StartWebAuthn(context.Background(), env, user, mfa.StartRegistration{Name: "Key"}); err == nil {
+	if _, err := s.StartWebAuthn(context.Background(), boundary, user, mfa.StartRegistration{Name: "Key"}); err == nil {
 		t.Fatal("registration without a relying party")
 	}
 	if _, err := s.BeginPasskey(context.Background(), env); err == nil {

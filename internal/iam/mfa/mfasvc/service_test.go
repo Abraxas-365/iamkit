@@ -18,6 +18,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa/adapters/mfatotp"
+	"github.com/Abraxas-365/iamkit/internal/iam/mfa/adapters/mfawebauthn"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
@@ -32,8 +33,10 @@ type memory struct {
 	saved    *memory
 	clock    *time.Time
 	// allowed is the environment's (and organization's) allowed kinds;
-	// required makes the boundary require a second factor.
+	// orgAllowed, when set, narrows them for boundaries with an
+	// organization; required makes the boundary require a second factor.
 	allowed    []string
+	orgAllowed []string
 	required   bool
 	phone      string
 	ceremonies map[string]mfa.Ceremony
@@ -91,8 +94,17 @@ func (m *memory) Summary(context.Context, identity.EnvironmentID, identity.UserI
 	}
 	return out, nil
 }
-func (m *memory) Policy(context.Context, authentication.Context, identity.UserID) (mfa.Policy, error) {
-	p := mfa.Policy{Active: []string{}, Allowed: m.allowed, Required: m.required}
+func (m *memory) Policy(_ context.Context, b authentication.Context, _ identity.UserID) (mfa.Policy, error) {
+	allowed := m.allowed
+	if m.orgAllowed != nil && !b.OrganizationID.IsZero() {
+		allowed = []string{}
+		for _, k := range m.allowed {
+			if slices.Contains(m.orgAllowed, k) {
+				allowed = append(allowed, k)
+			}
+		}
+	}
+	p := mfa.Policy{Active: []string{}, Allowed: allowed, Required: m.required}
 	for _, f := range m.factors {
 		if f.Active() {
 			p.Active = append(p.Active, f.Kind)
@@ -377,7 +389,7 @@ func errCode(err error) string {
 func enroll(t *testing.T, s *Service, now *time.Time) (string, []string) {
 	t.Helper()
 	ctx := context.Background()
-	e, err := s.Start(ctx, env, user)
+	e, err := s.Start(ctx, boundary, user)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +409,7 @@ func verify(s *Service, c string) (mfa.Verification, error) {
 func TestEnrollConfirmAndReplay(t *testing.T) {
 	s, repo, now := setup(t)
 	ctx := context.Background()
-	e, err := s.Start(ctx, env, user)
+	e, err := s.Start(ctx, boundary, user)
 	if err != nil || e.Secret == "" || e.URI == "" || repo.factor(mfa.KindTOTP).Sealed() == e.Secret {
 		t.Fatalf("start = %+v %v", e, err)
 	}
@@ -419,7 +431,7 @@ func TestEnrollConfirmAndReplay(t *testing.T) {
 	if _, err := verify(s, c); status(err) != 401 {
 		t.Fatalf("replayed code = %v", err)
 	}
-	if _, err := s.Start(ctx, env, user); status(err) != 409 {
+	if _, err := s.Start(ctx, boundary, user); status(err) != 409 {
 		t.Fatalf("second start = %v", err)
 	}
 	if _, err := s.Confirm(ctx, mfa.Mutation{Environment: env}, user, "totp", c); status(err) != 422 {
@@ -432,7 +444,7 @@ func TestEnrollConfirmAndReplay(t *testing.T) {
 
 func TestStartNeedsCipher(t *testing.T) {
 	s := New(newMemory(), mfatotp.TOTP{}, plain{off: true}, &secrets{}, nil)
-	if _, err := s.Start(context.Background(), env, user); status(err) != 422 {
+	if _, err := s.Start(context.Background(), boundary, user); status(err) != 422 {
 		t.Fatalf("start without key = %v", err)
 	}
 }
@@ -608,7 +620,7 @@ func TestPendingEnrollment(t *testing.T) {
 func TestUnconfirmedFactorDoesNotSatisfyLogin(t *testing.T) {
 	s, _, now := setup(t)
 	ctx := context.Background()
-	e, _ := s.Start(ctx, env, user)
+	e, _ := s.Start(ctx, boundary, user)
 	if _, err := verify(s, code(t, e.Secret, *now)); status(err) != 401 {
 		t.Fatalf("unconfirmed factor accepted: %v", err)
 	}
@@ -690,7 +702,7 @@ func TestPolicyRequirement(t *testing.T) {
 func TestStaleEnrollmentCannotBeConfirmed(t *testing.T) {
 	s, repo, now := setup(t)
 	ctx := context.Background()
-	e, err := s.Start(ctx, env, user)
+	e, err := s.Start(ctx, boundary, user)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -740,7 +752,7 @@ func TestCodeHelpers(t *testing.T) {
 func enrollCode(t *testing.T, s *Service, out *outbox, kind, phone string) []string {
 	t.Helper()
 	ctx := context.Background()
-	sent, err := s.StartCode(ctx, env, user, kind, phone)
+	sent, err := s.StartCode(ctx, boundary, user, kind, phone)
 	if err != nil || sent.Factor != kind || sent.Destination == "" {
 		t.Fatalf("start %s = %+v %v", kind, sent, err)
 	}
@@ -866,7 +878,7 @@ func TestWrongCodesDiscardLiveCode(t *testing.T) {
 func TestSMSFactorVerifiesPhone(t *testing.T) {
 	s, repo, now, out := setupSender(t)
 	ctx := context.Background()
-	if _, err := s.StartCode(ctx, env, user, mfa.KindSMS, "12345"); status(err) != 400 {
+	if _, err := s.StartCode(ctx, boundary, user, mfa.KindSMS, "12345"); status(err) != 400 {
 		t.Fatalf("bad phone = %v", err)
 	}
 	enrollCode(t, s, out, mfa.KindSMS, "+1 (415) 555-0100")
@@ -894,16 +906,52 @@ func TestFactorKindsAllowed(t *testing.T) {
 	s, repo, _, _ := setupSender(t)
 	ctx := context.Background()
 	repo.allowed = []string{mfa.KindTOTP}
-	if _, err := s.StartCode(ctx, env, user, mfa.KindEmail, ""); errCode(err) != "FACTOR_NOT_ALLOWED" {
+	if _, err := s.StartCode(ctx, boundary, user, mfa.KindEmail, ""); errCode(err) != "FACTOR_NOT_ALLOWED" {
 		t.Fatalf("disallowed email = %v", err)
 	}
 	unsent, repo2, _ := setup(t)
 	_ = repo2
-	if _, err := unsent.StartCode(ctx, env, user, mfa.KindEmail, ""); errCode(err) != "FACTOR_NOT_ALLOWED" {
+	if _, err := unsent.StartCode(ctx, boundary, user, mfa.KindEmail, ""); errCode(err) != "FACTOR_NOT_ALLOWED" {
 		t.Fatalf("no sender = %v", err)
 	}
-	if _, err := unsent.StartCode(ctx, env, user, mfa.KindTOTP, ""); status(err) != 400 {
+	if _, err := unsent.StartCode(ctx, boundary, user, mfa.KindTOTP, ""); status(err) != 400 {
 		t.Fatalf("totp via StartCode = %v", err)
+	}
+}
+
+// Self-service enrollment honours the allowed kinds of the environment and
+// of the organization the user signed in to, for every factor kind.
+func TestSelfServiceStartHonoursAllowedFactors(t *testing.T) {
+	s, repo, _, _ := setupSender(t)
+	repo.allowed = append(repo.allowed, mfa.KindWebAuthn)
+	s.SetRelying(mfawebauthn.New(origin, nil))
+	ctx := context.Background()
+	org := authentication.Context{EnvironmentID: env, OrganizationID: identity.MustParseOrganizationID("44444444-4444-4444-8444-444444444444")}
+
+	// The environment leaves out TOTP: no authenticator app.
+	repo.allowed = []string{mfa.KindEmail, mfa.KindWebAuthn}
+	if _, err := s.Start(ctx, boundary, user); errCode(err) != "FACTOR_NOT_ALLOWED" {
+		t.Fatalf("totp off in the environment = %v", err)
+	}
+	// The environment allows every kind; the organization keeps only TOTP.
+	repo.allowed = []string{mfa.KindTOTP, mfa.KindEmail, mfa.KindSMS, mfa.KindWebAuthn}
+	repo.orgAllowed = []string{mfa.KindTOTP}
+	if _, err := s.StartCode(ctx, org, user, mfa.KindEmail, ""); errCode(err) != "FACTOR_NOT_ALLOWED" {
+		t.Fatalf("email off in the organization = %v", err)
+	}
+	if _, err := s.StartCode(ctx, org, user, mfa.KindSMS, "+14155550100"); errCode(err) != "FACTOR_NOT_ALLOWED" {
+		t.Fatalf("sms off in the organization = %v", err)
+	}
+	if _, err := s.StartWebAuthn(ctx, org, user, mfa.StartRegistration{Name: "Key"}); errCode(err) != "FACTOR_NOT_ALLOWED" {
+		t.Fatalf("webauthn off in the organization = %v", err)
+	}
+	if _, err := s.Start(ctx, org, user); err != nil {
+		t.Fatalf("totp allowed by both = %v", err)
+	}
+	// The organization keeps only email: no authenticator app there.
+	repo.orgAllowed = []string{mfa.KindEmail}
+	if _, err := s.Start(ctx, org, user); errCode(err) != "FACTOR_NOT_ALLOWED" {
+		t.Fatalf("totp off in the organization = %v", err)
 	}
 }
 
