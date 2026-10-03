@@ -73,7 +73,7 @@ npm and PyPI) with the `whsec_` secret as is.
 | --- | --- |
 | Non-`2xx`, timeout, unreachable | Retried with exponential backoff (15 s doubling, at most 1 h between tries) for 24 hours from the first try; the subscription shows `failing_since` |
 | Still failing after 24 hours | The delivery is marked `failed` and the next event is tried; retry it from the console, CLI or API |
-| Failing for 3 days | The subscription is disabled (`active: false`, `disabled_reason: "failing"`) and emits `webhook.disabled`; events keep queuing — re-enable it to resume where it stopped |
+| Failing for 3 days | The subscription is disabled (`active: false`, `disabled_reason: "failing"`) and emits `webhook.disabled`; events keep queuing — re-enable it to resume where it stopped. A subscription an operator disables queues nothing until it is enabled again |
 | A success | `failing_since` clears |
 
 Finished deliveries are kept for 7 days. Events pruned from the log (see

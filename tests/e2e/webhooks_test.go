@@ -222,12 +222,28 @@ func TestEventWebhooks(t *testing.T) {
 	if got := eventTypes(e.Must("GET", e.Base+"/events?type=webhook.*", e.Owner, nil, 200)); !contains(got, "webhook.disabled") || !contains(got, "webhook.created") || !contains(got, "webhook.secret_rotated") {
 		t.Fatalf("webhook events = %v", got)
 	}
+	// Events keep queuing while it is disabled for failing ...
+	frank := e.User("Frank", "frank@example.com")
+	if s := e.Must("GET", e.Base+"/webhooks/"+sub, e.Owner, nil, 200).JSON; s["pending"] != float64(2) {
+		t.Fatalf("pending while disabled = %v", s["pending"])
+	}
 	receiver.set(0)
 	e.Must("PATCH", e.Base+"/webhooks/"+sub, e.Owner, fiber.Map{"active": true}, 200)
 	e.DB.MustExec(`UPDATE event_deliveries SET next_attempt_at = now() WHERE subscription_id=$1 AND status='pending'`, sub)
 	e.drain()
-	if got := receiver.types(); got[len(got)-1] != "user.created" {
-		t.Fatalf("resumed = %v", got)
+	last := func() map[string]any {
+		receiver.mu.Lock()
+		defer receiver.mu.Unlock()
+		return receiver.events[len(receiver.events)-1]
+	}
+	if got := last(); got["type"] != "user.created" || got["subject"].(map[string]any)["id"] != frank {
+		t.Fatalf("resumed = %v, want frank's user.created", got)
+	}
+	// ... but not after an operator turned it off.
+	e.Must("PATCH", e.Base+"/webhooks/"+sub, e.Owner, fiber.Map{"active": false}, 200)
+	e.User("Gina", "gina@example.com")
+	if s := e.Must("GET", e.Base+"/webhooks/"+sub, e.Owner, nil, 200).JSON; s["pending"] != float64(0) {
+		t.Fatalf("pending after an operator disable = %v", s["pending"])
 	}
 
 	// /api/v1: iam:webhooks:read lists, iam:webhooks:write changes.
