@@ -187,8 +187,8 @@ func TestStandardOIDCEndpoints(t *testing.T) {
 	if res := endSession(url.Values{"id_token_hint": {idToken2Raw(token)}, "post_logout_redirect_uri": {"https://evil.example/bye"}}); res.StatusCode != 400 {
 		t.Fatalf("unregistered post-logout redirect: %d", res.StatusCode)
 	}
-	if res := endSession(url.Values{"id_token_hint": {"garbage"}}); res.StatusCode != 400 {
-		t.Fatalf("bad hint: %d", res.StatusCode)
+	if res := endSession(url.Values{"id_token_hint": {"garbage"}}); res.StatusCode != 400 || res.Header.Get("X-Frame-Options") != "DENY" || !strings.Contains(res.Header.Get("Content-Security-Policy"), "frame-ancestors 'none'") {
+		t.Fatalf("bad hint: %d %v (an /oauth answer must never be framed)", res.StatusCode, res.Header)
 	}
 	if res := endSession(url.Values{"id_token_hint": {idToken2Raw(token)}, "client_id": {public}}); res.StatusCode != 400 {
 		t.Fatalf("client not in hint audience: %d", res.StatusCode)

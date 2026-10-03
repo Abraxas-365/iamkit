@@ -10,7 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func TestPortalServedWithStrictHeaders(t *testing.T) {
+func TestConsoleAndPortalServedWithStrictHeaders(t *testing.T) {
 	app := fiber.New()
 	(&Server{}).spaRoutes(app, fstest.MapFS{"index.html": {Data: []byte("<html>console</html>")}})
 	for _, tc := range []struct {
@@ -26,8 +26,8 @@ func TestPortalServedWithStrictHeaders(t *testing.T) {
 			t.Fatalf("%s: %d %s", tc.path, res.StatusCode, body)
 		}
 		csp := res.Header.Get("Content-Security-Policy")
-		if tc.portal != (csp == portalCSP) || tc.portal != (res.Header.Get("Referrer-Policy") == "no-referrer") {
-			t.Fatalf("%s: csp %q", tc.path, csp)
+		if csp != portalCSP || tc.portal != (res.Header.Get("Referrer-Policy") == "no-referrer") || res.Header.Get("X-Frame-Options") != "DENY" || res.Header.Get("X-Content-Type-Options") != "nosniff" {
+			t.Fatalf("%s: headers %v", tc.path, res.Header)
 		}
 	}
 }

@@ -53,6 +53,16 @@ func hostedHeaders(c *fiber.Ctx) error {
 	return c.Next()
 }
 
+// oauthHeaders keeps /oauth/* out of frames and sniffing. Pages rendered
+// there (signed out, device approved, errors) set their own CSP over this
+// default; no COOP here, so popup sign-ins keep their opener.
+func oauthHeaders(c *fiber.Ctx) error {
+	c.Set("X-Frame-Options", "DENY")
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("Content-Security-Policy", "default-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+	return c.Next()
+}
+
 // samlRoutes mounts the SAML identity provider's public endpoints:
 // metadata and single sign-on (HTTP-Redirect and HTTP-POST bindings). SSO
 // only parks the request and redirects to the hosted sign-in, which has

@@ -22,6 +22,12 @@ func (s *Server) spaRoutes(app *fiber.App, assets fs.FS) {
 	// browser: a strict CSP (bundled scripts only, API calls same-origin)
 	// and no referrer, since its callback URL carries an authorization code.
 	app.Use(PortalPath, portalHeaders)
+	app.Use(func(c *fiber.Ctx) error {
+		if !strings.HasPrefix(c.Path(), PortalPath) && !apiPath(c.Path()) {
+			consoleHeaders(c)
+		}
+		return c.Next()
+	})
 
 	app.Use(filesystem.New(filesystem.Config{
 		Root: http.FS(assets),
@@ -33,18 +39,33 @@ func (s *Server) spaRoutes(app *fiber.App, assets fs.FS) {
 			if c.Method() != fiber.MethodGet && c.Method() != fiber.MethodHead {
 				return true
 			}
-			// Skip API paths — let them 404 normally (/saml/ too: with the
-			// saml_idp feature off its routes are absent and must not
-			// answer with the console).
-			path := c.Path()
-			for _, prefix := range []string{"/management/", "/identity/", "/api/", "/scim/", "/hosted/", "/oauth/", "/saml/", "/health", "/.well-known/"} {
-				if strings.HasPrefix(path, prefix) {
-					return true
-				}
-			}
-			return false
+			return apiPath(c.Path())
 		},
 	}))
+}
+
+// apiPath reports paths the console never serves: API paths 404 normally
+// (/saml/ too: with the saml_idp feature off its routes are absent and must
+// not answer with the console).
+func apiPath(path string) bool {
+	for _, prefix := range []string{"/management/", "/identity/", "/api/", "/scim/", "/hosted/", "/oauth/", "/saml/", "/health", "/.well-known/"} {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// consoleCSP is the operator console's policy, the portal's (one bundle):
+// inline styles are React style attributes, and the sandboxed srcdoc
+// previews of hosted pages inherit it. Only the referrer policy differs.
+const consoleCSP = portalCSP
+
+func consoleHeaders(c *fiber.Ctx) {
+	c.Set("Content-Security-Policy", consoleCSP)
+	c.Set("X-Frame-Options", "DENY")
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("Referrer-Policy", "same-origin")
 }
 
 // PortalPath is where the hosted organization admin portal is served

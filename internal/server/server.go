@@ -411,7 +411,9 @@ func (s *Server) App() *fiber.App {
 	app.Use("/scim/v2", s.limit(limiter.Config{Max: rateLimit * 5, Expiration: time.Minute, LimitReached: scimTooMany}))
 	s.Provisioning.Register(app)
 	// Unauthenticated OIDC endpoints get per-IP limits; resource servers
-	// call introspection and userinfo often, so theirs are wider.
+	// call introspection and userinfo often, so theirs are wider. Some
+	// answer HTML (signed out, device approved): none may be framed.
+	app.Use("/oauth/", oauthHeaders)
 	app.Use("/oauth/token", countTokens, s.rateLimiter(rateLimit*5))
 	app.Use("/oauth/device_authorization", s.rateLimiter(rateLimit))
 	app.Use("/oauth/introspect", s.rateLimiter(rateLimit*5))
