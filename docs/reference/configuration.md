@@ -107,8 +107,10 @@ Do not allow app users to choose arbitrary outbound issuers or secret names.
 
 ## Encryption key
 
-Organization SSO connections store their client secret, and environment email
-delivery its SMTP password or Resend API key, encrypted with
+Organization SSO connections store their client secret (LDAP: bind password),
+environment email delivery its SMTP password or Resend API key, and SMS
+providers, event webhooks, action targets, TOTP factors and environment
+signing keys their secrets, encrypted with
 AES-256-GCM under `IAMKIT_ENCRYPTION_KEY`. Generate one with
 `openssl rand -base64 32` and keep it with your other deployment secrets.
 The server starts without it, but saving such a secret then fails. A malformed
@@ -116,9 +118,10 @@ key stops startup.
 
 Back the key up with the database: a restored database is useless for these
 secrets without it. To rotate, set the new key, move the old one to
-`IAMKIT_ENCRYPTION_KEYS_OLD`, restart, then re-save each secret
-(`PATCH {"client_secret":…}` for connections, `PUT …/delivery` with the password
-or API key for email) before dropping the old key. Stored values carry
+`IAMKIT_ENCRYPTION_KEYS_OLD`, restart, then re-seal each secret before
+dropping the old key (TOTP secrets cannot be re-sealed: keep the old key
+while they are in use); the steps per secret are in
+[secrets and keys](../operations/secrets-and-keys.md#encryption-key-rotation). Stored values carry
 the ID of their key, so old and new values coexist during rotation.
 
 ## Compose-only variables
