@@ -89,6 +89,18 @@ func TestPasswordPolicyJourney(t *testing.T) {
 	if r := e.Do("POST", "/identity/v1/challenges/verify", "", verify); r.Status != 400 || ruleOf(r) != "upper" {
 		t.Fatalf("weak reset: %d %s", r.Status, r.Body)
 	}
+	// A reset that passes is recorded as user.password_changed (method reset); the refused one is not.
+	resets := func() []any {
+		return e.Must("GET", e.Base+"/events?type=user.password_changed&subject="+bob.JSON["id"].(string), e.Owner, nil, 200).JSON["items"].([]any)
+	}
+	if got := resets(); len(got) != 0 {
+		t.Fatalf("refused reset recorded: %v", got)
+	}
+	verify["password"] = "Strong-Password-1b"
+	e.Must("POST", "/identity/v1/challenges/verify", "", verify, 204)
+	if got := resets(); len(got) != 1 || got[0].(map[string]any)["data"].(map[string]any)["method"] != "reset" {
+		t.Fatalf("reset events = %v", got)
+	}
 
 	// Lockout: wrong passwords lock after 3; a locked account refuses the
 	// right password with the same answer; the operator unlocks it.
@@ -98,7 +110,7 @@ func TestPasswordPolicyJourney(t *testing.T) {
 	wrong := e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Wrong-Password-1"), 401)
 	e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Wrong-Password-1"), 401)
 	e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Wrong-Password-1"), 401)
-	locked := e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Strong-Password-1"), 401)
+	locked := e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Strong-Password-1b"), 401)
 	if errorOf(locked)["message"] != errorOf(wrong)["message"] || errorOf(locked)["code"] != errorOf(wrong)["code"] {
 		t.Fatalf("lockout is distinguishable: %s vs %s", locked.Body, wrong.Body)
 	}
@@ -113,7 +125,7 @@ func TestPasswordPolicyJourney(t *testing.T) {
 	if e.audited("user.unlocked", e.Base+"/users/"+bobID+"/unlock") != 1 {
 		t.Fatal("unlock not audited")
 	}
-	e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Strong-Password-1"), 200)
+	e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Strong-Password-1b"), 200)
 	// /api/v1 unlock needs iam:users:write.
 	e.Must("POST", "/api/v1/environments/"+e.EnvID+"/users/"+bobID+"/unlock", e.scopedToken("iam:users:read"), nil, 403)
 	e.Must("POST", "/api/v1/environments/"+e.EnvID+"/users/"+bobID+"/unlock", e.scopedToken("iam:users:write"), nil, 204)
@@ -123,18 +135,18 @@ func TestPasswordPolicyJourney(t *testing.T) {
 	strict["max_age_days"] = 30
 	e.Must("PUT", policy, e.Owner, strict, 200)
 	e.DB.MustExec(`UPDATE users SET password_changed_at=now()-interval '31 days' WHERE id=$1`, bobID)
-	if r := e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Strong-Password-1"), 403); errorOf(r)["code"] != "PASSWORD_CHANGE_REQUIRED" {
+	if r := e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Strong-Password-1b"), 403); errorOf(r)["code"] != "PASSWORD_CHANGE_REQUIRED" {
 		t.Fatalf("expired: %s", r.Body)
 	}
-	body := e.LoginBody("bob@example.com", "Strong-Password-1")
-	body["new_password"] = "Strong-Password-1"
+	body := e.LoginBody("bob@example.com", "Strong-Password-1b")
+	body["new_password"] = "Strong-Password-1b"
 	if r := e.Must("POST", "/identity/v1/login", "", body, 400); ruleOf(r) != "reused" {
 		t.Fatalf("reused: %s", r.Body)
 	}
 	body["new_password"] = "Newer-Password-22"
 	e.Must("POST", "/identity/v1/login", "", body, 200)
 	e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Newer-Password-22"), 200)
-	e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Strong-Password-1"), 401)
+	e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", "Strong-Password-1b"), 401)
 
 	// Expiry, hosted: the password page leads to the new-password page,
 	// which rejects policy failures in the page's language, then finishes.

@@ -97,8 +97,17 @@ func (t *Transaction) SetLoginFailures(ctx context.Context, user identity.UserID
 		map[string]any{"method": "password", "failures": failures, "locked": lockedUntil != nil})
 }
 func (t *Transaction) SetPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, hash string) error {
-	_, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,password_changed_at=now(),password_change_required=false,failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash)
-	return failure(err)
+	if _, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,password_changed_at=now(),password_change_required=false,failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash); err != nil {
+		return failure(err)
+	}
+	return passwordChanged(ctx, t.tx, environment, user, "sign_in")
+}
+
+// passwordChanged records that the user set a new password (never the
+// password): at sign-in when it had expired or a change was required, or
+// through a reset code.
+func passwordChanged(ctx context.Context, tx *sqlx.Tx, environment identity.EnvironmentID, user identity.UserID, method string) error {
+	return eventpg.Emit(ctx, tx, environment, user.String(), event.UserPasswordChanged, event.Subject{Kind: "user", ID: user.String()}, map[string]any{"method": method})
 }
 func (t *Transaction) Audit(ctx context.Context, m authentication.Mutation) error {
 	return audit(ctx, t.tx, m)
@@ -242,6 +251,9 @@ func (t *Transaction) CompleteChallenge(ctx context.Context, id identity.Challen
 		// the password's age.
 		if _, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,email_verified=true,password_changed_at=now(),password_change_required=false,failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash); err != nil {
 			return failure(err)
+		}
+		if err := passwordChanged(ctx, t.tx, environment, user, "reset"); err != nil {
+			return err
 		}
 	} else {
 		if _, err := t.tx.ExecContext(ctx, `UPDATE users SET email_verified=true WHERE id=$1 AND environment_id=$2`, user, environment); err != nil {

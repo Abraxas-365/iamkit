@@ -19,11 +19,14 @@ const (
 	// UserPasswordChangeRequired: the next password sign-in must choose a
 	// new password.
 	UserPasswordChangeRequired = "user.password_change_required"
-	UserSignedUp               = "user.signed_up"
-	UserProfileUpdated         = "user.profile_updated"
-	UserProfileSynced          = "user.profile_synced"
-	UserMetadataSet            = "user.metadata_set"
-	UserMetadataDeleted        = "user.metadata_deleted"
+	// UserPasswordChanged: the user set a new password (data.method:
+	// sign_in — expired or required at sign-in — or reset).
+	UserPasswordChanged = "user.password_changed"
+	UserSignedUp        = "user.signed_up"
+	UserProfileUpdated  = "user.profile_updated"
+	UserProfileSynced   = "user.profile_synced"
+	UserMetadataSet     = "user.metadata_set"
+	UserMetadataDeleted = "user.metadata_deleted"
 	// UserProvisioned: a SCIM directory took over an existing user
 	// (data.mode: claimed, reactivated, adopted); UserDeprovisioned: SCIM
 	// DELETE removed the user from the directory's organization.

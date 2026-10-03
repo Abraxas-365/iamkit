@@ -70,7 +70,8 @@ With `max_age_days` set, a correct but expired password is not enough:
   chosen and any second factor passes — just before the session is issued.
 
 Email-code sign-ins are not subject to expiry, and a password reset restarts the
-clock.
+clock. Every new password the user sets this way or by reset is recorded as
+`user.password_changed` (`data.method` `sign_in` or `reset`).
 
 ### Requiring a change for one user
 
