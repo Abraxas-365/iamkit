@@ -258,8 +258,9 @@ and `passkey: true` for passkeys. A key assertion (`webauthn_session` +
 `credential`) also proves possession for `DELETE /me/factors/{kind}` and
 `/me/factors/recovery-codes`.
 
-Enrolling a kind the environment or organization does not allow gets 422
-`FACTOR_NOT_ALLOWED`.
+Enrolling a kind the environment or the organization the session signed in
+to does not allow gets 422 `FACTOR_NOT_ALLOWED` (every kind, including
+`totp`).
 
 Removing and regenerating require a current code; a wrong code gets 422
 `INVALID_CODE`. Every changing call (enroll, confirm, remove, regenerate) also needs a session that signed in
