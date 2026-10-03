@@ -144,6 +144,17 @@ export function signOut(environment: string, portal: Portal) {
   window.location.assign(`/oauth/end_session?${q}`)
 }
 
+/** userInfo reads who is signed in from /oauth/userinfo: IAMKit's ID and
+ * access tokens do not carry the email or name. Null when it cannot. */
+export async function userInfo(environment: string, signal?: AbortSignal): Promise<{ email?: string; name?: string } | null> {
+  const tokens = readTokens(environment)
+  if (!tokens) return null
+  try {
+    const res = await fetch('/oauth/userinfo', { signal, credentials: 'omit', headers: { Authorization: `Bearer ${tokens.access_token}` } })
+    return res.ok ? await res.json() : null
+  } catch { return null }
+}
+
 export interface Page<T> { items: T[]; page: { total: number; limit: number; offset: number } }
 
 /** Client calls the organization's /admin routes with the bearer token,

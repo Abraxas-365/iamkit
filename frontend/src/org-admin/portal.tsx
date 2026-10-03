@@ -6,7 +6,7 @@ import { ErrorState } from '@/components/library/patterns'
 import { LogoMark } from '@/components/brand/logo'
 import { Toaster } from '@/components/ui/sonner'
 import { cn, message } from '@/lib/utils'
-import { Client, complete, decode, discover, readTokens, signIn, signOut, type Portal } from './session'
+import { Client, complete, decode, discover, readTokens, signIn, signOut, userInfo, type Portal } from './session'
 import { AdminContext, useAdmin, type Admin } from './context'
 import { ActivityPage, BrandingPage, ConnectionsPage, DomainsPage, InvitationsPage, MembersPage, OverviewPage, PasswordPage, ResourcesPage, RolesPage, UsersPage } from './pages'
 import { t } from '@/lib/i18n'
@@ -130,6 +130,12 @@ function Shell() {
     client.get<{ name: string }>('', ctrl.signal).then(o => setName(o.name)).catch(() => {})
     return () => ctrl.abort()
   }, [client, can])
+  const [who, setWho] = useState(claims.email || claims.name || '')
+  useEffect(() => {
+    const ctrl = new AbortController()
+    userInfo(environment, ctrl.signal).then(u => { if (u?.email || u?.name) setWho(u.email || u.name || '') })
+    return () => ctrl.abort()
+  }, [environment])
   const base = `/org-admin/${environment}`
   const items = nav.filter(([, , , permission]) => can(permission))
   const home = items[0] ? `${base}/${items[0][0]}` : base
@@ -148,7 +154,7 @@ function Shell() {
     </aside>
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex items-center justify-end gap-3 border-b px-6 py-3">
-        <span className="truncate text-sm text-muted-foreground">{claims.email || claims.name || ''}</span>
+        <span className="truncate text-sm text-muted-foreground">{who}</span>
         <Button variant="outline" size="sm" onClick={() => signOut(environment, portal)}><LogOut /> {t('Sign out')}</Button>
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 space-y-6 p-6">

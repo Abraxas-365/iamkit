@@ -15,7 +15,7 @@ function jwt(claims: Record<string, unknown>) {
   return `${part({ alg: 'none' })}.${part(claims)}.sig`
 }
 function signedIn(permissions: string[]) {
-  sessionStorage.setItem('iamkit-org-admin:env1', JSON.stringify({ access_token: jwt({ organization_id: 'org1', permissions, email: 'alice@acme.test' }), refresh_token: 'rt', expires_at: Date.now() + 60_000 }))
+  sessionStorage.setItem('iamkit-org-admin:env1', JSON.stringify({ access_token: jwt({ organization_id: 'org1', permissions }), refresh_token: 'rt', expires_at: Date.now() + 60_000 }))
 }
 const page = (items: unknown[]) => ({ items, page: { total: items.length, limit: 50, offset: 0 } })
 
@@ -30,6 +30,7 @@ beforeEach(() => {
     const method = init.method ?? 'GET'
     calls.push({ url, method, body: init.body ? JSON.parse(String(init.body)) : undefined, auth: (init.headers as Record<string, string> | undefined)?.Authorization })
     if (url === '/identity/v1/org-admin/env1') return enabled ? Response.json({ client_id: 'client1', environment_id: 'env1', url: 'https://iam.example/org-admin/env1' }) : Response.json({ error: { message: 'not found' } }, { status: 404 })
+    if (url === '/oauth/userinfo') return Response.json({ sub: 'u9', email: 'owner@acme.test', name: 'Olivia Owner' })
     const path = url.replace('/api/v1/environments/env1/organizations/org1/admin', '').split('?')[0]
     if (method === 'PATCH' || method === 'DELETE') return new Response(null, { status: 204 })
     if (path === '') return Response.json({ id: 'org1', name: 'Acme', mfa_required: false, mfa_for_federated: false, allow_password: true, allow_email_code: true, allow_social: true, allow_passkey: true })
@@ -96,6 +97,13 @@ it('turns away a member without administration roles', async () => {
   open('/org-admin/env1')
   expect(await screen.findByText(/does not administer this organization/)).toBeTruthy()
   expect(calls.some(c => c.url.startsWith('/api/v1/'))).toBe(false)
+})
+
+it('shows who is signed in from UserInfo, since the tokens carry no email', async () => {
+  signedIn(['iam:org:read'])
+  open('/org-admin/env1')
+  expect(await within(await screen.findByRole('banner')).findByText('owner@acme.test')).toBeTruthy()
+  expect(calls.find(c => c.url === '/oauth/userinfo')?.auth).toMatch(/^Bearer /)
 })
 
 it('shows platform operators by kind in the activity, never by ID', async () => {
