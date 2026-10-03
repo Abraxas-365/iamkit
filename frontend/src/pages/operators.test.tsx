@@ -9,13 +9,19 @@ import App from '../App'
 const fetchMock = vi.fn()
 let options: unknown
 let role = 'owner'
+// extra: rows appended to the list; bobRole: Bob's role (a second owner by default).
+let extra: object[] = []
+let bobRole = 'owner'
 const operators = () => ({ items: [
   { id: 'op-owner', email: 'owner@example.com', role: 'owner', active: true, password_allowed: true, sso_providers: [], last_sso_login_at: null },
   { id: 'op-ann', email: 'ann@acme.com', role: 'admin', active: true, password_allowed: false, sso_providers: ['okta'], last_sso_login_at: '2026-09-27T12:00:00Z' },
-  { id: 'op-bob', email: 'bob@acme.com', role: 'owner', active: true, password_allowed: true, sso_providers: [], last_sso_login_at: null },
-], page: { total: 3, limit: 50, offset: 0 } })
+  { id: 'op-bob', email: 'bob@acme.com', role: bobRole, active: true, password_allowed: true, sso_providers: [], last_sso_login_at: null },
+  ...extra,
+], page: { total: 3 + extra.length, limit: 50, offset: 0 } })
 beforeEach(() => {
   role = 'owner'
+  extra = []
+  bobRole = 'owner'
   options = { password: true, providers: [{ id: 'okta', name: 'Acme Okta', type: 'oidc' }] }
   vi.stubGlobal('fetch', fetchMock)
   vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
@@ -23,6 +29,7 @@ beforeEach(() => {
   fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
     const path = url.replace('/management/v1', '').split('?')[0]
     if (init.method === 'DELETE' || init.method === 'PUT') return new Response(null, { status: 204 })
+    if (path === '/operators' && init.method === 'POST') return Response.json({ operator_id: 'op-cid', key_id: 'k1', secret: 'ik_mgmt_new', expires_at: '2026-10-04T12:00:00Z', reactivated: true }, { status: 201 })
     if (path === '/login-options') return Response.json(options)
     if (path === '/me') return Response.json({ operator_id: 'op-owner', workspace_id: 'ws1', role })
     if (path === '/operators') return Response.json(operators())
@@ -95,7 +102,53 @@ it('manages emergency access in break-glass mode', async () => {
   await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove emergency access' }))
   await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/operators/op-bob/password-access') && init?.method === 'PUT' && init.body === JSON.stringify({ allowed: false }))).toBe(true))
   // Never one's own: it would end this session.
-  expect(screen.queryByRole('button', { name: 'Actions for owner@example.com' })).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Actions for owner@example.com' }))
+  await screen.findByRole('menuitem', { name: 'Change role' })
+  expect(screen.queryByRole('menuitem', { name: 'Remove emergency access' })).toBeNull()
+})
+
+it('changes an operator role', async () => {
+  const user = userEvent.setup()
+  open('/operators')
+  await screen.findByText('ann@acme.com')
+  await user.click(screen.getByRole('button', { name: 'Actions for ann@acme.com' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Change role' }))
+  const dialog = await screen.findByRole('dialog')
+  const submit = within(dialog).getByRole('button', { name: 'Change role' }) as HTMLButtonElement
+  expect(submit.disabled).toBe(true) // unchanged
+  await user.click(within(dialog).getByRole('radio', { name: /Owner/ }))
+  await user.click(submit)
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/operators/op-ann/role') && init?.method === 'PUT' && init.body === JSON.stringify({ role: 'owner' }))).toBe(true))
+})
+
+it('keeps the last owner an owner', async () => {
+  const user = userEvent.setup()
+  bobRole = 'admin'
+  open('/operators')
+  await screen.findByText('ann@acme.com')
+  await user.click(screen.getByRole('button', { name: 'Actions for owner@example.com' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Change role' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(within(dialog).getByText(/make someone else an owner first/)).toBeTruthy()
+  expect((within(dialog).getByRole('radio', { name: /Admin/ }) as HTMLInputElement).disabled).toBe(true)
+  expect((within(dialog).getByRole('radio', { name: /Viewer/ }) as HTMLInputElement).disabled).toBe(true)
+})
+
+it('reactivates a disabled operator through the invite dialog', async () => {
+  const user = userEvent.setup()
+  extra = [{ id: 'op-cid', email: 'cid@acme.com', role: 'viewer', active: false, password_allowed: false, sso_providers: [], last_sso_login_at: null }]
+  open('/operators')
+  await screen.findByText('cid@acme.com')
+  await user.click(screen.getByRole('button', { name: 'Actions for cid@acme.com' }))
+  expect(screen.queryByRole('menuitem', { name: 'Change role' })).toBeNull()
+  await user.click(await screen.findByRole('menuitem', { name: 'Reactivate' }))
+  const dialog = await screen.findByRole('dialog')
+  expect((within(dialog).getByLabelText('Email') as HTMLInputElement).value).toBe('cid@acme.com')
+  expect((within(dialog).getByRole('radio', { name: /Viewer/ }) as HTMLInputElement).checked).toBe(true)
+  await user.click(within(dialog).getByRole('radio', { name: /Admin/ }))
+  await user.click(within(dialog).getByRole('button', { name: 'Reactivate' }))
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/operators') && init?.method === 'POST' && JSON.parse(String(init.body)).email === 'cid@acme.com' && JSON.parse(String(init.body)).role === 'admin')).toBe(true))
+  expect(await screen.findByText('Operator reactivated')).toBeTruthy()
 })
 
 it('offers no emergency access outside break-glass mode', async () => {

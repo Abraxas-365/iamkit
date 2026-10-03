@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Ban, KeyRound, Link2Off, Plus, UserCog } from 'lucide-react'
+import { Ban, KeyRound, Link2Off, Plus, RotateCcw, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -15,12 +15,33 @@ import { RowActions } from '@/components/ui/menu'
 import { formatDateTime, language, rich, t } from '@/lib/i18n'
 
 interface Operator { id: string; email: string; role: string; active: boolean; password_allowed?: boolean; sso_providers?: string[] | null; last_sso_login_at?: string | null }
-interface Delegated { operator_id: string; key_id: string; secret: string; expires_at: string }
+interface Delegated { operator_id: string; key_id: string; secret: string; expires_at: string; reactivated?: boolean }
 
 const roles = [
   { value: 'admin', label: t('Admin'), description: t('Full read & write access to all projects, environments, and configuration.') },
   { value: 'viewer', label: t('Viewer'), description: t('Read-only access. Cannot create, modify, or delete any resources.') },
 ]
+// Role changes may also make an owner; invitations never do.
+const allRoles = [
+  { value: 'owner', label: t('Owner'), description: t('Everything an admin can do, plus inviting and disabling operators and changing their roles.') },
+  ...roles,
+]
+
+function RoleOptions({ options, value, onChange, disabled }: { options: typeof allRoles; value: string; onChange: (role: string) => void; disabled?: (role: string) => boolean }) {
+  return <div className="space-y-2">
+    <label className="text-sm font-medium">{t('Role')}</label>
+    {options.map(r => {
+      const off = disabled?.(r.value) ?? false
+      return <label key={r.value} className={`flex items-start gap-3 rounded-lg border p-3 transition-colors ${off ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${value === r.value ? 'border-primary bg-primary/5' : 'border-input hover:border-foreground/20'}`}>
+        <input type="radio" name="role" value={r.value} checked={value === r.value} disabled={off} onChange={() => onChange(r.value)} className="mt-0.5 accent-primary" />
+        <div>
+          <p className="text-sm font-medium">{r.label}</p>
+          <p className="text-xs text-muted-foreground">{r.description}</p>
+        </div>
+      </label>
+    })}
+  </div>
+}
 
 const ttlOptions = [
   { label: t('1 hour'), value: '1h' },
@@ -34,7 +55,7 @@ const ttlOptions = [
 
 export default function OperatorsPage() {
   const list = usePaginatedList<Operator>('/operators')
-  const { principal, options } = useAuth()
+  const { principal, options, reload: reloadAuth } = useAuth()
   const isOwner = principal?.role === 'owner'
   const providers = options?.providers ?? []
   const sso = providers.length > 0
@@ -45,6 +66,10 @@ export default function OperatorsPage() {
   const selfPassword = password && !breakGlass
   const names = new Map(providers.map(p => [p.id, p.name]))
   const [add, setAdd] = useState(false)
+  // reactivating: the invite dialog for a disabled operator's email.
+  const [reactivating, setReactivating] = useState<Operator | null>(null)
+  const [change, setChange] = useState<Operator | null>(null)
+  const [newRole, setNewRole] = useState('admin')
   const [disable, setDisable] = useState<Operator | null>(null)
   const [reset, setReset] = useState<Operator | null>(null)
   const [access, setAccess] = useState<Operator | null>(null)
@@ -56,9 +81,13 @@ export default function OperatorsPage() {
   const pending = useRef(false)
   const ssoHint = sso && t('They can sign in with {{providers}} using this email.', { providers: new Intl.ListFormat(language(), { type: 'disjunction' }).format(providers.map(p => p.name)) })
   const inviteHint = [ssoHint, selfPassword && <>{rich('They receive an API key to set a console password at {{code}}.', { code: <code className="text-xs">{'/setup'}</code> })}</>, !password && t('Password sign-in is disabled; the API key is for the management API only.'), breakGlass && t('Passwords are for emergency access only; the API key is for the management API until you allow it.')].filter(Boolean)
+  // The server refuses demoting the last active owner; GET /operators
+  // returns every operator, so the list here is complete.
+  const lastOwner = list.data.filter(o => o.active && o.role === 'owner').length <= 1
+  const openInvite = (op: Operator | null) => { setReactivating(op); setAdd(true); setRole(op && op.role !== 'owner' ? op.role : 'admin'); setTtl('24h'); setError('') }
 
   return <div className="space-y-6">
-    <PageHeader title={t('Operators')} description={t('Console operators and their workspace roles. Only owners can invite or disable operators.')} actions={isOwner && <Button onClick={() => { setAdd(true); setRole('admin'); setTtl('24h'); setError('') }}><Plus className="size-4" /> {t('Invite operator')}</Button>} />
+    <PageHeader title={t('Operators')} description={t('Console operators and their workspace roles. Only owners can invite, disable or change the role of operators.')} actions={isOwner && <Button onClick={() => openInvite(null)}><Plus className="size-4" /> {t('Invite operator')}</Button>} />
     <PaginationBar state={list} noun="operators" />
     <DataTable columns={[t('Operator'), t('Role'), ...(sso ? [t('Single sign-on')] : []), t('Status'), ...(isOwner ? [t('Actions')] : [])]} loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState icon={<UserCog />} title={t('No operators yet')} description={t('Invite teammates to help manage projects and environments.')} />}
@@ -68,6 +97,8 @@ export default function OperatorsPage() {
         // out an owner without a linked identity): another owner does it.
         const self = op.id === principal?.operator_id
         const actions = [
+          ...(op.active ? [{ label: t('Change role'), icon: <UserCog />, onSelect: () => { setChange(op); setNewRole(op.role); setError('') } }] : []),
+          ...(!op.active ? [{ label: t('Reactivate'), icon: <RotateCcw />, onSelect: () => openInvite(op) }] : []),
           ...(breakGlass && op.active && !(self && op.password_allowed) ? [op.password_allowed
             ? { label: t('Remove emergency access'), icon: <KeyRound />, destructive: true, onSelect: () => setAccess(op) }
             : { label: t('Allow emergency access'), icon: <KeyRound />, onSelect: () => setAccess(op) }] : []),
@@ -86,11 +117,11 @@ export default function OperatorsPage() {
       })} />
 
     {add && <Dialog open onOpenChange={open => { if (!open && !pending.current) setAdd(false) }}><DialogContent>
-      <DialogTitle className="pr-6 text-base font-semibold">{t('Invite operator')}</DialogTitle>
-      <DialogDescription className="text-muted-foreground">{inviteHint.map((h, i) => <span key={i}>{i > 0 && ' '}{h}</span>)}</DialogDescription>
+      <DialogTitle className="pr-6 text-base font-semibold">{reactivating ? t('Reactivate {{email}}', { email: reactivating.email }) : t('Invite operator')}</DialogTitle>
+      <DialogDescription className="text-muted-foreground">{reactivating && <span>{t('They get a new API key and start fresh: earlier keys and sessions stay ended, emergency access is off, and their password and single sign-on links are cleared unless another workspace uses them.')} </span>}{inviteHint.map((h, i) => <span key={i}>{i > 0 && ' '}{h}</span>)}</DialogDescription>
       <form className="space-y-4" onSubmit={async event => {
         event.preventDefault(); if (pending.current) return
-        const email = String(new FormData(event.currentTarget).get('email') ?? '').trim()
+        const email = reactivating?.email ?? String(new FormData(event.currentTarget).get('email') ?? '').trim()
         pending.current = true; setBusy(true); setError('')
         try {
           const result = await api.post<Delegated>('/operators', { email, role, expires_in: ttl })
@@ -99,20 +130,9 @@ export default function OperatorsPage() {
       }}>
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="invite-email">{t('Email')}</label>
-          <Input id="invite-email" name="email" type="email" required disabled={busy} />
+          <Input id="invite-email" name="email" type="email" required disabled={busy} readOnly={!!reactivating} defaultValue={reactivating?.email} />
         </div>
-        <div className="space-y-2">
-          <label className="text-sm font-medium">{t('Role')}</label>
-          {roles.map(r => (
-            <label key={r.value} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors ${role === r.value ? 'border-primary bg-primary/5' : 'border-input hover:border-foreground/20'}`}>
-              <input type="radio" name="role" value={r.value} checked={role === r.value} onChange={() => setRole(r.value)} className="mt-0.5 accent-primary" />
-              <div>
-                <p className="text-sm font-medium">{r.label}</p>
-                <p className="text-xs text-muted-foreground">{r.description}</p>
-              </div>
-            </label>
-          ))}
-        </div>
+        <RoleOptions options={roles} value={role} onChange={setRole} />
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="invite-ttl">{t('Key expires in')}</label>
           <select id="invite-ttl" className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm" value={ttl} onChange={e => setTtl(e.target.value)}>
@@ -122,7 +142,30 @@ export default function OperatorsPage() {
         {error && <ErrorState error={error} />}
         <div className="flex justify-end gap-2 border-t pt-4">
           <Button type="button" variant="outline" disabled={busy} onClick={() => setAdd(false)}>{t('Cancel')}</Button>
-          <Button type="submit" disabled={busy}>{busy ? t('Inviting…') : t('Invite')}</Button>
+          <Button type="submit" disabled={busy}>{reactivating ? (busy ? t('Reactivating…') : t('Reactivate')) : (busy ? t('Inviting…') : t('Invite'))}</Button>
+        </div>
+      </form>
+    </DialogContent></Dialog>}
+
+    {change && <Dialog open onOpenChange={open => { if (!open && !pending.current) setChange(null) }}><DialogContent>
+      <DialogTitle className="pr-6 text-base font-semibold">{t('Change role of {{email}}', { email: change.email })}</DialogTitle>
+      <DialogDescription className="text-muted-foreground">{t('The new role applies at once, to their console sessions and API keys too.')}{change.role === 'owner' && lastOwner && <> {t('A workspace keeps at least one owner: make someone else an owner first.')}</>}</DialogDescription>
+      <form className="space-y-4" onSubmit={async event => {
+        event.preventDefault(); if (pending.current || newRole === change.role) return
+        pending.current = true; setBusy(true); setError('')
+        try {
+          await api.put(`/operators/${change.id}/role`, { role: newRole })
+          toast.success(t('Role changed')); setChange(null); list.reload()
+          // Stepping down changes what this console may do.
+          if (change.id === principal?.operator_id) void reloadAuth()
+        } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
+      }}>
+        <RoleOptions options={allRoles} value={newRole} onChange={setNewRole} disabled={r => change.role === 'owner' && lastOwner && r !== 'owner'} />
+        {change.id === principal?.operator_id && newRole !== 'owner' && <p className="text-sm text-muted-foreground">{t('You are changing your own role: you can no longer manage operators afterwards.')}</p>}
+        {error && <ErrorState error={error} />}
+        <div className="flex justify-end gap-2 border-t pt-4">
+          <Button type="button" variant="outline" disabled={busy} onClick={() => setChange(null)}>{t('Cancel')}</Button>
+          <Button type="submit" disabled={busy || newRole === change.role}>{busy ? t('Saving…') : t('Change role')}</Button>
         </div>
       </form>
     </DialogContent></Dialog>}
@@ -137,7 +180,7 @@ export default function OperatorsPage() {
 
     {secret && <Dialog open onOpenChange={open => { if (!open) setSecret(null) }}>
       <DialogContent>
-        <DialogTitle className="font-semibold">{t('Operator invited')}</DialogTitle>
+        <DialogTitle className="font-semibold">{secret.reactivated ? t('Operator reactivated') : t('Operator invited')}</DialogTitle>
         <DialogDescription className="text-muted-foreground">{ssoHint && <>{ssoHint} </>}{selfPassword ? <>{rich('Share this API key with the operator. They can set their console password at {{code}}.', { code: <code className="text-xs">{'/setup'}</code> })}</> : t('This API key works with the management API only; share it only if they need API access.')}</DialogDescription>
         <div className="space-y-2">
           <CopyField label={t('API key (shown once)')} value={secret.secret} />

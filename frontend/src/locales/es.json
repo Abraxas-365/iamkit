@@ -412,7 +412,7 @@
   "Connection:": "Conexión:",
   "Connections added later appear automatically.": "Las conexiones agregadas después aparecen automáticamente.",
   "Console language": "Idioma de la consola",
-  "Console operators and their workspace roles. Only owners can invite or disable operators.": "Operadores de la consola y sus roles en el espacio de trabajo. Solo los propietarios pueden invitar o desactivar operadores.",
+  "Console operators and their workspace roles. Only owners can invite, disable or change the role of operators.": "Operadores de la consola y sus roles en el espacio de trabajo. Solo los propietarios pueden invitar, desactivar o cambiar el rol de los operadores.",
   "Continue": "Continuar",
   "Continue with": "Continuar con",
   "Continue without its changes": "Continuar sin sus cambios",
@@ -2612,5 +2612,16 @@
   "Remove emergency access": "Retirar acceso de emergencia",
   "Remove emergency access for {{email}}?": "¿Retirar el acceso de emergencia de {{email}}?",
   "They can no longer sign in with a password, and their password sessions end now. Single sign-on sessions stay.": "Ya no podrá iniciar sesión con contraseña y sus sesiones con contraseña terminan ahora. Las sesiones de inicio de sesión único se mantienen.",
-  "They can sign in with a password when single sign-on is unavailable. Keep this to one or two owners.": "Podrá iniciar sesión con contraseña cuando el inicio de sesión único no esté disponible. Limítalo a uno o dos propietarios."
+  "They can sign in with a password when single sign-on is unavailable. Keep this to one or two owners.": "Podrá iniciar sesión con contraseña cuando el inicio de sesión único no esté disponible. Limítalo a uno o dos propietarios.",
+  "A workspace keeps at least one owner: make someone else an owner first.": "Un espacio de trabajo conserva al menos un propietario: primero haz propietario a otra persona.",
+  "Change role": "Cambiar rol",
+  "Change role of {{email}}": "Cambiar el rol de {{email}}",
+  "Everything an admin can do, plus inviting and disabling operators and changing their roles.": "Todo lo que puede hacer un administrador, además de invitar y desactivar operadores y cambiar sus roles.",
+  "Operator reactivated": "Operador reactivado",
+  "Reactivate {{email}}": "Reactivar a {{email}}",
+  "Reactivating…": "Reactivando…",
+  "Role changed": "Rol cambiado",
+  "The new role applies at once, to their console sessions and API keys too.": "El nuevo rol se aplica de inmediato, también a sus sesiones de consola y claves de API.",
+  "They get a new API key and start fresh: earlier keys and sessions stay ended, emergency access is off, and their password and single sign-on links are cleared unless another workspace uses them.": "Recibe una nueva clave de API y empieza de cero: las claves y sesiones anteriores siguen terminadas, el acceso de emergencia queda desactivado y su contraseña y vínculos de inicio de sesión único se borran salvo que otro espacio de trabajo los use.",
+  "You are changing your own role: you can no longer manage operators afterwards.": "Estás cambiando tu propio rol: después ya no podrás gestionar operadores."
 }
