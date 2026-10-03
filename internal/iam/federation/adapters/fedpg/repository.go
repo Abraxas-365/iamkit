@@ -246,6 +246,13 @@ func (r *Repository) FindDetail(ctx context.Context, environment identity.Enviro
 }
 func (r *Repository) Identities(ctx context.Context, environment identity.EnvironmentID, connectionID identity.ConnectionID, page query.Pagination) (query.Paginated[federation.ExternalIdentityView], error) {
 	base := `FROM external_identities x JOIN users u ON u.id=x.user_id AND u.environment_id=x.environment_id WHERE x.connection_id=$1 AND x.environment_id=$2`
+	var exists bool
+	if err := r.db.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM federation_connections WHERE id=$1 AND environment_id=$2)`, connectionID, environment); err != nil {
+		return query.Paginated[federation.ExternalIdentityView]{}, failure(err)
+	}
+	if !exists {
+		return query.Paginated[federation.ExternalIdentityView]{}, errx.NotFound("federation connection not found")
+	}
 	args := []any{connectionID, environment}
 	n := 2
 	if like := query.EscapeLike(page.Search); like != "" {

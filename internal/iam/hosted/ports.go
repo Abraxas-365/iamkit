@@ -258,4 +258,7 @@ type Repository interface {
 	// unknown client or organization of the environment is not found.
 	SaveTexts(ctx context.Context, m Mutation, input Texts) (Texts, error)
 	DeleteTexts(ctx context.Context, m Mutation, scope TextScope, locale string) error
+	// Owner is not found unless the scope's client or organization (when
+	// set) belongs to the environment.
+	Owner(ctx context.Context, environment identity.EnvironmentID, scope TextScope) error
 }

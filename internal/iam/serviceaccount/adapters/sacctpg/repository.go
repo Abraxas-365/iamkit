@@ -59,6 +59,14 @@ func (r *Repository) Revoke(ctx context.Context, environment identity.Environmen
 			return failure(err)
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
+			// Already revoked stays a no-op; an id of another environment is 404.
+			var exists bool
+			if err = tx.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM service_accounts WHERE id=$1 AND environment_id=$2)`, id, environment); err != nil {
+				return failure(err)
+			}
+			if !exists {
+				return errx.NotFound("service account not found")
+			}
 			return nil
 		}
 		return eventpg.Record(ctx, tx, environment, event.ServiceAccountRevoked, event.Subject{Kind: "service_account", ID: id.String()}, nil)

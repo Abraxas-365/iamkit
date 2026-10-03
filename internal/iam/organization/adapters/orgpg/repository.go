@@ -161,8 +161,16 @@ func (r *Repository) RemoveMember(ctx context.Context, environment identity.Envi
 		return failure(err)
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `UPDATE memberships SET active=false WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user); err != nil {
+	res, err := tx.ExecContext(ctx, `UPDATE memberships SET active=false WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user)
+	if err != nil {
 		return failure(err)
+	}
+	// No membership row (a user of another organization or environment):
+	// 404, and no membership.removed event.
+	if n, err := res.RowsAffected(); err != nil {
+		return failure(err)
+	} else if n == 0 {
+		return errx.NotFound("member not found")
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM group_members WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3`, environment, org, user); err != nil {
 		return failure(err)
@@ -174,6 +182,13 @@ func (r *Repository) RemoveMember(ctx context.Context, environment identity.Envi
 }
 func (r *Repository) Members(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, filter organization.MemberFilter, page query.Pagination) (query.Paginated[organization.MemberView], error) {
 	base := `FROM memberships m JOIN users u ON u.id=m.user_id LEFT JOIN users mgr ON mgr.id=m.manager_id WHERE m.environment_id=$1 AND m.organization_id=$2`
+	var exists bool
+	if err := r.db.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM organizations WHERE id=$1 AND environment_id=$2)`, org, environment); err != nil {
+		return query.Paginated[organization.MemberView]{}, failure(err)
+	}
+	if !exists {
+		return query.Paginated[organization.MemberView]{}, errx.NotFound("organization not found")
+	}
 	args := []any{environment, org}
 	n := 2
 	if !filter.ManagerID.IsZero() {

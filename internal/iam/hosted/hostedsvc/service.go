@@ -61,8 +61,12 @@ func (s *Service) options(ctx context.Context, environment identity.EnvironmentI
 	options := hosted.DefaultSignIn(environment, client)
 	var err error
 	if !client.IsZero() {
-		if options, err = s.SignIn(ctx, environment, client); err != nil {
+		saved, ok, err := s.repository.SignIn(ctx, environment, client)
+		if err != nil {
 			return options, err
+		}
+		if ok {
+			options = saved
 		}
 	}
 	policy := authentication.DefaultSignInPolicy()
@@ -872,8 +876,15 @@ func (s *Service) SignIn(ctx context.Context, environment identity.EnvironmentID
 		return hosted.SignIn{}, errx.Validation("environment_id and client_id are required")
 	}
 	out, ok, err := s.repository.SignIn(ctx, environment, client)
-	if err != nil || !ok {
-		return hosted.DefaultSignIn(environment, client), err
+	if err != nil {
+		return hosted.SignIn{}, err
+	}
+	if !ok {
+		// Defaults only for a client of the environment: another's is 404.
+		if err = s.repository.Owner(ctx, environment, hosted.TextScope{Client: client}); err != nil {
+			return hosted.SignIn{}, err
+		}
+		return hosted.DefaultSignIn(environment, client), nil
 	}
 	return out, nil
 }

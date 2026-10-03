@@ -18,6 +18,9 @@ func (s *Service) OrganizationSettings(ctx context.Context, environment identity
 	}
 	out, err := s.repository.OrganizationSettings(ctx, environment, organization)
 	if notFound(err) {
+		if err = s.repository.Owner(ctx, environment, hosted.TextScope{Organization: organization}); err != nil {
+			return hosted.OrganizationSettings{}, err
+		}
 		return hosted.OrganizationSettings{Environment: environment, Organization: organization}, nil
 	}
 	return out, err

@@ -45,6 +45,9 @@ func (s *Service) Texts(ctx context.Context, environment identity.EnvironmentID,
 	}
 	out, err := s.repository.Texts(ctx, environment, scope, locale)
 	if notFound(err) {
+		if err = s.repository.Owner(ctx, environment, scope); err != nil {
+			return hosted.Texts{}, err
+		}
 		out = hosted.Texts{Environment: environment, Locale: locale}
 		if !scope.Client.IsZero() {
 			out.Client = &scope.Client

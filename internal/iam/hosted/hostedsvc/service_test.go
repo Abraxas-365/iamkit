@@ -105,6 +105,11 @@ func (r *fakeRepository) SignIn(context.Context, identity.EnvironmentID, identit
 	}
 	return *r.signIn, true, nil
 }
+
+// Owner accepts every client and organization.
+func (r *fakeRepository) Owner(context.Context, identity.EnvironmentID, hosted.TextScope) error {
+	return nil
+}
 func (r *fakeRepository) SaveSignIn(_ context.Context, _ hosted.Mutation, _ identity.ClientID, in hosted.SignIn) (hosted.SignIn, error) {
 	r.signIn = &in
 	return in, nil

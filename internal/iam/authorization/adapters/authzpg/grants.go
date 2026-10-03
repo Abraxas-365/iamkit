@@ -224,7 +224,7 @@ func (r *Repository) DeleteGrant(ctx context.Context, environment identity.Envir
 	}
 	err = tx.GetContext(ctx, &row, `DELETE FROM grants WHERE id=$1 AND environment_id=$2 RETURNING organization_id,user_id,resource_id`, id, environment)
 	if err == sql.ErrNoRows {
-		return nil
+		return errx.NotFound("grant not found")
 	}
 	if err != nil {
 		return failure(err)

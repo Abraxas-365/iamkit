@@ -44,6 +44,21 @@ func (r *Repository) View(ctx context.Context, b organization.Boundary, view org
 	case organization.UnitDetail, organization.Ancestors, organization.Descendants, organization.DeleteImpact:
 		args = append(args, id)
 	}
+	switch view {
+	case organization.Ancestors, organization.Descendants, organization.DeleteImpact:
+		// The unit must be the organization's: another's is 404, not [].
+		unit, err := identity.ParseUnitID(id)
+		if err != nil {
+			return nil, errx.NotFound("resource not found")
+		}
+		var exists bool
+		if err = r.db.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM org_units WHERE environment_id=$1 AND organization_id=$2 AND id=$3)`, b.Environment, b.Organization, unit); err != nil {
+			return nil, failure(err)
+		}
+		if !exists {
+			return nil, errx.NotFound("resource not found")
+		}
+	}
 	var raw []byte
 	err := r.db.GetContext(ctx, &raw, query, args...)
 	if err == sql.ErrNoRows {

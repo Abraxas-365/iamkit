@@ -162,6 +162,10 @@ func (r *Repository) DeleteTexts(ctx context.Context, m hosted.Mutation, scope h
 
 // textOwner checks the scope's client or organization belongs to the
 // environment.
+func (r *Repository) Owner(ctx context.Context, environment identity.EnvironmentID, scope hosted.TextScope) error {
+	return textOwner(ctx, r.db, environment, scope)
+}
+
 func textOwner(ctx context.Context, tx interface {
 	GetContext(ctx context.Context, dest any, query string, args ...any) error
 }, environment identity.EnvironmentID, scope hosted.TextScope) error {

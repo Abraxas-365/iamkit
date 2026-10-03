@@ -164,6 +164,13 @@ func linkEvent(ctx context.Context, tx *sqlx.Tx, environment identity.Environmen
 }
 func (r *Repository) ListByApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, page query.Pagination) (query.Paginated[authorization.Resource], error) {
 	base := `FROM resources r JOIN application_resources ar ON ar.resource_id=r.id AND ar.environment_id=r.environment_id WHERE ar.environment_id=$1 AND ar.application_id=$2`
+	var exists bool
+	if err := r.db.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM applications WHERE id=$1 AND environment_id=$2)`, application, environment); err != nil {
+		return query.Paginated[authorization.Resource]{}, failure(err)
+	}
+	if !exists {
+		return query.Paginated[authorization.Resource]{}, errx.NotFound("application not found")
+	}
 	args := []any{environment, application}
 	n := 2
 	if like := query.EscapeLike(page.Search); like != "" {

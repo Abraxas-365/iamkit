@@ -142,6 +142,16 @@ func (r *Repository) ListGroups(ctx context.Context, b organization.Boundary, fi
 	if err := r.db.GetContext(ctx, &total, `SELECT count(*) FROM groups g WHERE g.environment_id=$1 AND g.organization_id=$2`+where, args...); err != nil {
 		return query.Paginated[organization.Group]{}, failure(err)
 	}
+	if total == 0 && !filter.User.IsZero() {
+		// A user's groups only for a member (former members included).
+		var member bool
+		if err := r.db.GetContext(ctx, &member, `SELECT EXISTS(SELECT 1 FROM memberships WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3)`, b.Environment, b.Organization, filter.User); err != nil {
+			return query.Paginated[organization.Group]{}, failure(err)
+		}
+		if !member {
+			return query.Paginated[organization.Group]{}, errx.NotFound("member not found")
+		}
+	}
 	out := []organization.Group{}
 	if err := r.db.SelectContext(ctx, &out, fmt.Sprintf("%s%s ORDER BY lower(g.name),g.id LIMIT %d OFFSET %d", selectGroup, where, page.Limit, page.Offset), args...); err != nil {
 		return query.Paginated[organization.Group]{}, failure(err)
