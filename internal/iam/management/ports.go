@@ -65,6 +65,9 @@ type ControlCommands interface {
 	RevokeKey(ctx context.Context, p Principal, key identity.KeyID) error
 	Delegate(ctx context.Context, p Principal, email, role string, expiresIn *string) (Delegated, error)
 	DisableOperator(ctx context.Context, p Principal, operator identity.OperatorID) error
+	// SetOperatorRole changes an active member's role (owners only); the
+	// last active owner cannot be demoted (ErrLastOwner).
+	SetOperatorRole(ctx context.Context, p Principal, operator identity.OperatorID, role string) error
 	// SetPasswordAccess grants or removes an operator's emergency password
 	// access (owners only); it matters in break-glass mode.
 	SetPasswordAccess(ctx context.Context, p Principal, operator identity.OperatorID, allowed bool) error
@@ -134,8 +137,16 @@ type ControlRepository interface {
 	CreateKey(ctx context.Context, p Principal, key identity.KeyID, hash []byte, expires time.Time) error
 	Keys(ctx context.Context, p Principal) ([]Key, error)
 	RevokeKey(ctx context.Context, p Principal, key identity.KeyID) error
-	Delegate(ctx context.Context, p Principal, email, role string, key identity.KeyID, hash []byte, expires time.Time) (identity.OperatorID, error)
+	// Delegate adds the operator with the email as a member with role and
+	// stores the key. A disabled member is reactivated (reactivated true)
+	// with fresh state; an active member with another role → ErrOperatorExists.
+	Delegate(ctx context.Context, p Principal, email, role string, key identity.KeyID, hash []byte, expires time.Time) (operator identity.OperatorID, reactivated bool, err error)
 	DisableOperator(ctx context.Context, p Principal, operator identity.OperatorID) error
+	// SetOperatorRole sets an active member's role and returns the previous
+	// one; Forbidden when p is no longer an active owner, NotFound for
+	// non-members, Conflict for disabled ones, ErrLastOwner when no active
+	// owner would remain.
+	SetOperatorRole(ctx context.Context, p Principal, operator identity.OperatorID, role string) (previous string, err error)
 	// SetPasswordAccess updates the workspace membership; NotFound when the
 	// operator is not a member.
 	SetPasswordAccess(ctx context.Context, workspace identity.WorkspaceID, operator identity.OperatorID, allowed bool) error

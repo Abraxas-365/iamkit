@@ -633,3 +633,158 @@ func TestOperatorPasswordAccessMigration(t *testing.T) {
 		t.Fatal("owner with a password not granted")
 	}
 }
+
+// TestOperatorRoleAndReactivation: owners change roles (never leaving the
+// workspace without an owner; changes apply to live credentials at once),
+// and inviting a disabled operator again reactivates them with fresh state.
+func TestOperatorRoleAndReactivation(t *testing.T) {
+	requireE2E(t)
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	idp := newFakeIdP(t, key, "console")
+	h := newHarness(t, bootstrap.WithOperatorSSO(bootstrap.OperatorSSO{
+		Settings: management.SSOSettings{Password: management.PasswordBreakGlass, Providers: []management.SSOProvider{
+			{ID: "acme", Name: "Acme", Type: management.SSOTypeOIDC, Issuer: idp.URL, Client: "console", AllowedDomains: []string{"acme.com"}},
+		}},
+		Secrets:   map[string]string{"acme": "sealed-secret"},
+		Transport: idp.Client().Transport,
+	}))
+	role := func(id string) string {
+		var out string
+		if err := h.DB.Get(&out, `SELECT role FROM workspace_members WHERE operator_id=$1`, id); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	ownerID := h.Must("GET", "/management/v1/me", h.Owner, nil, 200).JSON["operator_id"].(string)
+	ann := h.Must("POST", "/management/v1/operators", h.Owner, map[string]any{"email": "ann@acme.com", "role": "viewer"}, 201)
+	annID, annKey := ann.JSON["operator_id"].(string), ann.JSON["secret"].(string)
+	if ann.JSON["reactivated"] != false {
+		t.Fatalf("new operator reported reactivated: %s", ann.Body)
+	}
+
+	// Validation, permissions, unknown operators.
+	h.Must("PUT", "/management/v1/operators/"+annID+"/role", h.Owner, map[string]any{"role": "root"}, 400)
+	h.Must("PUT", "/management/v1/operators/"+annID+"/role", annKey, map[string]any{"role": "admin"}, 403)
+	h.Must("PUT", "/management/v1/operators/"+uuid.NewString()+"/role", h.Owner, map[string]any{"role": "admin"}, 404)
+	h.Must("PUT", "/management/v1/operators/not-a-uuid/role", h.Owner, map[string]any{"role": "admin"}, 404)
+	// The last owner cannot step down.
+	if res := h.Must("PUT", "/management/v1/operators/"+ownerID+"/role", h.Owner, map[string]any{"role": "admin"}, 409); !strings.Contains(res.Body, management.CodeLastOwner) {
+		t.Fatalf("last owner demotion: %s", res.Body)
+	}
+	// An invitation never changes an active member's role.
+	if res := h.Must("POST", "/management/v1/operators", h.Owner, map[string]any{"email": "ann@acme.com", "role": "admin"}, 409); !strings.Contains(res.Body, management.CodeOperatorExists) {
+		t.Fatalf("invite with another role: %s", res.Body)
+	}
+	// Same role re-invite keeps working (a new key) and is not a reactivation.
+	if res := h.Must("POST", "/management/v1/operators", h.Owner, map[string]any{"email": "ann@acme.com", "role": "viewer"}, 201); res.JSON["reactivated"] != false {
+		t.Fatalf("same-role re-invite: %s", res.Body)
+	}
+
+	// Promotion applies to Ann's existing key at once.
+	h.Must("POST", "/management/v1/projects", annKey, map[string]any{"name": "nope"}, 403)
+	h.Must("PUT", "/management/v1/operators/"+annID+"/role", h.Owner, map[string]any{"role": "admin"}, 204)
+	h.Must("POST", "/management/v1/projects", annKey, map[string]any{"name": "ann project"}, 201)
+	h.Must("PUT", "/management/v1/operators/"+annID+"/role", h.Owner, map[string]any{"role": "admin"}, 204) // no-op
+	// Ann becomes an owner; then the bootstrap owner may demote itself, and
+	// Ann (now the last owner) may not.
+	h.Must("PUT", "/management/v1/operators/"+annID+"/role", h.Owner, map[string]any{"role": "owner"}, 204)
+	if got := h.Must("GET", "/management/v1/me", annKey, nil, 200).JSON["role"]; got != "owner" {
+		t.Fatalf("ann role after promotion: %v", got)
+	}
+	h.Must("PUT", "/management/v1/operators/"+ownerID+"/role", h.Owner, map[string]any{"role": "viewer"}, 204)
+	h.Must("PUT", "/management/v1/operators/"+annID+"/role", annKey, map[string]any{"role": "admin"}, 409)
+	h.Must("PUT", "/management/v1/operators/"+ownerID+"/role", h.Owner, map[string]any{"role": "owner"}, 403) // a viewer now
+	h.Must("PUT", "/management/v1/operators/"+ownerID+"/role", annKey, map[string]any{"role": "owner"}, 204)
+	h.Must("PUT", "/management/v1/operators/"+annID+"/role", h.Owner, map[string]any{"role": "admin"}, 204)
+
+	// Ann links SSO, gets emergency access and a password, then is disabled.
+	res := operatorSSO(t, h, idp, "acme", map[string]any{"sub": "u-ann", "email": "ann@acme.com", "email_verified": true})
+	annCookie := sessionCookie(res)
+	if annCookie == nil {
+		t.Fatalf("ann sso: %s", res.Header.Get("Location"))
+	}
+	h.Must("PUT", "/management/v1/operators/"+annID+"/password-access", h.Owner, map[string]any{"allowed": true}, 204)
+	if status, code := consoleRequest(t, h, annCookie, "POST", "/management/v1/password", map[string]any{"password": "ann chosen password"}); status != 204 {
+		t.Fatalf("ann set password: %d %s", status, code)
+	}
+	h.Must("DELETE", "/management/v1/operators/"+annID, h.Owner, nil, 204)
+	if n := count(t, h.DB, `SELECT count(*) FROM operator_sessions WHERE operator_id=$1 AND revoked_at IS NULL`, annID); n != 0 {
+		t.Fatalf("disable left %d live sessions", n)
+	}
+	h.Must("PUT", "/management/v1/operators/"+annID+"/role", h.Owner, map[string]any{"role": "viewer"}, 409)
+
+	// Inviting her again reactivates her with the chosen role and nothing
+	// of before: old key, sessions, SSO link, password and grant are gone.
+	again := h.Must("POST", "/management/v1/operators", h.Owner, map[string]any{"email": "ann@acme.com", "role": "viewer"}, 201)
+	if again.JSON["reactivated"] != true || again.JSON["operator_id"] != annID {
+		t.Fatalf("reactivation: %s", again.Body)
+	}
+	if role(annID) != "viewer" {
+		t.Fatalf("reactivated role: %s", role(annID))
+	}
+	h.Must("GET", "/management/v1/me", annKey, nil, 401)
+	h.Must("GET", "/management/v1/me", again.JSON["secret"].(string), nil, 200)
+	if status, _ := consoleRequest(t, h, annCookie, "GET", "/management/v1/me", nil); status != 401 {
+		t.Fatalf("old session after reactivation: %d", status)
+	}
+	if status, code, _ := consolePassword(t, h, "ann@acme.com", "ann chosen password"); status != 401 {
+		t.Fatalf("old password after reactivation: %d %s", status, code)
+	}
+	if n := count(t, h.DB, `SELECT count(*) FROM operator_identities WHERE operator_id=$1`, annID); n != 0 {
+		t.Fatalf("identities after reactivation: %d", n)
+	}
+	if n := count(t, h.DB, `SELECT count(*) FROM workspace_members WHERE operator_id=$1 AND password_allowed`, annID); n != 0 {
+		t.Fatal("emergency access survived reactivation")
+	}
+	// A new subject for the same email links afresh.
+	if res = operatorSSO(t, h, idp, "acme", map[string]any{"sub": "u-ann-new", "email": "ann@acme.com", "email_verified": true}); sessionCookie(res) == nil {
+		t.Fatalf("relink after reactivation: %s", res.Header.Get("Location"))
+	}
+}
+
+// TestOperatorDemotionEndsOwnerPowers: a request authenticated as an owner
+// that was demoted meanwhile cannot change roles or reactivate, and a former
+// owner's impersonation sessions end with the demotion.
+func TestOperatorDemotionEndsOwnerPowers(t *testing.T) {
+	requireE2E(t)
+	e := newEnv(t)
+	ctx := context.Background()
+	repo := mgmtpg.New(e.DB)
+	owner := e.Must("GET", "/management/v1/me", e.Owner, nil, 200).JSON
+	ownerID := identity.MustParseOperatorID(owner["operator_id"].(string))
+	workspace := identity.MustParseWorkspaceID(owner["workspace_id"].(string))
+	bob := e.Must("POST", "/management/v1/operators", e.Owner, map[string]any{"email": "bob@example.com", "role": "admin"}, 201).JSON
+	bobID, bobKey := bob["operator_id"].(string), bob["secret"].(string)
+	gone := e.Must("POST", "/management/v1/operators", e.Owner, map[string]any{"email": "gone@example.com", "role": "viewer"}, 201).JSON["operator_id"].(string)
+	e.Must("DELETE", "/management/v1/operators/"+gone, e.Owner, nil, 204)
+	e.Must("PUT", "/management/v1/operators/"+bobID+"/role", e.Owner, map[string]any{"role": "owner"}, 204)
+
+	// Bob impersonates Alice, then the bootstrap owner demotes him.
+	imp := e.Must("POST", e.Base+"/impersonations", bobKey, fiber.Map{"user_id": e.Alice, "organization_id": e.Org, "application_id": e.Client, "resource_id": e.Res, "reason": "support ticket 42"}, 200)
+	active := func() any {
+		return e.Must("POST", "/identity/v1/introspect", imp.JSON["access_token"].(string), fiber.Map{"environment_id": e.EnvID, "audience": e.Audience}, 200).JSON["active"]
+	}
+	if active() != true {
+		t.Fatal("impersonation token inactive before demotion")
+	}
+	e.Must("PUT", "/management/v1/operators/"+bobID+"/role", e.Owner, map[string]any{"role": "admin"}, 204)
+	if n := count(t, e.DB, `SELECT count(*) FROM sessions WHERE actor_id=$1 AND revoked_at IS NULL`, bobID); n != 0 {
+		t.Fatalf("impersonation sessions after demotion: %d", n)
+	}
+	// Promoted back, the old impersonation does not revive.
+	e.Must("PUT", "/management/v1/operators/"+bobID+"/role", e.Owner, map[string]any{"role": "owner"}, 204)
+	if active() != false {
+		t.Fatal("impersonation revived by promotion")
+	}
+
+	// A principal read before the owner was demoted (a request in flight).
+	forbidden := func(err error) bool { return ssoCode(err) == "FORBIDDEN" }
+	stale := management.Principal{WorkspaceID: workspace, OperatorID: ownerID, Role: management.RoleOwner}
+	e.Must("PUT", "/management/v1/operators/"+ownerID.String()+"/role", bobKey, map[string]any{"role": "viewer"}, 204)
+	if _, err := repo.SetOperatorRole(ctx, stale, identity.MustParseOperatorID(bobID), management.RoleViewer); !forbidden(err) {
+		t.Fatalf("stale owner role change: %v", err)
+	}
+	if _, _, err := repo.Delegate(ctx, stale, "gone@example.com", "admin", identity.NewKeyID(), []byte("h"), time.Now().Add(time.Hour)); !forbidden(err) {
+		t.Fatalf("stale owner reactivation: %v", err)
+	}
+}

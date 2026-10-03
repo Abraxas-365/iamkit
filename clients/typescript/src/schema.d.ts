@@ -5282,6 +5282,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/management/v1/operators/{id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["putManagementOperatorsbyIdRole"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/management/v1/password": {
         parameters: {
             query?: never;
@@ -6134,6 +6150,7 @@ export interface components {
             key_id: string;
             /** @description UUID (empty when unset) */
             operator_id: string;
+            reactivated: boolean;
             secret: string;
         };
         Delivery: {
@@ -29894,6 +29911,51 @@ export interface operations {
             content: {
                 "application/json": {
                     allowed?: boolean | null;
+                };
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putManagementOperatorsbyIdRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    role?: string;
                 };
             };
         };

@@ -87,6 +87,7 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Post("/operators", h.delegate)
 	r.Get("/operators", h.operators)
 	r.Delete("/operators/:id", h.disable)
+	r.Put("/operators/:id/role", h.operatorRole)
 	r.Put("/operators/:id/password-access", h.passwordAccess)
 	r.Post("/projects", requireWrite, h.createProject)
 	r.Get("/projects", h.projects)
@@ -222,6 +223,22 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 		return errx.NotFound("resource not found")
 	}
 	if err := h.commands.DisableOperator(c.UserContext(), Principal(c), id); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
+}
+func (h *Handler) operatorRole(c *fiber.Ctx) error {
+	id, err := identity.ParseOperatorID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	var input struct {
+		Role string `json:"role"`
+	}
+	if err = c.BodyParser(&input); err != nil {
+		return errx.Validation("role is required")
+	}
+	if err = h.commands.SetOperatorRole(c.UserContext(), Principal(c), id, input.Role); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

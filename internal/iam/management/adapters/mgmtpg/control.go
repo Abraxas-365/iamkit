@@ -2,7 +2,9 @@ package mgmtpg
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -10,6 +12,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
@@ -51,35 +54,135 @@ func (r *Repository) RevokeKey(ctx context.Context, p management.Principal, id i
 	_, err := r.db.ExecContext(ctx, `UPDATE management_keys SET revoked_at=now() WHERE id=$1 AND workspace_id=$2 AND (operator_id=$3 OR $4='owner')`, id, p.WorkspaceID, p.OperatorID, p.Role)
 	return failure(err)
 }
-func (r *Repository) Delegate(ctx context.Context, p management.Principal, email, role string, key identity.KeyID, hash []byte, expires time.Time) (identity.OperatorID, error) {
+func (r *Repository) Delegate(ctx context.Context, p management.Principal, email, role string, key identity.KeyID, hash []byte, expires time.Time) (identity.OperatorID, bool, error) {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return identity.OperatorID{}, failure(err)
+		return identity.OperatorID{}, false, failure(err)
 	}
 	defer tx.Rollback()
-	id := uuid.NewString()
-	if err = tx.GetContext(ctx, &id, `INSERT INTO operators(id,email) VALUES($1,$2) ON CONFLICT(email) DO UPDATE SET email=EXCLUDED.email RETURNING id`, id, email); err != nil {
-		return identity.OperatorID{}, failure(err)
+	// Reactivation hands back access: re-check that the caller is still an
+	// active owner (its role was read when the request authenticated). The
+	// owners are locked in SetOperatorRole's order, so the two never deadlock.
+	var owners []identity.OperatorID
+	if err = tx.SelectContext(ctx, &owners, `SELECT operator_id FROM workspace_members WHERE workspace_id=$1 AND role='owner' AND active ORDER BY operator_id FOR SHARE`, p.WorkspaceID); err != nil {
+		return identity.OperatorID{}, false, failure(err)
 	}
-	res, err := tx.ExecContext(ctx, `INSERT INTO workspace_members(workspace_id,operator_id,role) VALUES($1,$2,$3) ON CONFLICT(workspace_id,operator_id) DO UPDATE SET role=EXCLUDED.role WHERE workspace_members.active AND workspace_members.role=EXCLUDED.role`, p.WorkspaceID, id, role)
-	if err != nil {
-		return identity.OperatorID{}, conflict(err)
+	if !slices.Contains(owners, p.OperatorID) {
+		return identity.OperatorID{}, false, errx.Forbidden("insufficient permissions")
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return identity.OperatorID{}, failure(err)
+	var id identity.OperatorID
+	if err = tx.GetContext(ctx, &id, `INSERT INTO operators(id,email) VALUES($1,$2) ON CONFLICT(email) DO UPDATE SET email=EXCLUDED.email RETURNING id`, uuid.NewString(), email); err != nil {
+		return identity.OperatorID{}, false, failure(err)
 	}
-	if n == 0 {
-		return identity.OperatorID{}, errx.Conflict("operator is disabled or has a different role")
+	var member struct {
+		Role   string `db:"role"`
+		Active bool   `db:"active"`
+	}
+	reactivated := false
+	err = tx.GetContext(ctx, &member, `SELECT role, active FROM workspace_members WHERE workspace_id=$1 AND operator_id=$2 FOR UPDATE`, p.WorkspaceID, id)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if _, err = tx.ExecContext(ctx, `INSERT INTO workspace_members(workspace_id,operator_id,role) VALUES($1,$2,$3)`, p.WorkspaceID, id, role); err != nil {
+			return identity.OperatorID{}, false, conflict(err)
+		}
+	case err != nil:
+		return identity.OperatorID{}, false, failure(err)
+	case member.Active && member.Role != role:
+		return identity.OperatorID{}, false, management.ErrOperatorExists()
+	case !member.Active:
+		reactivated = true
+		if err = reactivate(ctx, tx, p.WorkspaceID, id, role); err != nil {
+			return identity.OperatorID{}, false, err
+		}
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO management_keys(id,workspace_id,operator_id,secret_hash,expires_at) VALUES($1,$2,$3,$4,$5)`, key, p.WorkspaceID, id, hash, expires); err != nil {
-		return identity.OperatorID{}, failure(err)
+		return identity.OperatorID{}, false, failure(err)
 	}
-	opID, parseErr := identity.ParseOperatorID(id)
-	if parseErr != nil {
-		return identity.OperatorID{}, failure(parseErr)
+	return id, reactivated, failure(tx.Commit())
+}
+
+// reactivate makes a disabled member active again with role and nothing
+// left of before: the email may now belong to someone else, or access was
+// removed for a reason. Earlier keys and sessions stay ended and emergency
+// access returns to off. The operator's password and linked identities are
+// account-wide, so they are cleared only when no other workspace uses them.
+func reactivate(ctx context.Context, tx *sqlx.Tx, workspace identity.WorkspaceID, operator identity.OperatorID, role string) error {
+	if _, err := tx.ExecContext(ctx, `UPDATE workspace_members SET active=true, role=$3, password_allowed=false WHERE workspace_id=$1 AND operator_id=$2`, workspace, operator, role); err != nil {
+		return failure(err)
 	}
-	return opID, failure(tx.Commit())
+	for _, statement := range []string{
+		`UPDATE management_keys SET revoked_at=now() WHERE workspace_id=$1 AND operator_id=$2 AND revoked_at IS NULL`,
+		`UPDATE operator_sessions SET revoked_at=now() WHERE workspace_id=$1 AND operator_id=$2 AND revoked_at IS NULL`,
+	} {
+		if _, err := tx.ExecContext(ctx, statement, workspace, operator); err != nil {
+			return failure(err)
+		}
+	}
+	var shared bool
+	if err := tx.GetContext(ctx, &shared, `SELECT EXISTS(SELECT 1 FROM workspace_members WHERE operator_id=$1 AND workspace_id<>$2 AND active)`, operator, workspace); err != nil {
+		return failure(err)
+	}
+	if shared {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM operator_identities WHERE operator_id=$1`, operator); err != nil {
+		return failure(err)
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE operators SET password_hash='', password_must_change=false WHERE id=$1`, operator)
+	return failure(err)
+}
+
+func (r *Repository) SetOperatorRole(ctx context.Context, p management.Principal, operator identity.OperatorID, role string) (string, error) {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return "", failure(err)
+	}
+	defer tx.Rollback()
+	// Lock the owners first, in one order, so two owners demoting each other
+	// at once cannot both pass the last-owner check. NO KEY UPDATE leaves
+	// sign-ins and new keys (foreign keys to the membership) unblocked.
+	var owners []identity.OperatorID
+	if err = tx.SelectContext(ctx, &owners, `SELECT operator_id FROM workspace_members WHERE workspace_id=$1 AND role='owner' AND active ORDER BY operator_id FOR NO KEY UPDATE`, p.WorkspaceID); err != nil {
+		return "", failure(err)
+	}
+	// The caller's role was read when the request authenticated; another
+	// owner may have demoted them since.
+	if !slices.Contains(owners, p.OperatorID) {
+		return "", errx.Forbidden("insufficient permissions")
+	}
+	var member struct {
+		Role   string `db:"role"`
+		Active bool   `db:"active"`
+	}
+	err = tx.GetContext(ctx, &member, `SELECT role, active FROM workspace_members WHERE workspace_id=$1 AND operator_id=$2 FOR NO KEY UPDATE`, p.WorkspaceID, operator)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", errx.NotFound("resource not found")
+	}
+	if err != nil {
+		return "", failure(err)
+	}
+	if !member.Active {
+		return "", errx.Conflict("operator is disabled; invite them again to reactivate")
+	}
+	if member.Role == role {
+		return member.Role, nil
+	}
+	if member.Role == management.RoleOwner && len(owners) <= 1 {
+		return "", management.ErrLastOwner()
+	}
+	// Roles are read from the membership on every request, so the change
+	// applies to the operator's current sessions and keys at once.
+	if _, err = tx.ExecContext(ctx, `UPDATE workspace_members SET role=$3 WHERE workspace_id=$1 AND operator_id=$2`, p.WorkspaceID, operator, role); err != nil {
+		return "", failure(err)
+	}
+	// Impersonation is for owners: a former owner's impersonation sessions
+	// end, so a later promotion cannot revive them.
+	if member.Role == management.RoleOwner {
+		if _, err = tx.ExecContext(ctx, `UPDATE sessions SET revoked_at=now() WHERE actor_id=$2 AND revoked_at IS NULL AND environment_id IN (SELECT e.id FROM environments e JOIN projects pr ON pr.id=e.project_id WHERE pr.workspace_id=$1)`, p.WorkspaceID, operator); err != nil {
+			return "", failure(err)
+		}
+	}
+	return member.Role, failure(tx.Commit())
 }
 func (r *Repository) DisableOperator(ctx context.Context, p management.Principal, id identity.OperatorID) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -99,6 +202,11 @@ func (r *Repository) DisableOperator(ctx context.Context, p management.Principal
 		return errx.NotFound("resource not found")
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE management_keys SET revoked_at=now() WHERE workspace_id=$1 AND operator_id=$2`, p.WorkspaceID, id); err != nil {
+		return failure(err)
+	}
+	// Sessions are ended too, not only hidden behind the inactive
+	// membership, so a later reactivation never revives them.
+	if _, err = tx.ExecContext(ctx, `UPDATE operator_sessions SET revoked_at=now() WHERE workspace_id=$1 AND operator_id=$2 AND revoked_at IS NULL`, p.WorkspaceID, id); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())

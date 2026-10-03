@@ -518,3 +518,39 @@ func TestSetPasswordAccess(t *testing.T) {
 		t.Fatalf("grant: %v", err)
 	}
 }
+
+// fakeRoles plays ControlRepository for SetOperatorRole.
+type fakeRoles struct {
+	management.ControlRepository
+	roles map[identity.OperatorID]string
+}
+
+func (f *fakeRoles) SetOperatorRole(_ context.Context, _ management.Principal, operator identity.OperatorID, role string) (string, error) {
+	previous := f.roles[operator]
+	f.roles[operator] = role
+	return previous, nil
+}
+
+func TestSetOperatorRole(t *testing.T) {
+	ctx := context.Background()
+	target := identity.NewOperatorID()
+	repo := &fakeRoles{roles: map[identity.OperatorID]string{target: "viewer"}}
+	c := NewControl(repo, &fakeSecrets{})
+	for _, role := range []string{"admin", "viewer"} {
+		if err := c.SetOperatorRole(ctx, management.Principal{Role: role}, target, "admin"); code(err) != "FORBIDDEN" {
+			t.Fatalf("%s: %v", role, err)
+		}
+	}
+	owner := management.Principal{Role: "owner"}
+	for _, role := range []string{"", "root", "Owner"} {
+		if err := c.SetOperatorRole(ctx, owner, target, role); code(err) != string(errx.TypeValidation) {
+			t.Fatalf("role %q: %v", role, err)
+		}
+	}
+	if err := c.SetOperatorRole(ctx, owner, identity.OperatorID{}, "admin"); code(err) != string(errx.TypeNotFound) {
+		t.Fatalf("zero id: %v", err)
+	}
+	if err := c.SetOperatorRole(ctx, owner, target, "owner"); err != nil || repo.roles[target] != "owner" {
+		t.Fatalf("promote: %v %s", err, repo.roles[target])
+	}
+}

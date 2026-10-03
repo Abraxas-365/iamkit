@@ -2,6 +2,7 @@ package mgmtsvc
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -44,8 +45,11 @@ func (s *Control) Delegate(ctx context.Context, p management.Principal, email, r
 		return out, errx.Forbidden("insufficient permissions")
 	}
 	email, err := identity.Email(email)
-	if err != nil || (role != "admin" && role != "viewer") {
-		return out, errx.Validation("invalid request")
+	if err != nil {
+		return out, errx.Validation("email is invalid")
+	}
+	if role != management.RoleAdmin && role != management.RoleViewer {
+		return out, errx.Validation("role must be admin or viewer")
 	}
 	ttl, err := identity.ParseTTL(expiresIn)
 	if err != nil {
@@ -56,8 +60,34 @@ func (s *Control) Delegate(ctx context.Context, p management.Principal, email, r
 		return out, err
 	}
 	out = management.Delegated{Key: identity.NewKeyID(), Secret: raw, Expires: time.Now().Add(ttl)}
-	out.Operator, err = s.repository.Delegate(ctx, p, email, role, out.Key, hash, out.Expires)
+	out.Operator, out.Reactivated, err = s.repository.Delegate(ctx, p, email, role, out.Key, hash, out.Expires)
+	if err == nil && out.Reactivated {
+		slog.InfoContext(ctx, "operator.reactivated", "operator", out.Operator.String(), "workspace", p.WorkspaceID.String(), "by", p.OperatorID.String(), "role", role)
+	}
 	return out, err
+}
+
+// SetOperatorRole changes a member's role. Only owners do it, and a
+// workspace always keeps one active owner; an owner may demote themselves
+// while another remains.
+func (s *Control) SetOperatorRole(ctx context.Context, p management.Principal, id identity.OperatorID, role string) error {
+	if p.Role != management.RoleOwner {
+		return errx.Forbidden("insufficient permissions")
+	}
+	if !management.ValidRole(role) {
+		return errx.Validation("role must be owner, admin or viewer")
+	}
+	if id.IsZero() {
+		return errx.NotFound("resource not found")
+	}
+	previous, err := s.repository.SetOperatorRole(ctx, p, id, role)
+	if err != nil {
+		return err
+	}
+	if previous != role {
+		slog.InfoContext(ctx, "operator.role_changed", "operator", id.String(), "workspace", p.WorkspaceID.String(), "by", p.OperatorID.String(), "from", previous, "to", role)
+	}
+	return nil
 }
 func (s *Control) DisableOperator(ctx context.Context, p management.Principal, id identity.OperatorID) error {
 	if p.Role != "owner" {

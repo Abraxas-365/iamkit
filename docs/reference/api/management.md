@@ -27,9 +27,10 @@ workspace. Owner/admin can mutate environment data; viewer cannot.
 | `POST /keys` | Optional `expires_in` | 201 credential result; capture secret once |
 | `GET /keys` | Authenticated | 200 array |
 | `DELETE /keys/:id` | Key UUID | 204 |
-| `POST /operators` | `email`, `role`, optional `expires_in` | 201 delegated credential |
+| `POST /operators` | `email`, `role` (`admin` or `viewer`), optional `expires_in`; owner | 201 delegated credential `{operator_id,key_id,secret,expires_at,reactivated}`. Again for an active member with the same role: a new key. For a disabled member (formerly 409): reactivates it with the role (`reactivated: true`) and nothing of before — earlier keys and sessions stay ended, emergency access is off, and its password and linked SSO identities are cleared. An operator still active in another workspace keeps them, since they are account-wide; reset the SSO link (`DELETE /operators/:id/identities`) if they must not carry over. An active member with another role → 409 `OPERATOR_EXISTS`; change the role instead |
 | `GET /operators` | Authenticated | 200 array |
-| `DELETE /operators/:id` | Operator UUID | 204 |
+| `DELETE /operators/:id` | Operator UUID; owner | 204; disables a non-owner: revokes its keys and console sessions |
+| `PUT /operators/:id/role` | `role`: `owner`, `admin` or `viewer`; owner | 204; applies to the operator's live keys and sessions at once, and demoting an owner ends the user impersonations it started. An owner may step down while another active owner remains; the last one → 409 `LAST_OWNER`. Disabled operators → 409 (invite them again) |
 | `PUT /operators/:id/password-access` | `allowed` (boolean); owner | 204; grants or removes emergency password access (`break_glass` mode) |
 | `GET /operators/:id/identities` | Owner, or the operator themself | 200 `{items:[{provider,issuer,email,created_at,last_login_at}]}`: linked single sign-on identities |
 | `DELETE /operators/:id/identities` | Owner | 204; unlinks them, the next SSO sign-in links again by email |
@@ -38,8 +39,10 @@ workspace. Owner/admin can mutate environment data; viewer cannot.
 | `POST /projects/:project/environments` | `name` | 201 `{id}` |
 | `GET /projects/:project/environments` | Project UUID | 200 array |
 
-Delegating/disabling operators requires owner authority; creating keys does not
-upgrade the caller's role. Protect credential responses as secrets. The default
+Delegating, disabling and changing the role of operators requires owner
+authority; creating keys does not upgrade the caller's role. Role changes and
+reactivations are logged as `operator.role_changed` / `operator.reactivated`.
+Protect credential responses as secrets. The default
 management credential lifetime is 24 hours; consult actual TTL validation before
 selecting a custom value in [configuration](../configuration.md).
 

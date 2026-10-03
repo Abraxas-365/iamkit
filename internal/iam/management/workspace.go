@@ -61,6 +61,21 @@ type Delegated struct {
 	Key      identity.KeyID      `json:"key_id"`
 	Secret   string              `json:"secret"`
 	Expires  time.Time           `json:"expires_at"`
+	// Reactivated: the operator was a disabled member and is active again
+	// with the invited role.
+	Reactivated bool `json:"reactivated"`
+}
+
+// Workspace roles.
+const (
+	RoleOwner  = "owner"
+	RoleAdmin  = "admin"
+	RoleViewer = "viewer"
+)
+
+// ValidRole reports whether role is a workspace role.
+func ValidRole(role string) bool {
+	return role == RoleOwner || role == RoleAdmin || role == RoleViewer
 }
 type Operator struct {
 	ID     identity.OperatorID `json:"id"`

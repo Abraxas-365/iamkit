@@ -1646,6 +1646,9 @@
             "description": "UUID (empty when unset)",
             "type": "string"
           },
+          "reactivated": {
+            "type": "boolean"
+          },
           "secret": {
             "type": "string"
           }
@@ -1654,6 +1657,7 @@
           "expires_at",
           "key_id",
           "operator_id",
+          "reactivated",
           "secret"
         ],
         "type": "object"
@@ -43887,6 +43891,72 @@
                       "boolean",
                       "null"
                     ]
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/operators/{id}/role": {
+      "put": {
+        "operationId": "putManagementOperatorsbyIdRole",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "role": {
+                    "type": "string"
                   }
                 },
                 "type": "object"

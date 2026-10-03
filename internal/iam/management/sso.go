@@ -309,7 +309,27 @@ const (
 	// CodeReauthenticationRequired: a password change needs the current
 	// password, or a recent sign-in when none is set.
 	CodeReauthenticationRequired = "REAUTHENTICATION_REQUIRED"
+	// CodeLastOwner: the change would leave the workspace without an owner.
+	CodeLastOwner = "LAST_OWNER"
+	// CodeOperatorExists: the operator is already an active member with
+	// another role; change the role instead of inviting again.
+	CodeOperatorExists = "OPERATOR_EXISTS"
 )
+
+// ErrLastOwner refuses demoting the workspace's last active owner.
+func ErrLastOwner() error {
+	e := errx.Conflict("a workspace keeps at least one owner")
+	e.Code = CodeLastOwner
+	return e
+}
+
+// ErrOperatorExists refuses an invitation that would change an active
+// member's role: an invitation never changes a role as a side effect.
+func ErrOperatorExists() error {
+	e := errx.Conflict("operator is already a member with another role; change their role instead")
+	e.Code = CodeOperatorExists
+	return e
+}
 
 // ErrPasswordChangeRequired is returned by Login, only after the password
 // matched, when the password must be replaced.
