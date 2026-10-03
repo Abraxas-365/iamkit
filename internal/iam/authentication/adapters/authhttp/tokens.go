@@ -145,6 +145,11 @@ func (h *Tokens) Introspect(c *fiber.Ctx) error {
 	}
 	token, err := h.Validate(c, input.Environment, input.Audience)
 	c.Set("Cache-Control", "no-store")
+	// An outage is not an inactive token: a resource server must not end a
+	// user's session because IAMKit could not reach its database.
+	if errx.IsServerError(err) {
+		return err
+	}
 	if err != nil {
 		return c.JSON(fiber.Map{"active": false})
 	}

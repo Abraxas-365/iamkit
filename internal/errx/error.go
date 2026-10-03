@@ -125,6 +125,14 @@ func As(err error, target interface{}) bool {
 	return errors.As(err, target)
 }
 
+// IsServerError reports whether err carries a 5xx *Error (a database or
+// upstream failure). Credential checks that collapse refusals into one
+// 401 pass these through, so an outage never reads as a bad credential.
+func IsServerError(err error) bool {
+	var e *Error
+	return errors.As(err, &e) && e != nil && e.HTTPStatus >= 500
+}
+
 // typeToHTTPStatus maps error types to HTTP status codes
 func typeToHTTPStatus(t Type) int {
 	switch t {

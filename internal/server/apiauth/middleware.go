@@ -34,6 +34,9 @@ func (m *Middleware) Authenticate(c *fiber.Ctx) error {
 		return errx.Unauthorized("JWT access token required, not an API key")
 	}
 	token, err := m.validator.ValidateSelf(c.UserContext(), raw)
+	if errx.IsServerError(err) {
+		return err
+	}
 	if err != nil {
 		return errx.Unauthorized("invalid or expired token")
 	}

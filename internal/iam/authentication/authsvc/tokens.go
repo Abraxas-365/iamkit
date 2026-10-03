@@ -48,6 +48,9 @@ func (s *Tokens) Validate(ctx context.Context, raw string, audience string, envi
 	}
 	if strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
 		out, err := s.ValidateAccessToken(ctx, raw)
+		if errx.IsServerError(err) {
+			return authentication.Token{}, err
+		}
 		if err != nil || out.EnvironmentID != environment || out.Audience[0] != audience {
 			return authentication.Token{}, errx.Unauthorized("invalid credentials or access token")
 		}
@@ -64,11 +67,17 @@ func (s *Tokens) Validate(ctx context.Context, raw string, audience string, envi
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	current, err := s.repository.Current(ctx, out, environment)
+	if errx.IsServerError(err) {
+		return out, err
+	}
 	if err != nil || !identity.Subset(out.Permissions, current) {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	if out.Impersonated() {
 		active, err := s.repository.ActorActive(ctx, out)
+		if errx.IsServerError(err) {
+			return out, err
+		}
 		if err != nil || !active {
 			return out, errx.Unauthorized("impersonation actor disabled")
 		}
@@ -98,11 +107,17 @@ func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.T
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	current, err := s.repository.Current(ctx, out, out.EnvironmentID)
+	if errx.IsServerError(err) {
+		return out, err
+	}
 	if err != nil || !identity.Subset(out.Permissions, current) {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
 	if out.Impersonated() {
 		active, err := s.repository.ActorActive(ctx, out)
+		if errx.IsServerError(err) {
+			return out, err
+		}
 		if err != nil || !active {
 			return out, errx.Unauthorized("impersonation actor disabled")
 		}
@@ -125,6 +140,9 @@ func (s *Tokens) checkOAuth(ctx context.Context, raw string, token authenticatio
 		return errx.Unauthorized("OAuth token revoked")
 	}
 	active, err := s.oauth.Active(ctx, token.EnvironmentID, token.OAuthClientID, parts[2])
+	if errx.IsServerError(err) {
+		return err
+	}
 	if err != nil || !active {
 		return errx.Unauthorized("OAuth token revoked")
 	}

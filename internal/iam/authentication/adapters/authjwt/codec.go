@@ -116,15 +116,21 @@ func (c *Codec) parse(ctx context.Context, raw string, extra ...jwt.ParserOption
 	payload := &claims{}
 	opts := append([]jwt.ParserOption{jwt.WithValidMethods([]string{"RS256"}), jwt.WithIssuer(c.issuer), jwt.WithExpirationRequired()}, extra...)
 	var verifier signing.Verifier
+	var keyErr error
 	token, err := jwt.ParseWithClaims(raw, payload, func(t *jwt.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)
 		key, err := c.keys.Verifier(ctx, kid)
 		if err != nil {
+			keyErr = err
 			return nil, err
 		}
 		verifier = key
 		return key.Public, nil
 	}, opts...)
+	// A key store outage is not a bad token.
+	if errx.IsServerError(keyErr) {
+		return authentication.Token{}, keyErr
+	}
 	// An environment key only vouches for its own environment's tokens.
 	if err != nil || !token.Valid || !verifier.Allows(payload.EnvironmentID) {
 		return authentication.Token{}, errx.Unauthorized("invalid credentials or access token")

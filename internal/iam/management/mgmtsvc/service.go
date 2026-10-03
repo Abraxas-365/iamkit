@@ -95,6 +95,9 @@ func (s *Service) Login(ctx context.Context, email, password, newPassword string
 		return "", management.Principal{}, errx.Unauthorized("invalid credentials")
 	}
 	account, err := s.sessions.PasswordByEmail(ctx, email)
+	if errx.IsServerError(err) {
+		return "", management.Principal{}, err
+	}
 	if err != nil {
 		s.passwords.Compare("", password)
 		return "", management.Principal{}, errx.Unauthorized("invalid credentials")

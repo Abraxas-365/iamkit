@@ -57,7 +57,7 @@ func (r *Repository) machine(ctx context.Context, match string, arg any) (authen
 	}
 	err := r.db.GetContext(ctx, &row, `SELECT s.id,s.environment_id,s.application_id,s.resource_id,r.audience,s.permissions FROM service_accounts s JOIN resources r ON r.id=s.resource_id AND r.environment_id=s.environment_id JOIN applications a ON a.id=s.application_id AND a.environment_id=s.environment_id WHERE `+match+` AND s.revoked_at IS NULL AND s.expires_at>now() AND a.active`, arg)
 	if err != nil {
-		return authentication.Token{}, "", errx.Unauthorized("invalid credentials or access token")
+		return authentication.Token{}, "", credentialError(err)
 	}
 	return authentication.Token{Access: identity.Access{EnvironmentID: row.Environment, ApplicationID: row.Application, ResourceID: row.Resource, Permissions: []string(row.Permissions)}, Subject: row.ID, Purpose: "machine"}, row.Audience, nil
 }

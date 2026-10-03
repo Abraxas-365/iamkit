@@ -235,6 +235,9 @@ func (h *Handler) authenticate(c *fiber.Ctx) error {
 		return scimFailure(c, 401, "invalid credential", "")
 	}
 	p, err := h.commands.Authenticate(c.UserContext(), key)
+	if errx.IsServerError(err) {
+		return scimFailure(c, 500, "", "")
+	}
 	if err != nil {
 		return scimFailure(c, 401, "invalid credential", "")
 	}

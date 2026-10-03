@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -41,6 +42,7 @@ func TestCheckOAuth(t *testing.T) {
 		{"malformed token", oauthToken, "a.b", &oauthTokens{active: true}, false, false},
 		{"empty signature", oauthToken, "a.b.", &oauthTokens{active: true}, false, false},
 		{"no checker configured", oauthToken, "a.b.sig", nil, false, false},
+		{"outage", oauthToken, "a.b.sig", &oauthTokens{err: errx.Wrap(errors.New("db down"), "persistence failed", errx.TypeInternal)}, false, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -51,6 +53,10 @@ func TestCheckOAuth(t *testing.T) {
 			err := NewTokens(nil, nil, nil, checker).checkOAuth(context.Background(), c.raw, c.token)
 			if (err == nil) != c.ok {
 				t.Fatalf("err=%v want ok=%v", err, c.ok)
+			}
+			// A database outage stays a 5xx: it must not read as a revoked token.
+			if c.name == "outage" && !errx.IsServerError(err) {
+				t.Fatalf("outage became %v", err)
 			}
 			if c.oauth != nil && (c.oauth.signature != "") != c.lookup {
 				t.Fatalf("lookup=%v want %v", c.oauth.signature != "", c.lookup)

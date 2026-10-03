@@ -30,6 +30,9 @@ func (h *Handler) Authenticate(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-store")
 	if key := c.Get("X-API-Key"); strings.HasPrefix(key, "ik_mgmt_") {
 		p, err := h.auth.Authenticate(c.UserContext(), key)
+		if errx.IsServerError(err) {
+			return err
+		}
 		if err != nil {
 			return errx.Unauthorized("management credential required")
 		}
@@ -45,6 +48,9 @@ func (h *Handler) Authenticate(c *fiber.Ctx) error {
 			}
 		}
 		p, err := h.auth.AuthenticateSession(c.UserContext(), cookie)
+		if errx.IsServerError(err) {
+			return err
+		}
 		if err != nil {
 			return errx.Unauthorized("management credential required")
 		}
