@@ -279,3 +279,29 @@ func TestEventWebhooksGuarded(t *testing.T) {
 		t.Fatal("guarded transport reached loopback")
 	}
 }
+
+// A secret sealed with a key the server no longer has (dropped from
+// IAMKIT_ENCRYPTION_KEYS_OLD too early) is a readable test outcome, the
+// one a delivery records — not a 500.
+func TestEventWebhookTestUnopenedSecret(t *testing.T) {
+	receiver := &hookReceiver{}
+	srv := httptest.NewServer(receiver)
+	defer srv.Close()
+	e := newEnv(t, bootstrap.WithWebhookTransport(srv.Client().Transport))
+	sub := e.Must("POST", e.Base+"/webhooks", e.Owner, fiber.Map{"name": "rotated", "url": srv.URL}, 201).JSON["id"].(string)
+	e.DB.MustExec(`UPDATE event_subscriptions SET secret_sealed = 'v1:00000000:' || split_part(secret_sealed, ':', 3) WHERE id=$1`, sub)
+	test := e.Must("POST", e.Base+"/webhooks/"+sub+"/test", e.Owner, nil, 200).JSON
+	if test["delivered"] != false || test["error"] != "the subscription secret cannot be opened" {
+		t.Fatalf("test = %v", test)
+	}
+	if len(receiver.types()) != 0 {
+		t.Fatal("sent without a secret")
+	}
+	// Rotating re-seals under the current key; a previous secret under the
+	// dropped key no longer blocks signing during the overlap.
+	receiver.set(0, e.Must("POST", e.Base+"/webhooks/"+sub+"/rotate-secret", e.Owner, nil, 200).JSON["secret"].(string))
+	test = e.Must("POST", e.Base+"/webhooks/"+sub+"/test", e.Owner, nil, 200).JSON
+	if test["delivered"] != true || receiver.bad != 0 {
+		t.Fatalf("after rotation test = %v", test)
+	}
+}

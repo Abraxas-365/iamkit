@@ -311,8 +311,14 @@ func (s *Service) call(ctx context.Context, target action.Bound, condition actio
 		return call, action.Response{}
 	}
 	secrets := make([]string, 0, len(target.Sealed))
-	for _, sealed := range target.Sealed {
+	for i, sealed := range target.Sealed {
 		plain, err := s.cipher.Open(sealed)
+		if err != nil && i > 0 {
+			// A previous secret sealed with a dropped encryption key: rotating
+			// re-seals under the new key, so sign with the current one only.
+			slog.WarnContext(ctx, "previous action target secret cannot be opened; signing with the current one", "target", target.ID, "error", err)
+			continue
+		}
 		if err != nil {
 			return fail("the target secret cannot be opened")
 		}

@@ -23,6 +23,10 @@ const (
 	webhookLease = time.Minute
 )
 
+// secretUnopened is the outcome when a subscription secret was sealed with
+// a key the server no longer has.
+const secretUnopened = "the subscription secret cannot be opened"
+
 // Subscriptions manages event webhook subscriptions and delivers their
 // outbox.
 type Subscriptions struct {
@@ -135,7 +139,11 @@ func (s *Subscriptions) TestSubscription(ctx context.Context, environment identi
 	}
 	secrets, err := s.open(sealed)
 	if err != nil {
-		return event.TestResult{}, err
+		// Answer like a real delivery records it (and like an action target
+		// test): typically a key dropped from IAMKIT_ENCRYPTION_KEYS_OLD too
+		// early, which the operator must be able to read — not a bare 500.
+		slog.WarnContext(ctx, "webhook test: secret cannot be opened", "subscription", subscription, "error", err)
+		return event.TestResult{Outcome: event.Outcome{Error: secretUnopened}}, nil
 	}
 	e := event.Event{Environment: environment, Type: event.TestType, Actor: event.Actor{Kind: event.ActorSystem},
 		Subject: event.Subject{Kind: "webhook", ID: subscription.String()}, Data: []byte(`{}`), OccurredAt: s.now().UTC()}
@@ -143,10 +151,18 @@ func (s *Subscriptions) TestSubscription(ctx context.Context, environment identi
 	return event.TestResult{Delivered: out.OK(), Outcome: out}, nil
 }
 
+// open opens the current secret (first) and the previous ones still in
+// their overlap. A previous secret sealed with a key the server dropped is
+// left out: rotating is how a secret is re-sealed under a new encryption
+// key, so signing must not keep depending on the old key afterwards.
 func (s *Subscriptions) open(sealed []string) ([]string, error) {
 	out := make([]string, 0, len(sealed))
-	for _, x := range sealed {
+	for i, x := range sealed {
 		plain, err := s.cipher.Open(x)
+		if err != nil && i > 0 {
+			slog.Warn("previous webhook secret cannot be opened; signing with the current one", "error", err)
+			continue
+		}
 		if err != nil {
 			return nil, errx.Wrap(err, "open webhook secret", errx.TypeInternal)
 		}
@@ -212,7 +228,7 @@ func (s *Subscriptions) deliver(ctx context.Context, m event.Message) bool {
 	}
 	secrets, err := s.open(m.Secrets)
 	if err != nil {
-		out = event.Outcome{Error: "the subscription secret cannot be opened"}
+		out = event.Outcome{Error: secretUnopened}
 	} else {
 		out = s.sender.Send(ctx, event.Outbound{ID: "msg_" + strconv.FormatInt(m.Delivery, 10), URL: m.URL, Secrets: secrets, Event: *m.Event})
 	}

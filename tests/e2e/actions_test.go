@@ -246,6 +246,12 @@ func TestActions(t *testing.T) {
 	if receiver.bad != 0 {
 		t.Fatalf("%d unsigned calls", receiver.bad)
 	}
+	// A previous secret sealed with a dropped encryption key (rotation done to
+	// re-seal under the new key) does not stop the target: the current signs.
+	e.DB.MustExec(`UPDATE action_targets SET previous_sealed = 'v1:00000000:' || split_part(previous_sealed, ':', 3) WHERE id=$1`, target)
+	if out := e.Must("POST", e.Base+"/action-targets/"+target+"/test", e.Owner, fiber.Map{"condition": "function:pre_sign_in"}, 200).JSON; out["outcome"] == "failed" || receiver.bad != 0 {
+		t.Fatalf("previous under a dropped key: %v (%d unsigned)", out, receiver.bad)
+	}
 
 	// Deleting a target removes it from its executions; changes are events.
 	e.Must("DELETE", e.Base+"/action-targets/"+target, e.Owner, nil, 204)
