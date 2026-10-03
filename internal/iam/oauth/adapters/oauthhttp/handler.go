@@ -338,6 +338,7 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 	var ar fosite.AuthorizeRequester
 	var session *oauthfosite.Session
 	var device *oauth.Client
+	var refused error
 	err := h.flows.Complete(c.UserContext(), ticket, c.Cookies("__Host-iamkit-authorization"), approve, func(row oauth.Ticket, tx oauth.Authorization) error {
 		var client *oauth.Client
 		var err error
@@ -378,12 +379,15 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		if err != nil {
 			return err
 		}
-		if err = tx.Bind(c.UserContext(), access.Session, client.ID); err != nil {
-			return err
-		}
 		session = h.session(client, access, info, row.Requested)
 		addClaims(session, h.customClaims(c.UserContext(), client.Environment, access.User, ar.GetGrantedScopes()))
-		return h.tokenHooks(c.UserContext(), client, session, access.User, access.Organization, info.AMR, ar.GetGrantedScopes())
+		// A token hook refusing is answered to the client like any other
+		// authorization error (access_denied with the target's message);
+		// the ticket is spent and the session not bound.
+		if refused = h.tokenHooks(c.UserContext(), client, session, access.User, access.Organization, info.AMR, ar.GetGrantedScopes()); refused != nil {
+			return nil
+		}
+		return tx.Bind(c.UserContext(), access.Session, client.ID)
 	})
 	if err != nil {
 		return err
@@ -392,8 +396,12 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 	if device != nil {
 		return h.deviceApproved(c, device)
 	}
-	out, err := p.NewAuthorizeResponse(c.UserContext(), ar, session)
 	w := httptest.NewRecorder()
+	if refused != nil {
+		p.WriteAuthorizeError(c.UserContext(), w, ar, hookError(refused))
+		return response(c, w)
+	}
+	out, err := p.NewAuthorizeResponse(c.UserContext(), ar, session)
 	if err != nil {
 		p.WriteAuthorizeError(c.UserContext(), w, ar, err)
 	} else {

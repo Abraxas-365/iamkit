@@ -117,8 +117,10 @@ Answer `204` (or `200` with an empty body or `{}`) to change nothing. A
 
 - **`deny`** refuses the flow: management requests answer 403
   `ACTION_DENIED` with `message`; sign-in shows `message` on the hosted page
-  (or returns it as `ACTION_DENIED` from `/identity/v1`); the token endpoint
-  answers `access_denied` with it as the description. Without a message a
+  (or returns it as `ACTION_DENIED` from `/identity/v1`); token conditions
+  answer `access_denied` with it as the description — on the client's
+  redirect URI when they deny during an authorization, from the token
+  endpoint on a refresh or device grant. Without a message a
   generic one is used.
 - **`claims`** are added to the access token, ID token or UserInfo answer:
   names of 1–128 characters (letters, digits, `_ . : / -`, starting with a

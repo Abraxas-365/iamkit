@@ -199,12 +199,13 @@ func TestActions(t *testing.T) {
 	if calls = items(e.Must("GET", e.Base+"/action-calls?condition=function:pre_access_token&outcome=failed", e.Owner, nil, 200)); len(calls) != 1 || !strings.Contains(calls[0]["error"].(string), "reserved") {
 		t.Fatalf("reserved call = %v", calls)
 	}
-	// A denial at token time refuses the authorization.
+	// A denial at token time refuses the authorization: the client gets
+	// access_denied with the message on its redirect URI.
 	receiver.answer("function:pre_access_token", `{"deny":true,"message":"No tokens today"}`)
 	b = e.browser()
 	tk = b.authorize(client).field("ticket")
-	if p := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}}); p.Status != 403 || !strings.Contains(p.Body, "No tokens today") {
-		t.Fatalf("token deny: %d %s", p.Status, p.Body)
+	if p := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}}); p.Status != 303 || !strings.Contains(p.Location, "error=access_denied") || !strings.Contains(p.Location, "No+tokens+today") {
+		t.Fatalf("token deny: %d %q %s", p.Status, p.Location, p.Body)
 	}
 	receiver.answer("function:pre_access_token", "")
 
