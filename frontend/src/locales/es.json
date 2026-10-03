@@ -2579,5 +2579,7 @@
   "Updated the sign-in policy": "Actualizó la política de inicio de sesión",
   "Updated the user schema": "Actualizó el esquema de usuario",
   "User locked after failed sign-ins": "Usuario bloqueado tras inicios de sesión fallidos",
-  "Webhook disabled after failing deliveries": "Webhook desactivado por entregas fallidas"
+  "Webhook disabled after failing deliveries": "Webhook desactivado por entregas fallidas",
+  "Filter by application": "Filtrar por aplicación",
+  "Filter by organization": "Filtrar por organización"
 }

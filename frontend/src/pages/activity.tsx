@@ -1,17 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { Activity as ActivityIcon, Ban, ChevronLeft, ChevronRight, KeyRound } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/lib/api'
 import { message } from '@/lib/utils'
 import { useAuth } from '@/lib/auth'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
+import { useList } from '@/hooks/use-list'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { RowActions } from '@/components/ui/menu'
 import { PaginationBar } from '@/components/ui/pagination-bar'
-import { ConfirmDialog, CopyText, DataTable, EmptyState, EntityRef, PageHeader, Time } from '@/components/library/patterns'
+import { ConfirmDialog, CopyText, DataTable, EmptyState, EntityRef, PageHeader, Time, selectClass } from '@/components/library/patterns'
 import { language, t } from '@/lib/i18n'
 
 interface Session { id: string; user_id: string; user_name: string; user_email: string; organization_id: string; organization_name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null }
@@ -225,12 +226,35 @@ function Sessions() {
   const { project, environment } = useParams()
   const base = `/projects/${project}/environments/${environment}`
   const path = `/environments/${environment}/sessions`
-  const list = usePaginatedList<Session>(path)
+  const [search, setSearch] = useSearchParams()
+  const organization = search.get('organization_id') ?? '', application = search.get('application_id') ?? ''
+  const extraParams = useMemo(() => {
+    const p: Record<string, string> = {}
+    if (organization) p.organization_id = organization
+    if (application) p.application_id = application
+    return Object.keys(p).length ? p : undefined
+  }, [organization, application])
+  const list = usePaginatedList<Session>(path, { extraParams })
+  const organizations = useList<{ id: string; name: string }>(`/environments/${environment}/organizations?limit=100`)
+  const applications = useList<{ id: string; name: string }>(`/environments/${environment}/applications?limit=100`)
+  const filter = (key: string, value: string) => setSearch(prev => { const next = new URLSearchParams(prev); if (value) next.set(key, value); else next.delete(key); return next }, { replace: true })
   const { principal } = useAuth()
   const [target, setTarget] = useState<Session | null>(null)
   const status = (s: Session) => s.revoked_at ? [t('Revoked'), 'bg-destructive/10 text-destructive'] : Date.parse(s.expires_at) <= Date.now() ? [t('Expired'), 'bg-muted text-muted-foreground'] : [t('Active'), 'bg-success/10 text-success']
   return <div className="space-y-6">
     <PageHeader title={t('Sessions')} description={t('End users signed in to your applications. Revoking a session signs the user out at the next token refresh.')} />
+    <div className="flex flex-wrap items-center gap-2">
+      <select aria-label={t('Filter by organization')} className={`${selectClass} w-56`} value={organization} onChange={e => filter('organization_id', e.target.value)}>
+        <option value="">{t('All organizations')}</option>
+        {organizations.data.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+        {organization && !organizations.data.some(o => o.id === organization) && <option value={organization}>{organization}</option>}
+      </select>
+      <select aria-label={t('Filter by application')} className={`${selectClass} w-56`} value={application} onChange={e => filter('application_id', e.target.value)}>
+        <option value="">{t('All applications')}</option>
+        {applications.data.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        {application && !applications.data.some(a => a.id === application) && <option value={application}>{application}</option>}
+      </select>
+    </div>
     <PaginationBar state={list} noun="sessions" />
     <DataTable
       columns={[t('User'), { header: t('Application'), hideBelow: 'md' }, { header: t('Organization'), hideBelow: 'lg' }, { header: t('Signed in'), nowrap: true }, { header: t('Expires'), nowrap: true }, t('Status'), t('Actions')]}
