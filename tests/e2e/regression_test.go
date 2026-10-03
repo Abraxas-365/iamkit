@@ -130,5 +130,15 @@ func TestSelfServiceUpdateProfile(t *testing.T) {
 	if got := e.Must("GET", e.Base+"/users/"+e.Alice, e.Owner, nil, 200).JSON["name"]; got != "Alice Renamed" {
 		t.Fatalf("name not updated: %v", got)
 	}
+	// The change is in the log as the user's own user.updated (and so in History and webhooks).
+	updated := e.Must("GET", e.Base+"/events?type=user.updated&subject="+e.Alice, e.Owner, nil, 200).JSON["items"].([]any)
+	if len(updated) != 1 {
+		t.Fatalf("user.updated events = %v", updated)
+	}
+	ev := updated[0].(map[string]any)
+	actor, changes := ev["actor"].(map[string]any), ev["data"].(map[string]any)["changes"].(map[string]any)
+	if actor["kind"] != "user" || actor["id"] != e.Alice || changes["name"].([]any)[1] != "Alice Renamed" {
+		t.Fatalf("user.updated = %v", ev)
+	}
 	e.Must("PATCH", "/identity/v1/me", token, fiber.Map{"environment_id": e.EnvID, "audience": e.Audience, "name": "  "}, 400)
 }

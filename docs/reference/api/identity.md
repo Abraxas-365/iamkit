@@ -34,7 +34,7 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 | `POST /introspect` | Bearer access token; `environment_id`, `audience` | 200 `{active:false}` or `{active:true,claims:{…}}` |
 | `POST /logout` | Bearer user token; `environment_id`, `audience` | 204 |
 | `GET /me` | Bearer user token; query `environment_id`, `audience` | 200 profile (`id,email,name,username,avatar_url,email_verified,phone,phone_verified,…`) |
-| `PATCH /me` | Bearer user token; `environment_id`, `audience`, and `name` and/or `avatar_url` (https, `""` removes) | 204 |
+| `PATCH /me` | Bearer user token; `environment_id`, `audience`, and `name` and/or `avatar_url` (https, `""` removes) | 204; recorded as `user.updated` by the user |
 | `POST /me/phone` | Bearer user token (human, not impersonated, signed in recently); `environment_id`, `audience`, `phone` (E.164, spaces allowed) | 202 `{destination,expires_at}`: a code texted to that number; 403 `REAUTHENTICATION_REQUIRED`, 429 `CODE_COOLDOWN`/`CODE_LIMIT`, 502 without an SMS provider |
 | `POST /me/phone/verify` | Same token; `environment_id`, `audience`, `code` | 204: the number becomes the verified `phone`; 422 `INVALID_CODE` (five wrong codes discard it) |
 | `DELETE /me/phone` | Same token; query `environment_id`, `audience` | 204: phone cleared |

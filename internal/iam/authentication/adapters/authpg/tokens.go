@@ -76,10 +76,15 @@ func (r *Repository) Organizations(ctx context.Context, t authentication.Token) 
 	return out, failure(err)
 }
 
-// UpdateProfile sets the token subject's display name and avatar.
+// UpdateProfile sets the token subject's display name and avatar, recorded
+// as user.updated by the user (the change trigger fills data.changes).
 func (r *Repository) UpdateProfile(ctx context.Context, t authentication.Token, input authentication.ProfileUpdate) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE users SET name=coalesce($3,name),avatar_url=coalesce($4,avatar_url) WHERE id=$1 AND environment_id=$2`, t.Subject, t.EnvironmentID, input.Name, input.AvatarURL)
-	return failure(err)
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET name=coalesce($3,name),avatar_url=coalesce($4,avatar_url) WHERE id=$1 AND environment_id=$2`, t.Subject, t.EnvironmentID, input.Name, input.AvatarURL); err != nil {
+			return failure(err)
+		}
+		return eventpg.Audit(ctx, tx, t.EnvironmentID, t.Subject.String(), "PATCH", "/users/"+t.Subject.String())
+	})
 }
 
 // AddMember adds user to the token's organization when the caller (t.Subject)
