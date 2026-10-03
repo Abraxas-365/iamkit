@@ -111,7 +111,8 @@ PATCH supports `displayName`, `externalId` and `members` with the forms Entra
 ID and Okta send: `add` `members` (list of `{value}`), `remove`
 `members[value eq "id"]`, `remove` `members` with a value list (those members)
 or without one (all members), `replace` `members` (full set), and a path-less
-`replace` object with `displayName`/`members`. Operations are applied in order;
+`replace` object with `displayName`/`members`; `remove` `externalId` clears
+it (a `PUT` without `externalId` keeps it). Operations are applied in order;
 unknown attributes are ignored. Group filters: `displayName` (case-insensitive),
 `externalId` (case-exact) and `id`.
 

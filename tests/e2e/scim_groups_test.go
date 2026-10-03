@@ -105,6 +105,16 @@ func TestSCIMGroupsJourney(t *testing.T) {
 		t.Fatalf("put: %v", put)
 	}
 
+	// externalId: PATCH remove clears it, add sets it again.
+	s.must("PATCH", "/Groups/"+group, `{`+patchSchema+`,"Operations":[{"op":"remove","path":"externalId"}]}`, 204)
+	if got := s.must("GET", "/Groups/"+group, "", 200).JSON; got["externalId"] != nil {
+		t.Fatalf("externalId not removed: %v", got["externalId"])
+	}
+	s.must("PATCH", "/Groups/"+group, `{`+patchSchema+`,"Operations":[{"op":"add","path":"externalId","value":"grp-eng"}]}`, 204)
+	if got := s.must("GET", "/Groups/"+group, "", 200).JSON; got["externalId"] != "grp-eng" {
+		t.Fatalf("externalId not restored: %v", got["externalId"])
+	}
+
 	// Deprovisioning a user removes it from the directory's groups.
 	s.must("DELETE", "/Users/"+ann, "", 204)
 	if m := memberIDs(s.must("GET", "/Groups/"+group, "", 200).JSON); len(m) != 0 {

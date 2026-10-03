@@ -199,8 +199,11 @@ func (h *Groups) replace(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	external := input.ExternalID
-	update := provisioning.GroupUpdate{Name: &input.DisplayName, External: &external, Members: &members}
+	// A PUT without externalId keeps the stored one.
+	update := provisioning.GroupUpdate{Name: &input.DisplayName, Members: &members}
+	if external := strings.TrimSpace(input.ExternalID); external != "" {
+		update.External = &external
+	}
 	if err := h.commands.UpdateGroup(c.UserContext(), principal(c), id, update); err != nil {
 		return err
 	}
@@ -393,6 +396,8 @@ func (s *groupPatch) apply(kind, path string, value json.RawMessage) error {
 		s.update.Name = &v
 	case attr == "externalid":
 		if kind == "remove" {
+			cleared := ""
+			s.update.External = &cleared
 			return nil
 		}
 		v, err := stringValue(value, "externalId")

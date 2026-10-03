@@ -37,8 +37,9 @@ func (s *Groups) UpdateGroup(ctx context.Context, p provisioning.Principal, id i
 		name := strings.TrimSpace(*input.Name)
 		input.Name = &name
 	}
-	if input.External != nil && strings.TrimSpace(*input.External) == "" {
-		input.External = nil
+	if input.External != nil {
+		external := strings.TrimSpace(*input.External)
+		input.External = &external
 	}
 	if err := input.Validate(); err != nil {
 		return err

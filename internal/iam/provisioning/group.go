@@ -39,7 +39,8 @@ func (g GroupInput) Validate() error {
 }
 
 // GroupUpdate carries SCIM group changes. Members, when set, replaces the
-// whole member set and then Add/Remove apply on top; nil fields are untouched.
+// whole member set and then Add/Remove apply on top; nil fields are untouched
+// and an empty External clears the external id.
 type GroupUpdate struct {
 	Name     *string
 	External *string

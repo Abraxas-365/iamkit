@@ -120,7 +120,7 @@ func (r *Repository) UpdateGroup(ctx context.Context, p provisioning.Principal, 
 	if err != nil {
 		return failure(err)
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE groups SET name=coalesce($2,name),external_id=coalesce($3,external_id),updated_at=now(),version=version+1 WHERE id=$1`, id, input.Name, input.External); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE groups SET name=coalesce($2,name),external_id=CASE WHEN $3::text IS NULL THEN external_id ELSE nullif($3,'') END,updated_at=now(),version=version+1 WHERE id=$1`, id, input.Name, input.External); err != nil {
 		return groupConflict(err)
 	}
 	if input.Members != nil {
