@@ -142,3 +142,21 @@ func TestSelfServiceUpdateProfile(t *testing.T) {
 	}
 	e.Must("PATCH", "/identity/v1/me", token, fiber.Map{"environment_id": e.EnvID, "audience": e.Audience, "name": "  "}, 400)
 }
+
+// GET /roles/:id and /grants/:id answer that one row; an id that does not
+// parse, the zero id or an unknown id is 404 — never another row (F-044).
+func TestRoleAndGrantByID(t *testing.T) {
+	e := newEnv(t)
+	reader := e.ID("POST", e.Base+"/roles", fiber.Map{"name": "reader", "resource_id": e.Res, "permissions": []string{"invoices:read"}})
+	if got := e.Must("GET", e.Base+"/roles/"+reader, e.Owner, nil, 200).JSON; got["id"] != reader || got["name"] != "reader" {
+		t.Fatalf("role = %v", got)
+	}
+	grant := e.Must("PUT", e.Base+"/grants", e.Owner, fiber.Map{"organization_id": e.Org, "user_id": e.Alice, "resource_id": e.Res, "permissions": []string{"invoices:read"}}, 200).JSON["id"].(string)
+	if got := e.Must("GET", e.Base+"/grants/"+grant, e.Owner, nil, 200).JSON; got["id"] != grant {
+		t.Fatalf("grant = %v", got)
+	}
+	for _, id := range []string{"not-a-uuid", "00000000-0000-0000-0000-000000000000", "ffffffff-0000-4000-8000-000000000000", e.Res} {
+		e.Must("GET", e.Base+"/roles/"+id, e.Owner, nil, 404)
+		e.Must("GET", e.Base+"/grants/"+id, e.Owner, nil, 404)
+	}
+}

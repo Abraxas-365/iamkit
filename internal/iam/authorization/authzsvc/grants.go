@@ -12,23 +12,23 @@ import (
 type Grants struct{ repository authorization.GrantRepository }
 
 func NewGrants(r authorization.GrantRepository) *Grants { return &Grants{r} }
-func (s *Grants) ListRoles(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID, page query.Pagination) (query.Paginated[authorization.RoleView], error) {
+func (s *Grants) ListRoles(ctx context.Context, environment identity.EnvironmentID, id identity.RoleID, page query.Pagination) (query.Paginated[authorization.RoleView], error) {
 	out, err := s.repository.ListRoles(ctx, environment, id, page)
 	if err != nil || (!id.IsZero() && len(out.Items) == 0) {
 		if err != nil {
 			return query.Paginated[authorization.RoleView]{}, err
 		}
-		return query.Paginated[authorization.RoleView]{}, errx.NotFound("resource not found")
+		return query.Paginated[authorization.RoleView]{}, errx.NotFound("role not found")
 	}
 	return out, nil
 }
-func (s *Grants) ListGrants(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID, page query.Pagination) (query.Paginated[authorization.GrantView], error) {
+func (s *Grants) ListGrants(ctx context.Context, environment identity.EnvironmentID, id identity.GrantID, page query.Pagination) (query.Paginated[authorization.GrantView], error) {
 	out, err := s.repository.ListGrants(ctx, environment, id, page)
 	if err != nil || (!id.IsZero() && len(out.Items) == 0) {
 		if err != nil {
 			return query.Paginated[authorization.GrantView]{}, err
 		}
-		return query.Paginated[authorization.GrantView]{}, errx.NotFound("resource not found")
+		return query.Paginated[authorization.GrantView]{}, errx.NotFound("grant not found")
 	}
 	return out, nil
 }

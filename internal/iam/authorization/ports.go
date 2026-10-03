@@ -28,8 +28,8 @@ type GrantCommands interface {
 	DeleteGrant(ctx context.Context, environment identity.EnvironmentID, grant identity.GrantID) error
 }
 type GrantQueries interface {
-	ListRoles(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, page query.Pagination) (query.Paginated[RoleView], error)
-	ListGrants(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, page query.Pagination) (query.Paginated[GrantView], error)
+	ListRoles(ctx context.Context, environment identity.EnvironmentID, role identity.RoleID, page query.Pagination) (query.Paginated[RoleView], error)
+	ListGrants(ctx context.Context, environment identity.EnvironmentID, grant identity.GrantID, page query.Pagination) (query.Paginated[GrantView], error)
 	RoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter RoleAssignmentFilter, page query.Pagination) (query.Paginated[RoleAssignmentView], error)
 	GroupRoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter GroupRoleAssignmentFilter, page query.Pagination) (query.Paginated[GroupRoleAssignmentView], error)
 	// EffectiveRoles lists every role user holds with its source, in
@@ -49,8 +49,8 @@ type ResourceRepository interface {
 
 type GrantRepository interface {
 	Catalog(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID) ([]string, error)
-	ListRoles(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, page query.Pagination) (query.Paginated[RoleView], error)
-	ListGrants(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, page query.Pagination) (query.Paginated[GrantView], error)
+	ListRoles(ctx context.Context, environment identity.EnvironmentID, role identity.RoleID, page query.Pagination) (query.Paginated[RoleView], error)
+	ListGrants(ctx context.Context, environment identity.EnvironmentID, grant identity.GrantID, page query.Pagination) (query.Paginated[GrantView], error)
 	RoleAssignments(ctx context.Context, environment identity.EnvironmentID, filter RoleAssignmentFilter, page query.Pagination) (query.Paginated[RoleAssignmentView], error)
 	SaveRole(ctx context.Context, m Mutation, role identity.RoleID, input Role, create bool) error
 	DeleteRole(ctx context.Context, m Mutation, role identity.RoleID) error

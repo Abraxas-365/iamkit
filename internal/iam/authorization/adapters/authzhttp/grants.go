@@ -38,26 +38,47 @@ func (h *Grants) Register(e fiber.Router) {
 func (h *Grants) mutation(c *fiber.Ctx) authorization.Mutation {
 	return authorization.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
 }
-func optionalResourceID(c *fiber.Ctx) identity.ResourceID {
-	id, _ := identity.ParseResourceID(c.Params("id"))
-	return id
-}
+
+// ListRoles lists roles, or returns one role by id.
+//
+// An id that does not parse (or the zero id) is not found: it must never
+// fall back to the unfiltered list.
 func (h *Grants) ListRoles(c *fiber.Ctx) error {
-	out, err := h.queries.ListRoles(c.UserContext(), env(c), optionalResourceID(c), httpx.PaginationFromCtx(c))
+	var role identity.RoleID
+	if raw := c.Params("id"); raw != "" {
+		parsed, err := identity.ParseRoleID(raw)
+		if err != nil || parsed.IsZero() {
+			return errx.NotFound("role not found")
+		}
+		role = parsed
+	}
+	out, err := h.queries.ListRoles(c.UserContext(), env(c), role, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
-	if c.Params("id") != "" {
+	if !role.IsZero() {
 		return c.JSON(out.Items[0])
 	}
 	return c.JSON(out)
 }
+
+// ListGrants lists direct permission grants, or returns one grant by id.
+//
+// Unparsable and zero ids are not found, as in ListRoles.
 func (h *Grants) ListGrants(c *fiber.Ctx) error {
-	out, err := h.queries.ListGrants(c.UserContext(), env(c), optionalResourceID(c), httpx.PaginationFromCtx(c))
+	var grant identity.GrantID
+	if raw := c.Params("id"); raw != "" {
+		parsed, err := identity.ParseGrantID(raw)
+		if err != nil || parsed.IsZero() {
+			return errx.NotFound("grant not found")
+		}
+		grant = parsed
+	}
+	out, err := h.queries.ListGrants(c.UserContext(), env(c), grant, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}
-	if c.Params("id") != "" {
+	if !grant.IsZero() {
 		return c.JSON(out.Items[0])
 	}
 	return c.JSON(out)

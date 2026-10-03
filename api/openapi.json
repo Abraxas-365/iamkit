@@ -10090,6 +10090,7 @@
             "accessToken": []
           }
         ],
+        "summary": "ListGrants lists direct permission grants, or returns one grant by id.",
         "tags": [
           "Scoped API"
         ]
@@ -10309,6 +10310,7 @@
             "accessToken": []
           }
         ],
+        "summary": "ListGrants lists direct permission grants, or returns one grant by id.",
         "tags": [
           "Scoped API"
         ]
@@ -18092,6 +18094,7 @@
             "accessToken": []
           }
         ],
+        "summary": "ListRoles lists roles, or returns one role by id.",
         "tags": [
           "Scoped API"
         ]
@@ -18314,6 +18317,7 @@
             "accessToken": []
           }
         ],
+        "summary": "ListRoles lists roles, or returns one role by id.",
         "tags": [
           "Scoped API"
         ]
@@ -29006,6 +29010,7 @@
             "operatorSession": []
           }
         ],
+        "summary": "ListGrants lists direct permission grants, or returns one grant by id.",
         "tags": [
           "Management API"
         ]
@@ -29234,6 +29239,7 @@
             "operatorSession": []
           }
         ],
+        "summary": "ListGrants lists direct permission grants, or returns one grant by id.",
         "tags": [
           "Management API"
         ]
@@ -38098,6 +38104,7 @@
             "operatorSession": []
           }
         ],
+        "summary": "ListRoles lists roles, or returns one role by id.",
         "tags": [
           "Management API"
         ]
@@ -38329,6 +38336,7 @@
             "operatorSession": []
           }
         ],
+        "summary": "ListRoles lists roles, or returns one role by id.",
         "tags": [
           "Management API"
         ]

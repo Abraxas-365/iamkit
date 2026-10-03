@@ -23,7 +23,7 @@ func (r *Repository) Catalog(ctx context.Context, environment identity.Environme
 	}
 	return []string(catalog), failure(err)
 }
-func (r *Repository) ListRoles(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID, page query.Pagination) (query.Paginated[authorization.RoleView], error) {
+func (r *Repository) ListRoles(ctx context.Context, environment identity.EnvironmentID, id identity.RoleID, page query.Pagination) (query.Paginated[authorization.RoleView], error) {
 	base := `FROM roles r JOIN resources res ON res.id=r.resource_id WHERE r.environment_id=$1`
 	args := []any{environment}
 	n := 1
@@ -60,7 +60,7 @@ func (r *Repository) ListRoles(ctx context.Context, environment identity.Environ
 	}
 	return query.NewPaginated(rows, total, page), nil
 }
-func (r *Repository) ListGrants(ctx context.Context, environment identity.EnvironmentID, id identity.ResourceID, page query.Pagination) (query.Paginated[authorization.GrantView], error) {
+func (r *Repository) ListGrants(ctx context.Context, environment identity.EnvironmentID, id identity.GrantID, page query.Pagination) (query.Paginated[authorization.GrantView], error) {
 	base := `FROM grants g JOIN organizations o ON o.id=g.organization_id JOIN users u ON u.id=g.user_id JOIN resources res ON res.id=g.resource_id WHERE g.environment_id=$1`
 	args := []any{environment}
 	n := 1
