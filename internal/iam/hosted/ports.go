@@ -45,6 +45,10 @@ type Queries interface {
 	// SignIn is the sign-in methods the client offers (every method when
 	// it has no options of its own).
 	SignIn(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (SignIn, error)
+	// Offers is what the client's pages (zero client: a SAML sign-in)
+	// really offer: its sign-in options within the environment's sign-in
+	// policy, with sign-up, passkeys, password reset and terms resolved.
+	Offers(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (SignIn, error)
 	// ListSignIn lists the clients with sign-in options of their own.
 	ListSignIn(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[SignIn], error)
 	// OrganizationSettings is the organization's overrides (Custom false and

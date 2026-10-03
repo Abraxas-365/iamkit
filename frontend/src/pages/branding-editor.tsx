@@ -177,7 +177,7 @@ export default function BrandingEditorPage() {
     </div>}
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(340px,420px)_1fr]">
       <Settings draft={draft} setDraft={setDraft} canWrite={canWrite} environmentDefault={!clientId} enabled={enabled} />
-      <Preview environment={environment!} clientId={clientId} draft={draft} live={canWrite} savedStyle={!!saved}
+      <Preview environment={environment!} clientId={clientId} draft={draft} live={canWrite}
         onAdaptive={canWrite ? () => setDraft({ ...draft, theme: { ...draft.theme, mode: 'adaptive' } }) : undefined} />
     </div>
     {saveError && <ErrorState error={saveError} />}
@@ -356,7 +356,7 @@ function LegalSettings({ legal, inherit, onChange }: { legal: Legal; inherit: bo
 // saved style (they cannot change it, and drafts are a write operation).
 // With organization set, the preview shows the organization's overrides:
 // the unsaved ones (live) over the environment default, or the saved ones.
-export function Preview({ environment, clientId, draft, live, savedStyle, onAdaptive, organization }: { environment: string; clientId?: string; draft: Branding; live: boolean; savedStyle: boolean; onAdaptive?: () => void; organization?: { id: string; overrides: Record<string, unknown> } }) {
+export function Preview({ environment, clientId, draft, live, onAdaptive, organization }: { environment: string; clientId?: string; draft: Branding; live: boolean; onAdaptive?: () => void; organization?: { id: string; overrides: Record<string, unknown> } }) {
   const [page, setPage] = useState<Page>('identify')
   const [scheme, setScheme] = useState<Scheme>(draft.theme.mode === 'dark' ? 'dark' : 'light')
   const [phone, setPhone] = useState(false)
@@ -398,17 +398,18 @@ export function Preview({ environment, clientId, draft, live, savedStyle, onAdap
     let stale = false
     const timer = window.setTimeout(() => {
       const q = new URLSearchParams({ page, scheme })
-      if (clientId && savedStyle) q.set('client', clientId)
+      // The client's own style, else the default it uses, and its methods.
+      if (clientId) q.set('client', clientId)
       if (organization) q.set('organization', organization.id)
       if (signIn) q.set('sign_in', signIn)
       if (locale) q.set('locale', locale)
       const call = live
-        ? api.post<{ html: string }>(base, { page, scheme, [organization ? 'organization' : 'settings']: JSON.parse(request), ...(locale && { locale }), ...(signIn && { sign_in: JSON.parse(signIn) }) })
+        ? api.post<{ html: string }>(base, { page, scheme, [organization ? 'organization' : 'settings']: JSON.parse(request), ...(clientId && { client_id: clientId }), ...(locale && { locale }), ...(signIn && { sign_in: JSON.parse(signIn) }) })
         : api.get<{ html: string }>(`${base}?${q}`)
       call.then(r => { if (!stale) { setHtml(r.html); setError('') } }).catch(e => { if (!stale) setError(message(e)) })
     }, 300)
     return () => { stale = true; window.clearTimeout(timer) }
-  }, [environment, clientId, savedStyle, live, page, scheme, locale, request, signIn, methods, organization?.id])
+  }, [environment, clientId, live, page, scheme, locale, request, signIn, methods, organization?.id])
 
   const toggle = (active: boolean) => cn('gap-1.5', active && 'bg-muted')
   return <section aria-label={t('Preview')} className="min-w-0 space-y-3 xl:sticky xl:top-4">

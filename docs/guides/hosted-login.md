@@ -288,12 +288,21 @@ overrides (over `?client=` or the default); `POST` with `"organization":
 {…overrides}` instead of `settings` previews unsaved ones over the saved
 default.
 
+The `identify`, `password` and `signup` previews offer what the pages of
+`client` (`?client=`, or `"client_id"` in a `POST` body; default: a client
+without methods of its own) really offer under the environment's sign-in
+policy: "Create account", "Sign in with a passkey", "Forgot password?" and
+the terms checkbox appear exactly when they would there. The passkey button,
+which a browser with WebAuthn reveals by script, is shown without one (the
+preview runs no script).
+
 An optional `sign_in` (a body field, or `?sign_in=` as JSON on `GET`) shows
 only some methods on the `identify` and `password` pages, e.g. social login
 only: `{"password":false,"email_code":false,"organization_sso":false,
 "connections":[{"name":"GitHub","provider":"github"}]}`. Providers: `google`,
 `microsoft`, `github`, `apple`, `oidc`; at most 50 buttons, and at least one
-method. It changes the preview only; a client's real methods are set under
+method. It only narrows what the client offers, and changes the preview
+only; a client's real methods are set under
 [sign-in methods](#sign-in-methods).
 
 Every change is recorded in the environment's audit events. Free-form CSS is

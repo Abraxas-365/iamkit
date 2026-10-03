@@ -189,6 +189,9 @@ type view struct {
 	// Post is the form the "post" page submits to another site (a SAML
 	// response to the service provider's ACS).
 	Post *PostForm
+	// Preview renders a sample for the console's script-less frame: what
+	// the page script reveals in a browser with WebAuthn is shown.
+	Preview bool
 }
 
 // PostForm is a cross-site form post: the action and hidden fields.
@@ -199,6 +202,9 @@ type PostForm struct {
 
 // Script is whether the page runs a security key or passkey ceremony.
 func (v view) Script() bool {
+	if v.Preview {
+		return false
+	}
 	return v.Offers("webauthn") || (v.SignIn.Passkey && v.Token == "" && v.Invite == nil)
 }
 

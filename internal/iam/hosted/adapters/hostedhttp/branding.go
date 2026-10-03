@@ -109,7 +109,7 @@ const maxButtonName = 100
 
 var previewProviders = []string{federation.ProviderGoogle, federation.ProviderMicrosoft, federation.ProviderGitHub, federation.ProviderApple, federation.ProviderOIDC}
 
-// apply shows the methods on a sample page.
+// apply narrows what a sample page offers (v.SignIn) to the methods.
 func (m Methods) apply(v *view) error {
 	if len(m.Connections) > hosted.MaxSignInConnections {
 		return errx.Validation("sign_in.connections has at most 50 buttons")
@@ -125,10 +125,13 @@ func (m Methods) apply(v *view) error {
 		}
 		buttons = append(buttons, federation.ConnectionSummary{Name: name, Provider: b.Provider})
 	}
-	signIn := hosted.SignIn{Password: m.Password, EmailCode: m.EmailCode, OrganizationSSO: m.OrganizationSSO, PasswordReset: m.Password}
+	offered := v.SignIn
+	signIn := hosted.SignIn{Password: m.Password, EmailCode: m.EmailCode, OrganizationSSO: m.OrganizationSSO, PasswordReset: m.Password && offered.PasswordReset, Passkey: offered.Passkey}
 	if !signIn.EmailForm() && len(buttons) == 0 {
 		return errx.Validation("sign_in must show at least one method")
 	}
+	signIn.Signup = offered.Signup && (m.Password || m.EmailCode)
+	signIn.Terms = signIn.Signup && offered.Terms
 	v.SignIn = signIn
 	if v.Connections != nil {
 		v.Connections = buttons
@@ -226,9 +229,15 @@ func (h *Handler) draftPreview(c *fiber.Ctx) error {
 		previewInput
 		Settings     hosted.Settings              `json:"settings"`
 		Organization *hosted.OrganizationSettings `json:"organization"`
+		// Client is whose sign-in options the pages offer (default: a
+		// client without options of its own).
+		Client *identity.ClientID `json:"client_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
+	}
+	if input.Client != nil {
+		input.TextScope.Client = *input.Client
 	}
 	if input.Organization != nil {
 		settings, err := h.queries.DraftOrganization(c.UserContext(), env, *input.Organization)
@@ -292,17 +301,24 @@ func (h *Handler) preview(c *fiber.Ctx, settings hosted.Settings, in previewInpu
 	if in.Scheme != "" && in.Scheme != hosted.ModeLight && in.Scheme != hosted.ModeDark {
 		return errx.Validation("scheme must be light or dark")
 	}
+	if page == "identify" || page == "password" || page == "signup" {
+		// What the pages really offer: sign-up, passkeys, password reset
+		// and the terms follow the sign-in policy and the client's options.
+		offered, err := h.queries.Offers(c.UserContext(), environment, in.TextScope.Client)
+		if err != nil {
+			return err
+		}
+		offer(&v, offered)
+	}
 	if in.SignIn != nil && (page == "identify" || page == "password") {
 		if err := in.SignIn.apply(&v); err != nil {
 			return err
 		}
 	}
+	// A browser with WebAuthn shows the passkey button; the sandboxed
+	// preview runs no script to reveal it.
+	v.Preview = true
 	v.Brand = brandOf(settings, in.Scheme)
-	if page == "signup" {
-		// The checkbox shows when sign-up requires accepting the terms
-		// (the sign-in policy): preview it once there are terms to link.
-		v.SignIn.Terms = v.Brand.Legal.TermsURL != ""
-	}
 	out, err := document(page, &v)
 	if err != nil {
 		return err
@@ -375,6 +391,15 @@ func sample(page, lang string, texts i18n.Texts) (view, bool) {
 		return view{}, false
 	}
 	return v, true
+}
+
+// offer shows what a client's pages offer on a sample page: its methods,
+// and the sample buttons only when it offers social logins.
+func offer(v *view, offered hosted.SignIn) {
+	if v.Connections != nil && !offered.AllConnections && len(offered.Connections) == 0 {
+		v.Connections = []federation.ConnectionSummary{}
+	}
+	v.SignIn = offered
 }
 
 func (h *Handler) signIn(c *fiber.Ctx) error {

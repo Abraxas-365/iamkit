@@ -31165,6 +31165,13 @@
             "application/json": {
               "schema": {
                 "properties": {
+                  "client_id": {
+                    "description": "UUID (empty when unset)",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
                   "locale": {
                     "type": "string"
                   },

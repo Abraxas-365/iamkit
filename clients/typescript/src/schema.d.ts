@@ -22103,6 +22103,8 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    /** @description UUID (empty when unset) */
+                    client_id?: string | null;
                     locale?: string;
                     organization?: components["schemas"]["OrganizationSettingsInput"] | null;
                     page?: string;

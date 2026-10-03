@@ -77,6 +77,14 @@ func (s *Service) options(ctx context.Context, environment identity.EnvironmentI
 	return options, nil
 }
 
+// Offers is what the client's pages offer (previews show the same).
+func (s *Service) Offers(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (hosted.SignIn, error) {
+	if environment.IsZero() {
+		return hosted.SignIn{}, errx.Validation("environment_id is required")
+	}
+	return s.options(ctx, environment, client)
+}
+
 var (
 	_ hosted.Flow     = (*Service)(nil)
 	_ hosted.Commands = (*Service)(nil)

@@ -357,6 +357,44 @@ func TestPreviewMethods(t *testing.T) {
 			t.Fatalf("%s accepted", name)
 		}
 	}
+
+	// A preview shows what the client's pages offer: methods only narrow
+	// it, and the passkey button the page script would reveal is shown
+	// without the script (the console's frame runs none).
+	offered := hosted.SignIn{Password: true, EmailCode: true, Passkey: true, Signup: true, PasswordReset: false}
+	for _, tc := range []struct {
+		page    string
+		methods *Methods
+		want    []string
+		not     []string
+	}{
+		{"identify", nil, []string{`action="/hosted/signup"`, `class="divider">or<`, `data-autofill data-failed="Your security key or passkey could not be used. Try again or use another method.">Sign in with a passkey`}, []string{"<script", "Continue with", " hidden>Sign in with a passkey", "data-webauthn-reveal"}},
+		{"password", nil, []string{`type="password"`}, []string{"/hosted/login/reset"}},
+		{"identify", &Methods{OrganizationSSO: true}, []string{`name="email"`, "Sign in with a passkey"}, []string{"/hosted/signup"}},
+	} {
+		v, _ := sample(tc.page, "en", nil)
+		offer(&v, offered)
+		if tc.methods != nil {
+			if err := tc.methods.apply(&v); err != nil {
+				t.Fatal(err)
+			}
+		}
+		v.Preview, v.Brand = true, brandOf(hosted.Settings{}, "")
+		out, err := document(tc.page, &v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range tc.want {
+			if !strings.Contains(string(out), want) {
+				t.Fatalf("%s %+v: missing %q\n%s", tc.page, tc.methods, want, out)
+			}
+		}
+		for _, not := range tc.not {
+			if strings.Contains(string(out), not) {
+				t.Fatalf("%s %+v: shows %q\n%s", tc.page, tc.methods, not, out)
+			}
+		}
+	}
 }
 
 func TestFailedMessages(t *testing.T) {

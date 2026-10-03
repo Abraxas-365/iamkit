@@ -93,7 +93,7 @@ export function OrganizationBrandingPage() {
     </div>
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(340px,420px)_1fr]">
       <Settings draft={draft} setDraft={setDraft} canWrite={canWrite} environmentDefault={false} org={{ own, setOwn, inherited }} enabled={inherited.languages ?? []} />
-      <Preview environment={environment!} draft={draft} live={canWrite} savedStyle={custom} organization={preview} />
+      <Preview environment={environment!} draft={draft} live={canWrite} organization={preview} />
     </div>
     {saveError && <ErrorState error={saveError} />}
     {custom && canWrite && <Button variant="outline" onClick={() => setReset(true)}><Trash2 className="size-4" /> {t('Remove organization branding')}</Button>}

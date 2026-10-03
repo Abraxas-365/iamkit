@@ -184,8 +184,33 @@ func TestSignupJourney(t *testing.T) {
 		t.Fatal("pending account not created")
 	}
 
+	// The console previews show what the pages offer: the environment's
+	// "Create account" link, hidden for a client that hides it (saved and
+	// draft previews alike, whatever methods the preview picks).
+	preview := e.Base + "/login-settings/preview"
+	previewed := func(method, client string) string {
+		if method == "GET" {
+			return e.Must("GET", preview+"?client="+client, e.Owner, nil, 200).JSON["html"].(string)
+		}
+		body := fiber.Map{"settings": fiber.Map{}, "sign_in": fiber.Map{"password": true}}
+		if client != "" {
+			body["client_id"] = client
+		}
+		return e.Must("POST", preview, e.Owner, body, 200).JSON["html"].(string)
+	}
+	for _, method := range []string{"GET", "POST"} {
+		if !strings.Contains(previewed(method, ""), "/hosted/signup") {
+			t.Fatalf("%s preview: no sign-up link with sign-up on", method)
+		}
+	}
+
 	// The client can hide it; turning sign-up off hides it everywhere.
 	e.Must("PUT", e.Base+"/login-settings/clients/"+client+"/sign-in", e.Owner, fiber.Map{"password": true, "email_code": true, "organization_sso": true, "all_connections": true, "signup": false}, 200)
+	for _, method := range []string{"GET", "POST"} {
+		if strings.Contains(previewed(method, client), "/hosted/signup") || !strings.Contains(previewed(method, ""), "/hosted/signup") {
+			t.Fatalf("%s preview: the client's hidden link", method)
+		}
+	}
 	b = e.browser()
 	login = b.authorize(client)
 	if strings.Contains(login.Body, "/hosted/signup") {
@@ -199,6 +224,9 @@ func TestSignupJourney(t *testing.T) {
 	b = e.browser()
 	if login = b.authorize(client); strings.Contains(login.Body, "/hosted/signup") {
 		t.Fatal("link shown with sign-up off")
+	}
+	if strings.Contains(previewed("GET", ""), "/hosted/signup") {
+		t.Fatal("preview: sign-up link with sign-up off")
 	}
 	if r = signup("off@example.com", "Off", "a long enough password"); codeOf(r) != "SIGNUP_DISABLED" {
 		t.Fatalf("off again: %d %s", r.Status, r.Body)

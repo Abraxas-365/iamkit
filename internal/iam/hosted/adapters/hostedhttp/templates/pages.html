@@ -7,14 +7,14 @@
 <button type="submit">{{.T "hosted.form.continue"}}</button>
 </form>
 {{end}}
-{{if and .SignIn.EmailForm (or .SignIn.Passkey .Connections)}}<div class="divider"{{if not .Connections}} data-webauthn-reveal hidden{{end}}>{{.T "hosted.form.or"}}</div>{{end}}
+{{if and .SignIn.EmailForm (or .SignIn.Passkey .Connections)}}<div class="divider"{{if not (or .Connections .Preview)}} data-webauthn-reveal hidden{{end}}>{{.T "hosted.form.or"}}</div>{{end}}
 {{if .SignIn.Passkey}}
 <div class="error" id="webauthn-error" role="alert" hidden></div>
 <form method="post" action="/hosted/login/passkey" id="passkey-form">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <input type="hidden" name="webauthn_session" value="">
 <input type="hidden" name="credential" value="">
-<button type="button" class="secondary" data-webauthn="/hosted/login/passkey/options" data-form="passkey-form" data-autofill data-failed="{{.T "hosted.error.webauthn"}}" hidden>{{.T "hosted.form.passkey"}}</button>
+<button type="button" class="secondary" data-webauthn="/hosted/login/passkey/options" data-form="passkey-form" data-autofill data-failed="{{.T "hosted.error.webauthn"}}"{{if not .Preview}} hidden{{end}}>{{.T "hosted.form.passkey"}}</button>
 </form>
 {{end}}
 {{if .Connections}}
