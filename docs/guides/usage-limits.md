@@ -13,7 +13,7 @@ limits, nothing changes: every limit is unlimited by default.
 | `organizations_max` | Organizations that exist | 422 `QUOTA_EXCEEDED` |
 | `applications_max` | Applications that exist | 422 `QUOTA_EXCEEDED` |
 | `requests_per_minute` | `/api/v1` requests to the environment, per minute | 429 `QUOTA_EXCEEDED` |
-| `emails_per_day` | Emails sent, per UTC day (codes, invitations, verification) | 429 `QUOTA_EXCEEDED` |
+| `emails_per_day` | Emails sent, per UTC day (codes, invitations, verification) | 429 `QUOTA_EXCEEDED` on code requests (`POST /identity/v1/challenges`, sign-up, email factor codes) for any address; invitations are still created with `delivery: failed` |
 | `sms_per_day` | SMS sent, per UTC day | 429 `QUOTA_EXCEEDED` |
 | `action_calls_per_minute` | [Action](actions.md) target calls, per minute | The call is skipped like an open breaker (`action.failed`, outcome `skipped`); the flow fails only for `interrupt_on_error` targets |
 

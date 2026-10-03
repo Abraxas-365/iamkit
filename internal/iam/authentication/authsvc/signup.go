@@ -111,6 +111,9 @@ func (s *Service) Signup(ctx context.Context, input authentication.Signup) (iden
 	if required {
 		return identity.ChallengeID{}, errSSORequired()
 	}
+	if err = s.emailAdmitted(ctx, input.Environment); err != nil {
+		return identity.ChallengeID{}, err
+	}
 	id := identity.NewChallengeID()
 	exists, err := tx.AccountExists(ctx, input.Environment, email)
 	if err != nil || exists {

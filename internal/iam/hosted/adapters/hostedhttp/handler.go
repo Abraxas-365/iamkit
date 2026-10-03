@@ -320,6 +320,9 @@ var (
 		"SIGNUP_DISABLED":             "hosted.error.signup_disabled",
 		"TERMS_REQUIRED":              "hosted.error.terms_required",
 		"SIGNED_UP_NO_ACCESS":         "hosted.error.signed_up_no_access",
+		// A usage limit of the environment (users, emails, SMS): the
+		// operator's message names the limit, which end users cannot act on.
+		"QUOTA_EXCEEDED": "hosted.error.generic",
 	}
 	problemMessages = map[string]string{
 		"invalid credentials or access token":      "hosted.error.credentials",

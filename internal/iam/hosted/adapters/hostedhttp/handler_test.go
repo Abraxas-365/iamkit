@@ -14,6 +14,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
@@ -413,6 +414,7 @@ func TestFailedMessages(t *testing.T) {
 		{"last wrong code says why the login restarts", hosted.ErrAttemptsUsed(), 401, "Too many wrong codes. Sign in again."},
 		{"password length names its bounds", authentication.PasswordRejected(authentication.RuleLength, 14), 400, "The password must be 14 to 72 characters long."},
 		{"a method the policy refuses is translated", authentication.ErrMethodNotAllowed(), 403, "This sign-in method is not available"},
+		{"a usage limit stays generic", usage.ErrExceeded(usage.Limit{Name: usage.LimitEmails, Kind: usage.KindDaily}, 0), 429, "Something went wrong"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

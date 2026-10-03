@@ -105,6 +105,21 @@ func TestUsageLimits(t *testing.T) {
 	e.Must("PUT", limits, e.Owner, fiber.Map{}, 200)
 	e.Must("GET", api+"/usage", token, nil, 200)
 	e.Must("GET", api+"/usage", e.scopedToken("iam:users:read"), nil, 403)
+
+	// emails_per_day reached: a code request answers 429 instead of a 202
+	// for an email that never leaves, for any address.
+	e.Must("PUT", limits, e.Owner, fiber.Map{"emails_per_day": 0}, 200)
+	sent := len(e.Mail.Sent)
+	for _, email := range []string{e.AliceEmail, "nobody@example.com"} {
+		if r := e.Do("POST", "/identity/v1/challenges", "", fiber.Map{"environment_id": e.EnvID, "email": email, "purpose": "login"}); r.Status != 429 || !quota(r.JSON) {
+			t.Fatalf("challenge over emails_per_day (%s) = %d %s", email, r.Status, r.Body)
+		}
+	}
+	if len(e.Mail.Sent) != sent {
+		t.Fatalf("emailed over the limit: %v", e.Mail.Sent[sent:])
+	}
+	e.Must("PUT", limits, e.Owner, fiber.Map{}, 200)
+	e.Must("POST", "/identity/v1/challenges", "", fiber.Map{"environment_id": e.EnvID, "email": e.AliceEmail, "purpose": "login"}, 202)
 }
 
 // quota reports a QUOTA_EXCEEDED error body.

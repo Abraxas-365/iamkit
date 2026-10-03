@@ -12,6 +12,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
@@ -33,8 +34,20 @@ type Service struct {
 // SetActions runs the environment's sign-in and signup hooks.
 func (s *Service) SetActions(actions authentication.Actions) { s.actions = actions }
 
-// SetUsage enforces the users limit on signups.
+// SetUsage enforces the users limit on signups and emails_per_day on code
+// requests.
 func (s *Service) SetUsage(u authentication.Usage) { s.usage = u }
+
+// emailAdmitted refuses a code email once the environment reached its
+// emails_per_day limit (429 QUOTA_EXCEEDED). Code delivery failures are
+// otherwise silent, so the caller would wait for a code that never comes;
+// the refusal depends only on the environment and reveals no account.
+func (s *Service) emailAdmitted(ctx context.Context, environment identity.EnvironmentID) error {
+	if s.usage == nil {
+		return nil
+	}
+	return s.usage.Admit(ctx, environment, usage.LimitEmails)
+}
 
 func New(repository authentication.Repository, passwords authentication.Passwords, secrets authentication.Secrets, delivery authentication.Delivery) *Service {
 	return &Service{repository: repository, passwords: passwords, secrets: secrets, delivery: delivery}
@@ -415,6 +428,9 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 		if err = s.environmentAllows(ctx, environment, authentication.MethodCode); err != nil {
 			return identity.ChallengeID{}, err
 		}
+	}
+	if err = s.emailAdmitted(ctx, environment); err != nil {
+		return identity.ChallengeID{}, err
 	}
 	id := identity.NewChallengeID()
 	tx, err := s.repository.Begin(ctx)
