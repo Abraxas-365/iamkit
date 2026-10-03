@@ -111,6 +111,9 @@ func TestOrganizationAdministration(t *testing.T) {
 	e.Must("PATCH", admin+"/users/"+both, malloryToken, fiber.Map{"name": "x"}, 403)
 	e.Must("PATCH", admin+"/users/"+gus, malloryToken, fiber.Map{"name": "x"}, 404)
 	e.Must("GET", admin+"/users/"+gus, malloryToken, nil, 404)
+	// Another organization's member, or the zero id (no filter), has no roles here.
+	e.Must("GET", admin+"/members/"+gus+"/roles", malloryToken, nil, 404)
+	e.Must("GET", admin+"/members/00000000-0000-0000-0000-000000000000/roles", malloryToken, nil, 404)
 	e.Must("POST", admin+"/users/"+olga+"/deactivate", malloryToken, nil, 204)
 	e.Must("POST", admin+"/users/"+olga+"/reactivate", malloryToken, nil, 204)
 

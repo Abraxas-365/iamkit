@@ -266,6 +266,10 @@ func (s *Service) RoleAssignments(ctx context.Context, p orgadmin.Principal, u i
 	if err := p.Require(authorization.PermOrgRolesRead); err != nil {
 		return query.Paginated[authorization.RoleAssignmentView]{}, err
 	}
+	// A zero user would be no filter at all; a non-member is not found.
+	if err := s.member(ctx, p, u); err != nil {
+		return query.Paginated[authorization.RoleAssignmentView]{}, err
+	}
 	return s.d.GrantViews.RoleAssignments(ctx, p.Environment, authorization.RoleAssignmentFilter{OrganizationID: p.Organization, UserID: u}, page)
 }
 
