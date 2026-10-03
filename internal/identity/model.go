@@ -239,12 +239,17 @@ func ParseTTL(raw *string) (time.Duration, error) {
 // ValidateRedirects checks browser redirect targets (OAuth redirect and
 // post-logout URIs, application redirects): absolute https URLs, or http
 // on a loopback host (localhost, 127.0.0.1, [::1]) for development and
-// native apps (RFC 8252 §7.3), without credentials or fragments.
+// native apps (RFC 8252 §7.3), without credentials or fragments. They are
+// matched exactly, so a wildcard host is refused rather than stored as a
+// URI no browser could ever return to.
 func ValidateRedirects(values []string) error {
 	for _, v := range values {
 		u, err := url.Parse(v)
 		if err != nil || (u.Scheme != "https" && !LoopbackHTTP(u)) || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 			return errx.Validation("redirect URIs must be absolute HTTPS URLs (http only for localhost, 127.0.0.1 or [::1]) without credentials or fragments")
+		}
+		if strings.Contains(u.Host, "*") {
+			return errx.Validation("redirect URIs are matched exactly; wildcards are not supported, register each URI")
 		}
 	}
 	return nil
@@ -258,6 +263,9 @@ func ValidateHTTPS(values []string) error {
 		u, err := url.Parse(v)
 		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
 			return errx.Validation("URLs must be absolute HTTPS URLs without credentials or fragments")
+		}
+		if strings.Contains(u.Host, "*") {
+			return errx.Validation("URLs are matched exactly; wildcards are not supported")
 		}
 	}
 	return nil
