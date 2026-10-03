@@ -88,7 +88,9 @@ environment's policy — it can only **add** requirements for its members:
 Lockout stays environment-wide. A member's effective policy is the environment
 policy tightened by every organization they are an active member of, so a
 member of two organizations meets both. It applies to password resets,
-expired-password replacement and invitation acceptance into the organization;
+expired-password replacement, invitation acceptance into the organization and
+users created with it as their `home_organization_id` (by operators or the
+organization's [administrators](organization-administration.md));
 users outside it keep the environment policy.
 
 Existing passwords are not re-checked when requirements change; a shorter

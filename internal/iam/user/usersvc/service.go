@@ -59,7 +59,7 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	input.Username, _ = identity.Username(input.Username)
 	var hash string
 	if input.Password != "" {
-		if err = s.checkPassword(ctx, environment, input.Password); err != nil {
+		if err = s.checkPassword(ctx, environment, input.HomeOrganization, input.Password); err != nil {
 			return identity.UserID{}, err
 		}
 		hash, err = s.passwords.Hash(input.Password)
@@ -71,7 +71,12 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	return s.repository.Create(ctx, environment, input, hash)
 }
 
-func (s *Service) checkPassword(ctx context.Context, environment identity.EnvironmentID, password string) error {
+// checkPassword applies the environment's policy, tightened by the home
+// organization's requirements: creating the user makes it a member there.
+func (s *Service) checkPassword(ctx context.Context, environment identity.EnvironmentID, home identity.OrganizationID, password string) error {
+	if s.policy != nil && !home.IsZero() {
+		return s.policy.CheckMemberPassword(ctx, environment, home, password)
+	}
 	if s.policy != nil {
 		return s.policy.CheckPassword(ctx, environment, password)
 	}

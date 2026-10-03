@@ -175,6 +175,17 @@ func TestOrganizationPasswordPolicy(t *testing.T) {
 	}
 	e.Must("POST", "/identity/v1/invitations/accept", "", fiber.Map{"token": inv, "password": "invited & sixteen chars"}, 200)
 
+	// A user created homed in Acme (operators or Acme's admins) joins it:
+	// Acme's rules apply; without a home organization the environment's.
+	homed := func(email, password string) fiber.Map {
+		return fiber.Map{"email": email, "name": "Homed", "password": password, "home_organization_id": e.Org}
+	}
+	if r := e.Must("POST", e.Base+"/users", e.Owner, homed("dan@example.com", "twelve chars ok"), 400); ruleOf(r) != "length" {
+		t.Fatalf("homed user: %s", r.Body)
+	}
+	e.Must("POST", e.Base+"/users", e.Owner, homed("dan@example.com", "sixteen chars & symbol"), 201)
+	e.Must("POST", e.Base+"/users", e.Owner, fiber.Map{"email": "erin@example.com", "name": "Erin", "password": "twelve chars ok"}, 201)
+
 	// Delete: the member follows the environment again.
 	e.Must("DELETE", orgPolicy, e.Owner, nil, 204)
 	e.Must("DELETE", orgPolicy, e.Owner, nil, 404)

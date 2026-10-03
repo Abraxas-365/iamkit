@@ -203,6 +203,9 @@ type PasswordHasher interface {
 // (implemented by the authentication module).
 type PasswordPolicy interface {
 	CheckPassword(ctx context.Context, environment identity.EnvironmentID, password string) error
+	// CheckMemberPassword also applies the organization's requirements,
+	// for a user created as its member.
+	CheckMemberPassword(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, password string) error
 }
 
 // Actions runs the environment's request hooks (action.Runner):
