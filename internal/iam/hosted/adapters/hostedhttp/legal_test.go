@@ -129,6 +129,11 @@ func TestLegalLinks(t *testing.T) {
 	if html = string(out); !strings.Contains(html, `name="accept_terms" required`) || !strings.Contains(html, `Acepto los <a href="https://acme.example/terms"`) || !strings.Contains(html, `>Política de privacidad</a>`) {
 		t.Fatalf("terms checkbox\n%s", html)
 	}
+	// Its links wear the brand's link color, not the browser default
+	// (unreadable on a dark card).
+	if !strings.Contains(html, "label.check a{color:var(--link)}") {
+		t.Fatal("terms checkbox links unstyled")
+	}
 	v.SignIn.Terms = false
 	out, _ = document("signup", &v)
 	if strings.Contains(string(out), "accept_terms") {
