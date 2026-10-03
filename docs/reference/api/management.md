@@ -14,17 +14,25 @@ workspace. Owner/admin can mutate environment data; viewer cannot.
 
 | Method/path | Request | Success |
 | --- | --- | --- |
-| `POST /login` | `email`, `password`, optional `new_password`; console header, no existing credential | 200 principal + operator cookie. 403 `PASSWORD_CHANGE_REQUIRED` (only after the password matched) when the password was set for the operator (bootstrap); resend with `new_password` to replace it and sign in |
+| `POST /login` | `email`, `password`, optional `new_password`; console header, no existing credential | 200 principal + operator cookie. 403 `PASSWORD_CHANGE_REQUIRED` (only after the password matched) when the password was set for the operator (bootstrap); resend with `new_password` to replace it and sign in. 403 `PASSWORD_LOGIN_DISABLED` or `SSO_REQUIRED` under [operator single sign-on](../configuration.md#operator-single-sign-on) |
+| `GET /login-options` | Unauthenticated | 200 `{password, password_mode, providers:[{id,name,type}]}`: what the console login page offers |
+| `GET /sso/:provider/start` | Browser navigation | 302 to the provider; sets a binding cookie |
+| `GET /sso/callback` | Provider redirect | 303 to `/` with the operator cookie, or to `/login?sso_error=expired\|not_authorized\|provider_unavailable\|cancelled\|failed` |
 | `GET /me` | Authenticated | 200 `{operator_id,workspace_id,role,method,authenticated_at}`; `method` is `password`, `sso` or `key` |
 | `GET /password` | Authenticated | 200 `{set,usable,fresh,mode}`: has a password; may use one here; may set one without `current_password` |
 | `POST /password` | `password` (12–72 bytes), `current_password` | 204; updates own operator password. Proof: `current_password`, or a management key, or (no password set, or a single sign-on session) a sign-in within 5 minutes; else 403 `REAUTHENTICATION_REQUIRED`. Ends the operator's other console sessions; the calling one stays |
 | `DELETE /sessions/current` | Authenticated | 204; invalidates/clears operator cookie |
+| `GET /preferences` | Authenticated | 200 `{locale}`: the caller's console language, `null` follows the browser |
+| `PUT /preferences` | `locale`: `en`, `es` or `null` | 200 the saved preferences |
 | `POST /keys` | Optional `expires_in` | 201 credential result; capture secret once |
 | `GET /keys` | Authenticated | 200 array |
 | `DELETE /keys/:id` | Key UUID | 204 |
 | `POST /operators` | `email`, `role`, optional `expires_in` | 201 delegated credential |
 | `GET /operators` | Authenticated | 200 array |
 | `DELETE /operators/:id` | Operator UUID | 204 |
+| `PUT /operators/:id/password-access` | `allowed` (boolean); owner | 204; grants or removes emergency password access (`break_glass` mode) |
+| `GET /operators/:id/identities` | Owner, or the operator themself | 200 `{items:[{provider,issuer,email,created_at,last_login_at}]}`: linked single sign-on identities |
+| `DELETE /operators/:id/identities` | Owner | 204; unlinks them, the next SSO sign-in links again by email |
 | `POST /projects` | `name` | 201 `{id}` |
 | `GET /projects` | Authenticated | 200 array |
 | `POST /projects/:project/environments` | `name` | 201 `{id}` |

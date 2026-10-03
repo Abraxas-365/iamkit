@@ -27,6 +27,8 @@ containers after changes. Keep secrets outside source control and frontend build
 | `IAMKIT_BOOTSTRAP_EMAIL` | Unset: no automatic bootstrap | First-boot owner email; automatic bootstrap logs a one-time key |
 | `IAMKIT_BOOTSTRAP_WORKSPACE` | `Default` | First-boot workspace name |
 | `IAMKIT_BOOTSTRAP_PASSWORD` | Optional | Sets a temporary password only when bootstrap creates the owner: the first console sign-in must replace it. Not a reset mechanism; remove it after bootstrap (a warning is logged while it stays set) |
+| `IAMKIT_OPERATOR_SSO_PROVIDERS` | Unset: operators sign in with a password only | Comma-separated IDs of the identity providers operators sign in to the console with; each is configured by `IAMKIT_OPERATOR_SSO_<ID>_*`. See [operator single sign-on](#operator-single-sign-on) |
+| `IAMKIT_OPERATOR_PASSWORD_LOGIN` | `enabled` without SSO, `break_glass` with SSO | Console password sign-in: `enabled`, `break_glass` (only operators an owner granted emergency access) or `disabled` (`true`/`false` mean enabled/disabled). Restricting it needs an SSO provider; an invalid value stops start-up |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` and other standard `OTEL_*` | Unset: no traces or metrics exported | OpenTelemetry export over OTLP/HTTP; see [observability](../operations/observability.md#tracing-and-metrics) |
 | `IAMKIT_EVENT_RETENTION` | `2160h` (90 days) | How long the [event log](events.md) keeps events (Go duration, at least `1h`); older ones are pruned hourly |
 | `IAMKIT_WORKERS` | `true` | `false` turns off background jobs (back-channel logout delivery, event pruning) on this replica; keep them on in at least one. See [background jobs](../operations/observability.md#background-jobs) |
@@ -123,6 +125,58 @@ dropping the old key (TOTP secrets cannot be re-sealed: keep the old key
 while they are in use); the steps per secret are in
 [secrets and keys](../operations/secrets-and-keys.md#encryption-key-rotation). Stored values carry
 the ID of their key, so old and new values coexist during rotation.
+
+## Operator single sign-on
+
+Operators (the console's users, not your applications' users) can sign in
+with your organization's identity provider instead of a password. Register
+an OIDC web application at the provider with the redirect URI
+`<JWT_ISSUER>/management/v1/sso/callback`, then list it:
+
+```dotenv
+IAMKIT_OPERATOR_SSO_PROVIDERS=corp
+IAMKIT_OPERATOR_SSO_CORP_TYPE=oidc
+IAMKIT_OPERATOR_SSO_CORP_NAME=Acme SSO
+IAMKIT_OPERATOR_SSO_CORP_ISSUER=https://idp.example.com
+IAMKIT_OPERATOR_SSO_CORP_CLIENT_ID=REGISTERED_CLIENT_ID
+IAMKIT_OPERATOR_SSO_CORP_CLIENT_SECRET_FILE=/run/secrets/operator_sso_corp
+IAMKIT_OPERATOR_SSO_CORP_ALLOWED_DOMAINS=example.com
+```
+
+| `IAMKIT_OPERATOR_SSO_<ID>_…` | Meaning |
+| --- | --- |
+| `TYPE` | `oidc`, `google` or `microsoft`; may be left out when the ID is one of these. GitHub and Apple are refused (personal accounts outlive offboarding) |
+| `NAME` | Button label, at most 100 characters; defaults to Google, Microsoft or the capitalized ID |
+| `ISSUER` | `oidc` only: HTTPS issuer URL without credentials, query or fragment. Google and Microsoft set it themselves |
+| `CLIENT_ID` | Required |
+| `CLIENT_SECRET` or `CLIENT_SECRET_FILE` | Exactly one is required |
+| `ALLOWED_DOMAINS` | Required, 1–100 comma-separated domains. Checked on every sign-in: the identity's email must be in one of them (Google: the Workspace `hd` claim too) |
+| `TENANT` | `microsoft` only, required: a tenant ID, or `organizations` together with `TENANTS`. `common` and `consumers` are refused |
+| `TENANTS` | `microsoft` with `TENANT=organizations` only: 1–100 tenant IDs |
+
+`<ID>` is 1–32 lowercase letters, digits or dashes, written upper-case with
+`_` for `-` in the variable names (`my-idp` → `IAMKIT_OPERATOR_SSO_MY_IDP_*`).
+All settings are checked at start-up and a mistake stops it; the providers
+themselves are only contacted at the first sign-in. Variables with the prefix
+that match no listed provider are logged as ignored.
+
+There is no just-in-time creation: invite the operator first
+(`POST /management/v1/operators`). The first SSO sign-in links the identity
+to the active operator with that email, if the provider says the email is
+verified (an `oidc` or single-tenant Microsoft directory that sends no
+`email_verified` is trusted within the allowed domains); later sign-ins match
+the linked identity. An owner resets a link with
+`DELETE /management/v1/operators/:id/identities` (for example after the
+operator's account moved to another tenant).
+
+With a provider configured, password sign-in defaults to `break_glass`:
+only operators an owner granted emergency access
+(`PUT /management/v1/operators/:id/password-access`) can still use their
+password (others get 403 `SSO_REQUIRED`, only after their password matched). Set `IAMKIT_OPERATOR_PASSWORD_LOGIN=enabled` to keep passwords for
+everyone, or `disabled` to refuse them (403 `PASSWORD_LOGIN_DISABLED`).
+Failed sign-ins land on the console's `/login?sso_error=` with `expired`,
+`not_authorized`, `provider_unavailable`, `cancelled` or `failed`; the
+reason is in the server log.
 
 ## Compose-only variables
 
