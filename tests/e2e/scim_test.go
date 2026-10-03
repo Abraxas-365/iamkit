@@ -321,6 +321,22 @@ func TestSCIMProtocol(t *testing.T) {
 		t.Errorf("count=0: %v", page)
 	}
 
+	// attributes / excludedAttributes (RFC 7644 §3.4.2.5) on GET and list.
+	one := s.must("GET", "/Users/"+ids[0]+"?excludedAttributes=displayName,EMAILS", "", 200).JSON
+	if _, ok := one["displayName"]; ok || one["emails"] != nil || one["userName"] != "a@example.com" || one["id"] != ids[0] {
+		t.Errorf("excludedAttributes: %v", one)
+	}
+	one = s.must("GET", "/Users/"+ids[0]+"?attributes=urn:ietf:params:scim:schemas:core:2.0:User:externalId,emails.value", "", 200).JSON
+	if len(one) != 4 || one["externalId"] != "ext-a" || one["id"] != ids[0] || one["schemas"] == nil {
+		t.Errorf("attributes: %v", one)
+	} else if emails := one["emails"].([]any); len(emails) != 1 || len(emails[0].(map[string]any)) != 1 {
+		t.Errorf("attributes sub-attribute: %v", one["emails"])
+	}
+	listed := s.must("GET", "/Users?attributes=userName&count=1", "", 200).JSON["Resources"].([]any)[0].(map[string]any)
+	if len(listed) != 3 || listed["userName"] == nil {
+		t.Errorf("list attributes: %v", listed)
+	}
+
 	// totalResults agrees with rows when an operator removes the membership.
 	e.Must("DELETE", e.Base+"/organizations/"+e.Org+"/members/"+ids[2], e.Owner, nil, 204)
 	if page = s.must("GET", "/Users", "", 200).JSON; page["totalResults"].(float64) != float64(len(page["Resources"].([]any))) {

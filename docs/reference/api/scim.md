@@ -101,7 +101,7 @@ unique per connection (case-insensitive, 409 `uniqueness`). `members[].value`
 must be the id of a live user this connection provisioned (400 `invalidValue`).
 Deprovisioning a user (`DELETE /Users/:id`) removes it from every group.
 `excludedAttributes=members`, or an `attributes` list without `members`, omits
-members from GET and list responses.
+members from GET and list responses (members are then not even read).
 
 ```json
 {"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"Engineering","externalId":"grp-eng","members":[{"value":"SCIM_USER_UUID"}]}
@@ -144,6 +144,17 @@ single `ATTRIBUTE eq "VALUE"` with case-insensitive attribute and operator, for
 (case-exact) and `id`. Other expressions
 return 400 `invalidFilter`. URL-encode filters. Results use
 `Resources,totalResults,startIndex,itemsPerPage,schemas`, not `items/page`.
+
+## Attribute selection
+
+`GET /Users`, `GET /Users/:id`, `GET /Groups` and `GET /Groups/:id` honour
+`attributes` and `excludedAttributes` (comma-separated, RFC 7644 §3.4.2.5):
+paths are case-insensitive, may carry the core schema URN prefix, may name the
+enterprise extension or one of its attributes
+(`urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager`), and may
+name one sub-attribute (`name.formatted`, `emails.value`). `id` and `schemas`
+are always returned; when both parameters are given, `attributes` wins.
+POST, PUT and PATCH responses always return the full resource.
 
 ## Errors
 

@@ -189,6 +189,11 @@ func principal(c *fiber.Ctx) provisioning.Principal {
 func send(c *fiber.Ctx, status int, v any) error {
 	return c.Status(status).JSON(v, scimContentType)
 }
+
+// projected honours ?attributes= / ?excludedAttributes= on a returned resource.
+func projected(c *fiber.Ctx, core string, resource any) any {
+	return project(c.Query("attributes"), c.Query("excludedAttributes"), core, resource)
+}
 func parse(c *fiber.Ctx, v any) error {
 	if err := json.Unmarshal(c.Body(), v); err != nil {
 		return scimError("invalid request body", scimInvalidSyntax)
@@ -303,7 +308,7 @@ func (h *Handler) get(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return send(c, 200, dto(c, u))
+	return send(c, 200, projected(c, scimUserSchema, dto(c, u)))
 }
 func (h *Handler) list(c *fiber.Ctx) error {
 	f := provisioning.Filter{Start: c.QueryInt("startIndex", 1), Count: c.QueryInt("count", provisioning.MaxResults)}.Clamped()
@@ -318,9 +323,9 @@ func (h *Handler) list(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	resources := make([]scimUser, 0, len(rows))
+	resources := make([]any, 0, len(rows))
 	for _, u := range rows {
-		resources = append(resources, dto(c, u))
+		resources = append(resources, projected(c, scimUserSchema, dto(c, u)))
 	}
 	return send(c, 200, fiber.Map{"schemas": []string{scimListSchema}, "totalResults": total, "startIndex": f.Start, "itemsPerPage": len(resources), "Resources": resources})
 }

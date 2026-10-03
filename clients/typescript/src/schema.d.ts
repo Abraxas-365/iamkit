@@ -30858,7 +30858,9 @@ export interface operations {
     getScimUsers: {
         parameters: {
             query?: {
+                attributes?: string;
                 count?: number;
+                excludedAttributes?: string;
                 filter?: string;
                 startIndex?: number;
             };
@@ -30901,7 +30903,10 @@ export interface operations {
     };
     getScimUsersbyId: {
         parameters: {
-            query?: never;
+            query?: {
+                attributes?: string;
+                excludedAttributes?: string;
+            };
             header?: never;
             path: {
                 id: string;

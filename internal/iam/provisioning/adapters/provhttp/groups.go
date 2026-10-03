@@ -136,9 +136,9 @@ func (h *Groups) list(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	resources := make([]scimGroup, 0, len(out.Items))
+	resources := make([]any, 0, len(out.Items))
 	for _, g := range out.Items {
-		resources = append(resources, groupDTO(c, g))
+		resources = append(resources, projected(c, scimGroupSchema, groupDTO(c, g)))
 	}
 	return send(c, 200, fiber.Map{"schemas": []string{scimListSchema}, "totalResults": out.Page.Total, "startIndex": f.Start, "itemsPerPage": len(resources), "Resources": resources})
 }
@@ -152,7 +152,7 @@ func (h *Groups) get(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	return send(c, 200, groupDTO(c, g))
+	return send(c, 200, projected(c, scimGroupSchema, groupDTO(c, g)))
 }
 
 // groupInput is the inbound resource for POST and PUT.
