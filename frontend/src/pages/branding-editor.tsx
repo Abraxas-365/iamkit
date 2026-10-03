@@ -184,7 +184,7 @@ export default function BrandingEditorPage() {
     {clientId && saved && canWrite && <div className="flex justify-start">
       <Button variant="outline" onClick={() => setReset(true)}><Trash2 className="size-4" /> {t('Reset to default style')}</Button>
     </div>}
-    {canWrite && dirty && <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur md:left-(--sidebar-width)">
+    {canWrite && dirty && <div data-save-bar className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur md:left-(--sidebar-width)">
       <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-4 px-6 py-3">
         <span className="text-sm text-muted-foreground">{saved ? t('Unsaved changes') : t('New client style (not saved)')}</span>
         <div className="flex gap-2">

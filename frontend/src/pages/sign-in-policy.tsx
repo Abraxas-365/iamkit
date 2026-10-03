@@ -163,7 +163,7 @@ export default function SignInPolicyPage() {
         </div>}
       </SettingsSection>
 
-      {canWrite && changed && <div className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur md:left-(--sidebar-width)">
+      {canWrite && changed && <div data-save-bar className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur md:left-(--sidebar-width)">
         <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-3 px-6 py-3">
           <span className="text-sm text-muted-foreground">{saveError ? <span role="alert" className="text-destructive">{saveError}</span> : t('Unsaved changes')}</span>
           <div className="flex gap-2">

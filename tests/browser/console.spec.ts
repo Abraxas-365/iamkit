@@ -95,6 +95,31 @@ test("features: an environment override is saved and reset", async ({ page }) =>
   await expect(page.getByRole("switch", { name: "saml_idp" })).toHaveCount(0);
 });
 
+test("sign-in methods: the save bar never covers a switch", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 760 });
+  await page.goto(environmentURL(f, "sign-in-policy"));
+  await expect(page.getByRole("heading", { name: "Sign-in methods", level: 1 })).toBeVisible();
+  await ready(page);
+  const terms = page.getByRole("switch", { name: "Require accepting the terms" });
+  const was = await terms.isChecked();
+  await page.getByRole("switch", { name: "Passkeys", exact: true }).click();
+  const bar = page.getByText("Unsaved changes");
+  await expect(bar).toBeVisible();
+  const barTop = (await page.locator("[data-save-bar]").boundingBox())!.y;
+  // Every switch, reached by keyboard focus, sits above the bar.
+  for (const s of await page.getByRole("switch").all()) {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await s.focus();
+    const box = (await s.boundingBox())!;
+    expect(box.y + box.height, await s.getAttribute("aria-describedby") ?? "switch").toBeLessThanOrEqual(barTop);
+  }
+  // A click lands on the switch, not on Save.
+  await terms.click();
+  await expect(terms).toBeChecked({ checked: !was });
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await expect(bar).toHaveCount(0);
+});
+
 test("usage and limits: a users cap is enforced, then lifted", async ({ page, request }) => {
   await page.goto(environmentURL(f, "usage"));
   await expect(page.getByRole("heading", { name: "Usage and limits" })).toBeVisible();

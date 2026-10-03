@@ -138,6 +138,10 @@
   html {
     @apply font-sans;
   }
+  /* A fixed save bar must not hide the control that has focus (WCAG 2.4.11). */
+  html:has([data-save-bar]) {
+    scroll-padding-bottom: 5rem;
+  }
 }
 
 @layer utilities {
