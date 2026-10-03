@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -19,6 +21,8 @@ func usersCmd() *cobra.Command {
 	cmd.AddCommand(usersUpdateCmd())
 	cmd.AddCommand(usersSuspendCmd())
 	cmd.AddCommand(usersUnlockCmd())
+	cmd.AddCommand(usersRevokeSessionsCmd())
+	cmd.AddCommand(usersRequirePasswordChangeCmd())
 	cmd.AddCommand(usersStateCmd("deactivate", "Suspend a user (audited; ends their sessions)", "User deactivated: "))
 	cmd.AddCommand(usersStateCmd("reactivate", "Lift a user's suspension", "User reactivated: "))
 	cmd.AddCommand(metadataCmd("users", "user"))
@@ -53,6 +57,45 @@ func usersUnlockCmd() *cobra.Command {
 				return err
 			}
 			newPrinter().ok("User unlocked: " + args[0])
+			return nil
+		},
+	}
+}
+
+func usersRevokeSessionsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "revoke-sessions USER_ID",
+		Short: "Sign a user out everywhere (ends every live session)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c := mustClient(cmd)
+			raw, err := c.post(envPath()+"/users/"+args[0]+"/revoke-sessions", nil)
+			if err != nil {
+				return err
+			}
+			var out struct {
+				Revoked int `json:"revoked"`
+			}
+			if err := json.Unmarshal(raw, &out); err != nil {
+				return err
+			}
+			newPrinter().ok(fmt.Sprintf("Sessions revoked: %d", out.Revoked))
+			return nil
+		},
+	}
+}
+
+func usersRequirePasswordChangeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "require-password-change USER_ID",
+		Short: "Make a user's next password sign-in choose a new password",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c := mustClient(cmd)
+			if _, err := c.post(envPath()+"/users/"+args[0]+"/require-password-change", nil); err != nil {
+				return err
+			}
+			newPrinter().ok("Password change required: " + args[0])
 			return nil
 		},
 	}

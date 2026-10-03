@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from '../lib/auth'
@@ -25,6 +25,7 @@ beforeEach(() => {
       factors = { factors: [], recovery_codes_remaining: 0 }
       return new Response(null, { status: 204 })
     }
+    if (init.method === 'POST' && path === `${env}/users/u1/revoke-sessions`) return Response.json({ revoked: 2 })
     if (init.method && init.method !== 'GET') return new Response(null, { status: 204 })
     if (orgFails && path === `${env}/organizations/org1`) return Response.json({ error: { message: 'unavailable' } }, { status: 500 })
     const page = (items: unknown[]) => ({ items, page: { total: items.length, limit: 50, offset: 0 } })
@@ -58,6 +59,16 @@ it('shows a user\'s second factors and resets them', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Reset' }))
   await waitFor(() => expect(calls('DELETE').some(c => c.url.endsWith('/users/u1/factors'))).toBe(true))
   await screen.findByText('No second factor enrolled.')
+})
+
+it('signs a user out everywhere and requires a password change', async () => {
+  open('users/u1')
+  await userEvent.click(await screen.findByRole('button', { name: 'Sign out everywhere' }))
+  await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sign out everywhere' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await userEvent.click(screen.getByRole('button', { name: 'Require change' }))
+  await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Require change' }))
+  await waitFor(() => expect(calls('POST').map(c => c.url)).toEqual([`/management/v1${env}/users/u1/revoke-sessions`, `/management/v1${env}/users/u1/require-password-change`]))
 })
 
 it('labels security keys and passkeys by name', async () => {

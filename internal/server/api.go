@@ -45,6 +45,8 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	users.Post("/:id/deactivate", s.APIHandlers.Users.Suspend)
 	users.Post("/:id/reactivate", s.APIHandlers.Users.Reactivate)
 	users.Post("/:id/unlock", s.APIHandlers.Users.Unlock)
+	users.Post("/:id/revoke-sessions", s.APIHandlers.Users.RevokeSessions)
+	users.Post("/:id/require-password-change", s.APIHandlers.Users.RequirePasswordChange)
 	users.Get("/:id/metadata/:key", s.APIHandlers.Users.Metadata)
 	users.Put("/:id/metadata/:key", s.APIHandlers.Users.SetMetadata)
 	users.Delete("/:id/metadata/:key", s.APIHandlers.Users.DeleteMetadata)

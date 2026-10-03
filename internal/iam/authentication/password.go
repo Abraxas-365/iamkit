@@ -161,6 +161,14 @@ type PasswordAccount struct {
 	Failures    int             `db:"failed_logins"`
 	LockedUntil *time.Time      `db:"locked_until"`
 	Changed     time.Time       `db:"password_changed_at"`
+	// ChangeRequired is set by an operator (user.password_change_required).
+	ChangeRequired bool `db:"password_change_required"`
+}
+
+// MustChange reports whether the next sign-in must choose a new password:
+// an operator required it or the policy expired it.
+func (a PasswordAccount) MustChange(policy PasswordPolicy, now time.Time) bool {
+	return a.ChangeRequired || policy.Expired(a.Changed, now)
 }
 
 // Locked reports whether wrong passwords locked the account at now.

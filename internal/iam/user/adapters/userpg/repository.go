@@ -144,7 +144,7 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.UserID) (user.User, error) {
 	var row user.User
-	err := r.db.GetContext(ctx, &row, `SELECT u.id,u.kind,coalesce(u.email,'') AS email,u.name,coalesce(u.username,'') AS username,u.home_organization_id,u.avatar_url,u.active,u.email_verified,u.otp_enabled,u.phone,u.phone_verified,u.metadata,u.profile,u.failed_logins,CASE WHEN u.locked_until>now() THEN u.locked_until END AS locked_until,`+stateSQL+` AS state,u.last_signed_in_at,u.terms_accepted_at FROM users u WHERE u.environment_id=$1 AND u.id=$2`, environment, id)
+	err := r.db.GetContext(ctx, &row, `SELECT u.id,u.kind,coalesce(u.email,'') AS email,u.name,coalesce(u.username,'') AS username,u.home_organization_id,u.avatar_url,u.active,u.email_verified,u.otp_enabled,u.phone,u.phone_verified,u.metadata,u.profile,u.failed_logins,CASE WHEN u.locked_until>now() THEN u.locked_until END AS locked_until,`+stateSQL+` AS state,u.last_signed_in_at,u.terms_accepted_at,u.password_change_required FROM users u WHERE u.environment_id=$1 AND u.id=$2`, environment, id)
 	return row, failure(err, "find user")
 }
 
@@ -192,6 +192,53 @@ func (r *Repository) Unlock(ctx context.Context, m user.Mutation, id identity.Us
 		return failure(err, "audit user unlock")
 	}
 	return failure(tx.Commit(), "commit user unlock")
+}
+
+// RevokeSessions ends the user's live sessions (their children with them,
+// by trigger) and audits how many.
+func (r *Repository) RevokeSessions(ctx context.Context, m user.Mutation, id identity.UserID) (int, error) {
+	var count int
+	err := eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		var exists bool
+		if err := tx.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM users WHERE environment_id=$1 AND id=$2)`, m.Environment, id); err != nil {
+			return failure(err, "revoke sessions")
+		}
+		if !exists {
+			return errx.NotFound("resource not found")
+		}
+		res, err := tx.ExecContext(ctx, `UPDATE sessions SET revoked_at=now() WHERE environment_id=$1 AND user_id=$2 AND revoked_at IS NULL AND expires_at>now()`, m.Environment, id)
+		if err != nil {
+			return failure(err, "revoke sessions")
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return failure(err, "revoke sessions")
+		}
+		count = int(n)
+		return failure(eventpg.AuditWith(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, map[string]any{"count": count}), "audit revoked sessions")
+	})
+	return count, err
+}
+
+// RequirePasswordChange flags a user who has a password.
+func (r *Repository) RequirePasswordChange(ctx context.Context, m user.Mutation, id identity.UserID) error {
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		var hasPassword bool
+		err := tx.GetContext(ctx, &hasPassword, `SELECT password_hash<>'' FROM users WHERE environment_id=$1 AND id=$2 FOR UPDATE`, m.Environment, id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errx.NotFound("resource not found")
+		}
+		if err != nil {
+			return failure(err, "require password change")
+		}
+		if !hasPassword {
+			return errx.Business("the user has no password to change")
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE users SET password_change_required=true WHERE environment_id=$1 AND id=$2`, m.Environment, id); err != nil {
+			return failure(err, "require password change")
+		}
+		return audit(ctx, tx, m)
+	})
 }
 func (r *Repository) Update(ctx context.Context, m user.Mutation, id identity.UserID, input user.Update) error {
 	tx, err := r.db.BeginTxx(ctx, nil)

@@ -112,6 +112,8 @@ var actions = map[string]named{
 	"user.reactivated":                    {UserReactivated, "user"},
 	"user.locked":                         {UserLocked, "user"},
 	"user.unlocked":                       {UserUnlocked, "user"},
+	"user.sessions_revoked":               {UserSessionsRevoked, "user"},
+	"user.password_change_required":       {UserPasswordChangeRequired, "user"},
 	"user.profile_updated":                {UserProfileUpdated, "user"},
 	"user.metadata_set":                   {UserMetadataSet, "user"},
 	"user.metadata_deleted":               {UserMetadataDeleted, "user"},

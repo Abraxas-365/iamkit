@@ -2582,5 +2582,19 @@
   "User locked after failed sign-ins": "Usuario bloqueado tras inicios de sesión fallidos",
   "Webhook disabled after failing deliveries": "Webhook desactivado por entregas fallidas",
   "Filter by application": "Filtrar por aplicación",
-  "Filter by organization": "Filtrar por organización"
+  "Filter by organization": "Filtrar por organización",
+  "Every active session ends: refresh tokens stop working and they must sign in again. Access tokens already issued stay valid until they expire.": "Todas las sesiones activas terminan: los tokens de actualización dejan de funcionar y deberá iniciar sesión de nuevo. Los tokens de acceso ya emitidos siguen siendo válidos hasta que expiren.",
+  "Password change required": "Cambio de contraseña requerido",
+  "Require a password change for {{label}}?": "¿Exigir un cambio de contraseña a {{label}}?",
+  "Require change": "Exigir cambio",
+  "Require password change": "Exigir cambio de contraseña",
+  "Required a password change": "Exigió un cambio de contraseña",
+  "Sign out everywhere": "Cerrar sesión en todas partes",
+  "Sign {{user}} out everywhere?": "¿Cerrar todas las sesiones de {{user}}?",
+  "Signed a user out everywhere": "Cerró todas las sesiones de un usuario",
+  "Their next password sign-in asks for a new password before continuing.": "Su próximo inicio de sesión con contraseña le pedirá una nueva antes de continuar.",
+  "Their next password sign-in asks for a new password before continuing. To also end their current sessions, use Sign out everywhere.": "Su próximo inicio de sesión con contraseña le pedirá una nueva antes de continuar. Para terminar también sus sesiones actuales, use Cerrar sesión en todas partes.",
+  "Their next password sign-in must choose a new password. Existing sessions are not ended.": "Su próximo inicio de sesión con contraseña deberá elegir una nueva. Las sesiones existentes no terminan.",
+  "{{count}} sessions revoked_one": "{{count}} sesión revocada",
+  "{{count}} sessions revoked_other": "{{count}} sesiones revocadas"
 }

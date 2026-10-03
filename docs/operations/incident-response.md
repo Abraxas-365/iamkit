@@ -16,6 +16,22 @@ Signing-key compromise requires a coordinated trust-key change and cache handlin
 see [secrets](secrets-and-keys.md). Removing an external identity link alone is not
 proof every existing session has ended.
 
+## Suspicious end user
+
+1. Optionally [impersonate](../guides/impersonation.md) the user (with a reason)
+   to see what they see, then end the impersonation session.
+2. Sign the user out everywhere: `POST /users/:id/revoke-sessions` (**Sign out
+   everywhere** in the user's Recent sessions, `iam users revoke-sessions
+   USER_ID`, `RevokeUserSessions` in the SDK). Every live session ends — refresh
+   fails at once — and the answer `{"revoked": n}` is audited
+   `user.sessions_revoked` with `data.count`. Suspending the user also ends
+   sessions but blocks sign-in until reactivated.
+3. Reset second factors (`DELETE /users/:id/factors`) if a device may be lost or
+   cloned.
+4. Require a password change (`POST /users/:id/require-password-change`): the
+   next password sign-in must choose a new password.
+5. Export the evidence: `GET /events/export` (NDJSON, oldest first).
+
 ## Lost owner credential
 
 Requires trusted database/host access, not a public recovery endpoint. Recovery

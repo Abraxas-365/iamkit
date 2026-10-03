@@ -147,6 +147,20 @@ func (s *Service) Unlock(ctx context.Context, m user.Mutation, id identity.UserI
 	m.Action = user.ActionUnlocked
 	return s.repository.Unlock(ctx, m, id)
 }
+func (s *Service) RevokeSessions(ctx context.Context, m user.Mutation, id identity.UserID) (int, error) {
+	if id.IsZero() {
+		return 0, errx.NotFound("resource not found")
+	}
+	m.Action = user.ActionSessionsRevoked
+	return s.repository.RevokeSessions(ctx, m, id)
+}
+func (s *Service) RequirePasswordChange(ctx context.Context, m user.Mutation, id identity.UserID) error {
+	if id.IsZero() {
+		return errx.NotFound("resource not found")
+	}
+	m.Action = user.ActionPasswordChangeRequired
+	return s.repository.RequirePasswordChange(ctx, m, id)
+}
 
 func (s *Service) Metadata(ctx context.Context, environment identity.EnvironmentID, id identity.UserID, key string) (json.RawMessage, error) {
 	if err := identity.MetadataKey(key); err != nil {

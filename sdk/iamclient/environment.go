@@ -295,6 +295,22 @@ func (e Environment) UnlockUser(ctx context.Context, id string) error {
 	return e.operation(ctx, "POST", []string{"users", id, "unlock"}, nil, nil)
 }
 
+// RevokeUserSessions signs a user out everywhere: every live session ends
+// (audited user.sessions_revoked). It answers how many ended.
+func (e Environment) RevokeUserSessions(ctx context.Context, id string) (int, error) {
+	var out struct {
+		Revoked int `json:"revoked"`
+	}
+	err := e.operation(ctx, "POST", []string{"users", id, "revoke-sessions"}, nil, &out)
+	return out.Revoked, err
+}
+
+// RequirePasswordChange makes the user's next password sign-in choose a
+// new password (audited user.password_change_required).
+func (e Environment) RequirePasswordChange(ctx context.Context, id string) error {
+	return e.operation(ctx, "POST", []string{"users", id, "require-password-change"}, nil, nil)
+}
+
 // ── Machine users ──
 
 // CreateMachineUser creates a user of kind "machine": no email, password

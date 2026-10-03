@@ -34,6 +34,8 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Delete("/users/:id", h.Suspend)
 	r.Delete("/users/:id/permanent", h.Delete)
 	r.Post("/users/:id/unlock", h.Unlock)
+	r.Post("/users/:id/revoke-sessions", h.RevokeSessions)
+	r.Post("/users/:id/require-password-change", h.RequirePasswordChange)
 	r.Post("/users/:id/deactivate", h.Suspend)
 	r.Post("/users/:id/reactivate", h.Reactivate)
 	r.Get("/users/:id/metadata/:key", h.Metadata)
@@ -159,6 +161,40 @@ func (h *Handler) Unlock(c *fiber.Ctx) error {
 	}
 	m := user.Mutation{Environment: env(c), Actor: h.actor(c), Target: c.Path()}
 	if err := h.commands.Unlock(c.UserContext(), m, id); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
+}
+
+// SessionsRevoked answers how many sessions RevokeSessions ended.
+type SessionsRevoked struct {
+	Revoked int `json:"revoked"`
+}
+
+// RevokeSessions signs the user out everywhere: every live session ends
+// (refresh fails; JWT access tokens stay valid until they expire).
+func (h *Handler) RevokeSessions(c *fiber.Ctx) error {
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	m := user.Mutation{Environment: env(c), Actor: h.actor(c), Target: c.Path()}
+	n, err := h.commands.RevokeSessions(c.UserContext(), m, id)
+	if err != nil {
+		return err
+	}
+	return c.JSON(SessionsRevoked{Revoked: n})
+}
+
+// RequirePasswordChange makes the user's next password sign-in choose a
+// new password.
+func (h *Handler) RequirePasswordChange(c *fiber.Ctx) error {
+	id, err := identity.ParseUserID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("resource not found")
+	}
+	m := user.Mutation{Environment: env(c), Actor: h.actor(c), Target: c.Path()}
+	if err := h.commands.RequirePasswordChange(c.UserContext(), m, id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

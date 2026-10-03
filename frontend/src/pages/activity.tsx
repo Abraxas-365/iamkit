@@ -52,6 +52,7 @@ const named: Record<string, string> = {
   impersonate: t('Impersonated a user'),
   'user.signup': t('User signed up'), 'user.deactivated': t('Deactivated a user'), 'user.reactivated': t('Reactivated user'),
   'user.locked': t('User locked after failed sign-ins'), 'user.unlocked': t('Unlocked a user'),
+  'user.sessions_revoked': t('Signed a user out everywhere'), 'user.password_change_required': t('Required a password change'),
   'user.profile_updated': t('Updated a user profile'), 'user.metadata_set': t('Set user metadata'), 'user.metadata_deleted': t('Removed user metadata'),
   'user.phone_verified': t('Phone number verified'), 'user.phone_verified_set': t('Changed whether a phone number is verified'), 'user.phone_removed': t('Phone number removed'),
   'user.access_token_created': t('Created a personal access token'), 'user.access_token_revoked': t('Revoked a personal access token'),

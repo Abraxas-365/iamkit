@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Ban, Bot, Building2, Home, KeyRound, LockOpen, Pencil, Plus, RotateCcw, ShieldCheck, Smartphone, Trash2, UserX } from 'lucide-react'
+import { Ban, Bot, Building2, Home, KeyRound, LockOpen, LogOut, Pencil, Plus, RotateCcw, ShieldCheck, Smartphone, Trash2, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -20,7 +20,7 @@ import { UserKeys } from './machine-keys'
 import { HistorySection } from './history'
 import { rich, t } from '@/lib/i18n'
 
-interface User { id: string; kind?: string; name: string; email: string; username?: string; avatar_url?: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; profile?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null; state?: string; last_signed_in_at?: string | null; terms_accepted_at?: string | null; home_organization_id?: string | null }
+interface User { id: string; kind?: string; name: string; email: string; username?: string; avatar_url?: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; profile?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null; state?: string; last_signed_in_at?: string | null; terms_accepted_at?: string | null; home_organization_id?: string | null; password_change_required?: boolean }
 interface Org { id: string; name: string; active: boolean; membership_active?: boolean }
 interface Factor { id: string; kind: string; name?: string; passkey?: boolean; phone?: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
@@ -44,6 +44,7 @@ export default function UserDetailPage() {
   const [suspend, setSuspend] = useState(false)
   const [purge, setPurge] = useState(false)
   const [unlock, setUnlock] = useState(false)
+  const [requireChange, setRequireChange] = useState(false)
   const load = useCallback(() => { setError(''); api.get<User>(path).then(setUser).catch(e => setError(message(e))) }, [path])
   useEffect(load, [load])
 
@@ -67,6 +68,9 @@ export default function UserDetailPage() {
     {user.locked_until && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 p-4 text-sm">
       <div><p className="font-medium">{t('Locked after {{failed_logins}} wrong passwords', { failed_logins: user.failed_logins })}</p><p className="text-muted-foreground">{rich('Password sign-in is refused until {{time}}. A password reset also unlocks the account.', { time: <Time value={user.locked_until} /> })}</p></div>
       {canWrite && <Button variant="outline" onClick={() => setUnlock(true)}><LockOpen /> {t('Unlock')}</Button>}
+    </div>}
+    {user.password_change_required && <div role="status" className="rounded-lg border p-4 text-sm">
+      <p className="font-medium">{t('Password change required')}</p><p className="text-muted-foreground">{t('Their next password sign-in asks for a new password before continuing.')}</p>
     </div>}
 
     <DetailSection title={t('Profile')} actions={canWrite && <Button variant="outline" size="sm" onClick={() => setEditing(true)}><Pencil /> {t('Edit')}</Button>}>
@@ -100,6 +104,10 @@ export default function UserDetailPage() {
 
     {canWrite && <DetailSection danger title={t('Danger zone')}>
       <div className="space-y-4">
+        {!machine && !user.password_change_required && <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+          <div className="text-sm"><p className="font-medium">{t('Require password change')}</p><p className="text-muted-foreground">{t('Their next password sign-in must choose a new password. Existing sessions are not ended.')}</p></div>
+          <Button variant="outline" onClick={() => setRequireChange(true)}><KeyRound /> {t('Require change')}</Button>
+        </div>}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm"><p className="font-medium">{user.active ? t('Suspend user') : t('Reactivate user')}</p><p className="text-muted-foreground">{user.active ? t('Blocks sign-in everywhere and stops their sessions from refreshing. Nothing is deleted.') : t('Lets the user sign in again with their existing access.')}</p></div>
           <Button variant="outline" onClick={() => setSuspend(true)}>{user.active ? <><UserX /> {t('Suspend')}</> : <><RotateCcw /> {t('Reactivate')}</>}</Button>
@@ -131,6 +139,7 @@ export default function UserDetailPage() {
     {suspend && (user.active
       ? <ConfirmDialog title={t('Suspend {{label}}?', { label })} description={t('They can no longer sign in and their sessions stop refreshing. You can reactivate them later.')} confirmLabel={t('Suspend')} onClose={() => setSuspend(false)} confirm={async () => { await api.post(`${path}/deactivate`); toast.success(t('User suspended')); load() }} />
       : <ConfirmDialog title={t('Reactivate {{label}}?', { label })} description={t('They can sign in again with their existing memberships and roles.')} confirmLabel={t('Reactivate')} onClose={() => setSuspend(false)} confirm={async () => { await api.post(`${path}/reactivate`); toast.success(t('User reactivated')); load() }} />)}
+    {requireChange && <ConfirmDialog title={t('Require a password change for {{label}}?', { label })} description={t('Their next password sign-in asks for a new password before continuing. To also end their current sessions, use Sign out everywhere.')} confirmLabel={t('Require change')} onClose={() => setRequireChange(false)} confirm={async () => { await api.post(`${path}/require-password-change`); toast.success(t('Password change required')); load() }} />}
     {unlock && <ConfirmDialog title={t('Unlock {{label}}?', { label })} description={t('Clears the wrong-password count so they can sign in with their password again.')} confirmLabel={t('Unlock')} onClose={() => setUnlock(false)} confirm={async () => { await api.post(`${path}/unlock`); toast.success(t('User unlocked')); load() }} />}
     {purge && <ConfirmDialog title={t('Permanently delete user?')} description={t('This erases {{label}} and every session, membership, grant, role assignment, and linked identity for them in this environment. This cannot be undone.', { label })} confirmLabel={t('Delete permanently')} confirmationText={label} onClose={() => setPurge(false)} confirm={async () => { await api.delete(`${path}/permanent`); toast.success(t('User deleted')); navigate(`${console}/users`) }} />}
   </div>
@@ -243,8 +252,12 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
   const params = useMemo(() => ({ user_id: user.id }), [user.id])
   const list = usePaginatedList<Session>(`${base}/sessions`, { extraParams: params, limit: 20 })
   const [revoke, setRevoke] = useState<Session | null>(null)
+  const [revokeAll, setRevokeAll] = useState(false)
   const state = (s: Session) => s.revoked_at ? [t('Revoked'), 'bg-destructive/10 text-destructive'] : Date.parse(s.expires_at) <= Date.now() ? [t('Expired'), 'bg-muted text-muted-foreground'] : [t('Active'), 'bg-success/10 text-success']
-  return <DetailSection title={t('Recent sessions')} description={t('Sign-ins to your applications, newest first.')} actions={<Link to={`${console}/sessions`} className="text-sm text-primary hover:underline">{t('All sessions')}</Link>}>
+  return <DetailSection title={t('Recent sessions')} description={t('Sign-ins to your applications, newest first.')} actions={<div className="flex items-center gap-3">
+    {canWrite && <Button variant="outline" size="sm" onClick={() => setRevokeAll(true)}><LogOut /> {t('Sign out everywhere')}</Button>}
+    <Link to={`${console}/sessions`} className="text-sm text-primary hover:underline">{t('All sessions')}</Link>
+  </div>}>
     <DataTable
       columns={[t('Application'), { header: t('Organization'), hideBelow: 'md' }, { header: t('Signed in'), nowrap: true }, { header: t('Expires'), nowrap: true }, t('Status'), ...(canWrite ? [t('Actions')] : [])]}
       loading={list.loading} error={list.error} retry={list.reload}
@@ -260,6 +273,7 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
           ...(canWrite ? [!s.revoked_at && <RowActions label={t('Actions for session in {{application_name}}', { application_name: s.application_name })} actions={[{ label: t('Revoke session'), icon: <Ban />, destructive: true, onSelect: () => setRevoke(s) }]} />] : []),
         ]
       })} />
+    {revokeAll && <ConfirmDialog title={t('Sign {{user}} out everywhere?', { user: user.email || user.name })} description={t('Every active session ends: refresh tokens stop working and they must sign in again. Access tokens already issued stay valid until they expire.')} confirmLabel={t('Sign out everywhere')} onClose={() => setRevokeAll(false)} confirm={async () => { const out = await api.post<{ revoked: number }>(`${base}/users/${user.id}/revoke-sessions`); toast.success(t('{{count}} sessions revoked', { count: out.revoked })); list.reload() }} />}
     {revoke && <ConfirmDialog title={t('Revoke this session?')} description={t('{{user}} is signed out of {{application}} and must sign in again.', { user: user.email, application: revoke.application_name || t('the application') })} confirmLabel={t('Revoke session')} onClose={() => setRevoke(null)} confirm={async () => { await api.delete(`${base}/sessions/${revoke.id}`); toast.success(t('Session revoked')); list.reload() }} />}
   </DetailSection>
 }

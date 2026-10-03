@@ -60,7 +60,7 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 		return authentication.Verified{}, err
 	}
 	return authentication.Verified{User: account.ID, Email: account.Email, Method: authentication.MethodPassword,
-		PasswordExpired: policy.Expired(account.Changed, time.Now())}, nil
+		PasswordExpired: account.MustChange(policy, time.Now())}, nil
 }
 
 // ChangePassword replaces the expired password of a verified login. The

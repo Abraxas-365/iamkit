@@ -6,18 +6,24 @@ package event
 // read the current state through the API. New types may appear in any
 // release; consumers must ignore types they do not know.
 const (
-	UserCreated         = "user.created"
-	UserUpdated         = "user.updated"
-	UserDeactivated     = "user.deactivated"
-	UserReactivated     = "user.reactivated"
-	UserDeleted         = "user.deleted"
-	UserLocked          = "user.locked"
-	UserUnlocked        = "user.unlocked"
-	UserSignedUp        = "user.signed_up"
-	UserProfileUpdated  = "user.profile_updated"
-	UserProfileSynced   = "user.profile_synced"
-	UserMetadataSet     = "user.metadata_set"
-	UserMetadataDeleted = "user.metadata_deleted"
+	UserCreated     = "user.created"
+	UserUpdated     = "user.updated"
+	UserDeactivated = "user.deactivated"
+	UserReactivated = "user.reactivated"
+	UserDeleted     = "user.deleted"
+	UserLocked      = "user.locked"
+	UserUnlocked    = "user.unlocked"
+	// UserSessionsRevoked: an operator signed the user out everywhere
+	// (data.count sessions ended).
+	UserSessionsRevoked = "user.sessions_revoked"
+	// UserPasswordChangeRequired: the next password sign-in must choose a
+	// new password.
+	UserPasswordChangeRequired = "user.password_change_required"
+	UserSignedUp               = "user.signed_up"
+	UserProfileUpdated         = "user.profile_updated"
+	UserProfileSynced          = "user.profile_synced"
+	UserMetadataSet            = "user.metadata_set"
+	UserMetadataDeleted        = "user.metadata_deleted"
 	// UserProvisioned: a SCIM directory took over an existing user
 	// (data.mode: claimed, reactivated, adopted); UserDeprovisioned: SCIM
 	// DELETE removed the user from the directory's organization.

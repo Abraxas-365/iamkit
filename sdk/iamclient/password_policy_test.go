@@ -47,6 +47,9 @@ func TestPasswordPolicyEndpoints(t *testing.T) {
 	if err := env.UnlockUser(ctx, "u1"); err != nil {
 		t.Fatal(err)
 	}
+	if err := env.RequirePasswordChange(ctx, "u1"); err != nil {
+		t.Fatal(err)
+	}
 	_, err = env.CreateUser(ctx, CreateUser{Email: "a@b.com", Password: "no digits here"})
 	var apiErr *apierror.Error
 	if !errors.As(err, &apiErr) || apiErr.Code != apierror.CodePasswordPolicy || apiErr.Rule() != apierror.RuleDigit || apiErr.Details["min_length"] != float64(12) {
@@ -54,7 +57,7 @@ func TestPasswordPolicyEndpoints(t *testing.T) {
 	}
 
 	base := "/management/v1/environments/env-1/"
-	expected := []string{"GET " + base + "password-policy", "PUT " + base + "password-policy", "DELETE " + base + "password-policy", "POST " + base + "users/u1/unlock", "POST " + base + "users"}
+	expected := []string{"GET " + base + "password-policy", "PUT " + base + "password-policy", "DELETE " + base + "password-policy", "POST " + base + "users/u1/unlock", "POST " + base + "users/u1/require-password-change", "POST " + base + "users"}
 	if strings.Join(calls, "\n") != strings.Join(expected, "\n") {
 		t.Fatalf("calls:\n%s", strings.Join(calls, "\n"))
 	}

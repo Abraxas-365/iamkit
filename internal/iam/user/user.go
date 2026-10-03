@@ -45,6 +45,9 @@ type User struct {
 	// TermsAcceptedAt is when the user accepted the terms at sign-up (nil
 	// when sign-up did not require it, or the user did not sign up).
 	TermsAcceptedAt *time.Time `json:"terms_accepted_at,omitempty" db:"terms_accepted_at"`
+	// PasswordChangeRequired is set by an operator: the next password
+	// sign-in must choose a new password.
+	PasswordChangeRequired bool `json:"password_change_required" db:"password_change_required"`
 }
 
 // State summarizes whether and why a user can sign in. It is computed
@@ -101,6 +104,11 @@ const (
 	ActionUnlocked    = "user.unlocked"
 	ActionDeactivated = "user.deactivated"
 	ActionReactivated = "user.reactivated"
+	// ActionSessionsRevoked ends every live session of the user.
+	ActionSessionsRevoked = "user.sessions_revoked"
+	// ActionPasswordChangeRequired makes the next password sign-in choose
+	// a new password.
+	ActionPasswordChangeRequired = "user.password_change_required"
 )
 
 type Create struct {

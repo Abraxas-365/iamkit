@@ -70,7 +70,7 @@ func (t *Transaction) Rollback() error { return t.tx.Rollback() }
 // at most one of the two columns.
 func (t *Transaction) PasswordUser(ctx context.Context, b authentication.Context, login string) (authentication.PasswordAccount, error) {
 	var row authentication.PasswordAccount
-	err := t.tx.GetContext(ctx, &row, `SELECT id,email,password_hash,failed_logins,locked_until,password_changed_at FROM users WHERE environment_id=$1 AND (email=$2 OR username=$2) AND active AND kind='human' FOR UPDATE`, b.EnvironmentID, login)
+	err := t.tx.GetContext(ctx, &row, `SELECT id,email,password_hash,failed_logins,locked_until,password_changed_at,password_change_required FROM users WHERE environment_id=$1 AND (email=$2 OR username=$2) AND active AND kind='human' FOR UPDATE`, b.EnvironmentID, login)
 	return row, credentialError(err)
 }
 func (t *Transaction) ActiveEmail(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (string, error) {
@@ -97,7 +97,7 @@ func (t *Transaction) SetLoginFailures(ctx context.Context, user identity.UserID
 		map[string]any{"method": "password", "failures": failures, "locked": lockedUntil != nil})
 }
 func (t *Transaction) SetPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, hash string) error {
-	_, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,password_changed_at=now(),failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash)
+	_, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,password_changed_at=now(),password_change_required=false,failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash)
 	return failure(err)
 }
 func (t *Transaction) Audit(ctx context.Context, m authentication.Mutation) error {
@@ -240,7 +240,7 @@ func (t *Transaction) CompleteChallenge(ctx context.Context, id identity.Challen
 	if purpose == "password_reset" {
 		// A reset proves the mailbox: it also lifts a lockout and restarts
 		// the password's age.
-		if _, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,email_verified=true,password_changed_at=now(),failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash); err != nil {
+		if _, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$3,email_verified=true,password_changed_at=now(),password_change_required=false,failed_logins=0,locked_until=NULL WHERE id=$1 AND environment_id=$2`, user, environment, hash); err != nil {
 			return failure(err)
 		}
 	} else {

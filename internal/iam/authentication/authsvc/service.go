@@ -111,7 +111,7 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, lo
 		return out, err
 	}
 	var hash string
-	if policy.Expired(account.Changed, time.Now()) {
+	if account.MustChange(policy, time.Now()) {
 		if newPassword == "" {
 			return out, commitThen(tx, authentication.ErrPasswordChangeRequired())
 		}

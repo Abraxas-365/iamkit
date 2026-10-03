@@ -72,6 +72,19 @@ With `max_age_days` set, a correct but expired password is not enough:
 Email-code sign-ins are not subject to expiry, and a password reset restarts the
 clock.
 
+### Requiring a change for one user
+
+An operator can make one user's next password sign-in behave as expired, with or
+without `max_age_days`: `POST /users/:id/require-password-change` (management,
+or the scoped API with `iam:users:write`; audited
+`user.password_change_required`), **Require password change** in the danger
+zone of the user's console page, `iam users require-password-change USER_ID` or
+`RequirePasswordChange` in the SDK. The user shows `password_change_required:
+true` until a new password is set (sign-in change or password reset). Users
+without a password (email code, SSO, SCIM, machine users) answer 422. The flag
+does not end existing sessions: for a suspected compromise also sign the user
+out everywhere (see [incident response](../operations/incident-response.md)).
+
 ## Organization requirements
 
 Users belong to the environment, not to one organization: one account, one

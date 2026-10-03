@@ -20,6 +20,13 @@ type Commands interface {
 	Delete(ctx context.Context, m Mutation, user identity.UserID) error
 	// Unlock clears the user's wrong-password count and lockout.
 	Unlock(ctx context.Context, m Mutation, user identity.UserID) error
+	// RevokeSessions ends every live session of the user (audited
+	// user.sessions_revoked, data.count) and returns how many ended.
+	RevokeSessions(ctx context.Context, m Mutation, user identity.UserID) (int, error)
+	// RequirePasswordChange makes the user's next password sign-in choose a
+	// new password (audited user.password_change_required); users without
+	// a password are refused.
+	RequirePasswordChange(ctx context.Context, m Mutation, user identity.UserID) error
 	// SetMetadata sets one metadata key (audited user.metadata_set).
 	SetMetadata(ctx context.Context, m Mutation, user identity.UserID, key string, value json.RawMessage) error
 	// DeleteMetadata removes one key (audited user.metadata_deleted);
@@ -171,6 +178,8 @@ type Repository interface {
 	SetActive(ctx context.Context, m Mutation, user identity.UserID, active bool) error
 	Delete(ctx context.Context, m Mutation, user identity.UserID) error
 	Unlock(ctx context.Context, m Mutation, user identity.UserID) error
+	RevokeSessions(ctx context.Context, m Mutation, user identity.UserID) (int, error)
+	RequirePasswordChange(ctx context.Context, m Mutation, user identity.UserID) error
 	// EditMetadata runs edit on the user's metadata under a row lock and
 	// stores its result with an audit of m.Action; edit may return an
 	// error to abort.
