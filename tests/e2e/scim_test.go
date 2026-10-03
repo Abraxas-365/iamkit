@@ -234,6 +234,11 @@ func TestSCIMEntraCycle(t *testing.T) {
 	if got := s.must("GET", "/Users/"+id, "", 200).JSON; got["active"] != false {
 		t.Errorf("deactivate: %v", got["active"])
 	}
+	// Operators see the inactive membership on the user's organizations.
+	orgs := e.Must("GET", e.Base+"/organizations?user_id="+id, e.Owner, nil, 200).JSON["items"].([]any)
+	if len(orgs) != 1 || orgs[0].(map[string]any)["membership_active"] != false || orgs[0].(map[string]any)["active"] != true {
+		t.Errorf("organizations of the deactivated user = %v", orgs)
+	}
 	s.must("DELETE", "/Users/"+id, "", 204)
 }
 
@@ -253,6 +258,19 @@ func TestSCIMOktaCycle(t *testing.T) {
 	}
 	s.must("PATCH", "/Users/"+id, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":false}}]}`, 200)
 	s.must("PATCH", "/Users/"+id, `{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[{"op":"replace","value":{"active":true,"name":{"givenName":"Okta2","familyName":"User"}}}]}`, 200)
+	// The membership changes are events with data.changes, actor directory
+	// (webhook consumers and the user's history see the deactivation).
+	changed := e.Must("GET", e.Base+"/events?type=membership.updated&subject="+id, e.Owner, nil, 200).JSON["items"].([]any)
+	if len(changed) != 2 {
+		t.Fatalf("membership.updated events = %v", changed)
+	}
+	reactivated, deactivated := changed[0].(map[string]any), changed[1].(map[string]any)
+	if fmt.Sprint(deactivated["data"].(map[string]any)["changes"]) != "map[active:[true false]]" || deactivated["actor"].(map[string]any)["kind"] != "directory" || deactivated["organization_id"] != e.Org {
+		t.Fatalf("deactivation event = %v", deactivated)
+	}
+	if fmt.Sprint(reactivated["data"].(map[string]any)["changes"]) != "map[active:[false true]]" {
+		t.Fatalf("reactivation event = %v", reactivated)
+	}
 
 	put := s.must("PUT", "/Users/"+id, `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"id":"`+id+`","userName":"okta.user@example.com",
 		"name":{"givenName":"Renamed","familyName":"Person"},"emails":[{"primary":true,"value":"okta.user@example.com","type":"work"}],"active":true,"groups":[]}`, 200)

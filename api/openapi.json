@@ -7404,6 +7404,12 @@
             "description": "UUID (empty when unset)",
             "type": "string"
           },
+          "membership_active": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "name": {
             "type": "string"
           }

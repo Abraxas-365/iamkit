@@ -49,7 +49,7 @@ export function HistorySection({ path, refresh }: { path: string; refresh?: unkn
     return () => controller.abort()
   }, [path, before, version, refresh])
   const page = state.page
-  return <DetailSection title={t('History')} description={t('Every recorded change and sign-in event, newest first. Secrets and password hashes are never recorded.')}
+  return <DetailSection title={t('History')} description={t('Every recorded change, newest first. Secrets and password hashes are never recorded.')}
     actions={<div className="flex gap-2">
       <Button variant="outline" size="icon" className="size-7" disabled={cursors.length === 1} onClick={() => setCursors(c => c.slice(0, -1))} aria-label={t('Newer history')}><ChevronLeft className="size-4" /></Button>
       <Button variant="outline" size="icon" className="size-7" disabled={!page?.next} onClick={() => page && setCursors(c => [...c, page.next])} aria-label={t('Older history')}><ChevronRight className="size-4" /></Button>

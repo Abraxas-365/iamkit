@@ -23,7 +23,9 @@ Directory notes:
 - UPN/email renames update the user's login email and keep the same identity,
   unless the user is shared with another organization or directory.
 - Unassigning a user (Entra "soft delete" `active=false`) deactivates the
-  membership; a hard DELETE deprovisions it, removes its access in the
+  membership: the user's sessions in the organization end at once, and a
+  `membership.updated` event with `data.changes.active: [true, false]` (actor
+  `directory`) reaches webhooks and the user's history. A hard DELETE deprovisions it, removes its access in the
   organization and returns 404 until reassigned.
 
 Create a test user through SCIM with a stable `externalId`. Read it back, change

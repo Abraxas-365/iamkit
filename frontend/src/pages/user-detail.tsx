@@ -21,7 +21,7 @@ import { HistorySection } from './history'
 import { rich, t } from '@/lib/i18n'
 
 interface User { id: string; kind?: string; name: string; email: string; username?: string; avatar_url?: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; profile?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null; state?: string; last_signed_in_at?: string | null; terms_accepted_at?: string | null; home_organization_id?: string | null }
-interface Org { id: string; name: string; active: boolean }
+interface Org { id: string; name: string; active: boolean; membership_active?: boolean }
 interface Factor { id: string; kind: string; name?: string; passkey?: boolean; phone?: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
 interface Session { id: string; organization_name: string; application_id: string; application_name: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null }
@@ -154,7 +154,7 @@ function Organizations({ base, console, user, canWrite, reload }: { base: string
       loading={orgs.loading} error={orgs.error} retry={orgs.reload}
       empty={<EmptyState icon={<Building2 />} title={t('Not a member of any organization')} description={t('Users need a membership to sign in to an organization.')} action={add} />}
       rows={orgs.data.map(o => [
-        <span className="flex flex-wrap items-center gap-2"><EntityRef name={o.name} id={o.id} to={`${console}/organizations/${o.id}/members`} secondary={!o.active ? t('Organization inactive') : undefined} />{user.home_organization_id === o.id && <Badge variant="secondary" title={t('Its administrators may edit this user')}>{t('Home')}</Badge>}</span>,
+        <span className="flex flex-wrap items-center gap-2"><EntityRef name={o.name} id={o.id} to={`${console}/organizations/${o.id}/members`} secondary={!o.active ? t('Organization inactive') : o.membership_active === false ? t('Membership inactive: cannot sign in here') : undefined} />{user.home_organization_id === o.id && <Badge variant="secondary" title={t('Its administrators may edit this user')}>{t('Home')}</Badge>}</span>,
         roles.loading ? <span className="text-sm text-muted-foreground">{t('Loading…')}</span>
           : roles.error ? <span className="text-sm text-muted-foreground">{t('Unavailable')}</span>
             : <OrgRoles console={console} org={o} roles={byOrg(o.id)} onRemove={canWrite ? role => setUnassigning({ role, org: o }) : undefined} />,

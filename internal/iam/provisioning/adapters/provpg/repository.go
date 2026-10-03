@@ -346,14 +346,34 @@ func (r *Repository) Update(ctx context.Context, p provisioning.Principal, id id
 	if _, err = tx.ExecContext(ctx, `UPDATE provisioned_identities SET updated_at=now(),version=version+1 WHERE connection_id=$1 AND user_id=$2`, p.Connection, id); err != nil {
 		return out, failure(err)
 	}
-	if err = scimEvent(ctx, tx, p, event.UserUpdated, id, nil); err != nil {
-		return out, err
-	}
 	out, err = find(ctx, tx, p, id)
 	if err != nil {
 		return out, err
 	}
+	// Membership fields are not change-tracked by trigger: name them here,
+	// so a deactivation is visible to webhook consumers and in history.
+	if changes := membershipChanges(old, out); len(changes) > 0 {
+		if err = scimEvent(ctx, tx, p, event.MembershipUpdated, id, map[string]any{"changes": changes}); err != nil {
+			return out, err
+		}
+	}
+	if err = scimEvent(ctx, tx, p, event.UserUpdated, id, nil); err != nil {
+		return out, err
+	}
 	return out, failure(tx.Commit())
+}
+
+// membershipChanges lists the membership-scoped fields a SCIM update
+// changed, as {field: [old, new]}.
+func membershipChanges(old, updated provisioning.User) map[string]any {
+	changes := map[string]any{}
+	if old.Active != updated.Active {
+		changes["active"] = []any{old.Active, updated.Active}
+	}
+	if old.Name != updated.Name {
+		changes["display_name"] = []any{old.Name, updated.Name}
+	}
+	return changes
 }
 
 // scimEvent records a directory change of user; the actor is the SCIM

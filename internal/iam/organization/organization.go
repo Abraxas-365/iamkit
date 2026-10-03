@@ -34,6 +34,10 @@ type Summary struct {
 	ID     identity.OrganizationID `json:"id" db:"id"`
 	Name   string                  `json:"name" db:"name"`
 	Active bool                    `json:"active" db:"active"`
+	// MembershipActive is the filtered user's membership state (set only
+	// when the list is filtered by user): a directory or an operator may
+	// deactivate one membership while the user stays active.
+	MembershipActive *bool `json:"membership_active,omitempty" db:"membership_active"`
 }
 
 // Filter narrows the organization list; zero fields match everything.

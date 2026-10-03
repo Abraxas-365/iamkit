@@ -292,6 +292,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** ListGrants lists direct permission grants, or returns one grant by id. */
         get: operations["getApiEnvironmentsbyEnvironmentGrants"];
         put: operations["putApiEnvironmentsbyEnvironmentGrants"];
         post?: never;
@@ -308,6 +309,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** ListGrants lists direct permission grants, or returns one grant by id. */
         get: operations["getApiEnvironmentsbyEnvironmentGrantsbyId"];
         put?: never;
         post?: never;
@@ -1401,6 +1403,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** ListRoles lists roles, or returns one role by id. */
         get: operations["getApiEnvironmentsbyEnvironmentRoles"];
         put?: never;
         post: operations["postApiEnvironmentsbyEnvironmentRoles"];
@@ -1417,6 +1420,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** ListRoles lists roles, or returns one role by id. */
         get: operations["getApiEnvironmentsbyEnvironmentRolesbyId"];
         put: operations["putApiEnvironmentsbyEnvironmentRolesbyId"];
         post?: never;
@@ -3236,6 +3240,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** ListGrants lists direct permission grants, or returns one grant by id. */
         get: operations["getManagementEnvironmentsbyEnvironmentGrants"];
         put: operations["putManagementEnvironmentsbyEnvironmentGrants"];
         post?: never;
@@ -3252,6 +3257,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** ListGrants lists direct permission grants, or returns one grant by id. */
         get: operations["getManagementEnvironmentsbyEnvironmentGrantsbyId"];
         put?: never;
         post?: never;
@@ -4363,6 +4369,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** ListRoles lists roles, or returns one role by id. */
         get: operations["getManagementEnvironmentsbyEnvironmentRoles"];
         put?: never;
         post: operations["postManagementEnvironmentsbyEnvironmentRoles"];
@@ -4379,6 +4386,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** ListRoles lists roles, or returns one role by id. */
         get: operations["getManagementEnvironmentsbyEnvironmentRolesbyId"];
         put: operations["putManagementEnvironmentsbyEnvironmentRolesbyId"];
         post?: never;
@@ -7568,6 +7576,7 @@ export interface components {
             active: boolean;
             /** @description UUID (empty when unset) */
             id: string;
+            membership_active?: boolean | null;
             name: string;
         };
         Target: {
