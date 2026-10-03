@@ -303,6 +303,7 @@ var (
 		hosted.CodeNoAccess:           "hosted.error.no_access",
 		"FACTOR_NOT_ALLOWED":          "hosted.error.factor_not_allowed",
 		"LOGIN_EXPIRED":               "hosted.error.login_expired",
+		hosted.CodeAttemptsUsed:       "hosted.error.attempts_used",
 		"SIGN_IN_METHOD_UNAVAILABLE":  "hosted.error.method_unavailable",
 		"METHOD_NOT_ALLOWED":          "hosted.error.method_unavailable",
 		"INVALID_CODE":                "hosted.error.mfa_code",
@@ -595,8 +596,7 @@ func (h *Handler) secondFactor(c *fiber.Ctx) error {
 	}
 	result, err := h.flow.SecondFactor(c.UserContext(), r, proof)
 	if err != nil {
-		var e *errx.Error
-		if enrolling && !(errx.As(err, &e) && e.Code == "LOGIN_EXPIRED") {
+		if enrolling && !hosted.Restart(err) {
 			return h.enrollPage(c, r, v, err)
 		}
 		v.Title, v.Subtitle = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa")
@@ -665,8 +665,7 @@ func (h *Handler) sendFactorCode(c *fiber.Ctx) error {
 	}
 	result, err := h.flow.SendFactorCode(c.UserContext(), r, c.FormValue("factor"))
 	if err != nil {
-		var e *errx.Error
-		if c.FormValue("enrolling") == "true" && !(errx.As(err, &e) && e.Code == "LOGIN_EXPIRED") {
+		if c.FormValue("enrolling") == "true" && !hosted.Restart(err) {
 			return h.enrollPage(c, r, v, err)
 		}
 		v.Title, v.Subtitle = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa")
@@ -772,9 +771,9 @@ func (h *Handler) retry(c *fiber.Ctx, v view, page string, err error) error {
 	if errx.As(err, &e) && e.Code == "SSO_REQUIRED" {
 		page, text = "identify", v.T("hosted.error.sso_required")
 	}
-	if errx.As(err, &e) && e.Code == "LOGIN_EXPIRED" {
+	if hosted.Restart(err) {
 		// The parked login is gone (expired or out of attempts): start over.
-		page, v.Title = "identify", v.T("hosted.title.sign_in")
+		page, v.Title, v.Subtitle = "identify", v.T("hosted.title.sign_in"), ""
 	}
 	v.Error = text
 	return render(c, status, page, v)

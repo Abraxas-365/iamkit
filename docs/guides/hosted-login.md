@@ -173,7 +173,9 @@ and placeholders; `go test ./internal/i18n` checks it). The
 beta languages from environments that have not listed their languages.
 
 A wrong second-factor code on the hosted pages says how many tries are left
-(`WRONG_CODE`, 401). Errors carry machine codes (`LOGIN_INVALID`,
+(`WRONG_CODE`, 401); the wrong code that spends the last of the five ends the
+login at once (`MFA_ATTEMPTS_USED`, 401) and the page returns to the first
+step. Errors carry machine codes (`LOGIN_INVALID`,
 `SSO_ONLY`, `SSO_NOT_OFFERED`, `SSO_EMAIL`, `PASSWORD_REQUIRED`,
 `CHOOSE_ORGANIZATION`, `ORGANIZATION_CHOSEN`, `FACTOR_REQUIRED`,
 `NO_ACCESS`, …) that the pages translate.

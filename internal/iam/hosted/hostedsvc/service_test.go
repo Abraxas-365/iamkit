@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
@@ -434,6 +435,24 @@ func TestHostedSecondFactorBeforeChooser(t *testing.T) {
 	}
 	if _, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("123456")); err == nil || len(repo.saved) != 0 {
 		t.Fatal("after 5 wrong codes the login must be dropped")
+	}
+
+	// Each wrong code counts down; the one that spends the last try ends the
+	// login at once instead of offering a code field no code can pass.
+	s, _, repo = setupMFA(second, orgA, orgB)
+	if _, err = s.Password(context.Background(), request, "a@example.com", "right"); err != nil {
+		t.Fatal(err)
+	}
+	var e *errx.Error
+	for i := 1; i < config.MFAAttempts; i++ {
+		_, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("000000"))
+		if !errx.As(err, &e) || e.Code != hosted.CodeWrongCode || e.Details["remaining"] != config.MFAAttempts-i || hosted.Restart(err) {
+			t.Fatalf("wrong code %d: %v %+v", i, err, e)
+		}
+	}
+	_, err = s.SecondFactor(context.Background(), request, authentication.CodeProof("000000"))
+	if !errx.As(err, &e) || e.Code != hosted.CodeAttemptsUsed || !hosted.Restart(err) || len(repo.saved) != 0 {
+		t.Fatalf("last wrong code must end the login: %v saved=%d", err, len(repo.saved))
 	}
 
 	// Fresh login, right code → chooser → session.

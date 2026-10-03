@@ -175,6 +175,7 @@
   "hosted.error.name_required": "Zadejte své jméno.",
   "hosted.error.name_length": "Jméno může mít nejvýše 200 znaků.",
   "hosted.error.login_expired": "Přihlášení trvalo příliš dlouho. Přihlaste se znovu.",
+  "hosted.error.attempts_used": "Příliš mnoho chybných kódů. Přihlaste se znovu.",
   "hosted.error.password_length": "Heslo musí mít 12 až 72 znaků.",
   "hosted.error.password_between": "Heslo musí mít {min} až {max} znaků.",
   "hosted.error.password_upper": "Použijte velké písmeno.",

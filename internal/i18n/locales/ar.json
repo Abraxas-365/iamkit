@@ -179,6 +179,7 @@
   "hosted.error.name_required": "أدخل اسمك.",
   "hosted.error.name_length": "يجب ألا يتجاوز الاسم 200 حرف.",
   "hosted.error.login_expired": "استغرق تسجيل الدخول وقتًا طويلًا. سجّل الدخول مرة أخرى.",
+  "hosted.error.attempts_used": "رموز خاطئة كثيرة جدًا. سجّل الدخول مرة أخرى.",
   "hosted.error.password_length": "يجب أن تتكون كلمة المرور من 12 إلى 72 حرفًا.",
   "hosted.error.password_between": "يجب أن تتكون كلمة المرور من {min} إلى {max} حرفًا.",
   "hosted.error.password_upper": "استخدم حرفًا كبيرًا.",

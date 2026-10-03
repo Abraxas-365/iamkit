@@ -173,6 +173,7 @@
   "hosted.error.name_required": "名前を入力してください。",
   "hosted.error.name_length": "名前は 200 文字以内で入力してください。",
   "hosted.error.login_expired": "サインインに時間がかかりすぎました。もう一度サインインしてください。",
+  "hosted.error.attempts_used": "間違ったコードが多すぎます。もう一度サインインしてください。",
   "hosted.error.password_length": "パスワードは 12〜72 文字で入力してください。",
   "hosted.error.password_between": "パスワードは {min}〜{max} 文字で入力してください。",
   "hosted.error.password_upper": "大文字を含めてください。",

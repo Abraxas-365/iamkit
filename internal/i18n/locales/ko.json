@@ -173,6 +173,7 @@
   "hosted.error.name_required": "이름을 입력하세요.",
   "hosted.error.name_length": "이름은 최대 200자까지 입력할 수 있습니다.",
   "hosted.error.login_expired": "로그인 시간이 너무 오래 걸렸습니다. 다시 로그인하세요.",
+  "hosted.error.attempts_used": "잘못된 코드를 너무 많이 입력했습니다. 다시 로그인하세요.",
   "hosted.error.password_length": "비밀번호는 12~72자여야 합니다.",
   "hosted.error.password_between": "비밀번호는 {min}~{max}자여야 합니다.",
   "hosted.error.password_upper": "대문자를 포함하세요.",

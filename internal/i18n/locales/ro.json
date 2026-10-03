@@ -175,6 +175,7 @@
   "hosted.error.name_required": "Introduceți numele.",
   "hosted.error.name_length": "Numele poate avea cel mult 200 de caractere.",
   "hosted.error.login_expired": "Conectarea a durat prea mult. Conectați-vă din nou.",
+  "hosted.error.attempts_used": "Prea multe coduri greșite. Conectați-vă din nou.",
   "hosted.error.password_length": "Parola trebuie să aibă între 12 și 72 de caractere.",
   "hosted.error.password_between": "Parola trebuie să aibă între {min} și {max} caractere.",
   "hosted.error.password_upper": "Folosiți o literă mare.",

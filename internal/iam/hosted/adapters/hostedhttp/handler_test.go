@@ -372,6 +372,7 @@ func TestFailedMessages(t *testing.T) {
 		{"plain errors stay generic", errors.New("boom"), 500, "Something went wrong"},
 		{"hosted codes are translated", hosted.Problem(errx.Validation, hosted.CodeChooseOrganization, "choose an organization"), 400, "Choose an organization."},
 		{"wrong code counts down", hosted.ErrWrongCode(1), 401, "That code is not valid. Try again. 1 attempt left."},
+		{"last wrong code says why the login restarts", hosted.ErrAttemptsUsed(), 401, "Too many wrong codes. Sign in again."},
 		{"password length names its bounds", authentication.PasswordRejected(authentication.RuleLength, 14), 400, "The password must be 14 to 72 characters long."},
 		{"a method the policy refuses is translated", authentication.ErrMethodNotAllowed(), 403, "This sign-in method is not available"},
 	}
@@ -394,5 +395,26 @@ func TestFailedMessages(t *testing.T) {
 				t.Fatal("cause leaked to the page")
 			}
 		})
+	}
+}
+
+// An error that ends the parked login sends the MFA page back to the first
+// step, without the MFA subtitle or code field.
+func TestRetryRestarts(t *testing.T) {
+	for _, err := range []error{hosted.ErrLoginExpired(), hosted.ErrAttemptsUsed()} {
+		app := fiber.New()
+		app.Get("/", func(c *fiber.Ctx) error {
+			v := view{Lang: "en", Ticket: "t", SignIn: hosted.SignIn{Password: true}, Title: "Two-step verification", Subtitle: "Enter the 6-digit code"}
+			return (&Handler{}).retry(c, v, "mfa", err)
+		})
+		res, rerr := app.Test(httptest.NewRequest("GET", "/", nil))
+		if rerr != nil {
+			t.Fatal(rerr)
+		}
+		body, _ := io.ReadAll(res.Body)
+		html := string(body)
+		if res.StatusCode != 401 || !strings.Contains(html, `name="email"`) || strings.Contains(html, `name="code"`) || strings.Contains(html, "6-digit") {
+			t.Fatalf("%v: got %d %s", err, res.StatusCode, html)
+		}
 	}
 }

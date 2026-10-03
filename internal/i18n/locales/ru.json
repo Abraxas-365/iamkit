@@ -176,6 +176,7 @@
   "hosted.error.name_required": "Введите имя.",
   "hosted.error.name_length": "Имя может содержать не более 200 символов.",
   "hosted.error.login_expired": "Вход занял слишком много времени. Войдите снова.",
+  "hosted.error.attempts_used": "Слишком много неверных кодов. Войдите снова.",
   "hosted.error.password_length": "Пароль должен содержать от 12 до 72 символов.",
   "hosted.error.password_between": "Пароль должен содержать от {min} до {max} символов.",
   "hosted.error.password_upper": "Добавьте заглавную букву.",

@@ -176,6 +176,7 @@
   "hosted.error.name_required": "Введіть ім’я.",
   "hosted.error.name_length": "Ім’я може містити не більше 200 символів.",
   "hosted.error.login_expired": "Вхід тривав надто довго. Увійдіть знову.",
+  "hosted.error.attempts_used": "Забагато неправильних кодів. Увійдіть знову.",
   "hosted.error.password_length": "Пароль має містити від 12 до 72 символів.",
   "hosted.error.password_between": "Пароль має містити від {min} до {max} символів.",
   "hosted.error.password_upper": "Додайте велику літеру.",

@@ -174,6 +174,7 @@
   "hosted.error.name_required": "Gib deinen Namen ein.",
   "hosted.error.name_length": "Der Name darf höchstens 200 Zeichen lang sein.",
   "hosted.error.login_expired": "Deine Anmeldung hat zu lange gedauert. Melde dich erneut an.",
+  "hosted.error.attempts_used": "Zu viele falsche Codes. Melde dich erneut an.",
   "hosted.error.password_length": "Das Passwort muss 12 bis 72 Zeichen lang sein.",
   "hosted.error.password_between": "Das Passwort muss {min} bis {max} Zeichen lang sein.",
   "hosted.error.password_upper": "Verwende einen Großbuchstaben.",

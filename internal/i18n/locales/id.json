@@ -173,6 +173,7 @@
   "hosted.error.name_required": "Masukkan nama Anda.",
   "hosted.error.name_length": "Nama maksimal 200 karakter.",
   "hosted.error.login_expired": "Proses masuk terlalu lama. Masuk lagi.",
+  "hosted.error.attempts_used": "Terlalu banyak kode yang salah. Masuk lagi.",
   "hosted.error.password_length": "Kata sandi harus terdiri dari 12 hingga 72 karakter.",
   "hosted.error.password_between": "Kata sandi harus terdiri dari {min} hingga {max} karakter.",
   "hosted.error.password_upper": "Gunakan huruf kapital.",

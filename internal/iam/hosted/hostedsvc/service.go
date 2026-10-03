@@ -622,6 +622,14 @@ func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, proof auth
 	v, err := s.second.Verify(ctx, boundary(target, login), login.Verified.User, login.Verified.Methods(), proof, req.Enroll)
 	if err != nil {
 		if mfa.IsInvalidCode(err) {
+			if used >= config.MFAAttempts {
+				// That was the last try: drop the login now rather than
+				// offer a code field no code can pass.
+				if err = s.repository.DeleteLogin(ctx, hash); err != nil {
+					return hosted.Result{}, err
+				}
+				return hosted.Result{}, hosted.ErrAttemptsUsed()
+			}
 			return hosted.Result{}, hosted.ErrWrongCode(config.MFAAttempts - used)
 		}
 		return hosted.Result{}, err

@@ -173,6 +173,7 @@
   "hosted.error.name_required": "Ingresa tu nombre.",
   "hosted.error.name_length": "El nombre debe tener como máximo 200 caracteres.",
   "hosted.error.login_expired": "Tu inicio de sesión tardó demasiado. Inicia sesión de nuevo.",
+  "hosted.error.attempts_used": "Demasiados códigos incorrectos. Inicia sesión de nuevo.",
   "hosted.error.password_length": "La contraseña debe tener entre 12 y 72 caracteres.",
   "hosted.error.password_between": "La contraseña debe tener entre {min} y {max} caracteres.",
   "hosted.error.password_upper": "Incluye una letra mayúscula.",

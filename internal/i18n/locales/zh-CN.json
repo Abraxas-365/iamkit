@@ -173,6 +173,7 @@
   "hosted.error.name_required": "请输入姓名。",
   "hosted.error.name_length": "姓名不能超过 200 个字符。",
   "hosted.error.login_expired": "登录耗时过长，请重新登录。",
+  "hosted.error.attempts_used": "错误验证码次数过多，请重新登录。",
   "hosted.error.password_length": "密码长度必须为 12 到 72 个字符。",
   "hosted.error.password_between": "密码长度必须为 {min} 到 {max} 个字符。",
   "hosted.error.password_upper": "请包含大写字母。",

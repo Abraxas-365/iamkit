@@ -176,6 +176,7 @@
   "hosted.error.name_required": "Wpisz swoje imię i nazwisko.",
   "hosted.error.name_length": "Imię i nazwisko może mieć najwyżej 200 znaków.",
   "hosted.error.login_expired": "Logowanie trwało zbyt długo. Zaloguj się ponownie.",
+  "hosted.error.attempts_used": "Zbyt wiele błędnych kodów. Zaloguj się ponownie.",
   "hosted.error.password_length": "Hasło musi mieć od 12 do 72 znaków.",
   "hosted.error.password_between": "Hasło musi mieć od {min} do {max} znaków.",
   "hosted.error.password_upper": "Użyj wielkiej litery.",

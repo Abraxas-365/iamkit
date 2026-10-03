@@ -134,6 +134,25 @@ func ErrWrongCode(remaining int) error {
 	return e
 }
 
+// CodeAttemptsUsed is the code of ErrAttemptsUsed.
+const CodeAttemptsUsed = "MFA_ATTEMPTS_USED"
+
+// ErrAttemptsUsed is returned for the wrong code that spends the parked
+// login's last second-factor attempt: the login is gone, the user signs in
+// again.
+func ErrAttemptsUsed() error {
+	e := errx.Unauthorized("too many wrong codes; sign in again")
+	e.Code = CodeAttemptsUsed
+	return e
+}
+
+// Restart reports whether err ends the parked login, so the hosted pages
+// go back to the first step.
+func Restart(err error) bool {
+	var e *errx.Error
+	return errx.As(err, &e) && (e.Code == "LOGIN_EXPIRED" || e.Code == CodeAttemptsUsed)
+}
+
 // ErrSignedUpNoAccess is returned when a new account was created but its
 // sign-up organization gives it no access to the application yet.
 func ErrSignedUpNoAccess() error {

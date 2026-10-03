@@ -173,6 +173,7 @@
   "hosted.error.name_required": "Enter your name.",
   "hosted.error.name_length": "The name must be at most 200 characters long.",
   "hosted.error.login_expired": "Your sign-in took too long. Sign in again.",
+  "hosted.error.attempts_used": "Too many wrong codes. Sign in again.",
   "hosted.error.password_length": "The password must be 12 to 72 characters long.",
   "hosted.error.password_between": "The password must be {min} to {max} characters long.",
   "hosted.error.password_upper": "Include an uppercase letter.",
