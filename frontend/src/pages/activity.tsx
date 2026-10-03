@@ -15,7 +15,7 @@ import { PaginationBar } from '@/components/ui/pagination-bar'
 import { ConfirmDialog, CopyText, DataTable, EmptyState, EntityRef, PageHeader, Time, selectClass } from '@/components/library/patterns'
 import { language, t } from '@/lib/i18n'
 
-interface Session { id: string; user_id: string; user_name: string; user_email: string; organization_id: string; organization_name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null }
+interface Session { id: string; user_id: string; user_name: string; user_email: string; organization_id: string; organization_name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null; impersonated?: boolean; impersonator?: string; impersonation_reason?: string }
 interface IAMEvent { id: number; type: string; actor: { kind: string; id: string }; subject: { kind: string; id: string }; organization_id?: string; data?: Record<string, unknown>; occurred_at: string }
 interface EventPage { items: IAMEvent[]; next: number }
 interface AuditEvent { id: string; actor_id: string; actor_label: string; actor_kind?: string; action: string; target_id: string; target_label?: string; created_at: string }
@@ -141,12 +141,21 @@ const eventVerbs: Record<string, (subject: string) => string> = {
 }
 const eventNamed: Record<string, string> = {
   'login.failed': t('Sign-in failed'), 'session.created': t('Signed in'), 'session.revoked': t('Session ended'),
+  'user.sessions_revoked': t('Signed out everywhere'), 'user.password_change_required': t('Password change required'), 'user.password_changed': t('Password changed'),
   'user.signed_up': t('User signed up'), 'user.provisioned': t('User provisioned by the directory'), 'user.deprovisioned': t('User deprovisioned by the directory'),
   'application.resource_linked': t('Linked a resource to an application'), 'application.resource_unlinked': t('Unlinked a resource from an application'),
   'group.members_changed': t('Changed group members'), 'grant.updated': t('Set a grant'), 'grant.deleted': t('Removed a grant'),
 }
 
 /** describeEvent turns a semantic event type (user.created) into a sentence. */
+// ImpersonationBadge marks a session an operator or service account started on
+// the user's behalf; the reason and who started it are in its title.
+export function ImpersonationBadge({ session }: { session: { impersonated?: boolean; impersonator?: string; impersonation_reason?: string } }) {
+  if (!session.impersonated) return null
+  const by = session.impersonator ? t('Impersonated by {{actor}}: {{reason}}', { actor: session.impersonator, reason: session.impersonation_reason }) : t('Impersonated: {{reason}}', { reason: session.impersonation_reason })
+  return <Badge variant="secondary" className="ml-1 bg-warning/10 text-warning" title={by}>{t('Impersonation')}</Badge>
+}
+
 export function describeEvent(type: string) {
   if (eventNamed[type]) return eventNamed[type]
   const [subject, verb = ''] = type.split('.')
@@ -269,7 +278,7 @@ function Sessions() {
           <EntityRef name={s.organization_name} id={s.organization_id} />,
           <Time value={s.authenticated_at} />,
           <Time value={s.expires_at} />,
-          <Badge variant="secondary" className={tone}>{label}</Badge>,
+          <span className="whitespace-nowrap"><Badge variant="secondary" className={tone}>{label}</Badge><ImpersonationBadge session={s} /></span>,
           principal?.role !== 'viewer' && !s.revoked_at && <RowActions label={t('Actions for session of {{value}}', { value: s.user_email || s.user_id })} actions={[{ label: t('Revoke session'), icon: <Ban />, destructive: true, onSelect: () => setTarget(s) }]} />,
         ]
       })} />

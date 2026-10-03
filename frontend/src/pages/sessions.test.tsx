@@ -13,7 +13,7 @@ const session = (id: string, organization: string, application: string) => ({
   application_id: application, application_name: application === 'a1' ? 'Web' : 'Mobile', resource_id: 'r1', resource_name: 'Billing',
   authenticated_at: new Date().toISOString(), expires_at: new Date(Date.now() + 3600e3).toISOString(), revoked_at: null,
 })
-const sessions = [session('s1', 'o1', 'a1'), session('s2', 'o2', 'a1'), session('s3', 'o1', 'a2')]
+const sessions = [session('s1', 'o1', 'a1'), { ...session('s2', 'o2', 'a1'), impersonated: true, impersonator: 'owner@example.com', impersonation_reason: 'Ticket 42: missing invoices' }, session('s3', 'o1', 'a2')]
 let queries: URLSearchParams[]
 
 beforeEach(() => {
@@ -67,4 +67,11 @@ it('opens with the filters of the link', async () => {
   expect(await screen.findByText('s3@example.com')).toBeTruthy()
   expect(screen.queryByText('s1@example.com')).toBeNull()
   expect(queries[0].get('application_id')).toBe('a2')
+})
+
+it('marks impersonation sessions with who started them and why', async () => {
+  open()
+  const badge = await screen.findByText('Impersonation')
+  expect(badge.getAttribute('title')).toBe('Impersonated by owner@example.com: Ticket 42: missing invoices')
+  expect(screen.getAllByText('Impersonation')).toHaveLength(1)
 })

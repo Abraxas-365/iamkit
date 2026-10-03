@@ -6694,6 +6694,15 @@
             "description": "UUID (empty when unset)",
             "type": "string"
           },
+          "impersonated": {
+            "type": "boolean"
+          },
+          "impersonation_reason": {
+            "type": "string"
+          },
+          "impersonator": {
+            "type": "string"
+          },
           "organization_id": {
             "description": "UUID (empty when unset)",
             "type": "string"
@@ -6732,6 +6741,9 @@
           "authenticated_at",
           "expires_at",
           "id",
+          "impersonated",
+          "impersonation_reason",
+          "impersonator",
           "organization_id",
           "organization_name",
           "resource_id",

@@ -20,7 +20,7 @@ func TestIncidentResponseUserActions(t *testing.T) {
 		return fiber.Map{"environment_id": e.EnvID, "organization_id": e.Org, "application_id": e.Client, "resource_id": e.Res, "refresh_token": token}
 	}
 
-	// Two live sessions, one already revoked: only the live ones count.
+	// Two live sessions (+ an impersonation below), one already revoked: only the live ones count.
 	first := e.Must("POST", "/identity/v1/login", "", e.LoginBody(e.AliceEmail, e.Pass), 200).JSON
 	second := e.Must("POST", "/identity/v1/login", "", e.LoginBody(e.AliceEmail, e.Pass), 200).JSON
 	gone := e.Must("POST", "/identity/v1/login", "", e.LoginBody(e.AliceEmail, e.Pass), 200).JSON
@@ -30,7 +30,27 @@ func TestIncidentResponseUserActions(t *testing.T) {
 	e.Grant(e.Org, bob, e.Res, "invoices:read")
 	bystander := e.Must("POST", "/identity/v1/login", "", e.LoginBody("bob@example.com", e.Pass), 200).JSON
 
-	if got := e.Must("POST", user+"/revoke-sessions", e.Owner, nil, 200).JSON["revoked"]; got != float64(2) {
+	// An impersonation session is told apart from the user's own sign-ins
+	// in the session inventory (and is ended by sign out everywhere too).
+	reason := "Incident 7: suspicious exports"
+	e.Must("POST", e.Base+"/impersonations", e.Owner, fiber.Map{"user_id": e.Alice, "organization_id": e.Org, "application_id": e.Client, "resource_id": e.Res, "reason": reason}, 200)
+	marked := 0
+	for _, raw := range e.Must("GET", e.Base+"/sessions?user_id="+e.Alice, e.Owner, nil, 200).JSON["items"].([]any) {
+		s := raw.(map[string]any)
+		if s["impersonated"] == true {
+			marked++
+			if s["impersonation_reason"] != reason || !strings.Contains(s["impersonator"].(string), "@") {
+				t.Fatalf("impersonation session = %v", s)
+			}
+		} else if s["impersonator"] != "" || s["impersonation_reason"] != "" {
+			t.Fatalf("own session carries impersonation fields: %v", s)
+		}
+	}
+	if marked != 1 {
+		t.Fatalf("impersonation sessions marked = %d", marked)
+	}
+
+	if got := e.Must("POST", user+"/revoke-sessions", e.Owner, nil, 200).JSON["revoked"]; got != float64(3) {
 		t.Fatalf("revoked = %v", got)
 	}
 	e.Must("POST", "/identity/v1/refresh", "", refresh(first["refresh_token"]), 401)
@@ -40,7 +60,7 @@ func TestIncidentResponseUserActions(t *testing.T) {
 		t.Fatalf("second revoke = %v", got)
 	}
 	events := e.Must("GET", e.Base+"/events?type=user.sessions_revoked&subject="+e.Alice, e.Owner, nil, 200).JSON["items"].([]any)
-	if len(events) != 2 || events[1].(map[string]any)["data"].(map[string]any)["count"] != float64(2) {
+	if len(events) != 2 || events[1].(map[string]any)["data"].(map[string]any)["count"] != float64(3) {
 		t.Fatalf("sessions_revoked events = %v", events)
 	}
 	e.Must("POST", e.Base+"/users/00000000-0000-0000-0000-000000000000/revoke-sessions", e.Owner, nil, 404)
@@ -88,4 +108,16 @@ func TestIncidentResponseUserActions(t *testing.T) {
 		t.Fatal("hosted change signed in the wrong user")
 	}
 	e.Must("POST", "/identity/v1/login", "", e.LoginBody(e.AliceEmail, "another fresh horse"), 200)
+
+	// Each new password is on the record (headless + hosted), the user as actor.
+	changed := e.Must("GET", e.Base+"/events?type=user.password_changed&subject="+e.Alice, e.Owner, nil, 200).JSON["items"].([]any)
+	if len(changed) != 2 {
+		t.Fatalf("password_changed events = %v", changed)
+	}
+	for _, raw := range changed {
+		ev := raw.(map[string]any)
+		if ev["data"].(map[string]any)["method"] != "sign_in" || ev["actor"].(map[string]any)["kind"] != "user" {
+			t.Fatalf("password_changed = %v", ev)
+		}
+	}
 }

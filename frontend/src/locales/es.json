@@ -2596,5 +2596,10 @@
   "Their next password sign-in asks for a new password before continuing. To also end their current sessions, use Sign out everywhere.": "Su próximo inicio de sesión con contraseña le pedirá una nueva antes de continuar. Para terminar también sus sesiones actuales, use Cerrar sesión en todas partes.",
   "Their next password sign-in must choose a new password. Existing sessions are not ended.": "Su próximo inicio de sesión con contraseña deberá elegir una nueva. Las sesiones existentes no terminan.",
   "{{count}} sessions revoked_one": "{{count}} sesión revocada",
-  "{{count}} sessions revoked_other": "{{count}} sesiones revocadas"
+  "{{count}} sessions revoked_other": "{{count}} sesiones revocadas",
+  "Impersonation": "Suplantación",
+  "Impersonated by {{actor}}: {{reason}}": "Suplantada por {{actor}}: {{reason}}",
+  "Impersonated: {{reason}}": "Suplantada: {{reason}}",
+  "Password changed": "Contraseña cambiada",
+  "Signed out everywhere": "Sesión cerrada en todas partes"
 }

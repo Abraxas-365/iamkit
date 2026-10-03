@@ -18,13 +18,14 @@ import { MetadataEditor, ProfileAttributes } from '@/components/library/metadata
 import { AccessTokens } from './machine-tokens'
 import { UserKeys } from './machine-keys'
 import { HistorySection } from './history'
+import { ImpersonationBadge } from './activity'
 import { rich, t } from '@/lib/i18n'
 
 interface User { id: string; kind?: string; name: string; email: string; username?: string; avatar_url?: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; profile?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null; state?: string; last_signed_in_at?: string | null; terms_accepted_at?: string | null; home_organization_id?: string | null; password_change_required?: boolean }
 interface Org { id: string; name: string; active: boolean; membership_active?: boolean }
 interface Factor { id: string; kind: string; name?: string; passkey?: boolean; phone?: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
-interface Session { id: string; organization_name: string; application_id: string; application_name: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null }
+interface Session { id: string; organization_name: string; application_id: string; application_name: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null; impersonated?: boolean; impersonator?: string; impersonation_reason?: string }
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id), inactive: item.active === false })
 
@@ -269,7 +270,7 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
           s.organization_name || '—',
           <Time value={s.authenticated_at} />,
           <Time value={s.expires_at} />,
-          <Badge variant="secondary" className={tone}>{label}</Badge>,
+          <span className="whitespace-nowrap"><Badge variant="secondary" className={tone}>{label}</Badge><ImpersonationBadge session={s} /></span>,
           ...(canWrite ? [!s.revoked_at && <RowActions label={t('Actions for session in {{application_name}}', { application_name: s.application_name })} actions={[{ label: t('Revoke session'), icon: <Ban />, destructive: true, onSelect: () => setRevoke(s) }]} />] : []),
         ]
       })} />

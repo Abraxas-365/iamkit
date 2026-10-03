@@ -22,6 +22,12 @@ type Session struct {
 	OrganizationName string `json:"organization_name" db:"organization_name"`
 	ApplicationName  string `json:"application_name" db:"application_name"`
 	ResourceName     string `json:"resource_name" db:"resource_name"`
+	// Impersonated marks a session started by an operator or service account
+	// on the user's behalf; Impersonator labels it (operator email, service
+	// account name; empty once removed) and ImpersonationReason is the reason given.
+	Impersonated        bool   `json:"impersonated" db:"impersonated"`
+	Impersonator        string `json:"impersonator" db:"impersonator"`
+	ImpersonationReason string `json:"impersonation_reason" db:"impersonation_reason"`
 }
 
 // SessionFilter narrows the session inventory; zero fields match everything.

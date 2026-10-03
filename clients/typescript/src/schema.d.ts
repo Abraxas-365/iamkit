@@ -7452,6 +7452,9 @@ export interface components {
             expires_at: string;
             /** @description UUID (empty when unset) */
             id: string;
+            impersonated: boolean;
+            impersonation_reason: string;
+            impersonator: string;
             /** @description UUID (empty when unset) */
             organization_id: string;
             organization_name: string;
