@@ -34,6 +34,20 @@ func (h *Activity) sessions(c *fiber.Ctx) error {
 		}
 		filter.User = user
 	}
+	if raw := c.Query("organization_id"); raw != "" {
+		organization, err := identity.ParseOrganizationID(raw)
+		if err != nil {
+			return errx.Validation("organization_id must be a valid UUID")
+		}
+		filter.Organization = organization
+	}
+	if raw := c.Query("application_id"); raw != "" {
+		application, err := identity.ParseApplicationID(raw)
+		if err != nil {
+			return errx.Validation("application_id must be a valid UUID")
+		}
+		filter.Application = application
+	}
 	out, err := h.queries.Sessions(c.UserContext(), envID(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err

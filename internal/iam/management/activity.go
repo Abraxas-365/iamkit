@@ -26,7 +26,9 @@ type Session struct {
 
 // SessionFilter narrows the session inventory; zero fields match everything.
 type SessionFilter struct {
-	User identity.UserID
+	User         identity.UserID
+	Organization identity.OrganizationID
+	Application  identity.ApplicationID
 }
 type AuditEvent struct {
 	ID      string    `json:"id" db:"id"`

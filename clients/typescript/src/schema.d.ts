@@ -26982,8 +26982,10 @@ export interface operations {
     getManagementEnvironmentsbyEnvironmentSessions: {
         parameters: {
             query?: {
+                application_id?: string;
                 limit?: number;
                 offset?: number;
+                organization_id?: string;
                 search?: string;
                 user_id?: string;
             };

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -345,6 +346,61 @@ func TestSessionsNewestFirst(t *testing.T) {
 			t.Fatalf("session lacks authenticated_at: %v", s)
 		}
 	}
+}
+
+// TestSessionsFiltered: the inventory narrows to one user, organization or
+// application (M15.01), alone or combined; a malformed id is a 400.
+func TestSessionsFiltered(t *testing.T) {
+	e := newEnv(t)
+	globex := e.ID("POST", e.Base+"/organizations", fiber.Map{"name": "Globex"})
+	e.Join(globex, e.Alice)
+	e.Grant(globex, e.Alice, e.Res, "invoices:read")
+	mobile := e.ID("POST", e.Base+"/applications", fiber.Map{"name": "mobile", "redirect_uris": []string{"https://m.example/callback"}})
+	e.Must("POST", e.Base+"/application-resources", e.Owner, fiber.Map{"application_id": mobile, "resource_id": e.Res}, 201)
+	bob := e.User("Bob", "bob@example.com")
+	e.Join(e.Org, bob)
+	e.Grant(e.Org, bob, e.Res, "invoices:read")
+
+	login := func(email, org, app string) string {
+		body := e.LoginBody(email, e.Pass)
+		body["organization_id"], body["application_id"] = org, app
+		token := e.Must("POST", "/identity/v1/login", "", body, 200).JSON["access_token"].(string)
+		return claimsOf(t, token)["sid"].(string)
+	}
+	acmeWeb := login(e.AliceEmail, e.Org, e.Client)
+	globexWeb := login(e.AliceEmail, globex, e.Client)
+	acmeMobile := login(e.AliceEmail, e.Org, mobile)
+	bobWeb := login("bob@example.com", e.Org, e.Client)
+
+	ids := func(q string) []string {
+		out := e.Must("GET", e.Base+"/sessions?"+q, e.Owner, nil, 200).JSON
+		items, _ := out["items"].([]any)
+		got := []string{}
+		for _, it := range items {
+			got = append(got, it.(map[string]any)["id"].(string))
+		}
+		if total := int(out["page"].(map[string]any)["total"].(float64)); total != len(got) {
+			t.Fatalf("%s: total %d for %d items", q, total, len(got))
+		}
+		slices.Sort(got)
+		return got
+	}
+	want := func(s ...string) []string { slices.Sort(s); return s }
+	for q, expected := range map[string][]string{
+		"organization_id=" + globex:                                want(globexWeb),
+		"organization_id=" + e.Org:                                 want(acmeWeb, acmeMobile, bobWeb),
+		"application_id=" + mobile:                                 want(acmeMobile),
+		"application_id=" + e.Client:                               want(acmeWeb, globexWeb, bobWeb),
+		"user_id=" + bob:                                           want(bobWeb),
+		"user_id=" + e.Alice + "&organization_id=" + e.Org:         want(acmeWeb, acmeMobile),
+		"organization_id=" + e.Org + "&application_id=" + e.Client: want(acmeWeb, bobWeb),
+	} {
+		if got := ids(q); !slices.Equal(got, expected) {
+			t.Fatalf("%s: sessions %v, want %v", q, got, expected)
+		}
+	}
+	e.Must("GET", e.Base+"/sessions?organization_id=acme", e.Owner, nil, 400)
+	e.Must("GET", e.Base+"/sessions?application_id=web", e.Owner, nil, 400)
 }
 
 func TestAuditEventsNameTheirTarget(t *testing.T) {

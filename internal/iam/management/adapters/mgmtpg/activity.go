@@ -14,9 +14,18 @@ import (
 func (r *Repository) Sessions(ctx context.Context, environment identity.EnvironmentID, filter management.SessionFilter, page query.Pagination) (query.Paginated[management.Session], error) {
 	base := `FROM sessions WHERE environment_id=$1`
 	args := []any{environment}
+	where := func(column string, value any) {
+		args = append(args, value)
+		base += fmt.Sprintf(` AND %s=$%d`, column, len(args))
+	}
 	if !filter.User.IsZero() {
-		base += ` AND user_id=$2`
-		args = append(args, filter.User)
+		where("user_id", filter.User)
+	}
+	if !filter.Organization.IsZero() {
+		where("organization_id", filter.Organization)
+	}
+	if !filter.Application.IsZero() {
+		where("application_id", filter.Application)
 	}
 	// Sessions are all UUIDs — no useful ILIKE columns, skip search.
 	var total int

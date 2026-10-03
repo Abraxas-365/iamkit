@@ -39381,6 +39381,13 @@
           },
           {
             "in": "query",
+            "name": "application_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "limit",
             "schema": {
               "type": "integer"
@@ -39391,6 +39398,13 @@
             "name": "offset",
             "schema": {
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
             }
           },
           {
