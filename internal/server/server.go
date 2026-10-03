@@ -277,6 +277,15 @@ func (s *Server) rateLimiter(max int) fiber.Handler {
 	})
 }
 
+// scimTooMany answers a rate-limited SCIM request as a SCIM error (RFC 7644
+// §3.12), which directories parse.
+func scimTooMany(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+		"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:Error"},
+		"status":  "429", "detail": "too many requests",
+	}, "application/scim+json")
+}
+
 // limit is limiter.New on the shared LimitStorage (REDIS_URL) when set
 // (keys: the config's KeyGenerator, default the client IP).
 // Each limiter gets its own key space, numbered in registration order —
@@ -396,6 +405,10 @@ func (s *Server) App() *fiber.App {
 		auth.Post("/passkeys/login/begin", passkeyLimit, s.Auth.BeginPasskey)
 		auth.Post("/passkeys/login/finish", passkeyLimit, s.Auth.FinishPasskey)
 	}
+	// SCIM: directories sync in bursts, so the budget is the token
+	// endpoint's; every request (a wrong credential too) counts, before the
+	// credential lookup.
+	app.Use("/scim/v2", s.limit(limiter.Config{Max: rateLimit * 5, Expiration: time.Minute, LimitReached: scimTooMany}))
 	s.Provisioning.Register(app)
 	// Unauthenticated OIDC endpoints get per-IP limits; resource servers
 	// call introspection and userinfo often, so theirs are wider.
