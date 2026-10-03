@@ -10,9 +10,10 @@ const fetchMock = vi.fn()
 let options: unknown
 let role = 'owner'
 const operators = () => ({ items: [
-  { id: 'op-owner', email: 'owner@example.com', role: 'owner', active: true, sso_providers: [], last_sso_login_at: null },
-  { id: 'op-ann', email: 'ann@acme.com', role: 'admin', active: true, sso_providers: ['okta'], last_sso_login_at: '2026-09-27T12:00:00Z' },
-], page: { total: 2, limit: 50, offset: 0 } })
+  { id: 'op-owner', email: 'owner@example.com', role: 'owner', active: true, password_allowed: true, sso_providers: [], last_sso_login_at: null },
+  { id: 'op-ann', email: 'ann@acme.com', role: 'admin', active: true, password_allowed: false, sso_providers: ['okta'], last_sso_login_at: '2026-09-27T12:00:00Z' },
+  { id: 'op-bob', email: 'bob@acme.com', role: 'owner', active: true, password_allowed: true, sso_providers: [], last_sso_login_at: null },
+], page: { total: 3, limit: 50, offset: 0 } })
 beforeEach(() => {
   role = 'owner'
   options = { password: true, providers: [{ id: 'okta', name: 'Acme Okta', type: 'oidc' }] }
@@ -21,7 +22,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
     const path = url.replace('/management/v1', '').split('?')[0]
-    if (init.method === 'DELETE') return new Response(null, { status: 204 })
+    if (init.method === 'DELETE' || init.method === 'PUT') return new Response(null, { status: 204 })
     if (path === '/login-options') return Response.json(options)
     if (path === '/me') return Response.json({ operator_id: 'op-owner', workspace_id: 'ws1', role })
     if (path === '/operators') return Response.json(operators())
@@ -39,7 +40,7 @@ it('shows linked single sign-on providers and resets a link', async () => {
   await screen.findByText('ann@acme.com')
   expect(screen.getByRole('columnheader', { name: 'Single sign-on' })).toBeTruthy()
   expect(screen.getByText('Acme Okta')).toBeTruthy()
-  expect(screen.getByText('Not linked')).toBeTruthy()
+  expect(screen.getAllByText('Not linked')).toHaveLength(2)
   await user.click(screen.getByRole('button', { name: 'Actions for ann@acme.com' }))
   await user.click(await screen.findByRole('menuitem', { name: 'Reset SSO link' }))
   const dialog = await screen.findByRole('dialog')
@@ -77,4 +78,32 @@ it('replaces the password form in settings when password sign-in is off', async 
   open('/settings')
   expect(await screen.findByText('Password sign-in is disabled')).toBeTruthy()
   expect(screen.queryByLabelText('New password')).toBeNull()
+})
+
+it('manages emergency access in break-glass mode', async () => {
+  const user = userEvent.setup()
+  options = { password: true, password_mode: 'break_glass', providers: [{ id: 'okta', name: 'Acme Okta', type: 'oidc' }] }
+  open('/operators')
+  await screen.findByText('ann@acme.com')
+  expect(screen.getAllByText('Emergency access')).toHaveLength(2)
+  await user.click(screen.getByRole('button', { name: 'Actions for ann@acme.com' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Allow emergency access' }))
+  await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Allow emergency access' }))
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/operators/op-ann/password-access') && init?.method === 'PUT' && init.body === JSON.stringify({ allowed: true }))).toBe(true))
+  await user.click(screen.getByRole('button', { name: 'Actions for bob@acme.com' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Remove emergency access' }))
+  await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove emergency access' }))
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/operators/op-bob/password-access') && init?.method === 'PUT' && init.body === JSON.stringify({ allowed: false }))).toBe(true))
+  // Never one's own: it would end this session.
+  expect(screen.queryByRole('button', { name: 'Actions for owner@example.com' })).toBeNull()
+})
+
+it('offers no emergency access outside break-glass mode', async () => {
+  const user = userEvent.setup()
+  open('/operators')
+  await screen.findByText('ann@acme.com')
+  expect(screen.queryByText('Emergency access')).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Actions for ann@acme.com' }))
+  await screen.findByRole('menuitem', { name: 'Reset SSO link' })
+  expect(screen.queryByRole('menuitem', { name: 'Allow emergency access' })).toBeNull()
 })

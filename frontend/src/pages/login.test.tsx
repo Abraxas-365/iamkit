@@ -126,3 +126,15 @@ it('asks for a new password when the current one must change', async () => {
   await waitFor(() => expect(screen.queryByLabelText('New password')).toBeNull())
   expect(logins[1]).toEqual({ email: 'owner@example.com', password: 'bootstrap password', new_password: 'owner chosen password' })
 })
+
+it('puts the password form behind emergency access in break-glass mode', async () => {
+  const user = userEvent.setup()
+  options = { password: true, password_mode: 'break_glass', providers: [{ id: 'okta', name: 'Acme Okta', type: 'oidc' }] }
+  open('/login')
+  await screen.findByRole('link', { name: 'Continue with Acme Okta' })
+  expect(screen.queryByLabelText('Password')).toBeNull()
+  expect(screen.queryByRole('link', { name: 'Set up your account' })).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Emergency access' }))
+  expect(await screen.findByLabelText('Password')).toBeTruthy()
+  expect(screen.getByText(/only operators a workspace owner allowed/)).toBeTruthy()
+})

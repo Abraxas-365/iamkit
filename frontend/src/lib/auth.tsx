@@ -19,7 +19,7 @@ async function syncLanguage() {
 export interface Principal { operator_id: string; workspace_id: string; role: 'owner' | 'admin' | 'viewer'; method?: 'password' | 'sso' | 'key'; authenticated_at?: string }
 export interface SSOProvider { id: string; name: string; type: 'oidc' | 'google' | 'microsoft' }
 /** How operators sign in to this deployment (IAMKIT_OPERATOR_SSO_*, IAMKIT_OPERATOR_PASSWORD_LOGIN). */
-export interface LoginOptions { password: boolean; providers: SSOProvider[] }
+export interface LoginOptions { password: boolean; password_mode?: 'enabled' | 'break_glass' | 'disabled'; providers: SSOProvider[] }
 interface Auth { principal: Principal | null; options: LoginOptions | null; loading: boolean; error: string; reload: () => Promise<void>; login: (email: string, password: string, newPassword?: string) => Promise<void>; logout: () => Promise<void> }
 const Context = createContext<Auth | null>(null)
 // Deployments without the endpoint, or a failed request, keep the password form.
@@ -29,7 +29,8 @@ async function loadOptions(): Promise<LoginOptions> {
     const response = await fetch('/management/v1/login-options', { credentials: 'same-origin', headers: { 'X-IAMKit-Console': '1' } })
     if (!response.ok) return passwordOnly
     const body = await response.json() as Partial<LoginOptions> | null
-    return { password: body?.password !== false, providers: Array.isArray(body?.providers) ? body.providers : [] }
+    const mode = body?.password_mode
+    return { password: body?.password !== false, password_mode: mode === 'break_glass' || mode === 'disabled' ? mode : 'enabled', providers: Array.isArray(body?.providers) ? body.providers : [] }
   } catch { return passwordOnly }
 }
 export function AuthProvider({ children }: { children: ReactNode }) {

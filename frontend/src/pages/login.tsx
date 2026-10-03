@@ -41,10 +41,14 @@ export default function LoginPage() {
   // Credentials that matched a password someone else chose (bootstrap): the
   // operator picks their own before the session starts.
   const [change, setChange] = useState<{ email: string; password: string } | null>(null)
+  // In break-glass mode the password form is for emergency access only.
+  const [emergency, setEmergency] = useState(false)
   const pending = useRef(false)
   if (auth.loading || !auth.options) return <p role="status" className="p-8">{t('Loading session…')}</p>
   if (auth.principal) return <Navigate to="/" replace />
   const { password, providers } = auth.options
+  const breakGlass = password && providers.length > 0 && auth.options.password_mode === 'break_glass'
+  const showForm = password && (!breakGlass || emergency)
   const ssoError = params.get('sso_error')
   const ssoMessage = ssoError ? ssoErrors[ssoError] ?? ssoErrors.failed : ''
   if (change) return <main className="flex min-h-dvh items-center justify-center bg-sidebar p-6"><Card className="w-full max-w-sm space-y-6 p-8">
@@ -74,8 +78,10 @@ export default function LoginPage() {
     <div><h1 className="font-mono text-xl font-bold tracking-tight">{t('Sign in to IAMKit')}</h1><p className="mt-2 text-sm text-muted-foreground">{t('Manage your identities, access, and applications.')}</p></div>
     {ssoMessage && <ErrorState error={ssoMessage} />}
     {providers.length > 0 && <div className="space-y-2">{providers.map(p => <ProviderButton key={p.id} provider={p} />)}</div>}
-    {providers.length > 0 && password && <div className="flex items-center gap-3 text-xs text-muted-foreground" role="separator" aria-label={t('or')}><span className="h-px flex-1 bg-border" />{t('or')}<span className="h-px flex-1 bg-border" /></div>}
-    {password && <form className="space-y-4" onSubmit={async event => {
+    {providers.length > 0 && showForm && <div className="flex items-center gap-3 text-xs text-muted-foreground" role="separator" aria-label={t('or')}><span className="h-px flex-1 bg-border" />{t('or')}<span className="h-px flex-1 bg-border" /></div>}
+    {breakGlass && !emergency && <Button type="button" variant="link" className="h-auto self-start p-0 text-xs text-muted-foreground" onClick={() => setEmergency(true)}>{t('Emergency access')}</Button>}
+    {breakGlass && emergency && <p className="text-xs text-muted-foreground">{t('Emergency access: only operators a workspace owner allowed can sign in with a password.')}</p>}
+    {showForm && <form className="space-y-4" onSubmit={async event => {
       event.preventDefault(); if (pending.current) return
       const data = new FormData(event.currentTarget)
       const email = String(data.get('email')), current = String(data.get('password'))
@@ -90,8 +96,8 @@ export default function LoginPage() {
       {(error || auth.error) && <ErrorState error={error || auth.error} />}
       <Button className="w-full" type="submit" disabled={busy}>{busy ? t('Signing in…') : t('Sign in')}</Button>
     </form>}
-    {!password && auth.error && <ErrorState error={auth.error} />}
-    {password
+    {!showForm && auth.error && <ErrorState error={auth.error} />}
+    {password && !breakGlass
       ? <p className="text-xs text-muted-foreground">{t('New operator?')} <Link to="/setup" className="text-primary underline">{t('Set up your account')}</Link> {t('with your API key.')}</p>
       : <p className="text-xs text-muted-foreground">{t('New operator? Ask a workspace owner to invite your work email, then sign in with single sign-on.')}</p>}
   </Card></main>

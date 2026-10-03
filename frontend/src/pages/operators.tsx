@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Ban, Link2Off, Plus, UserCog } from 'lucide-react'
+import { Ban, KeyRound, Link2Off, Plus, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { RowActions } from '@/components/ui/menu'
 import { formatDateTime, language, rich, t } from '@/lib/i18n'
 
-interface Operator { id: string; email: string; role: string; active: boolean; sso_providers?: string[] | null; last_sso_login_at?: string | null }
+interface Operator { id: string; email: string; role: string; active: boolean; password_allowed?: boolean; sso_providers?: string[] | null; last_sso_login_at?: string | null }
 interface Delegated { operator_id: string; key_id: string; secret: string; expires_at: string }
 
 const roles = [
@@ -39,10 +39,15 @@ export default function OperatorsPage() {
   const providers = options?.providers ?? []
   const sso = providers.length > 0
   const password = options?.password !== false
+  // break_glass: SSO is required except for operators an owner granted
+  // emergency (password) access; only then does the grant matter.
+  const breakGlass = sso && password && options?.password_mode === 'break_glass'
+  const selfPassword = password && !breakGlass
   const names = new Map(providers.map(p => [p.id, p.name]))
   const [add, setAdd] = useState(false)
   const [disable, setDisable] = useState<Operator | null>(null)
   const [reset, setReset] = useState<Operator | null>(null)
+  const [access, setAccess] = useState<Operator | null>(null)
   const [secret, setSecret] = useState<Delegated | null>(null)
   const [role, setRole] = useState('admin')
   const [ttl, setTtl] = useState('24h')
@@ -50,7 +55,7 @@ export default function OperatorsPage() {
   const [error, setError] = useState('')
   const pending = useRef(false)
   const ssoHint = sso && t('They can sign in with {{providers}} using this email.', { providers: new Intl.ListFormat(language(), { type: 'disjunction' }).format(providers.map(p => p.name)) })
-  const inviteHint = [ssoHint, password && <>{rich('They receive an API key to set a console password at {{code}}.', { code: <code className="text-xs">{'/setup'}</code> })}</>, !password && t('Password sign-in is disabled; the API key is for the management API only.')].filter(Boolean)
+  const inviteHint = [ssoHint, selfPassword && <>{rich('They receive an API key to set a console password at {{code}}.', { code: <code className="text-xs">{'/setup'}</code> })}</>, !password && t('Password sign-in is disabled; the API key is for the management API only.'), breakGlass && t('Passwords are for emergency access only; the API key is for the management API until you allow it.')].filter(Boolean)
 
   return <div className="space-y-6">
     <PageHeader title={t('Operators')} description={t('Console operators and their workspace roles. Only owners can invite or disable operators.')} actions={isOwner && <Button onClick={() => { setAdd(true); setRole('admin'); setTtl('24h'); setError('') }}><Plus className="size-4" /> {t('Invite operator')}</Button>} />
@@ -59,13 +64,19 @@ export default function OperatorsPage() {
       empty={<EmptyState icon={<UserCog />} title={t('No operators yet')} description={t('Invite teammates to help manage projects and environments.')} />}
       rows={list.data.map(op => {
         const linked = op.sso_providers ?? []
+        // Removing one's own access would end this very session (and lock
+        // out an owner without a linked identity): another owner does it.
+        const self = op.id === principal?.operator_id
         const actions = [
+          ...(breakGlass && op.active && !(self && op.password_allowed) ? [op.password_allowed
+            ? { label: t('Remove emergency access'), icon: <KeyRound />, destructive: true, onSelect: () => setAccess(op) }
+            : { label: t('Allow emergency access'), icon: <KeyRound />, onSelect: () => setAccess(op) }] : []),
           ...(linked.length > 0 ? [{ label: t('Reset SSO link'), icon: <Link2Off />, destructive: true, onSelect: () => setReset(op) }] : []),
           ...(op.active && op.role !== 'owner' ? [{ label: t('Disable operator'), icon: <Ban />, destructive: true, onSelect: () => setDisable(op) }] : []),
         ]
         return [
           <EntityRef name={op.email} id={op.id} secondary={op.id === principal?.operator_id ? t('You') : undefined} />,
-          <Badge variant="secondary" className="capitalize">{op.role}</Badge>,
+          <span className="flex flex-wrap gap-1"><Badge variant="secondary" className="capitalize">{op.role}</Badge>{breakGlass && op.password_allowed && <Badge variant="outline">{t('Emergency access')}</Badge>}</span>,
           ...(sso ? [linked.length > 0
             ? <span>{linked.map(id => names.get(id) ?? id).join(', ')}<span className="block text-xs text-muted-foreground">{op.last_sso_login_at ? <Time value={op.last_sso_login_at} prefix={t('Last sign-in')} /> : t('Linked')}</span></span>
             : <span className="text-muted-foreground">{t('Not linked')}</span>] : []),
@@ -120,10 +131,14 @@ export default function OperatorsPage() {
 
     {reset && <ConfirmDialog title={t('Reset single sign-on for {{email}}?', { email: reset.email })} description={t('Their linked provider identities are removed and they are signed out of the console. Their next single sign-on links again by verified email.')} confirmLabel={t('Reset SSO link')} onClose={() => setReset(null)} confirm={async () => { await api.delete(`/operators/${reset.id}/identities`); toast.success(t('Single sign-on link reset')); list.reload() }} />}
 
+    {access && (access.password_allowed
+      ? <ConfirmDialog title={t('Remove emergency access for {{email}}?', { email: access.email })} description={t('They can no longer sign in with a password, and their password sessions end now. Single sign-on sessions stay.')} confirmLabel={t('Remove emergency access')} onClose={() => setAccess(null)} confirm={async () => { await api.put(`/operators/${access.id}/password-access`, { allowed: false }); toast.success(t('Emergency access removed')); list.reload() }} />
+      : <ConfirmDialog title={t('Allow emergency access for {{email}}?', { email: access.email })} description={t('They can sign in with a password when single sign-on is unavailable. Keep this to one or two owners.')} confirmLabel={t('Allow emergency access')} onClose={() => setAccess(null)} confirm={async () => { await api.put(`/operators/${access.id}/password-access`, { allowed: true }); toast.success(t('Emergency access allowed')); list.reload() }} />)}
+
     {secret && <Dialog open onOpenChange={open => { if (!open) setSecret(null) }}>
       <DialogContent>
         <DialogTitle className="font-semibold">{t('Operator invited')}</DialogTitle>
-        <DialogDescription className="text-muted-foreground">{ssoHint && <>{ssoHint} </>}{password ? <>{rich('Share this API key with the operator. They can set their console password at {{code}}.', { code: <code className="text-xs">{'/setup'}</code> })}</> : t('This API key works with the management API only; share it only if they need API access.')}</DialogDescription>
+        <DialogDescription className="text-muted-foreground">{ssoHint && <>{ssoHint} </>}{selfPassword ? <>{rich('Share this API key with the operator. They can set their console password at {{code}}.', { code: <code className="text-xs">{'/setup'}</code> })}</> : t('This API key works with the management API only; share it only if they need API access.')}</DialogDescription>
         <div className="space-y-2">
           <CopyField label={t('API key (shown once)')} value={secret.secret} />
           <p className="text-xs text-muted-foreground">{t('Expires {{time}}', { time: formatDateTime(secret.expires_at) })}</p>
