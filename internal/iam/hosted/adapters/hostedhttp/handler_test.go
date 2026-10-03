@@ -373,6 +373,7 @@ func TestFailedMessages(t *testing.T) {
 		{"hosted codes are translated", hosted.Problem(errx.Validation, hosted.CodeChooseOrganization, "choose an organization"), 400, "Choose an organization."},
 		{"wrong code counts down", hosted.ErrWrongCode(1), 401, "That code is not valid. Try again. 1 attempt left."},
 		{"password length names its bounds", authentication.PasswordRejected(authentication.RuleLength, 14), 400, "The password must be 14 to 72 characters long."},
+		{"a method the policy refuses is translated", authentication.ErrMethodNotAllowed(), 403, "This sign-in method is not available"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -304,6 +304,7 @@ var (
 		"FACTOR_NOT_ALLOWED":          "hosted.error.factor_not_allowed",
 		"LOGIN_EXPIRED":               "hosted.error.login_expired",
 		"SIGN_IN_METHOD_UNAVAILABLE":  "hosted.error.method_unavailable",
+		"METHOD_NOT_ALLOWED":          "hosted.error.method_unavailable",
 		"INVALID_CODE":                "hosted.error.mfa_code",
 		"MFA_LOCKED":                  "hosted.error.too_many",
 		"PASSWORD_CHANGE_REQUIRED":    "hosted.subtitle.password_expired",
