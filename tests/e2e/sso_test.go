@@ -77,6 +77,15 @@ func newFakeIdP(t *testing.T, key *rsa.PrivateKey, client string) *fakeIdP {
 // user with claims, and returns the callback response.
 func (e *Env) sso(p *fakeIdP, connection, org string, claims map[string]any) Response {
 	e.t.Helper()
+	var out Response
+	e.ssoAfter(p, connection, org, claims, func() {}, func(r Response) { out = r })
+	return out
+}
+
+// ssoAfter is sso with between run after the start and before the
+// callback; check receives the start's refusal or the callback response.
+func (e *Env) ssoAfter(p *fakeIdP, connection, org string, claims map[string]any, between func(), check func(Response)) {
+	e.t.Helper()
 	body, _ := json.Marshal(fiber.Map{"connection_id": connection, "environment_id": e.EnvID, "organization_id": org, "application_id": e.Client, "resource_id": e.Res})
 	req := httptest.NewRequest("POST", "/identity/v1/federation/start", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -88,8 +97,10 @@ func (e *Env) sso(p *fakeIdP, connection, org string, claims map[string]any) Res
 	json.NewDecoder(res.Body).Decode(&start)
 	res.Body.Close()
 	if res.StatusCode != 200 {
-		return Response{Status: res.StatusCode, JSON: start}
+		check(Response{Status: res.StatusCode, JSON: start})
+		return
 	}
+	between()
 	authorization, _ := url.Parse(start["authorization_url"].(string))
 	p.mu.Lock()
 	p.nonce, p.claims = authorization.Query().Get("nonce"), claims
@@ -103,7 +114,7 @@ func (e *Env) sso(p *fakeIdP, connection, org string, claims map[string]any) Res
 	defer result.Body.Close()
 	out := Response{Status: result.StatusCode}
 	json.NewDecoder(result.Body).Decode(&out.JSON)
-	return out
+	check(out)
 }
 
 // TestOrgSSOJourney covers organization connections end to end: sealed

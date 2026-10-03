@@ -106,6 +106,10 @@ func (s federationSessions) SignIn(ctx context.Context, tx authentication.Transa
 	return s.service.SignInFederated(ctx, tx, boundary, user, email, organizationSSO)
 }
 
+func (s federationSessions) SocialAllowed(ctx context.Context, boundary authentication.Context) error {
+	return s.service.SocialAllowed(ctx, boundary)
+}
+
 // lateBranding is a Branding set after the module is built (the hosted
 // module owns branding and is assembled later).
 type lateBranding struct {

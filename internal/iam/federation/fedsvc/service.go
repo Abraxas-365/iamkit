@@ -255,6 +255,11 @@ func (s *Service) Start(ctx context.Context, b authentication.Context, id identi
 	if connection.Scoped() && connection.Organization != b.OrganizationID {
 		return federation.Start{}, errx.Validation("connection belongs to another organization")
 	}
+	if !connection.Scoped() {
+		if err = s.sessions.SocialAllowed(ctx, b); err != nil {
+			return federation.Start{}, err
+		}
+	}
 	return s.start(ctx, connection, federation.State{Connection: id, Boundary: b, Return: back})
 }
 
@@ -352,6 +357,13 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 	claims, err := s.provider.Verify(ctx, connection, code, row.Nonce, row.Verifier)
 	if err != nil {
 		return out, err
+	}
+	// The policy may have changed since the start: refuse before a social
+	// identity is linked or signs up.
+	if !connection.Scoped() {
+		if err = s.sessions.SocialAllowed(ctx, row.Boundary); err != nil {
+			return out, err
+		}
 	}
 	if claims.Assertion != "" {
 		if err = s.repository.UseAssertion(ctx, connection.ID, claims.Assertion, claims.AssertionExpires); err != nil {

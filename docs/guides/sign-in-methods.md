@@ -15,7 +15,7 @@ Manage it in the console (**Sign-in → Sign-in methods**), with the
 | `allow_password` | Password sign-in refused (headless and hosted) |
 | `allow_password_reset` | "Forgot password" hidden and refused; needs `allow_password` |
 | `allow_email_code` | Email-code sign-in refused |
-| `allow_social` | [Environment connections](social-login.md) (Google, Microsoft…) refused |
+| `allow_social` | [Environment connections](social-login.md) (Google, Microsoft…) refused at `/federation/start`, and again at the callback before an identity is linked or signs up |
 | `allow_passkey` | [Passkey](mfa.md#passkeys) sign-in refused (it also needs `webauthn` in `allowed_factors`); omitted on `PUT` keeps the current value |
 
 | Field | Effect when `true` |

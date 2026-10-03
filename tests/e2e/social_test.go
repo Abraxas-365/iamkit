@@ -93,6 +93,38 @@ func TestSocialLogin(t *testing.T) {
 	}
 	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"link_email": true}, 204)
 
+	// Social login off: refused at the start, and at the callback (policy
+	// changed meanwhile) before an account signs up.
+	policy := e.Base + "/sign-in-policy"
+	noSocial := fiber.Map{"allow_password": true, "allow_email_code": true, "allow_social": false, "allow_password_reset": true}
+	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"signup": true, "signup_organization_id": e.Org}, 204)
+	e.Must("PUT", policy, e.Owner, noSocial, 200)
+	gus := map[string]any{"sub": "gus-sub", "email": "gus@example.net", "email_verified": true}
+	refusedAtStart := func(what string) {
+		e.ssoAfter(idp, conn, e.Org, gus, func() { t.Fatalf("%s: the start must refuse", what) }, func(r Response) {
+			if r.Status != 403 || r.JSON["error"].(map[string]any)["code"] != "METHOD_NOT_ALLOWED" {
+				t.Fatalf("%s: %d %v", what, r.Status, r.JSON)
+			}
+		})
+	}
+	refusedAtStart("social off")
+	e.Must("DELETE", policy, e.Owner, nil, 204)
+	e.Must("PATCH", e.Base+"/organizations/"+e.Org, e.Owner, fiber.Map{"allow_social": false}, 204)
+	refusedAtStart("organization social off")
+	e.Must("PATCH", e.Base+"/organizations/"+e.Org, e.Owner, fiber.Map{"allow_social": true}, 204)
+	e.ssoAfter(idp, conn, e.Org, gus, func() {
+		e.Must("PUT", policy, e.Owner, noSocial, 200)
+	}, func(r Response) {
+		if r.Status != 403 || r.JSON["error"].(map[string]any)["code"] != "METHOD_NOT_ALLOWED" {
+			t.Fatalf("social off at callback: %d %v", r.Status, r.JSON)
+		}
+	})
+	if n := count(t, e.DB, `SELECT count(*) FROM users WHERE environment_id=$1 AND email='gus@example.net'`, e.EnvID); n != 0 {
+		t.Fatalf("refused social login signed up %d users", n)
+	}
+	e.Must("DELETE", policy, e.Owner, nil, 204)
+	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"signup": false}, 204)
+
 	// A social login does not bypass the organization's enforced SSO.
 	orgIdP := newFakeIdP(t, e.Key, "acme-client")
 	domain := e.ID("POST", e.Base+"/organizations/"+e.Org+"/domains", fiber.Map{"domain": "example.com"})

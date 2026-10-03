@@ -142,6 +142,17 @@ func (s *Service) SignInFederated(ctx context.Context, tx authentication.Transac
 	return s.signIn(ctx, tx, boundary, user, authentication.MethodSSO, organizationSSO, "")
 }
 
+// SocialAllowed refuses an environment (social) connection's login before
+// the provider round trip and before its account is linked or created.
+func (s *Service) SocialAllowed(ctx context.Context, boundary authentication.Context) error {
+	tx, err := s.repository.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	return s.allowed(ctx, tx, boundary, authentication.MethodSocial)
+}
+
 // signIn finishes the login. passwordHash replaces an expired password: in
 // tx before the session (so a refused session keeps the old one), or once
 // the second factor passed.

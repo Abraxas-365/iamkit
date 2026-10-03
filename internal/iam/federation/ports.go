@@ -163,6 +163,10 @@ type Sessions interface {
 	// organization SSO satisfies SSO enforcement for email and stands in for
 	// the organization's second factor.
 	SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, email string, organizationSSO bool) (authentication.Result, error)
+	// SocialAllowed refuses (403 METHOD_NOT_ALLOWED) social login the
+	// environment, or the boundary's organization when set, turns off. It
+	// reads no account, so it runs before any is linked or created.
+	SocialAllowed(ctx context.Context, boundary authentication.Context) error
 }
 
 // Actions runs the environment's hooks (action.Runner): post_federation on
