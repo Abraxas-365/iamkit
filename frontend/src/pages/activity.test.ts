@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { expect, it } from 'vitest'
 import { describeAction, describeEvent } from './activity'
 
@@ -40,4 +43,18 @@ it('describes semantic event types', () => {
   expect(describeEvent('login.failed')).toBe('Sign-in failed')
   expect(describeEvent('membership.removed')).toBe('Membership removed')
   expect(describeEvent('org_unit.created')).toBe('Org unit created')
+})
+
+// Every named audit action the server writes (the classifier's catalog in
+// internal/iam/event) reads as a sentence, never the raw action string.
+it('labels every audit action the server classifies', () => {
+  const dir = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../internal/iam/event')
+  const source = fs.readFileSync(path.join(dir, 'classify.go'), 'utf8')
+  const block = source.slice(source.indexOf('var actions = map[string]named{'))
+  const body = block.slice(0, block.indexOf('\n}\n'))
+  const constants = Object.fromEntries([...fs.readFileSync(path.join(dir, 'subscription.go'), 'utf8').matchAll(/(Action\w+)\s*=\s*"([^"]+)"/g)].map(m => [m[1], m[2]]))
+  const keys = [...body.matchAll(/^\s*(?:"([^"]+)"|(Action\w+)):/gm)].map(m => m[1] ?? constants[m[2]])
+  expect(keys.length).toBeGreaterThan(70)
+  expect(keys.filter(k => !k || describeAction(k) === k)).toEqual([])
+  expect(describeAction('impersonate')).toBe('Impersonated a user')
 })
