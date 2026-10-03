@@ -218,6 +218,9 @@ func TestOrgSSOJourney(t *testing.T) {
 	e.Grant(e.Org, olga, e.Res, "invoices:read")
 	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"enforcement": "enforced"}, 204)
 	e.Must("POST", connections, e.Owner, fiber.Map{"organization_id": e.Org, "name": "Second", "issuer": idp.URL, "client_id": "second-client", "client_secret": "x", "enforcement": "enforced"}, 409)
+	if dup := e.Must("POST", connections, e.Owner, fiber.Map{"organization_id": e.Org, "name": "Again", "issuer": idp.URL, "client_id": "acme-client", "client_secret": "x"}, 409); !strings.Contains(dup.Body, "issuer and client_id") {
+		t.Fatalf("duplicate connection = %s", dup.Body)
+	}
 	blocked := e.Must("POST", "/identity/v1/login", "", e.LoginBody(e.AliceEmail, e.Pass), 403)
 	if code, _ := blocked.JSON["error"].(map[string]any)["code"].(string); code != "SSO_REQUIRED" {
 		t.Fatalf("blocked = %s", blocked.Body)

@@ -34,6 +34,9 @@ func conflict(err error) error {
 		if pg.Constraint == "federation_connections_enforced" {
 			return errx.Conflict("the organization already has an enforced SSO connection")
 		}
+		if pg.Constraint == "federation_connections_client" {
+			return errx.Conflict("a connection with this issuer and client_id already exists here (disabled connections count)")
+		}
 		return errx.Conflict("conflicting or out-of-bound federation connection")
 	}
 	return failure(err)
