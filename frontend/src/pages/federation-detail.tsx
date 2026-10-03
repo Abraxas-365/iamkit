@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -60,6 +60,7 @@ export default function FederationDetailPage() {
   const [unlinking, setUnlinking] = useState<ExternalIdentity | null>(null)
   const [editing, setEditing] = useState(false)
   const [version, setVersion] = useState(0)
+  const [enabling, setEnabling] = useState(false)
 
   useEffect(() => {
     if (!environment || !connectionId) return
@@ -91,6 +92,14 @@ export default function FederationDetailPage() {
       <PageHeader title={conn.name} description={conn.id} actions={<div className="flex items-center gap-2">
         <Status active={conn.active} />
         {canWrite && conn.active && <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="size-4" /> {t('Edit')}</Button>}
+        {canWrite && !conn.active && <Button variant="outline" disabled={enabling} onClick={async () => {
+          setEnabling(true)
+          try {
+            await api.post(`${base}/federation-connections/${conn.id}/enable`)
+            toast.success(t('{{name}} enabled', { name: conn.name }))
+            setVersion(v => v + 1)
+          } catch (e) { toast.error(message(e)) } finally { setEnabling(false) }
+        }}><RotateCcw className="size-4" /> {t('Enable')}</Button>}
       </div>} />
     </div>
 

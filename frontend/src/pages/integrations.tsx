@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, Ban, Bot, Building2, Globe, KeyRound, Link2, LogIn, Plus, Server, TriangleAlert, UserCog } from 'lucide-react'
+import { ArrowRight, Ban, Bot, Building2, Globe, KeyRound, Link2, LogIn, Plus, RotateCcw, Server, TriangleAlert, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -195,9 +195,16 @@ export function FederationPage() {
     ]
     if (canWrite) cells.push(<RowActions label={t('Actions for {{name}}', { name: c.name })} actions={[
       { label: t('Open'), icon: <ArrowRight />, onSelect: () => navigate(detailPath(c.id)) },
-      ...(c.active ? [{ label: t('Disable'), icon: <Ban />, destructive: true, onSelect: () => setDisable(c) }] : []),
+      ...(c.active ? [{ label: t('Disable'), icon: <Ban />, destructive: true, onSelect: () => setDisable(c) }] : [{ label: t('Enable'), icon: <RotateCcw />, onSelect: () => enable(c) }]),
     ]} />)
     return cells
+  }
+  const enable = async (c: FederationConnection) => {
+    try {
+      await api.post(`${path}/${c.id}/enable`)
+      toast.success(t('{{name}} enabled', { name: c.name }))
+      social.reload(); sso.reload()
+    } catch (e) { toast.error(message(e)) }
   }
 
   return <div className="space-y-8">

@@ -2623,5 +2623,8 @@
   "Role changed": "Rol cambiado",
   "The new role applies at once, to their console sessions and API keys too.": "El nuevo rol se aplica de inmediato, también a sus sesiones de consola y claves de API.",
   "They get a new API key and start fresh: earlier keys and sessions stay ended, emergency access is off, and their password and single sign-on links are cleared unless another workspace uses them.": "Recibe una nueva clave de API y empieza de cero: las claves y sesiones anteriores siguen terminadas, el acceso de emergencia queda desactivado y su contraseña y vínculos de inicio de sesión único se borran salvo que otro espacio de trabajo los use.",
-  "You are changing your own role: you can no longer manage operators afterwards.": "Estás cambiando tu propio rol: después ya no podrás gestionar operadores."
+  "You are changing your own role: you can no longer manage operators afterwards.": "Estás cambiando tu propio rol: después ya no podrás gestionar operadores.",
+  "Connection enabled": "Conexión activada",
+  "{{name}} enabled": "{{name}} activado",
+  "Enabled federation connection": "Activó una conexión de federación"
 }

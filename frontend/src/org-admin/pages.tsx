@@ -281,9 +281,11 @@ export function ConnectionsPage() {
         c.enforcement === 'enforced' ? <Badge variant="secondary" className="bg-primary/10 text-primary">{t('SSO required')}</Badge> : <span className="text-sm text-muted-foreground">{t('Optional')}</span>,
         <span className="tabular-nums">{c.linked}</span>,
         <Status active={c.active} label={c.active ? t('Active') : t('Disabled')} />,
-        write && c.active ? <RowActions label={t('Actions for {{name}}', { name: c.name })} actions={[
+        write ? <RowActions label={t('Actions for {{name}}', { name: c.name })} actions={c.active ? [
           { label: c.enforcement === 'enforced' ? t('Make optional') : t('Require SSO'), onSelect: async () => { try { await client.patch(`/connections/${c.id}`, { enforcement: c.enforcement === 'enforced' ? 'optional' : 'enforced' }); toast.success(t('Connection updated')); list.reload() } catch (e) { toast.error(message(e)) } } },
           { label: t('Disable'), icon: <Ban />, destructive: true, onSelect: () => setDisabling(c) },
+        ] : [
+          { label: t('Enable'), icon: <RotateCcw />, onSelect: async () => { try { await client.post(`/connections/${c.id}/enable`); toast.success(t('Connection enabled')); list.reload() } catch (e) { toast.error(message(e)) } } },
         ]} /> : null,
       ])} />
     {adding && <CreateConnectionDialog base="" kind="sso" organization={{ id: claims.organization_id ?? '', name: 'your organization' }} transport={transport} onClose={() => setAdding(false)} onCreated={list.reload} />}

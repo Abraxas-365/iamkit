@@ -151,6 +151,20 @@ it('shows organization names instead of IDs for connections and SCIM tokens', as
   expect(screen.getAllByText(/\/scim\/v2$/).length).toBeGreaterThan(0)
 })
 
+it('enables a disabled connection from its row', async () => {
+  const active = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+    if (!init.method && url.includes('/federation-connections') && url.includes('scope=organization')) return Response.json({ items: [{ ...connection, active: false }], page: { total: 1, limit: 50, offset: 0 } })
+    if (init.method === 'POST' && url.endsWith('/enable')) return new Response(null, { status: 204 })
+    return active(url, init)
+  })
+  open('federation')
+  await userEvent.click(await screen.findByRole('button', { name: 'Actions for Acme Entra' }))
+  expect(screen.queryByRole('menuitem', { name: 'Disable' })).toBeNull()
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Enable' }))
+  await waitFor(() => expect(calls('POST')).toEqual([{ url: `/management/v1${env}/federation-connections/f1/enable`, body: undefined }]))
+})
+
 it('lands on the environment home with counts, setup steps and recent changes', async () => {
   open('')
   expect(await screen.findByRole('heading', { name: 'Environment home' })).toBeTruthy()

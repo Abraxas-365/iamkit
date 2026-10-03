@@ -97,6 +97,7 @@ export function describeAction(action: string, target = '') {
   if (last === 'force-verify') return t('Marked domain verified')
   if (last === 'permanent') return t('Permanently deleted user')
   if (last === 'profile') return t('Updated member profile')
+  if (last === 'enable') return t('Enabled federation connection')
   // Action-style POSTs end in a verb segment (handled above); any other
   // POST creates the item its path names.
   return sentence(nouns[last] ?? last.replace(/-/g, ' '))

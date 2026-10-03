@@ -21,6 +21,8 @@ it('describes action-style routes', () => {
   expect(describeAction('POST', `${env}/organizations/${id}/domains/${id}/verify`)).toBe('Verified domain')
   expect(describeAction('POST', `${env}/organizations/${id}/domains/${id}/force-verify`)).toBe('Marked domain verified')
   expect(describeAction('POST', `${env}/invitations/${id}/resend`)).toBe('Resent invitation')
+  expect(describeAction('POST', `${env}/federation-connections/${id}/enable`)).toBe('Enabled federation connection')
+  expect(describeAction('POST', `/api/v1/environments/${id}/organizations/${id}/admin/connections/${id}/enable`)).toBe('Enabled federation connection')
 })
 
 it('describes named events and keeps unknown ones as-is', () => {
