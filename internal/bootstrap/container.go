@@ -448,9 +448,7 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		opts = append(opts, WithRedis(redis))
 	}
 	if mail.WebhookClient != nil {
-		// IAMKIT_ALLOW_PRIVATE_DELIVERY: event webhooks and action targets
-		// may reach private addresses too (development only).
-		opts = append(opts, WithWebhookTransport(mail.WebhookClient), WithActionTransport(mail.WebhookClient))
+		opts = append(opts, privateDelivery(mail.WebhookClient)...)
 	}
 	s := New(db, key, strings.TrimSuffix(issuer, "/"), delivery, opts...)
 	if redis != nil {

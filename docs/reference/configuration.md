@@ -13,7 +13,7 @@ containers after changes. Keep secrets outside source control and frontend build
 | `SERVER_PORT` | `8080` | Listening port; image healthcheck assumes 8080 |
 | `OIDC_HMAC_SECRET` | OAuth provider needs at least 32 bytes | Stable secret for OAuth; Compose templates require it explicitly |
 | `EMAIL_*`, `SMTP_*`, `RESEND_API_KEY` | Unset: no global email delivery | Deployment-wide email fallback; see [email](#email) |
-| `IAMKIT_ALLOW_PRIVATE_DELIVERY` | `false` | **Development only.** Lets environment email webhooks and SMTP servers reach localhost and private networks; see [private delivery addresses](#private-delivery-addresses-development-only) |
+| `IAMKIT_ALLOW_PRIVATE_DELIVERY` | `false` | **Development only.** Lets environment email/SMS webhooks, SMTP servers, event webhooks, action targets, OAuth clients' `jwks_uri` and back-channel logout URIs, and federation identity providers reach localhost and private networks; see [private delivery addresses](#private-delivery-addresses-development-only) |
 | `FEDERATION_CREDENTIAL_BINDINGS` | No approved bindings when unset | JSON array of exact environment/issuer/client/secret-reference approvals |
 | `IAMKIT_PROVIDER_*` | As referenced by a binding | External provider client secret; server-only |
 | `IAMKIT_ENCRYPTION_KEY` | Unset: features storing secrets fail | Base64 of 32 bytes; encrypts stored secrets (organization SSO client secrets, SMTP passwords, Resend API keys). See [encryption key](#encryption-key) |
@@ -78,8 +78,16 @@ IAMKIT_ALLOW_PRIVATE_DELIVERY=true
 
 Accepted values are those of Go's `strconv.ParseBool` (`true`/`false`, `1`/`0`,
 …); anything else stops startup. When on, the server logs a warning at startup
-and environment webhooks and SMTP servers may reach any address. The Resend API
-endpoint is fixed and unaffected.
+and these outbound calls may reach any address:
+
+- environment email and SMS webhooks and SMTP servers;
+- [event webhooks](event-webhooks.md) and [action](../guides/actions.md) targets;
+- OAuth clients' `jwks_uri` (`private_key_jwt`) and `backchannel_logout_uri`
+  (still https only: give the local receiver a TLS certificate);
+- identity providers of federation connections with a stored client secret.
+
+The Resend and Twilio API endpoints are fixed and unaffected; LDAP directories
+use `IAMKIT_LDAP_ALLOWED_HOSTS` instead.
 
 > **Never enable it in production or on any deployment where operators are not
 > fully trusted with the server's network access.** It lets anyone who can edit

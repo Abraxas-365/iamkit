@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 
@@ -111,5 +112,17 @@ func TestMailFromEnvAllowPrivate(t *testing.T) {
 	setMailEnv(t, map[string]string{"IAMKIT_ALLOW_PRIVATE_DELIVERY": "true", "EMAIL_PROVIDER": "resend", "EMAIL_FROM": "no-reply@acme.io", "RESEND_API_KEY": "re_1"})
 	if _, mail, err := mailFromEnv(); err != nil || mail.Global == nil || mail.WebhookClient == nil {
 		t.Fatalf("with global: %v %+v", err, mail)
+	}
+}
+
+// The flag also unguards event webhooks, action targets and the federation
+// transport (OAuth jwks_uri and back-channel logout, federation providers).
+func TestPrivateDeliveryTransports(t *testing.T) {
+	var o options
+	for _, opt := range privateDelivery(http.DefaultTransport) {
+		opt(&o)
+	}
+	if o.webhooks != http.DefaultTransport || o.actions != http.DefaultTransport || o.transport != http.DefaultTransport {
+		t.Fatalf("webhooks=%t actions=%t federation=%t, want all set", o.webhooks != nil, o.actions != nil, o.transport != nil)
 	}
 }

@@ -112,7 +112,9 @@ If the provider cannot be reached or its discovery document is unusable, the
 start fails with 502 code `PROVIDER_UNAVAILABLE` (the cause is logged, never
 returned); hosted sign-in pages tell the user the SSO provider is not
 responding. Check the issuer URL, DNS and outbound HTTPS — sealed-secret
-connections only reach public addresses.
+connections only reach public addresses (in development,
+[`IAMKIT_ALLOW_PRIVATE_DELIVERY`](../reference/configuration.md#private-delivery-addresses-development-only)
+lifts this).
 
 Break-glass: `PATCH /organizations/:organization/members/:user` with
 `{"sso_bypass":true}` (console: key icon on Members) lets that member keep

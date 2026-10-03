@@ -161,7 +161,7 @@ create/PATCH) at `/oauth/token` and `/oauth/revoke`. Assertions: `iss` = `sub`
 (replay-checked per client until `exp`), `exp` at most one hour ahead, signed
 with `token_endpoint_auth_signing_alg` (default RS256; RS/PS/ES 256–512) by a
 key in the registered `jwks` (≤10 public RSA/EC keys) or `jwks_uri` (HTTPS,
-public address only, ≤64 KB, cached one hour, refetched at most once a minute
+public address only unless `IAMKIT_ALLOW_PRIVATE_DELIVERY` is on, ≤64 KB, cached one hour, refetched at most once a minute
 for an unknown `kid`). Discovery advertises
 `token_endpoint_auth_methods_supported` and
 `token_endpoint_auth_signing_alg_values_supported`. Introspection still takes
@@ -205,7 +205,9 @@ logout, operator revocation, suspension, access changes; or the user deleted), a
 database trigger queues a notification in the same transaction. Each replica's
 dispatcher (every 5 s, `FOR UPDATE SKIP LOCKED` leases) POSTs
 `application/x-www-form-urlencoded` `logout_token=…` over the guarded transport
-(public addresses, 10 s timeout, no redirects). Logout token: header `typ:
+(public addresses unless the development-only
+[`IAMKIT_ALLOW_PRIVATE_DELIVERY`](../configuration.md#private-delivery-addresses-development-only)
+is on; 10 s timeout, no redirects). Logout token: header `typ:
 logout+jwt`, `kid`; claims `iss`, `aud` (client ID), `iat`, `exp` (+2 min),
 `jti`, `sub`, `sid`, `environment_id`, `events:
 {"http://schemas.openid.net/event/backchannel-logout":{}}`, no `nonce`. Any 2xx

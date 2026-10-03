@@ -44,7 +44,7 @@ func mailFromEnv() (authentication.Delivery, authmodule.Mail, error) {
 		mail.Dial = (&net.Dialer{Timeout: config.ExternalHTTPTimeout}).DialContext
 		mail.WebhookClient = http.DefaultTransport
 		mail.SMSClient = http.DefaultTransport
-		slog.Warn("IAMKIT_ALLOW_PRIVATE_DELIVERY is on: environment email/SMS webhooks, event webhooks and SMTP servers may reach localhost and private networks. Development only — never enable it in production")
+		slog.Warn("IAMKIT_ALLOW_PRIVATE_DELIVERY is on: email/SMS webhooks, SMTP servers, event webhooks, action targets, OAuth back-channel logout and jwks_uri, and identity providers of federation connections may reach localhost and private networks. Development only — never enable it in production")
 	}
 	port := 0
 	if v := strings.TrimSpace(os.Getenv("SMTP_PORT")); v != "" {
@@ -101,6 +101,14 @@ func mailFromEnv() (authentication.Delivery, authmodule.Mail, error) {
 	}
 	mail.Global = sender
 	return nil, mail, nil
+}
+
+// privateDelivery is what IAMKIT_ALLOW_PRIVATE_DELIVERY unguards besides
+// email and SMS (development only): event webhooks, action targets, and the
+// federation transport — OAuth clients' jwks_uri and back-channel logout
+// URIs, and identity providers of sealed-secret federation connections.
+func privateDelivery(t http.RoundTripper) []Option {
+	return []Option{WithWebhookTransport(t), WithActionTransport(t), WithFederationTransport(t)}
 }
 
 // allowPrivateDelivery reads IAMKIT_ALLOW_PRIVATE_DELIVERY (a boolean,
