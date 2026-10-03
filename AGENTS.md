@@ -329,7 +329,7 @@ consumed by services.
    `oauth.Origins`: https or loopback http, ≤ `oauth.MaxOrigins`,
    normalized) feed `Server.ClientOrigins` (`oauth.Queries.OriginAllowed`,
    cached `config.ClientOriginCacheTTL`). `server/cors.go` honours them
-   only on `browserFacing` routes (`/identity/v1/`, `/oauth/`); the
+   only on `browserFacing` routes (`/identity/v1/`, `/oauth/`, `/.well-known/`); the
    deployment-wide `CORS_ALLOWED_ORIGINS` applies everywhere. The ticket
    stays bound to the `__Host-iamkit-authorization` cookie:
    `GET /identity/v1/authorize/:ticket` (`hosted.Flow.Authorization` →

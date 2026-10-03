@@ -19,11 +19,13 @@ type ClientOrigins interface {
 }
 
 // browserFacing are the routes a custom sign-in UI or a single-page
-// application calls from another origin: the identity API and the OAuth
-// endpoints browsers use. Client allowed origins apply only there; the
-// deployment-wide CORS_ALLOWED_ORIGINS applies everywhere.
+// application calls from another origin: the identity API, the OAuth
+// endpoints browsers use and the public discovery documents (OIDC
+// libraries read the configuration and JWKS first). Client allowed origins
+// apply only there; the deployment-wide CORS_ALLOWED_ORIGINS applies
+// everywhere.
 func browserFacing(path string) bool {
-	for _, prefix := range []string{"/identity/v1/", "/oauth/"} {
+	for _, prefix := range []string{"/identity/v1/", "/oauth/", "/.well-known/"} {
 		if strings.HasPrefix(path, prefix) {
 			return true
 		}

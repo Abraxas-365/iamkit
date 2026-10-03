@@ -61,7 +61,10 @@ func TestCORSScopes(t *testing.T) {
 	cases := []struct{ path, origin, want string }{
 		{"/identity/v1/login", "https://login.example", "https://login.example"},
 		{"/oauth/authorize/complete", "https://login.example", "https://login.example"},
+		{"/.well-known/openid-configuration", "https://login.example", "https://login.example"},
+		{"/.well-known/jwks.json", "https://evil.example", ""},
 		{"/management/v1/projects", "https://login.example", ""},
+		{"/api/v1/environments/x/users", "https://login.example", ""},
 		{"/identity/v1/login", "https://console.example", "https://console.example"},
 		{"/management/v1/projects", "https://console.example", "https://console.example"},
 		{"/identity/v1/login", "https://evil.example", ""},

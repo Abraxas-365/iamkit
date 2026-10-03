@@ -54,7 +54,8 @@ with nothing after it: no path other than `/`, no query, fragment, user
 info or wildcard. Origins must be `https`, except `http` on `localhost` or
 `127.0.0.1`. IAMKit normalizes them (lowercase host, default port dropped).
 IAMKit answers CORS with credentials for these origins **only** on the
-browser-facing routes `/identity/v1/*` and `/oauth/*`. It never does so on
+browser-facing routes `/identity/v1/*`, `/oauth/*` and the discovery
+documents under `/.well-known/` (OpenID configuration, JWKS). It never does so on
 `/management/v1` or `/api/v1`. The deployment-wide `CORS_ALLOWED_ORIGINS`
 still applies everywhere. Origin answers are cached briefly, so a change
 takes effect within about a minute. The same list also authorizes the
