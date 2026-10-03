@@ -2532,5 +2532,7 @@
   "“{{current}}” is not an enabled language; the inherited language applies until you choose another.": "“{{current}}” no es un idioma activado; se aplica el idioma heredado hasta que elijas otro.",
   "↑↓ to move": "↑↓ para moverte",
   "→ {{resource}} in {{organization}}": "→ {{resource}} en {{organization}}",
-  "↵ to open": "↵ para abrir"
+  "↵ to open": "↵ para abrir",
+  "SAML identity provider turned off": "Proveedor de identidad SAML desactivado",
+  "This deployment does not serve IAMKit as a SAML identity provider (feature saml_idp, set with IAMKIT_FEATURES). Turn it on to register SAML applications.": "Este despliegue no ofrece IAMKit como proveedor de identidad SAML (función saml_idp, definida con IAMKIT_FEATURES). Actívela para registrar aplicaciones SAML."
 }

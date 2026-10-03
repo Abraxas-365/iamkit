@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AppWindow, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { api } from '@/lib/api'
+import { api, ApiError } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { useList } from '@/hooks/use-list'
 import { Button } from '@/components/ui/button'
@@ -61,9 +61,12 @@ export default function SAMLAppsPage() {
   const path = `${base}/saml/service-providers`
   const providers = useList<ServiceProvider>(`${path}?limit=200`)
   const [idp, setIdP] = useState<IdentityProvider | null>(null)
+  // The deployment's saml_idp feature off: the SAML routes are absent (404).
+  const [off, setOff] = useState(false)
   useEffect(() => {
     const controller = new AbortController()
-    api.get<IdentityProvider>(`${base}/saml/identity-provider`, controller.signal).then(setIdP).catch(() => undefined)
+    api.get<IdentityProvider>(`${base}/saml/identity-provider`, controller.signal).then(setIdP)
+      .catch(e => { if (!controller.signal.aborted && e instanceof ApiError && e.status === 404) setOff(true) })
     return () => controller.abort()
   }, [base])
   const [editing, setEditing] = useState<ServiceProvider | 'new' | null>(null)
@@ -88,9 +91,14 @@ export default function SAMLAppsPage() {
     providers.reload()
   }
 
+  const header = <PageHeader title={t('SAML applications')} description={t('Applications that sign users in with SAML 2.0, IAMKit being their identity provider. Users sign in on the hosted pages and are sent back with a signed assertion.')}
+    actions={canWrite && !off && <Button onClick={() => setEditing('new')}><Plus /> {t('Add SAML application')}</Button>} />
+  if (off) return <div className="space-y-6">{header}
+    <EmptyState icon={<AppWindow />} title={t('SAML identity provider turned off')} description={t('This deployment does not serve IAMKit as a SAML identity provider (feature saml_idp, set with IAMKIT_FEATURES). Turn it on to register SAML applications.')} />
+  </div>
+
   return <div className="space-y-6">
-    <PageHeader title={t('SAML applications')} description={t('Applications that sign users in with SAML 2.0, IAMKit being their identity provider. Users sign in on the hosted pages and are sent back with a signed assertion.')}
-      actions={canWrite && <Button onClick={() => setEditing('new')}><Plus /> {t('Add SAML application')}</Button>} />
+    {header}
     {idp && <section aria-label={t('Identity provider settings')} className="grid gap-3 rounded-lg border p-4 md:grid-cols-2">
       <CopyField label={t('Metadata URL')} value={idp.metadata_url} hint={t('Give this URL to the service provider, or the values below.')} />
       <CopyField label={t('Single sign-on URL')} value={idp.sso_url} />

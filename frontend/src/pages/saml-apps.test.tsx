@@ -74,6 +74,16 @@ it('shows the identity provider settings, edits and deletes a SAML application',
   expect(await screen.findByText('No SAML applications')).toBeTruthy()
 })
 
+it('explains the turned-off SAML identity provider instead of a bare error', async () => {
+  const base = fetchMock.getMockImplementation()!
+  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => url.includes('/saml/')
+    ? Response.json({ error: { message: 'Not Found', code: 'NOT_FOUND' } }, { status: 404 }) : base(url, init))
+  open()
+  expect(await screen.findByText('SAML identity provider turned off')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Add SAML application' })).toBeNull()
+  expect(screen.queryByText('Not Found')).toBeNull()
+})
+
 it('is read-only for viewers', async () => {
   role = 'viewer'
   open()
