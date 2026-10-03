@@ -395,6 +395,43 @@ func TestAccessTokenFormat(t *testing.T) {
 	}
 }
 
+func TestLiveListShapes(t *testing.T) {
+	var got map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == "POST" {
+			json.NewDecoder(r.Body).Decode(&got)
+			w.Write([]byte(`{"id":"cr-1","secret":"ik_scim_x","expires_at":"2030-01-01T00:00:00Z","connection_id":"cn-1"}`))
+			return
+		}
+		if r.URL.Path == "/management/v1/environments/env-1/audit-events" {
+			w.Write([]byte(`{"items":[{"id":"7d0c0f2e-58a5-4a4b-9a3e-5c8f0e0b6a11","actor_id":"op-1","action":"user.created","target_id":"u-1","created_at":"2030-01-01T00:00:00Z","actor_kind":"operator","actor_label":"owner@ops.test","target_label":"Ada"}],"page":{"total":1,"limit":50,"offset":0}}`))
+			return
+		}
+		// The server answers a plain array here (not {items,page}).
+		w.Write([]byte(`[{"id":"cr-1","name":"Okta","organization_id":"org-1","organization_name":"Acme","connection_id":"cn-1","expires_at":"2030-01-01T00:00:00Z"}]`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	ctx := context.Background()
+	// The API requires name and organization_id (400 without them).
+	cred, err := env.CreateProvisioningCredential(ctx, Credential{Name: "Okta", OrganizationID: "org-1", ExpiresIn: "720h"})
+	if err != nil || cred.Secret != "ik_scim_x" {
+		t.Fatal(cred, err)
+	}
+	if got["name"] != "Okta" || got["organization_id"] != "org-1" || got["expires_in"] != "720h" || got["id"] != "" && got["id"] != nil {
+		t.Fatalf("create body = %v", got)
+	}
+	list, err := env.ProvisioningCredentials(ctx)
+	if err != nil || len(list) != 1 || list[0].Name != "Okta" || list[0].OrganizationID != "org-1" || list[0].OrganizationName != "Acme" {
+		t.Fatal(list, err)
+	}
+	events, err := env.AuditEvents(ctx)
+	if err != nil || len(events) != 1 || events[0].ID != "7d0c0f2e-58a5-4a4b-9a3e-5c8f0e0b6a11" || events[0].ActorKind != "operator" || events[0].TargetLabel != "Ada" {
+		t.Fatal(events, err)
+	}
+}
+
 func TestOAuthClientGrantTypes(t *testing.T) {
 	var got []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

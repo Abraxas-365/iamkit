@@ -81,11 +81,25 @@ type ServiceAccountKey struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+// Credential is a SCIM provisioning credential. Create it with Name and
+// OrganizationID (required) and optionally ConnectionID and ExpiresIn; the
+// Secret (ik_scim_) is returned once, on create.
 type Credential struct {
-	ID           string    `json:"id"`
-	Secret       string    `json:"secret"`
-	ConnectionID string    `json:"connection_id,omitempty"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	ID     string `json:"id"`
+	Secret string `json:"secret"`
+	// Name labels the credential (required on create).
+	Name string `json:"name,omitempty"`
+	// OrganizationID is the organization the directory provisions into
+	// (required on create).
+	OrganizationID   string `json:"organization_id,omitempty"`
+	OrganizationName string `json:"organization_name,omitempty"`
+	ConnectionID     string `json:"connection_id,omitempty"`
+	ConnectionName   string `json:"connection_name,omitempty"`
+	// ExpiresIn is the lifetime on create, a Go duration ("720h") or
+	// "never"; empty uses the server default.
+	ExpiresIn string     `json:"expires_in,omitempty"`
+	ExpiresAt time.Time  `json:"expires_at"`
+	RevokedAt *time.Time `json:"revoked_at,omitempty"`
 	// AdoptExistingMembers links SCIM-created users to existing organization
 	// members with the same email instead of failing with 409.
 	AdoptExistingMembers *bool `json:"adopt_existing_members,omitempty"`
@@ -383,11 +397,18 @@ type Session struct {
 }
 
 type AuditEvent struct {
-	ID        int64     `json:"id"`
+	ID        string    `json:"id"`
 	ActorID   string    `json:"actor_id"`
 	Action    string    `json:"action"`
 	TargetID  string    `json:"target_id"`
 	CreatedAt time.Time `json:"created_at"`
+	// ActorLabel is the operator or end user email behind ActorID.
+	ActorLabel string `json:"actor_label,omitempty"`
+	// ActorKind is operator, user, service_account, directory or system.
+	ActorKind      string `json:"actor_kind,omitempty"`
+	OrganizationID string `json:"organization_id,omitempty"`
+	// TargetLabel is the current name of the target, when it has one.
+	TargetLabel string `json:"target_label,omitempty"`
 }
 
 type Impersonation struct {
@@ -589,8 +610,12 @@ func (e Environment) CreateProvisioningCredential(ctx context.Context, input Cre
 	return out, err
 }
 
+// ProvisioningCredentials lists the environment's SCIM credentials (a plain
+// array on the wire, not a paginated envelope).
 func (e Environment) ProvisioningCredentials(ctx context.Context) ([]Credential, error) {
-	return listOp[Credential](e, ctx, []string{"provisioning-credentials"})
+	out := []Credential{}
+	err := e.operation(ctx, "GET", []string{"provisioning-credentials"}, nil, &out)
+	return out, err
 }
 
 func (e Environment) RevokeProvisioningCredential(ctx context.Context, id string) error {

@@ -280,7 +280,10 @@ env.UnlinkExternalIdentity(ctx, fed.ID, "user-id")
 #### Provisioning Credentials
 
 ```go
-cred, _ := env.CreateProvisioningCredential(ctx, iamclient.Credential{})
+cred, _ := env.CreateProvisioningCredential(ctx, iamclient.Credential{
+    Name: "Okta", OrganizationID: "org-id", ExpiresIn: "720h",
+})
+// cred.Secret (ik_scim_…) is shown once: give it to the directory.
 creds, _ := env.ProvisioningCredentials(ctx)
 env.RevokeProvisioningCredential(ctx, cred.ID)
 ```
