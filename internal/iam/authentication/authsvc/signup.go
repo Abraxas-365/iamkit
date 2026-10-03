@@ -220,7 +220,7 @@ func (s *Service) CompleteSignup(ctx context.Context, environment identity.Envir
 	}
 	if s.actions != nil {
 		if _, err = s.actions.Run(ctx, environment, action.PreRegistration, func() action.Input {
-			return action.Input{Organization: &policy.SignupOrganization, Method: []string{method}, User: &action.UserInput{Email: row.Email, Name: row.Name}}
+			return action.Input{Organization: &policy.SignupOrganization, Method: []string{authentication.MethodAMR(method)}, User: &action.UserInput{Email: row.Email, Name: row.Name}}
 		}); err != nil {
 			return authentication.SignedUp{}, err
 		}

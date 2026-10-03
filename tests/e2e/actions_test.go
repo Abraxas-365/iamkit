@@ -2,6 +2,7 @@ package e2e_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -287,7 +288,7 @@ func TestRegistrationActions(t *testing.T) {
 	if n := count(t, e.DB, `SELECT count(*) FROM users WHERE email='new@example.com'`); n != 0 {
 		t.Fatal("denied sign-up created a user")
 	}
-	if in := receiver.last("function:pre_registration"); in["user"].(map[string]any)["email"] != "new@example.com" || in["organization_id"] != e.Org {
+	if in := receiver.last("function:pre_registration"); in["user"].(map[string]any)["email"] != "new@example.com" || in["organization_id"] != e.Org || fmt.Sprint(in["amr"]) != "[pwd]" {
 		t.Fatalf("signup input = %v", in)
 	}
 
