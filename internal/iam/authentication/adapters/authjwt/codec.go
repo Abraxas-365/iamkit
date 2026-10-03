@@ -58,9 +58,9 @@ func (c *Codec) Sign(ctx context.Context, input authentication.Token) (string, e
 	payload := claims{
 		Access:        input.Access,
 		Purpose:       input.Purpose,
-		SessionID:     input.SessionID.String(),
-		OAuthClientID: input.OAuthClientID.String(),
-		ActorID:       input.ActorID.String(),
+		SessionID:     text(input.SessionID),
+		OAuthClientID: text(input.OAuthClientID),
+		ActorID:       text(input.ActorID),
 		AMR:           input.AMR,
 		Scopes:        input.Scopes,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -100,6 +100,16 @@ func mustParse[T any](s string) identity.ID[T] {
 	}
 	id, _ := identity.ParseID[T](s)
 	return id
+}
+
+// text is an optional ID claim: empty (so omitempty drops it) when unset,
+// never the nil UUID, which a relying party would read as present
+// (actor_id → impersonated, sid on a machine token).
+func text[T any](id identity.ID[T]) string {
+	if id.IsZero() {
+		return ""
+	}
+	return id.String()
 }
 
 func (c *Codec) parse(ctx context.Context, raw string, extra ...jwt.ParserOption) (authentication.Token, error) {

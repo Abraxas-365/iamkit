@@ -17,9 +17,9 @@ Do not decode without verifying and treat that as authentication.
 | `purpose` | `application` or `machine` for API access |
 | `organization_id` | Tenant on user/application tokens; absent for machines |
 | `sid` | User session identifier; absent for machines |
-| `actor_id` | Operator attribution on impersonated tokens |
+| `actor_id` | Operator attribution on impersonated tokens; absent otherwise |
 | `act` | `{"sub": "<service account id>"}` ([RFC 8693](https://www.rfc-editor.org/rfc/rfc8693)) on tokens a service account got by [impersonation](../guides/impersonation.md#service-accounts-token-exchange) |
-| `oauth_client_id` | OAuth client binding when applicable |
+| `oauth_client_id` | OAuth client binding when applicable; absent otherwise |
 | `amr` | How the session authenticated: `pwd`, `email` or `fed`, plus `otp` + `mfa` (authenticator or email code), `sms` + `mfa` (text), `hwk` + `mfa` (security key) or `mfa` (recovery code) after a [second factor](../guides/mfa.md); a [passkey](../guides/mfa.md#passkeys) sign-in is `hwk`, `user`, `mfa`; a machine user [key](../guides/machine-users.md#keys-jwt-bearer-login) sign-in is `swk`. Also in OIDC ID tokens |
 | `scp` | OAuth scopes granted (OAuth access tokens only) |
 | `auth_time` | When the session signed in (Unix seconds); unchanged by refreshes. Absent on machine and impersonation tokens; [exchanged](../guides/oauth-oidc.md#calling-another-api-as-the-user-token-exchange) tokens keep the original |

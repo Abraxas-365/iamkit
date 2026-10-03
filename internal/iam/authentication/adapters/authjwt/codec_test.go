@@ -85,6 +85,22 @@ func TestActorAccount(t *testing.T) {
 	if err != nil || got.ActorAccount != account || !got.ActorID.IsZero() || !got.Impersonated() {
 		t.Fatalf("actor = %+v %v", got, err)
 	}
+	// Unset optional IDs are left out, not the nil UUID: SDKs read a present
+	// actor_id as operator impersonation and a sid on a machine token as invalid.
+	plain, err := c.Sign(ctx, authentication.Token{Purpose: "machine", Audience: []string{"api"}, IssuedAt: now, NotBefore: now, ExpiresAt: now + 60})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed, _, err := jwt.NewParser().ParseUnverified(plain, jwt.MapClaims{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := parsed.Claims.(jwt.MapClaims)
+	for _, name := range []string{"actor_id", "oauth_client_id", "sid", "act"} {
+		if v, ok := claims[name]; ok {
+			t.Fatalf("%s = %v, want absent", name, v)
+		}
+	}
 	bad := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{"iss": "https://iam.example", "aud": "api", "exp": now + 60, "purpose": "application", "act": map[string]any{"sub": "nope"}})
 	signed, err := bad.SignedString(key)
 	if err != nil {

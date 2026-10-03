@@ -53,6 +53,16 @@ func TestTokenExchangeResource(t *testing.T) {
 	if !jsonEqual(got["aud"], []any{"https://reports.example"}) || !jsonEqual(got["permissions"], []any{"reports:read"}) || got["sub"] != original["sub"] || got["organization_id"] != original["organization_id"] || got["resource_id"] != reports || got["sid"] == original["sid"] || got["act"] != nil {
 		t.Fatalf("exchanged claims = %v (original %v)", got, original)
 	}
+	// Unset optional IDs are absent, not the nil UUID (SDKs read a present
+	// actor_id as impersonation).
+	for _, name := range []string{"actor_id", "oauth_client_id"} {
+		if v, ok := got[name]; ok {
+			t.Fatalf("exchanged %s = %v, want absent", name, v)
+		}
+		if v, ok := original[name]; ok {
+			t.Fatalf("login %s = %v, want absent", name, v)
+		}
+	}
 	if !jsonEqual(got["amr"], original["amr"]) || !jsonEqual(got["auth_time"], original["auth_time"]) {
 		t.Fatalf("sign-in facts not kept: %v vs %v", got, original)
 	}
@@ -150,7 +160,7 @@ func TestTokenExchangeImpersonation(t *testing.T) {
 	}
 	token := res.JSON["access_token"].(string)
 	claims := claimsOf(t, token)
-	if claims["sub"] != e.Alice || !jsonEqual(claims["act"], map[string]any{"sub": id}) || !jsonEqual(claims["permissions"], []any{"invoices:read"}) || claims["actor_id"] != "00000000-0000-0000-0000-000000000000" {
+	if claims["sub"] != e.Alice || !jsonEqual(claims["act"], map[string]any{"sub": id}) || !jsonEqual(claims["permissions"], []any{"invoices:read"}) || claims["actor_id"] != nil {
 		t.Fatalf("impersonation claims = %v", claims)
 	}
 	me := "/identity/v1/me?environment_id=" + e.EnvID + "&audience=" + url.QueryEscape(e.Audience)
