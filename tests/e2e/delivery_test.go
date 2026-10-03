@@ -95,6 +95,13 @@ func TestDeliveryStatusAndTest(t *testing.T) {
 	}))
 	defer hook.Close()
 	e.Must("PUT", e.Base+"/delivery", e.Owner, fiber.Map{"webhook_url": hook.URL + "/mail", "webhook_token": "t"}, 204)
+	var plain, sealed string
+	if err := e.DB.QueryRow(`SELECT webhook_token, secret_sealed FROM delivery_configs WHERE environment_id=$1`, e.EnvID).Scan(&plain, &sealed); err != nil || plain != "" || sealed == "" {
+		t.Fatalf("webhook token at rest: plain %q sealed %q (%v)", plain, sealed, err)
+	}
+	if cfg := e.Must("GET", e.Base+"/delivery", e.Owner, nil, 200).JSON; cfg["has_token"] != true || cfg["has_secret"] != false {
+		t.Fatalf("sealed token config = %v", cfg)
+	}
 	if s = status(); s["source"] != "environment" {
 		t.Fatalf("override status = %v", s)
 	}

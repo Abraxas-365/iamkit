@@ -153,9 +153,10 @@ func TestSMTPDelivery(t *testing.T) {
 		t.Fatalf("bad credentials = %v", a)
 	}
 
-	// Back to the webhook: the SMTP secret is dropped.
+	// Back to the webhook: the SMTP secret is replaced by the sealed token.
+	smtpSealed := e.sealedSecret()
 	e.Must("PUT", e.Base+"/delivery", e.Owner, fiber.Map{"webhook_url": "https://hook.example/mail", "webhook_token": "t"}, 204)
-	if cfg := e.Must("GET", e.Base+"/delivery", e.Owner, nil, 200).JSON; cfg["provider"] != "webhook" || cfg["has_secret"] != false || cfg["smtp_host"] != "" || e.sealedSecret() != "" {
+	if cfg := e.Must("GET", e.Base+"/delivery", e.Owner, nil, 200).JSON; cfg["provider"] != "webhook" || cfg["has_secret"] != false || cfg["has_token"] != true || cfg["smtp_host"] != "" || e.sealedSecret() == smtpSealed {
 		t.Fatalf("switched = %v", cfg)
 	}
 	if n := e.audited("delivery.update", "/environments/"+e.EnvID+"/delivery"); n != 3 {

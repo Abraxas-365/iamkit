@@ -49,7 +49,7 @@ func (r *DeliveryConfigRepository) GetDeliveryConfig(ctx context.Context, enviro
 		EnvironmentID: row.EnvironmentID,
 		Provider:      row.Provider,
 		WebhookURL:    row.WebhookURL,
-		HasToken:      row.WebhookToken != "",
+		HasToken:      row.WebhookToken != "" || (row.Provider == authentication.ProviderWebhook && row.SecretSealed != ""),
 		InvitationURL: row.InvitationURL,
 		FromEmail:     row.FromEmail,
 		FromName:      row.FromName,
@@ -58,7 +58,7 @@ func (r *DeliveryConfigRepository) GetDeliveryConfig(ctx context.Context, enviro
 		SMTPPort:      int(row.SMTPPort.Int32),
 		SMTPUsername:  row.SMTPUsername,
 		SMTPTLS:       row.SMTPTLS,
-		HasSecret:     row.SecretSealed != "",
+		HasSecret:     row.Provider != authentication.ProviderWebhook && row.SecretSealed != "",
 		CreatedAt:     row.CreatedAt,
 		UpdatedAt:     row.UpdatedAt,
 	}

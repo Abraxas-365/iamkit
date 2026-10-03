@@ -154,9 +154,6 @@ func New(deps Deps) Module {
 	}
 	deliveryRepo := authpg.NewDeliveryConfigRepository(deps.DB)
 	factory := func(cfg authentication.DeliveryConfig, secret authentication.DeliverySecret) (authentication.Delivery, error) {
-		if cfg.Provider == authentication.ProviderWebhook {
-			return authmail.WebhookDelivery{URL: cfg.WebhookURL, Token: secret.WebhookToken, Transport: deps.Mail.WebhookClient}, nil
-		}
 		plain := ""
 		if secret.Sealed != "" {
 			if deps.Cipher == nil {
@@ -167,6 +164,14 @@ func New(deps Deps) Module {
 				return nil, authentication.DeliveryFailure(err, authentication.CodeDeliveryCredential)
 			}
 			plain = string(opened)
+		}
+		if cfg.Provider == authentication.ProviderWebhook {
+			// Sealed since the token is encrypted at rest; plaintext in
+			// rows saved without a key (or before).
+			if secret.WebhookToken != "" {
+				plain = secret.WebhookToken
+			}
+			return authmail.WebhookDelivery{URL: cfg.WebhookURL, Token: plain, Transport: deps.Mail.WebhookClient}, nil
 		}
 		var mailer authentication.Mailer
 		switch cfg.Provider {

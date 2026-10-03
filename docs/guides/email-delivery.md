@@ -133,7 +133,8 @@ the API is `/management/v1/environments/ENV_UUID/delivery`:
   them requires the password again (400), so a stored password is never sent
   to a different server. They are stored encrypted, which requires
   [`IAMKIT_ENCRYPTION_KEY`](../reference/configuration.md#encryption-key); without
-  it, storing one returns 422. The webhook token is stored as before.
+  it, storing one returns 422. The webhook token is write-only too and is
+  stored encrypted when the key is set (in plaintext without it).
   Plaintext SMTP is not configurable (only a `localhost`/loopback mail catcher
   that offers no STARTTLS is used without TLS, for local development).
 

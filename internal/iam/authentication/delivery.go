@@ -74,8 +74,8 @@ type DeliveryConfig struct {
 }
 
 // DeliverySecret is the stored credential of a delivery configuration: the
-// webhook token (plaintext, as it always was) or the sealed SMTP password /
-// Resend API key.
+// sealed SMTP password, Resend API key or webhook token, or a webhook token
+// in plaintext (saved without IAMKIT_ENCRYPTION_KEY, or before it was sealed).
 type DeliverySecret struct {
 	WebhookToken string
 	Sealed       string

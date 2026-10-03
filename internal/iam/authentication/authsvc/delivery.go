@@ -63,8 +63,8 @@ const (
 )
 
 // SetDeliveryConfig validates and stores the configuration. A provider
-// secret (SMTP password, Resend API key) is sealed; left blank while keeping
-// the same provider, the stored one is kept.
+// secret (SMTP password, Resend API key, webhook token) is sealed; left blank
+// while keeping the same provider, a stored SMTP password or API key is kept.
 func (s *DeliveryService) SetDeliveryConfig(ctx context.Context, m authentication.Mutation, input authentication.DeliveryConfigInput) error {
 	if m.Environment.IsZero() {
 		return errx.Validation("environment_id must be a valid UUID")
@@ -77,6 +77,15 @@ func (s *DeliveryService) SetDeliveryConfig(ctx context.Context, m authenticatio
 	if input.Provider != authentication.ProviderWebhook {
 		var err error
 		if sealed, err = s.secret(ctx, m.Environment, input); err != nil {
+			return err
+		}
+	} else if s.cipher != nil {
+		// The webhook token is sealed like the other providers' secrets;
+		// without a configured key it is kept in plaintext, as before.
+		switch token, err := s.cipher.Seal([]byte(input.WebhookToken)); {
+		case err == nil:
+			sealed, input.WebhookToken = token, ""
+		case !keyRequired(err):
 			return err
 		}
 	}
@@ -307,4 +316,11 @@ func (s *DeliveryService) deliver(ctx context.Context, environmentID identity.En
 func notFound(err error) bool {
 	var e *errx.Error
 	return errx.As(err, &e) && e.Type == errx.TypeNotFound
+}
+
+// keyRequired reports the cipher's "no IAMKIT_ENCRYPTION_KEY" refusal
+// (cryptox.CodeKeyRequired).
+func keyRequired(err error) bool {
+	var e *errx.Error
+	return errx.As(err, &e) && e.Code == "ENCRYPTION_KEY_REQUIRED"
 }

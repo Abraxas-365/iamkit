@@ -139,14 +139,14 @@ func TestSetDeliveryConfigSecrets(t *testing.T) {
 		t.Fatalf("resend keep: %v %q", err, repo.secret.Sealed)
 	}
 
-	// Webhook stores no sealed secret and still requires its token.
+	// Webhook requires its token, sealed when a key is configured.
 	if err := s.SetDeliveryConfig(ctx, m, authentication.DeliveryConfigInput{WebhookURL: "https://hook.acme.io"}); err == nil || !strings.HasSuffix(err.Error(), "] webhook_token is required") {
 		t.Fatalf("webhook without token: %v", err)
 	}
 	if err := s.SetDeliveryConfig(ctx, m, authentication.DeliveryConfigInput{WebhookURL: "https://hook.acme.io", WebhookToken: "t"}); err != nil {
 		t.Fatal(err)
 	}
-	if repo.cfg.Provider != "webhook" || repo.secret.Sealed != "" || repo.secret.WebhookToken != "t" {
+	if repo.cfg.Provider != "webhook" || repo.secret.Sealed != "sealed:t" || repo.secret.WebhookToken != "" {
 		t.Fatalf("webhook: %+v %+v", repo.cfg, repo.secret)
 	}
 }
