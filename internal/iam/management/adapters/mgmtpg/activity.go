@@ -24,15 +24,15 @@ func (r *Repository) Sessions(ctx context.Context, environment identity.Environm
 		return query.Paginated[management.Session]{}, failure(err)
 	}
 	out := []management.Session{}
-	sel := fmt.Sprintf(`SELECT s.id,s.user_id,s.organization_id,s.application_id,s.resource_id,s.expires_at,s.revoked_at,
+	sel := fmt.Sprintf(`SELECT s.id,s.user_id,s.organization_id,s.application_id,s.resource_id,s.authenticated_at,s.expires_at,s.revoked_at,
 		COALESCE(u.name,'') AS user_name, COALESCE(u.email,'') AS user_email, COALESCE(o.name,'') AS organization_name,
 		COALESCE(a.name,'') AS application_name, COALESCE(r.name,'') AS resource_name
-		FROM (SELECT * %s ORDER BY id DESC LIMIT %d OFFSET %d) s
+		FROM (SELECT * %s ORDER BY created_at DESC, id DESC LIMIT %d OFFSET %d) s
 		LEFT JOIN users u ON u.id=s.user_id AND u.environment_id=s.environment_id
 		LEFT JOIN organizations o ON o.id=s.organization_id AND o.environment_id=s.environment_id
 		LEFT JOIN applications a ON a.id=s.application_id AND a.environment_id=s.environment_id
 		LEFT JOIN resources r ON r.id=s.resource_id AND r.environment_id=s.environment_id
-		ORDER BY s.id DESC`, base, page.Limit, page.Offset)
+		ORDER BY s.created_at DESC, s.id DESC`, base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &out, sel, args...); err != nil {
 		return query.Paginated[management.Session]{}, failure(err)
 	}

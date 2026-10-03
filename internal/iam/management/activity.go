@@ -12,8 +12,10 @@ type Session struct {
 	Organization identity.OrganizationID `json:"organization_id" db:"organization_id"`
 	Application  identity.ApplicationID  `json:"application_id" db:"application_id"`
 	Resource     identity.ResourceID     `json:"resource_id" db:"resource_id"`
-	Expires      time.Time               `json:"expires_at" db:"expires_at"`
-	Revoked      *time.Time              `json:"revoked_at" db:"revoked_at"`
+	// Authenticated is the sign-in time (auth_time); exchanged sessions keep their root's.
+	Authenticated time.Time  `json:"authenticated_at" db:"authenticated_at"`
+	Expires       time.Time  `json:"expires_at" db:"expires_at"`
+	Revoked       *time.Time `json:"revoked_at" db:"revoked_at"`
 	// Display labels for the referenced entities; empty when deleted.
 	UserName         string `json:"user_name" db:"user_name"`
 	UserEmail        string `json:"user_email" db:"user_email"`

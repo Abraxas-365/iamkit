@@ -148,7 +148,8 @@ default 30: `days`, `totals`, `now`). Creates past a total limit answer 422
 order) and `GET /action-calls` (7-day call log). Writes need owner/admin and
 are audited `action_target.*`/`action_execution.*`. Management API only.
 
-Administrative inventories include `GET /sessions` (optional `user_id` filter), `DELETE /sessions/:id` and
+Administrative inventories include `GET /sessions` (optional `user_id` filter; newest first, each with
+`authenticated_at`), `DELETE /sessions/:id` and
 `GET /audit-events` under this prefix, plus `GET /events`, the typed
 [event log](../events.md) (cursor-paged by event id; `GET /events/export`
 streams it as NDJSON, and `GET /<users|organizations|applications|oauth-clients|roles|resources>/:id/history`

@@ -6682,6 +6682,10 @@
           "application_name": {
             "type": "string"
           },
+          "authenticated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
           "expires_at": {
             "format": "date-time",
             "type": "string"
@@ -6725,6 +6729,7 @@
         "required": [
           "application_id",
           "application_name",
+          "authenticated_at",
           "expires_at",
           "id",
           "organization_id",

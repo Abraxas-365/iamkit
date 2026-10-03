@@ -7371,6 +7371,8 @@ export interface components {
             application_id: string;
             application_name: string;
             /** Format: date-time */
+            authenticated_at: string;
+            /** Format: date-time */
             expires_at: string;
             /** @description UUID (empty when unset) */
             id: string;

@@ -324,6 +324,29 @@ func TestUserScopedInventories(t *testing.T) {
 	e.Must("GET", e.Base+"/organizations?user_id=nope", e.Owner, nil, 400)
 }
 
+// TestSessionsNewestFirst: session ids are random, so the inventory orders
+// by sign-in time — the latest sign-in heads the first page (F-041).
+func TestSessionsNewestFirst(t *testing.T) {
+	e := newEnv(t)
+	signed := []string{}
+	for range 12 {
+		signed = append(signed, claimsOf(t, e.Login(e.AliceEmail))["sid"].(string))
+	}
+	items, _ := e.Must("GET", e.Base+"/sessions?limit=5", e.Owner, nil, 200).JSON["items"].([]any)
+	if len(items) != 5 {
+		t.Fatalf("first page = %v", items)
+	}
+	for i, it := range items {
+		s := it.(map[string]any)
+		if want := signed[len(signed)-1-i]; s["id"] != want {
+			t.Fatalf("session %d = %v, want %s (newest first)", i, s["id"], want)
+		}
+		if s["authenticated_at"] == nil {
+			t.Fatalf("session lacks authenticated_at: %v", s)
+		}
+	}
+}
+
 func TestAuditEventsNameTheirTarget(t *testing.T) {
 	e := newEnv(t)
 	org := e.ID("POST", e.Base+"/organizations", fiber.Map{"name": "Initech"})

@@ -14,7 +14,7 @@ import { PaginationBar } from '@/components/ui/pagination-bar'
 import { ConfirmDialog, CopyText, DataTable, EmptyState, EntityRef, PageHeader, Time } from '@/components/library/patterns'
 import { language, t } from '@/lib/i18n'
 
-interface Session { id: string; user_id: string; user_name: string; user_email: string; organization_id: string; organization_name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; expires_at: string; revoked_at: string | null }
+interface Session { id: string; user_id: string; user_name: string; user_email: string; organization_id: string; organization_name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null }
 interface IAMEvent { id: number; type: string; actor: { kind: string; id: string }; subject: { kind: string; id: string }; organization_id?: string; data?: Record<string, unknown>; occurred_at: string }
 interface EventPage { items: IAMEvent[]; next: number }
 interface AuditEvent { id: string; actor_id: string; actor_label: string; actor_kind?: string; action: string; target_id: string; target_label?: string; created_at: string }
@@ -212,7 +212,7 @@ function Sessions() {
     <PageHeader title={t('Sessions')} description={t('End users signed in to your applications. Revoking a session signs the user out at the next token refresh.')} />
     <PaginationBar state={list} noun="sessions" />
     <DataTable
-      columns={[t('User'), { header: t('Application'), hideBelow: 'md' }, { header: t('Organization'), hideBelow: 'lg' }, { header: t('Expires'), nowrap: true }, t('Status'), t('Actions')]}
+      columns={[t('User'), { header: t('Application'), hideBelow: 'md' }, { header: t('Organization'), hideBelow: 'lg' }, { header: t('Signed in'), nowrap: true }, { header: t('Expires'), nowrap: true }, t('Status'), t('Actions')]}
       loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState icon={<KeyRound />} title={t('No sessions yet')} description={t('Sessions appear here when end users sign in to an application in this environment.')} />}
       rows={list.data.map(s => {
@@ -221,6 +221,7 @@ function Sessions() {
           <EntityRef name={s.user_name || s.user_email} id={s.user_id} secondary={s.user_name ? s.user_email : undefined} />,
           <EntityRef name={s.application_name} id={s.application_id} to={`${base}/applications/${s.application_id}`} secondary={s.resource_name} />,
           <EntityRef name={s.organization_name} id={s.organization_id} />,
+          <Time value={s.authenticated_at} />,
           <Time value={s.expires_at} />,
           <Badge variant="secondary" className={tone}>{label}</Badge>,
           principal?.role !== 'viewer' && !s.revoked_at && <RowActions label={t('Actions for session of {{value}}', { value: s.user_email || s.user_id })} actions={[{ label: t('Revoke session'), icon: <Ban />, destructive: true, onSelect: () => setTarget(s) }]} />,

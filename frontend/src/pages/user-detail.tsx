@@ -24,7 +24,7 @@ interface User { id: string; kind?: string; name: string; email: string; usernam
 interface Org { id: string; name: string; active: boolean }
 interface Factor { id: string; kind: string; name?: string; passkey?: boolean; phone?: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
-interface Session { id: string; organization_name: string; application_id: string; application_name: string; resource_name: string; expires_at: string; revoked_at: string | null }
+interface Session { id: string; organization_name: string; application_id: string; application_name: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null }
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id), inactive: item.active === false })
 
@@ -246,7 +246,7 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
   const state = (s: Session) => s.revoked_at ? [t('Revoked'), 'bg-destructive/10 text-destructive'] : Date.parse(s.expires_at) <= Date.now() ? [t('Expired'), 'bg-muted text-muted-foreground'] : [t('Active'), 'bg-success/10 text-success']
   return <DetailSection title={t('Recent sessions')} description={t('Sign-ins to your applications, newest first.')} actions={<Link to={`${console}/sessions`} className="text-sm text-primary hover:underline">{t('All sessions')}</Link>}>
     <DataTable
-      columns={[t('Application'), { header: t('Organization'), hideBelow: 'md' }, { header: t('Expires'), nowrap: true }, t('Status'), ...(canWrite ? [t('Actions')] : [])]}
+      columns={[t('Application'), { header: t('Organization'), hideBelow: 'md' }, { header: t('Signed in'), nowrap: true }, { header: t('Expires'), nowrap: true }, t('Status'), ...(canWrite ? [t('Actions')] : [])]}
       loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState icon={<KeyRound />} title={t('No sessions')} description={t('Sessions appear when this user signs in to an application.')} />}
       rows={list.data.map(s => {
@@ -254,6 +254,7 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
         return [
           <EntityRef name={s.application_name} id={s.application_id} to={`${console}/applications/${s.application_id}`} secondary={s.resource_name} />,
           s.organization_name || '—',
+          <Time value={s.authenticated_at} />,
           <Time value={s.expires_at} />,
           <Badge variant="secondary" className={tone}>{label}</Badge>,
           ...(canWrite ? [!s.revoked_at && <RowActions label={t('Actions for session in {{application_name}}', { application_name: s.application_name })} actions={[{ label: t('Revoke session'), icon: <Ban />, destructive: true, onSelect: () => setRevoke(s) }]} />] : []),
