@@ -180,9 +180,10 @@ func TestSAMLConnection(t *testing.T) {
 
 	// Metadata by URL, fetched through the federation transport; a later
 	// metadata update may not switch the identity provider.
+	published := idp.Metadata()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/samlmetadata+xml")
-		io.WriteString(w, idp.Metadata())
+		io.WriteString(w, published)
 	}))
 	defer server.Close()
 	e.IdP.Set(server.Client().Transport)
@@ -193,6 +194,13 @@ func TestSAMLConnection(t *testing.T) {
 	e.Must("PATCH", connections+"/"+byURL, e.Owner, fiber.Map{"options": fiber.Map{"metadata_xml": samltest.New("https://other-idp.example.com").Metadata()}}, 400)
 	e.Must("PATCH", connections+"/"+byURL, e.Owner, fiber.Map{"options": fiber.Map{"metadata_url": server.URL + "/metadata", "sign_requests": true}}, 204)
 	e.Must("PATCH", connections+"/"+byURL, e.Owner, fiber.Map{"client_secret": "x"}, 400)
+	// Enabling fetches the metadata again; it must still name the same
+	// identity provider.
+	e.Must("DELETE", connections+"/"+byURL, e.Owner, nil, 204)
+	published = samltest.New("https://other-idp.example.com").Metadata()
+	e.Must("POST", connections+"/"+byURL+"/enable", e.Owner, nil, 400)
+	published = idp.Metadata()
+	e.Must("POST", connections+"/"+byURL+"/enable", e.Owner, nil, 204)
 
 	// Hosted login: enforced SSO redirects to the IdP; the ACS resumes the
 	// hosted journey in the browser that holds both cookies.

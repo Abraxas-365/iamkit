@@ -42,6 +42,7 @@ func (h *Handler) Register(e fiber.Router) {
 	e.Patch("/federation-connections/:id", h.update)
 	e.Get("/federation-connections/:id/identities", h.identities)
 	e.Delete("/federation-connections/:id", h.disable)
+	e.Post("/federation-connections/:id/enable", h.enable)
 	e.Post("/external-identities", h.link)
 	e.Delete("/external-identities/:connection/:user", h.unlink)
 }
@@ -93,6 +94,16 @@ func (h *Handler) disable(c *fiber.Ctx) error {
 		return errx.Validation("invalid connection id")
 	}
 	if err := h.commands.Disable(c.UserContext(), h.mutation(c), id); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
+}
+func (h *Handler) enable(c *fiber.Ctx) error {
+	id, err := identity.ParseConnectionID(c.Params("id"))
+	if err != nil {
+		return errx.Validation("invalid connection id")
+	}
+	if err := h.commands.Enable(c.UserContext(), h.mutation(c), id); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

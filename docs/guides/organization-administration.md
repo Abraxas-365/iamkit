@@ -173,7 +173,7 @@ request and response bodies are the management API's.
 | `POST /role-assignments` (`user_id`, `role_id`), `DELETE /role-assignments/:user/:role` | `iam:org:roles:assign` |
 | `GET /invitations`, `POST /invitations`, `POST /invitations/:invitation/resend`, `DELETE /invitations/:invitation` | `iam:org:members:read`, `iam:org:invitations:write` |
 | `GET /domains`, `POST /domains`, `POST /domains/:domain/verify`, `DELETE /domains/:domain` | `iam:org:read`, `iam:org:domains:write` |
-| `GET /connections`, `GET /connections/:connection`, `POST`, `PATCH /connections/:connection`, `DELETE /connections/:connection` | `iam:org:read`, `iam:org:sso:write` |
+| `GET /connections`, `GET /connections/:connection`, `POST`, `PATCH /connections/:connection`, `DELETE /connections/:connection`, `POST /connections/:connection/enable` (re-enables a disabled connection as it was; 403 for operator `secret_env` connections) | `iam:org:read`, `iam:org:sso:write` |
 | `GET /events` (`?action=` prefix) | `iam:org:audit:read` |
 | `GET /branding`, `PUT /branding`, `DELETE /branding` ([organization branding](hosted-login.md#organization-branding): sign-in pages, invitation pages and emails) | `iam:org:read`, `iam:org:settings:write` |
 | `GET /password-policy`, `PUT /password-policy`, `DELETE /password-policy` ([requirements](password-policy.md) that only tighten the environment's) | `iam:org:read`, `iam:org:settings:write` |

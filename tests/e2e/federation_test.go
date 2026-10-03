@@ -108,4 +108,10 @@ func federationJourney(t *testing.T, app *App, key *rsa.PrivateKey, call func(st
 	if replay.StatusCode != 401 {
 		t.Fatal("federation replay accepted")
 	}
+	// Re-enabling needs the deployment binding of its secret_env to remain.
+	call("DELETE", base+"/federation-connections/"+connection, owner, nil, 204)
+	t.Setenv("FEDERATION_CREDENTIAL_BINDINGS", "[]")
+	call("POST", base+"/federation-connections/"+connection+"/enable", owner, nil, 422)
+	t.Setenv("FEDERATION_CREDENTIAL_BINDINGS", string(binding))
+	call("POST", base+"/federation-connections/"+connection+"/enable", owner, nil, 204)
 }

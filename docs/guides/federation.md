@@ -198,7 +198,9 @@ so a second factor, a refused method or missing access answers exactly like
 
 GET connection detail/identities to inspect links and their origin. DELETE
 `/external-identities/:connection/:user` to unlink or DELETE
-`/federation-connections/:id` to disable a connection. Removing a login method is
+`/federation-connections/:id` to disable a connection; `POST
+/federation-connections/:id/enable` turns it back on with its settings and
+linked identities. Removing a login method is
 not automatically proof all existing sessions are revoked; revoke sessions when
 that is the intended action.
 

@@ -586,6 +586,20 @@ func (s *Service) DisableConnection(ctx context.Context, p orgadmin.Principal, i
 	return s.d.Connections.Disable(ctx, s.federationMutation(p), id)
 }
 
+func (s *Service) EnableConnection(ctx context.Context, p orgadmin.Principal, id identity.ConnectionID) error {
+	if err := p.Require(authorization.PermOrgSSOWrite); err != nil {
+		return err
+	}
+	c, err := s.connection(ctx, p, id)
+	if err != nil {
+		return err
+	}
+	if c.SecretSource == "env" {
+		return errx.Forbidden("this connection reads a deployment secret (secret_env); an operator must enable it")
+	}
+	return s.d.Connections.Enable(ctx, s.federationMutation(p), id)
+}
+
 func (s *Service) federationMutation(p orgadmin.Principal) federation.Mutation {
 	return federation.Mutation{Environment: p.Environment, Actor: p.Actor(), Action: p.Action, Target: p.Target}
 }

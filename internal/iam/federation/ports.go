@@ -16,6 +16,9 @@ type Commands interface {
 	Link(ctx context.Context, m Mutation, connection identity.ConnectionID, user identity.UserID, subject string) error
 	Unlink(ctx context.Context, m Mutation, connection identity.ConnectionID, user identity.UserID) error
 	Disable(ctx context.Context, m Mutation, connection identity.ConnectionID) error
+	// Enable turns a disabled connection back on as it was, keeping the
+	// identities linked to it.
+	Enable(ctx context.Context, m Mutation, connection identity.ConnectionID) error
 }
 type Queries interface {
 	List(ctx context.Context, environment identity.EnvironmentID, filter ConnectionFilter, page query.Pagination) (query.Paginated[ConnectionView], error)
@@ -114,6 +117,11 @@ type Repository interface {
 	Link(ctx context.Context, m Mutation, connection identity.ConnectionID, user identity.UserID, subject string) error
 	Unlink(ctx context.Context, m Mutation, connection identity.ConnectionID, user identity.UserID) error
 	Disable(ctx context.Context, m Mutation, connection identity.ConnectionID) error
+	// FindDisabled returns a disabled connection; NotFound otherwise.
+	FindDisabled(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) (Connection, error)
+	// Enable reactivates a disabled connection; Conflict when its
+	// organization is inactive or another enforced connection is active.
+	Enable(ctx context.Context, m Mutation, c Connection) error
 }
 
 // Provider talks to external identity providers: OIDC and OAuth 2.0

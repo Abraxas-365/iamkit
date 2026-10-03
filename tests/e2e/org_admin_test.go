@@ -168,6 +168,23 @@ func TestOrganizationAdministration(t *testing.T) {
 	if list["page"].(map[string]any)["total"].(float64) != 0 {
 		t.Fatalf("connections = %v", list)
 	}
+	// A disabled connection of the organization can be turned back on.
+	e.Must("DELETE", e.Base+"/federation-connections/"+globexConn, e.Owner, nil, 204)
+	e.Must("POST", sso+"/"+globexConn+"/enable", aliceToken, nil, 404)
+	own := e.Must("POST", sso, aliceToken, fiber.Map{"name": "Okta", "provider": "oidc", "issuer": "https://idp.example", "client_id": "acme", "client_secret": "s3cret"}, 201).JSON["id"].(string)
+	e.Must("DELETE", sso+"/"+own, aliceToken, nil, 204)
+	e.Must("POST", sso+"/"+own+"/enable", malloryToken, nil, 403)
+	e.Must("POST", sso+"/"+own+"/enable", aliceToken, nil, 204)
+	e.Must("POST", sso+"/"+own+"/enable", aliceToken, nil, 404)
+	if got := e.Must("GET", sso+"/"+own, aliceToken, nil, 200).JSON; got["active"] != true {
+		t.Fatalf("enabled connection = %v", got)
+	}
+	// Connections reading a deployment secret stay the operators' to enable.
+	t.Setenv("FEDERATION_CREDENTIAL_BINDINGS", `[{"environment_id":"`+e.EnvID+`","issuer":"https://idp.env.example","client_id":"acme-env","secret_env":"IAMKIT_PROVIDER_ORG_ADMIN"}]`)
+	byEnv := e.ID("POST", e.Base+"/federation-connections", fiber.Map{"organization_id": e.Org, "name": "Env SSO", "issuer": "https://idp.env.example", "client_id": "acme-env", "secret_env": "IAMKIT_PROVIDER_ORG_ADMIN"})
+	e.Must("DELETE", sso+"/"+byEnv, aliceToken, nil, 204)
+	e.Must("POST", sso+"/"+byEnv+"/enable", aliceToken, nil, 403)
+	e.Must("POST", e.Base+"/federation-connections/"+byEnv+"/enable", e.Owner, nil, 204)
 
 	// Audit: owners read their organization's events, attributed to users.
 	e.Must("PATCH", e.Base+"/organizations/"+e.Org, e.Owner, fiber.Map{"name": "Acme Inc"}, 204)

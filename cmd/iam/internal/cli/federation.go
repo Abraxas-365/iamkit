@@ -19,6 +19,7 @@ func federationCmd() *cobra.Command {
 	cmd.AddCommand(fedCreateCmd())
 	cmd.AddCommand(fedUpdateCmd())
 	cmd.AddCommand(fedDisableCmd())
+	cmd.AddCommand(fedEnableCmd())
 	return cmd
 }
 
@@ -471,6 +472,22 @@ func fedDisableCmd() *cobra.Command {
 				return err
 			}
 			p.ok("Federation connection disabled: " + args[0])
+			return nil
+		},
+	}
+}
+
+func fedEnableCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "enable CONNECTION_ID",
+		Short: "Enable a disabled federation connection as it was (linked users keep their accounts)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c := mustClient(cmd)
+			if _, err := c.post(envPath()+"/federation-connections/"+args[0]+"/enable", nil); err != nil {
+				return err
+			}
+			newPrinter().ok("Federation connection enabled: " + args[0])
 			return nil
 		},
 	}

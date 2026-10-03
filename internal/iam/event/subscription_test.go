@@ -77,3 +77,17 @@ func TestClassifySignInTexts(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifyConnectionEnabled(t *testing.T) {
+	const env = "/management/v1/environments/0b3c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11"
+	const id = "7f0c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11"
+	for _, path := range []string{
+		env + "/federation-connections/" + id + "/enable",
+		"/api/v1/environments/0b3c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11/organizations/9a0c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11/admin/connections/" + id + "/enable",
+	} {
+		c, ok := Classify("POST", path)
+		if !ok || c.Type != ConnectionEnabled || c.Subject.Kind != "connection" || c.Subject.ID != id {
+			t.Errorf("%s: %+v %v", path, c, ok)
+		}
+	}
+}

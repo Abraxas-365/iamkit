@@ -66,6 +66,7 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Get("/connections/:connection", h.connection)
 	r.Patch("/connections/:connection", h.updateConnection)
 	r.Delete("/connections/:connection", h.disableConnection)
+	r.Post("/connections/:connection/enable", h.enableConnection)
 	r.Get("/events", h.events)
 	r.Get("/resources", h.resources)
 	r.Get("/resource-grants", h.resourceGrants)
@@ -428,6 +429,14 @@ func (h *Handler) disableConnection(c *fiber.Ctx) error {
 		return err
 	}
 	return done(c, h.commands.DisableConnection(c.UserContext(), principal(c), id))
+}
+
+func (h *Handler) enableConnection(c *fiber.Ctx) error {
+	id, err := connectionID(c)
+	if err != nil {
+		return err
+	}
+	return done(c, h.commands.EnableConnection(c.UserContext(), principal(c), id))
 }
 
 func (h *Handler) events(c *fiber.Ctx) error {

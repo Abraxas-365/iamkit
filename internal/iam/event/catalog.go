@@ -104,6 +104,7 @@ const (
 	ConnectionCreated  = "connection.created"
 	ConnectionUpdated  = "connection.updated"
 	ConnectionDisabled = "connection.disabled"
+	ConnectionEnabled  = "connection.enabled"
 	IdentityLinked     = "identity.linked"
 	IdentityUnlinked   = "identity.unlinked"
 

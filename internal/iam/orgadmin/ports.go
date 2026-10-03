@@ -35,6 +35,7 @@ type Commands interface {
 	CreateConnection(ctx context.Context, p Principal, input federation.ConnectionInput) (identity.ConnectionID, error)
 	UpdateConnection(ctx context.Context, p Principal, connection identity.ConnectionID, input federation.ConnectionUpdate) error
 	DisableConnection(ctx context.Context, p Principal, connection identity.ConnectionID) error
+	EnableConnection(ctx context.Context, p Principal, connection identity.ConnectionID) error
 	// PutResourceGrant grants one of the organization's own resources to
 	// another organization.
 	PutResourceGrant(ctx context.Context, p Principal, input authorization.ResourceGrantInput) (authorization.ResourceGrant, error)

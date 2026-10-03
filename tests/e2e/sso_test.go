@@ -275,6 +275,47 @@ func TestOrgSSOJourney(t *testing.T) {
 	if len(ids) != 3 {
 		t.Fatalf("identities = %v", ids)
 	}
+
+	// Disabled, the connection signs no one in; enabled again, it is the
+	// same connection: linked users return to their accounts.
+	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"enforcement": "enforced"}, 422) // the domain is gone
+	e.Must("POST", domains, e.Owner, fiber.Map{"domain": "example.com"}, 201)
+	verify := items(e.Must("GET", domains, e.Owner, nil, 200))[0]["id"].(string)
+	e.Must("POST", domains+"/"+verify+"/force-verify", e.Owner, nil, 200)
+	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"enforcement": "enforced"}, 204)
+	e.Must("DELETE", connections+"/"+conn, e.Owner, nil, 204)
+	if r := e.sso(idp, conn, e.Org, map[string]any{"sub": "carol-sub"}); r.Status == 200 {
+		t.Fatal("disabled connection signed in")
+	}
+	viewer := e.Must("POST", "/management/v1/operators", e.Owner, fiber.Map{"email": "viewer@example.com", "role": "viewer"}, 201).JSON["secret"].(string)
+	e.Must("POST", connections+"/"+conn+"/enable", viewer, nil, 403)
+	e.Must("POST", connections+"/not-a-uuid/enable", e.Owner, nil, 400)
+	e.Must("POST", connections+"/00000000-0000-4000-8000-000000000000/enable", e.Owner, nil, 404)
+	// Meanwhile another connection enforces SSO: enabling would make two.
+	second := e.ID("POST", connections, fiber.Map{"organization_id": e.Org, "name": "Second", "issuer": idp.URL, "client_id": "second-client", "client_secret": "x", "enforcement": "enforced"})
+	if r := e.Must("POST", connections+"/"+conn+"/enable", e.Owner, nil, 409); !strings.Contains(r.Body, "Second") {
+		t.Fatalf("enforced conflict = %s", r.Body)
+	}
+	e.Must("DELETE", connections+"/"+second, e.Owner, nil, 204)
+	// The organization is inactive: nothing to sign in to.
+	e.Must("PATCH", e.Base+"/organizations/"+e.Org, e.Owner, fiber.Map{"active": false}, 204)
+	e.Must("POST", connections+"/"+conn+"/enable", e.Owner, nil, 409)
+	e.Must("PATCH", e.Base+"/organizations/"+e.Org, e.Owner, fiber.Map{"active": true}, 204)
+	e.Must("POST", connections+"/"+conn+"/enable", e.Owner, nil, 204)
+	e.Must("POST", connections+"/"+conn+"/enable", e.Owner, nil, 404) // already active
+	if d := e.Must("GET", connections+"/"+conn, e.Owner, nil, 200).JSON; d["active"] != true || d["enforcement"] != "enforced" || d["linked"] != float64(3) {
+		t.Fatalf("enabled = %v", d)
+	}
+	if r := e.sso(idp, conn, e.Org, map[string]any{"sub": "carol-sub"}); r.Status != 200 {
+		t.Fatalf("carol after enable: %d %v", r.Status, r.JSON)
+	}
+	found := false
+	for _, ev := range items(e.Must("GET", e.Base+"/events?type=connection.enabled", e.Owner, nil, 200)) {
+		found = found || ev["subject"].(map[string]any)["id"] == conn
+	}
+	if !found {
+		t.Fatal("connection.enabled event missing")
+	}
 }
 
 // TestSealedConnectionBlocksPrivateProviders checks the guarded transport:

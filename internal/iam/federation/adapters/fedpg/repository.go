@@ -194,6 +194,58 @@ func (r *Repository) Link(ctx context.Context, m federation.Mutation, connection
 func (r *Repository) Disable(ctx context.Context, m federation.Mutation, id identity.ConnectionID) error {
 	return r.mutate(ctx, m, `UPDATE federation_connections SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
 }
+func (r *Repository) FindDisabled(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
+	var row connectionRow
+	err := r.db.GetContext(ctx, &row, `SELECT `+connectionColumns+` FROM federation_connections WHERE id=$1 AND environment_id=$2 AND NOT active`, id, environment)
+	if errors.Is(err, sql.ErrNoRows) {
+		return federation.Connection{}, errx.NotFound("disabled federation connection not found")
+	}
+	return row.connection(), failure(err)
+}
+
+// Enable turns a disabled connection back on with c's options (SAML
+// metadata fetched again); everything else, linked identities included, is
+// kept as it was.
+func (r *Repository) Enable(ctx context.Context, m federation.Mutation, c federation.Connection) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return failure(err)
+	}
+	defer tx.Rollback()
+	if !c.Organization.IsZero() {
+		var active bool
+		if err = tx.GetContext(ctx, &active, `SELECT EXISTS(SELECT 1 FROM organizations WHERE id=$1 AND environment_id=$2 AND active FOR SHARE)`, c.Organization, c.Environment); err != nil {
+			return failure(err)
+		}
+		if !active {
+			return errx.Conflict("the connection's organization is inactive")
+		}
+	}
+	if c.Enforcement == federation.EnforcementEnforced {
+		var other string
+		err = tx.GetContext(ctx, &other, `SELECT name FROM federation_connections WHERE environment_id=$1 AND organization_id=$2 AND id<>$3 AND enforcement='enforced' AND active`, c.Environment, c.Organization, c.ID)
+		if err == nil {
+			return errx.Conflict(fmt.Sprintf("the organization already enforces SSO through %q; make it optional or disable it first", other))
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return failure(err)
+		}
+	}
+	// Only SAML options change (metadata fetched again); the rest are kept.
+	res, err := tx.ExecContext(ctx, `UPDATE federation_connections SET active=true, options=CASE WHEN provider='saml' THEN $3 ELSE options END WHERE id=$1 AND environment_id=$2 AND NOT active`, c.ID, c.Environment, options(c.Options))
+	if err != nil {
+		return conflict(err)
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return failure(err)
+	} else if n == 0 {
+		return errx.NotFound("disabled federation connection not found")
+	}
+	if err = audit(ctx, tx, m); err != nil {
+		return err
+	}
+	return failure(tx.Commit())
+}
 func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, filter federation.ConnectionFilter, page query.Pagination) (query.Paginated[federation.ConnectionView], error) {
 	base := `FROM federation_connections c WHERE c.environment_id=$1`
 	args := []any{environment}

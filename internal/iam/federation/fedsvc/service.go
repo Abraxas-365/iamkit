@@ -180,6 +180,37 @@ func (s *Service) Disable(ctx context.Context, m federation.Mutation, id identit
 	}
 	return s.repository.Disable(ctx, m, id)
 }
+
+// Enable turns a disabled connection back on as it was, so the users linked
+// to it keep signing in to the same accounts. The rules of create and update
+// are checked again, since the environment may have changed meanwhile.
+func (s *Service) Enable(ctx context.Context, m federation.Mutation, id identity.ConnectionID) error {
+	if id.IsZero() {
+		return errx.NotFound("federation connection not found")
+	}
+	c, err := s.repository.FindDisabled(ctx, m.Environment, id)
+	if err != nil {
+		return err
+	}
+	if c.Provider == federation.ProviderSAML && c.Options.MetadataURL != "" {
+		// The identity provider may have rotated its certificate meanwhile.
+		issuer := c.Issuer
+		c.Options.MetadataXML = ""
+		if c, err = s.prepare(ctx, c); err != nil {
+			return err
+		}
+		if c.Issuer != issuer {
+			return errx.Validation("the metadata names another identity provider entity ID; create another connection")
+		}
+	}
+	if err = s.check(ctx, c); err != nil {
+		return err
+	}
+	if c.SecretEnv != "" && c.Sealed == "" && !s.provider.Approved(c) {
+		return errx.Business("the connection's secret_env credential is no longer approved for this environment (FEDERATION_CREDENTIAL_BINDINGS); restore the binding before enabling it")
+	}
+	return s.repository.Enable(ctx, m, c)
+}
 func (s *Service) Unlink(ctx context.Context, m federation.Mutation, connectionID identity.ConnectionID, userID identity.UserID) error {
 	if connectionID.IsZero() || userID.IsZero() {
 		return errx.Validation("invalid external identity")

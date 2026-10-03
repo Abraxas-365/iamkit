@@ -498,6 +498,22 @@ export interface paths {
         patch: operations["patchApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminConnectionsbyConnection"];
         trace?: never;
     };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/connections/{connection}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminConnectionsbyConnectionEnable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/organizations/{organization}/admin/domains": {
         parameters: {
             query?: never;
@@ -3249,6 +3265,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["patchManagementEnvironmentsbyEnvironmentFederationConnectionsbyId"];
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/federation-connections/{id}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentFederationConnectionsbyIdEnable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/management/v1/environments/{environment}/federation-connections/{id}/identities": {
@@ -10042,6 +10074,47 @@ export interface operations {
         };
     };
     patchApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminConnectionsbyConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminConnectionsbyConnectionEnable: {
         parameters: {
             query?: never;
             header?: never;
@@ -20875,6 +20948,46 @@ export interface operations {
                 "application/json": components["schemas"]["ConnectionUpdateInput"];
             };
         };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentFederationConnectionsbyIdEnable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description No content */
             204: {
