@@ -88,6 +88,19 @@ test("password sign-in returns to the application signed in; the ticket is singl
   await expect(page.locator('[data-iamkit="root"]')).toHaveAttribute("data-step", "failed");
 });
 
+test("without an organization the authorize request names none, so the email's SSO organization can apply", async ({ page }) => {
+  // The default organization (IAMKIT_ORGANIZATION_ID) is the sign-in page's
+  // fallback, not an authorize hint: a hint pins the ticket and refuses
+  // emails of another organization's verified SSO domain.
+  const authorize = page.waitForRequest((r) => new URL(r.url()).pathname === "/oauth/authorize");
+  await startSignIn(page);
+  expect(new URL((await authorize).url()).searchParams.get("organization_id")).toBeNull();
+  await identify(page, fixture.alice.email);
+  await page.getByLabel("Password").fill(fixture.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expectSignedIn(page, fixture.alice, fixture.organization);
+});
+
 test("a wrong password is refused on the page", async ({ page }) => {
   await startSignIn(page);
   await identify(page, fixture.alice.email);

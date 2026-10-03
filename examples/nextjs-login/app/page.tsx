@@ -1,5 +1,4 @@
 import { signIn, signOut } from "./actions";
-import { config } from "@/lib/config";
 import { session } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -30,8 +29,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
       ) : null}
       <form action={signIn}>
         {/* Sign in to a given organization (the authorize organization_id
-            hint), else the default one or the email's SSO organization. */}
-        <input type="hidden" name="organization" value={params.organization ?? config().organizationId ?? ""} />
+            hint). Without one, the sign-in page picks the email's SSO
+            organization, else IAMKIT_ORGANIZATION_ID: sending the default
+            as a hint would pin the ticket to it and refuse SSO domains of
+            other organizations. */}
+        <input type="hidden" name="organization" value={params.organization ?? ""} />
         <button type="submit">Sign in</button>
       </form>
     </>
