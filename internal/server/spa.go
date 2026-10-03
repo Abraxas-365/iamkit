@@ -33,9 +33,11 @@ func (s *Server) spaRoutes(app *fiber.App, assets fs.FS) {
 			if c.Method() != fiber.MethodGet && c.Method() != fiber.MethodHead {
 				return true
 			}
-			// Skip API paths — let them 404 normally.
+			// Skip API paths — let them 404 normally (/saml/ too: with the
+			// saml_idp feature off its routes are absent and must not
+			// answer with the console).
 			path := c.Path()
-			for _, prefix := range []string{"/management/", "/identity/", "/api/", "/scim/", "/hosted/", "/oauth/", "/health", "/.well-known/"} {
+			for _, prefix := range []string{"/management/", "/identity/", "/api/", "/scim/", "/hosted/", "/oauth/", "/saml/", "/health", "/.well-known/"} {
 				if strings.HasPrefix(path, prefix) {
 					return true
 				}
