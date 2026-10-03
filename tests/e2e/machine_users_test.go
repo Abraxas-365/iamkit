@@ -149,6 +149,14 @@ func TestMachineUsers(t *testing.T) {
 	if err := e.DB.Get(&audited, `SELECT count(*) FROM audit_events WHERE environment_id=$1 AND action IN ('user.access_token_created','user.access_token_revoked')`, e.EnvID); err != nil || audited < 5 {
 		t.Fatalf("audited = %d, %v", audited, err)
 	}
+	// The events' subject is the machine user; data names the token.
+	tokenEvents := e.Must("GET", e.Base+"/events?type=user.*&subject="+bot, e.Owner, nil, 200)
+	if got := eventTypes(tokenEvents); !contains(got, "user.access_token_created") || got[0] != "user.access_token_revoked" {
+		t.Fatalf("token events of the bot = %v", got)
+	}
+	if data := tokenEvents.JSON["items"].([]any)[0].(map[string]any)["data"].(map[string]any); data["access_token_id"] != other["id"] || data["user_id"] != bot {
+		t.Fatalf("revoked token event data = %v", data)
+	}
 }
 
 // TestMachineUsersInvisibleToSCIM: a SCIM directory neither lists machine

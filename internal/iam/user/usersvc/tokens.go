@@ -46,7 +46,7 @@ func (s *AccessTokens) CreateAccessToken(ctx context.Context, m user.Mutation, i
 		ExpiresAt:    time.Now().Add(ttl).UTC().Truncate(time.Second),
 	}
 	m.Action = user.ActionAccessTokenCreated
-	m.Target = token.ID.String()
+	m.Target = credentialTarget(id, token.ID.String(), "access_token_id")
 	stored, err := s.repository.CreateAccessToken(ctx, m, token, hash)
 	if err != nil {
 		return user.IssuedAccessToken{}, err
@@ -59,7 +59,7 @@ func (s *AccessTokens) RevokeAccessToken(ctx context.Context, m user.Mutation, i
 		return errx.NotFound("access token not found")
 	}
 	m.Action = user.ActionAccessTokenRevoked
-	m.Target = token.String()
+	m.Target = credentialTarget(id, token.String(), "access_token_id")
 	return s.repository.RevokeAccessToken(ctx, m, id, token)
 }
 
@@ -68,4 +68,11 @@ func (s *AccessTokens) AccessTokens(ctx context.Context, environment identity.En
 		return query.Paginated[user.AccessToken]{}, errx.NotFound("user not found")
 	}
 	return s.repository.AccessTokens(ctx, environment, id, page)
+}
+
+// credentialTarget is the audit target of a machine credential: its id,
+// with the credential id and the user (the event subject) as event data.
+// The user's id comes last, so the activity log names the machine user.
+func credentialTarget(id identity.UserID, credential, key string) string {
+	return credential + "?" + key + "=" + credential + "&user=" + id.String()
 }

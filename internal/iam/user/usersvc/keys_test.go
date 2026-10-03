@@ -60,7 +60,7 @@ func TestAddKey(t *testing.T) {
 			if (out.PrivateKey != "") != c.private || (c.private && !strings.HasPrefix(out.PrivateKey, "-----BEGIN PRIVATE KEY-----")) {
 				t.Fatalf("private key = %q", out.PrivateKey)
 			}
-			if repo.m.Action != user.ActionKeyAdded || repo.m.Target != out.ID.String() || out.User != user1 {
+			if repo.m.Action != user.ActionKeyAdded || repo.m.Target != out.ID.String()+"?key_id="+out.ID.String()+"&user="+user1.String() || out.User != user1 {
 				t.Fatalf("mutation = %+v key = %+v", repo.m, out.Key)
 			}
 			if strings.Contains(string(out.PublicKey), "kid") || !strings.Contains(string(out.PublicKey), `"use":"sig"`) {

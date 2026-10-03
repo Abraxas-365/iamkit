@@ -47,7 +47,7 @@ func (s *Keys) AddKey(ctx context.Context, m user.Mutation, id identity.UserID, 
 		key.PublicKey, private = public, pem
 	}
 	m.Action = user.ActionKeyAdded
-	m.Target = key.ID.String()
+	m.Target = credentialTarget(id, key.ID.String(), "key_id")
 	stored, err := s.repository.AddKey(ctx, m, key)
 	if err != nil {
 		return user.IssuedKey{}, err
@@ -60,7 +60,7 @@ func (s *Keys) RemoveKey(ctx context.Context, m user.Mutation, id identity.UserI
 		return errx.NotFound("key not found")
 	}
 	m.Action = user.ActionKeyRemoved
-	m.Target = key.String()
+	m.Target = credentialTarget(id, key.String(), "key_id")
 	return s.repository.RemoveKey(ctx, m, id, key)
 }
 

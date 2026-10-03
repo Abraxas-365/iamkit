@@ -160,8 +160,18 @@ func TestMachineUserKeys(t *testing.T) {
 
 	// Audited, and advertised in discovery.
 	var audited int
-	if err := e.DB.Get(&audited, `SELECT count(*) FROM audit_events WHERE action IN ('user.key_added','user.key_removed') AND target_id IN ($1,$2)`, keyID, ecID); err != nil || audited != 3 {
+	if err := e.DB.Get(&audited, `SELECT count(*) FROM audit_events WHERE action IN ('user.key_added','user.key_removed') AND split_part(target_id,'?',1) IN ($1,$2)`, keyID, ecID); err != nil || audited != 3 {
 		t.Fatalf("audit events = %d %v", audited, err)
+	}
+	// The events' subject is the machine user; data names the key.
+	keyEvents := e.Must("GET", e.Base+"/events?type=user.key_added&subject="+bot, e.Owner, nil, 200).JSON["items"].([]any)
+	if len(keyEvents) < 1 {
+		t.Fatalf("key events of the bot = %v", keyEvents)
+	}
+	for _, it := range keyEvents {
+		if data := it.(map[string]any)["data"].(map[string]any); data["user_id"] != bot || data["key_id"] == nil {
+			t.Fatalf("key event = %v", it)
+		}
 	}
 	discovery := e.Must("GET", "/.well-known/openid-configuration", "", nil, 200)
 	if !strings.Contains(discovery.Body, "urn:ietf:params:oauth:grant-type:jwt-bearer") {

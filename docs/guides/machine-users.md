@@ -55,7 +55,7 @@ curl -X POST "$IAMKIT_URL/management/v1/environments/$ENV/users/$USER/access-tok
 `expires_in` is `1h`–`8760h` or `never`; the default is `24h`. GET lists tokens
 (never secrets, with `last_used_at`); DELETE `…/access-tokens/:token` revokes one.
 Creating and revoking are audited `user.access_token_created` and
-`user.access_token_revoked`. CLI: `iam machine-users tokens create|list|revoke`.
+`user.access_token_revoked` (subject = the machine user, `data.access_token_id`). CLI: `iam machine-users tokens create|list|revoke`.
 
 Creating a token does not need the machine user to hold a role on the resource,
 but every use is refused (401) until it does. The console's **Create token**
@@ -127,7 +127,7 @@ refused) and meant for signing. `expires_in` is `1h`–`8760h` or `never`
 (default `8760h`). A machine user holds at most 10 keys; people cannot have
 any (422). GET lists the keys (public halves), DELETE `…/keys/:key` removes one
 and ends the sessions opened with it. Audited `user.key_added` and
-`user.key_removed`. Console: the machine user's **Keys** section. CLI:
+`user.key_removed` (subject = the machine user, `data.key_id`). Console: the machine user's **Keys** section. CLI:
 `iam machine-users keys add USER_ID --private-key-out bot.pem`
 (or `--public-key-file key.jwk`), `keys list`, `keys remove`.
 
