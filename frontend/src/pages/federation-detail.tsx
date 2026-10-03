@@ -330,7 +330,9 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
   }
   if (conn.organization_id) {
     if (values.jit_provisioning !== conn.jit_provisioning) patch.jit_provisioning = values.jit_provisioning
-    if (values.jit_group_id !== (conn.jit_group_id ?? '')) patch.jit_group_id = values.jit_group_id
+    // The default group applies only with JIT: turning JIT off clears it.
+    const group = values.jit_provisioning ? values.jit_group_id : ''
+    if (group !== (conn.jit_group_id ?? '')) patch.jit_group_id = group
     if (values.enforcement !== conn.enforcement) patch.enforcement = values.enforcement
   }
   return patch

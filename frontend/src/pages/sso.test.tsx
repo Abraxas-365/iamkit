@@ -55,6 +55,9 @@ it('patches only changed connection fields', () => {
   expect(connectionPatch(conn, { name: 'Acme Entra', client_secret: '', jit_provisioning: true, jit_group_id: '', enforcement: 'enforced' })).toEqual({})
   expect(connectionPatch(conn, { name: 'Acme', client_secret: 's', jit_provisioning: true, jit_group_id: 'g1', enforcement: 'optional' })).toEqual({ name: 'Acme', client_secret: 's', jit_group_id: 'g1', enforcement: 'optional' })
   expect(connectionPatch({ ...conn, jit_group_id: 'g1' }, { name: 'Acme Entra', client_secret: '', jit_provisioning: true, jit_group_id: '', enforcement: 'enforced' })).toEqual({ jit_group_id: '' })
+  // Turning JIT off clears the default group (the API refuses a group without JIT).
+  expect(connectionPatch({ ...conn, jit_group_id: 'g1' }, { name: 'Acme Entra', client_secret: '', jit_provisioning: false, jit_group_id: 'g1', enforcement: 'enforced' })).toEqual({ jit_provisioning: false, jit_group_id: '' })
+  expect(connectionPatch(conn, { name: 'Acme Entra', client_secret: '', jit_provisioning: false, jit_group_id: '', enforcement: 'enforced' })).toEqual({ jit_provisioning: false })
   expect(connectionPatch({ ...conn, organization_id: null }, { name: 'Acme Entra', client_secret: '' })).toEqual({})
   expect(connectionPatch(conn, { name: 'Acme Entra', client_secret: '', jit_provisioning: true, jit_group_id: '', enforcement: 'enforced', link_email: true })).toEqual({ link_email: true })
 })
