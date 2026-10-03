@@ -124,6 +124,11 @@ func TestEventWebhooks(t *testing.T) {
 	e.Must("PATCH", e.Base+"/users/"+bob, e.Owner, fiber.Map{"name": "Robert"}, 204)
 	e.ID("POST", e.Base+"/organizations", fiber.Map{"name": "Globex"})
 	e.ID("POST", e.Base+"/applications", fiber.Map{"name": "ignored"})
+	// A round that delivered a subscription's head asks for another at
+	// once, so the worker drains a backlog instead of one event per interval.
+	if more, err := e.Server.WebhookDispatcher.DispatchRound(context.Background()); err != nil || !more {
+		t.Fatalf("first round more = %v, %v", more, err)
+	}
 	e.drain()
 	if got := receiver.types(); fmt.Sprint(got) != "[user.created user.updated organization.created]" {
 		t.Fatalf("delivered = %v", got)

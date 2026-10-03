@@ -135,7 +135,8 @@ with package `webhook`.
 ## Operations
 
 Delivery runs as the `event_webhook` [background job](../operations/observability.md#background-jobs)
-every 2 seconds on every replica (rows are leased with `FOR UPDATE SKIP
+every 2 seconds on every replica, and again at once while a subscription's
+delivery succeeds or is given up, so a backlog drains without waiting (rows are leased with `FOR UPDATE SKIP
 LOCKED`); `event_webhook_maintenance` disables failing subscriptions and
 prunes old deliveries every 10 minutes. `iamkit.worker.lag{job="event_webhook"}`
 is how long the oldest due delivery has waited, and

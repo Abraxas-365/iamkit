@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
@@ -173,33 +174,41 @@ func (s *Subscriptions) ListDeliveries(ctx context.Context, environment identity
 }
 
 // DispatchRound claims each due subscription's next delivery and sends
-// them concurrently; more reports a full batch.
+// them concurrently; more reports a full batch or a subscription whose
+// head moved on (delivered or given up), whose next event may be due —
+// otherwise a subscription would drain one event per interval.
 func (s *Subscriptions) DispatchRound(ctx context.Context) (bool, error) {
 	due, err := s.repository.ClaimDeliveries(ctx, webhookBatch, webhookLease)
 	if err != nil {
 		return false, err
 	}
 	var wg sync.WaitGroup
+	var advanced atomic.Bool
 	for _, m := range due {
 		wg.Add(1)
 		go func(m event.Message) {
 			defer wg.Done()
-			s.deliver(ctx, m)
+			if s.deliver(ctx, m) {
+				advanced.Store(true)
+			}
 		}(m)
 	}
 	wg.Wait()
-	return len(due) == webhookBatch, nil
+	return len(due) == webhookBatch || advanced.Load(), nil
 }
 
-func (s *Subscriptions) deliver(ctx context.Context, m event.Message) {
+// deliver sends one delivery and records the outcome; it reports whether
+// the delivery finished, so the subscription's next one can go.
+func (s *Subscriptions) deliver(ctx context.Context, m event.Message) bool {
 	var out event.Outcome
 	if m.Event == nil {
 		// Pruned before it could be delivered: nothing left to send.
 		out = event.Outcome{Error: "the event was pruned before delivery"}
 		if err := s.repository.GiveUp(ctx, m.Delivery, out); err != nil {
 			slog.Error("record webhook delivery", "delivery", m.Delivery, "error", err)
+			return false
 		}
-		return
+		return true
 	}
 	secrets, err := s.open(m.Secrets)
 	if err != nil {
@@ -207,21 +216,25 @@ func (s *Subscriptions) deliver(ctx context.Context, m event.Message) {
 	} else {
 		out = s.sender.Send(ctx, event.Outbound{ID: "msg_" + strconv.FormatInt(m.Delivery, 10), URL: m.URL, Secrets: secrets, Event: *m.Event})
 	}
+	finished := true
 	if out.OK() {
 		err = s.repository.Delivered(ctx, m.Delivery, out)
 	} else if ctx.Err() != nil {
 		// Shutting down: the lease expires and another round retries.
-		return
+		return false
 	} else if wait, ok := event.DeliveryRetryAfter(m.Attempts, m.FirstAttempt, s.now(), config.EventWebhookRetryBase, config.EventWebhookRetryMax, config.EventWebhookRetryWindow); ok {
 		slog.Warn("event webhook failed, will retry", "subscription", m.Subscription, "event", m.Event.ID, "attempt", m.Attempts, "error", out.Error)
 		err = s.repository.RetryLater(ctx, m.Delivery, out, wait)
+		finished = false
 	} else {
 		slog.Warn("event webhook given up", "subscription", m.Subscription, "event", m.Event.ID, "attempts", m.Attempts, "error", out.Error)
 		err = s.repository.GiveUp(ctx, m.Delivery, out)
 	}
 	if err != nil {
 		slog.Error("record webhook delivery", "delivery", m.Delivery, "error", err)
+		return false
 	}
+	return finished
 }
 
 // Maintain disables subscriptions failing for
