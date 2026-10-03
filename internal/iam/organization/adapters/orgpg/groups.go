@@ -44,7 +44,7 @@ func (r *Repository) CreateGroup(ctx context.Context, b organization.Boundary, m
 	if _, err = tx.ExecContext(ctx, `INSERT INTO groups(id,environment_id,organization_id,name,description) VALUES($1,$2,$3,$4,$5)`, id, b.Environment, b.Organization, input.Name, input.Description); err != nil {
 		return groupConflict(err)
 	}
-	if err = audit(ctx, tx, m); err != nil {
+	if err = auditCreated(ctx, tx, m, id.String()); err != nil {
 		return err
 	}
 	return failure(tx.Commit())

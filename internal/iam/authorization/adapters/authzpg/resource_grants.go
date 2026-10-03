@@ -38,7 +38,25 @@ func roleArray(roles []identity.RoleID) any {
 }
 
 func audit(ctx context.Context, tx *sqlx.Tx, m authorization.Mutation) error {
-	return failure(eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target))
+	return auditChange(ctx, tx, m, change{})
+}
+
+// change is what an event needs beyond the mutation's target: the subject
+// id of a create route (the new row; empty = the target's) and data.
+type change struct {
+	subject string
+	data    map[string]any
+}
+
+func auditChange(ctx context.Context, tx *sqlx.Tx, m authorization.Mutation, c change) error {
+	return failure(eventpg.AuditSubject(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, c.subject, c.data))
+}
+
+// grantChange names a resource grant's resource, grantee and granted roles
+// (null = every role) in its events; organization_id stays the scope of
+// the route (the owner administering it), if any.
+func grantChange(id identity.ResourceGrantID, resource identity.ResourceID, grantee identity.OrganizationID, roles any) change {
+	return change{id.String(), map[string]any{"resource_id": resource.String(), "granted_organization_id": grantee.String(), "role_ids": roles}}
 }
 
 // endUngranted ends the sessions of organizations that no longer reach the
@@ -127,7 +145,15 @@ func (r *Repository) PutResourceGrant(ctx context.Context, m authorization.Mutat
 			return id, conflict(err)
 		}
 	}
-	if err = audit(ctx, tx, m); err != nil {
+	roles := []string{}
+	for _, role := range input.Roles {
+		roles = append(roles, role.String())
+	}
+	var granted any = roles
+	if input.Roles == nil {
+		granted = nil
+	}
+	if err = auditChange(ctx, tx, m, grantChange(id, input.Resource, input.Organization, granted)); err != nil {
 		return id, err
 	}
 	return id, failure(tx.Commit())
@@ -173,7 +199,9 @@ func (r *Repository) DeleteResourceGrant(ctx context.Context, m authorization.Mu
 	if _, err = tx.ExecContext(ctx, endOrganization, m.Environment, row.Resource, row.Organization); err != nil {
 		return failure(err)
 	}
-	if err = audit(ctx, tx, m); err != nil {
+	c := grantChange(id, row.Resource, row.Organization, nil)
+	delete(c.data, "role_ids")
+	if err = auditChange(ctx, tx, m, c); err != nil {
 		return err
 	}
 	return failure(tx.Commit())

@@ -105,7 +105,7 @@ func (r *Repository) Link(ctx context.Context, m provisioning.Mutation, input pr
 			return conflict(err)
 		}
 	}
-	if err = eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target); err != nil {
+	if err = eventpg.AuditSubject(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, input.User.String(), map[string]any{"user_id": input.User.String(), "connection_id": input.Connection.String()}); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())

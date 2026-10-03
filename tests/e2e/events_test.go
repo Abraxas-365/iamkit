@@ -70,6 +70,23 @@ func TestEvents(t *testing.T) {
 	e.Must("GET", e.Base+"/events?type=nope", e.Owner, nil, 400)
 	e.Must("GET", e.Base+"/events?after=1&before=2", e.Owner, nil, 400)
 
+	// Create and assignment routes name their subject and ids in data.
+	role := e.ID("POST", e.Base+"/roles", fiber.Map{"name": "auditor", "resource_id": e.Res, "permissions": []string{}})
+	group := e.ID("POST", e.Base+"/organizations/"+e.Org+"/groups", fiber.Map{"name": "Auditors"})
+	e.Must("POST", e.Base+"/role-assignments", e.Owner, fiber.Map{"organization_id": e.Org, "user_id": e.Alice, "role_id": role}, 204)
+	e.Must("POST", e.Base+"/group-role-assignments", e.Owner, fiber.Map{"organization_id": e.Org, "group_id": group, "role_id": role}, 204)
+	for _, tc := range []struct{ typ, subject, key, value string }{
+		{"role.created", role, "resource_id", e.Res},
+		{"group.created", group, "organization_id", e.Org},
+		{"role.assigned", e.Alice, "role_id", role},
+		{"group_role.assigned", group, "role_id", role},
+	} {
+		items := e.Must("GET", e.Base+"/events?type="+tc.typ+"&subject="+tc.subject, e.Owner, nil, 200).JSON["items"].([]any)
+		if len(items) != 1 || items[0].(map[string]any)["data"].(map[string]any)[tc.key] != tc.value {
+			t.Fatalf("%s of %s = %v", tc.typ, tc.subject, items)
+		}
+	}
+
 	// A failed sign-in is an event of its own.
 	e.Must("POST", "/identity/v1/login", "", e.LoginBody(e.AliceEmail, "wrong password!"), 401)
 	if got := eventTypes(e.Must("GET", e.Base+"/events?type=login.failed", e.Owner, nil, 200)); len(got) != 1 {

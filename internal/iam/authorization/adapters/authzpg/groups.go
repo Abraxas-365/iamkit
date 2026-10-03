@@ -13,6 +13,7 @@ import (
 // or a group outside the organization, matches no row (404).
 func (r *Repository) AssignGroupRole(ctx context.Context, m authorization.Mutation, input authorization.GroupRoleAssignment) error {
 	return r.mutateAs(ctx, m, assignment("the group already holds this role", "the group is not in the organization"),
+		change{input.Group.String(), map[string]any{"organization_id": input.Organization.String(), "role_id": input.Role.String()}},
 		`INSERT INTO group_role_assignments(group_id,environment_id,organization_id,resource_id,role_id)
 		SELECT g.id,g.environment_id,g.organization_id,ro.resource_id,ro.id
 		FROM groups g JOIN roles ro ON ro.environment_id=g.environment_id

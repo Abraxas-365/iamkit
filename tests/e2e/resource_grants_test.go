@@ -184,6 +184,26 @@ func TestResourceGrants(t *testing.T) {
 	if n := count(t, e.DB, `SELECT count(*) FROM audit_events WHERE environment_id=$1 AND actor_kind='user' AND organization_id=$2 AND target_id LIKE '%/resource-grants%'`, e.EnvID, vendor); n != 4 {
 		t.Fatalf("vendor grant audit events = %d", n)
 	}
+	// The grant events name the grant, its resource, grantee and roles
+	// (role_ids null = every role); the scope stays the owner organization.
+	grantRes := e.Must("GET", e.Base+"/events?type=resource_grant.*&subject="+grantID, e.Owner, nil, 200)
+	grantEvents := grantRes.JSON["items"].([]any)
+	if got := eventTypes(grantRes); !equal(got, []string{"resource_grant.deleted", "resource_grant.updated", "resource_grant.updated", "resource_grant.updated"}) {
+		t.Fatalf("grant events = %v", got)
+	}
+	for i, it := range grantEvents {
+		ev := it.(map[string]any)
+		data := ev["data"].(map[string]any)
+		if data["resource_id"] != e.Res || data["granted_organization_id"] != e.Org || ev["organization_id"] != vendor || ev["actor"].(map[string]any)["id"] != vic {
+			t.Fatalf("grant event %d = %v", i, ev)
+		}
+	}
+	if roles := grantEvents[1].(map[string]any)["data"].(map[string]any)["role_ids"].([]any); len(roles) != 1 || roles[0] != reader {
+		t.Fatalf("narrowed grant roles = %v", roles)
+	}
+	if roles, ok := grantEvents[2].(map[string]any)["data"].(map[string]any)["role_ids"]; !ok || roles != nil {
+		t.Fatalf("widened grant roles = %v (%v)", roles, ok)
+	}
 
 	// Turning require_grant off restores every organization.
 	e.Must("PUT", api+"/resources/"+e.Res+"/access", e.scopedToken("iam:resources:read", "iam:resources:write"), fiber.Map{"owner_organization_id": vendor, "require_grant": false}, 204)

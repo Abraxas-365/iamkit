@@ -31,6 +31,13 @@ func Audit(ctx context.Context, tx Execer, environment identity.EnvironmentID, a
 // AuditWith is Audit adding ids the target does not name (e.g. the user of
 // a session target) to the event's data.
 func AuditWith(ctx context.Context, tx Execer, environment identity.EnvironmentID, actor, action, target string, data map[string]any) error {
+	return AuditSubject(ctx, tx, environment, actor, action, target, "", data)
+}
+
+// AuditSubject is AuditWith naming the subject the target does not (the
+// new row of a create route, whose classified subject id is empty); an id
+// the target names wins.
+func AuditSubject(ctx context.Context, tx Execer, environment identity.EnvironmentID, actor, action, target, subject string, data map[string]any) error {
 	if _, err := tx.ExecContext(ctx, `INSERT INTO audit_events(environment_id,actor_id,action,target_id) VALUES($1,$2,$3,$4)`, environment, actor, action, target); err != nil {
 		return failure(err)
 	}
@@ -40,6 +47,9 @@ func AuditWith(ctx context.Context, tx Execer, environment identity.EnvironmentI
 	}
 	for k, v := range data {
 		c.Data[k] = v
+	}
+	if c.Subject.ID == "" {
+		c.Subject.ID = subject
 	}
 	return Emit(ctx, tx, environment, actor, c.Type, c.Subject, c.Data)
 }

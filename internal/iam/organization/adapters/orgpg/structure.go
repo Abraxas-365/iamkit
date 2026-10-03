@@ -54,6 +54,12 @@ func (r *Repository) View(ctx context.Context, b organization.Boundary, view org
 func audit(ctx context.Context, tx *sqlx.Tx, m organization.Mutation) error {
 	return failure(eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target))
 }
+
+// auditCreated is audit naming the created row as the event subject (create
+// routes' targets name only the collection).
+func auditCreated(ctx context.Context, tx *sqlx.Tx, m organization.Mutation, id string) error {
+	return failure(eventpg.AuditSubject(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, id, nil))
+}
 func (r *Repository) mutate(ctx context.Context, m organization.Mutation, query string, args ...any) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
@@ -113,7 +119,7 @@ func (r *Repository) SaveUnit(ctx context.Context, b organization.Boundary, m or
 	if err != nil {
 		return conflict(err)
 	}
-	if err = audit(ctx, tx, m); err != nil {
+	if err = auditCreated(ctx, tx, m, id.String()); err != nil {
 		return err
 	}
 	return failure(tx.Commit())

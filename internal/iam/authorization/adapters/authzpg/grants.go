@@ -100,12 +100,13 @@ func (r *Repository) ListGrants(ctx context.Context, environment identity.Enviro
 	return query.NewPaginated(rows, total, page), nil
 }
 func (r *Repository) mutate(ctx context.Context, m authorization.Mutation, query string, args ...any) error {
-	return r.mutateAs(ctx, m, conflict, query, args...)
+	return r.mutateAs(ctx, m, conflict, change{}, query, args...)
 }
 
 // mutateAs is mutate with its own mapping of constraint violations, for
-// statements whose conflicts deserve a specific message.
-func (r *Repository) mutateAs(ctx context.Context, m authorization.Mutation, onConflict func(error) error, query string, args ...any) error {
+// statements whose conflicts deserve a specific message, and the event
+// subject and data the mutation's target does not name.
+func (r *Repository) mutateAs(ctx context.Context, m authorization.Mutation, onConflict func(error) error, c change, query string, args ...any) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return failure(err)
@@ -122,7 +123,7 @@ func (r *Repository) mutateAs(ctx context.Context, m authorization.Mutation, onC
 	if n == 0 {
 		return errx.NotFound("resource not found")
 	}
-	if err = audit(ctx, tx, m); err != nil {
+	if err = auditChange(ctx, tx, m, c); err != nil {
 		return failure(err)
 	}
 	return failure(tx.Commit())
@@ -131,14 +132,15 @@ func (r *Repository) SaveRole(ctx context.Context, m authorization.Mutation, id 
 	if !creating {
 		return r.mutate(ctx, m, `UPDATE roles SET name=$3,permissions=$4 WHERE environment_id=$1 AND id=$2 AND resource_id=$5 AND system_role IS NULL`, m.Environment, id, input.Name, array(input.Permissions), input.Resource)
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO roles(id,environment_id,resource_id,name,permissions) VALUES($1,$2,$3,$4,$5)`, id, m.Environment, input.Resource, input.Name, array(input.Permissions))
-	return conflict(err)
+	return r.mutateAs(ctx, m, conflict, change{id.String(), map[string]any{"resource_id": input.Resource.String()}},
+		`INSERT INTO roles(id,environment_id,resource_id,name,permissions) VALUES($1,$2,$3,$4,$5)`, id, m.Environment, input.Resource, input.Name, array(input.Permissions))
 }
 func (r *Repository) DeleteRole(ctx context.Context, m authorization.Mutation, id identity.RoleID) error {
 	return r.mutate(ctx, m, `DELETE FROM roles WHERE environment_id=$1 AND id=$2 AND system_role IS NULL`, m.Environment, id)
 }
 func (r *Repository) AssignRole(ctx context.Context, m authorization.Mutation, input authorization.RoleAssignment) error {
 	return r.mutateAs(ctx, m, assignment("the user already holds this role in the organization", "the user is not a member of the organization"),
+		change{input.User.String(), map[string]any{"organization_id": input.Organization.String(), "role_id": input.Role.String()}},
 		`INSERT INTO role_assignments(environment_id,organization_id,user_id,resource_id,role_id) SELECT environment_id,$2,$3,resource_id,id FROM roles WHERE environment_id=$1 AND id=$4`, m.Environment, input.Organization, input.User, input.Role)
 }
 func (r *Repository) UnassignRole(ctx context.Context, m authorization.Mutation, input authorization.RoleAssignment) error {
