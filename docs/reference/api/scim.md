@@ -126,7 +126,9 @@ resets, `remove` clears the aliases; `emails[value eq "x"]` and
 `emails[type eq "t"].value` target one alias, and `emails[primary eq true].value`
 renames. Read-only (`id`, `meta`, `schemas`) and unstored attributes
 (`name.givenName`, `title`, `department`, …) are accepted and ignored, so a
-directory's full attribute mapping does not fail the sync. `phoneNumbers` is
+directory's full attribute mapping does not fail the sync. A user always
+keeps a name, a state and its primary email: `remove` of `displayName`,
+`name` or `active` is ignored, and `remove` `emails` clears only the aliases. `phoneNumbers` is
 stored only for connections issued with `map_phone: true`: the element of
 `type` `mobile` (`phoneNumbers[type eq "mobile"]`, `….value`, or a whole list)
 becomes the user's unverified `phone`, a list without one or `remove` clears
@@ -161,7 +163,7 @@ POST, PUT and PATCH responses always return the full resource.
 
 SCIM Error schema with string `status`, `detail` and, for 400/409, a `scimType`
 (`invalidSyntax`, `invalidFilter`, `invalidPath`, `invalidValue`, `mutability`,
-`uniqueness`). Bulk, sort, password change and ETags are not supported.
+`uniqueness`). Bulk, sort, password change, ETags and `POST …/.search` are not supported.
 
 Source: `internal/iam/provisioning/adapters/provhttp/{handler,patch,schema,groups}.go`,
 `provsvc/{service,groups}.go`. See [connection setup](../../guides/scim-provisioning.md).
