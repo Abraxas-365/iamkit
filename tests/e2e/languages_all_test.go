@@ -19,7 +19,7 @@ func TestHostedEveryLanguage(t *testing.T) {
 	e := newEnv(t)
 	// 23 languages × 12 pages outrun the per-minute management limit.
 	e.Server.RateLimitPerMinute = 10000
-	e.App = contracted(t, e.Server.App())
+	e.App = contracted(t, e.Server.App(), e.Server.WaitDeliveries)
 	t.Cleanup(func() { e.App.Shutdown() })
 	settings := e.Base + "/login-settings"
 	listed := e.Must("GET", settings+"/locales", e.Owner, nil, 200).JSON["items"].([]any)

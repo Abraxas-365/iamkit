@@ -168,6 +168,9 @@ any account lookup → 403 `METHOD_NOT_ALLOWED`; its `mfa_required` is OR-ed int
 `mfapg.Policy`; its `allow_signup` + `signup_organization_id`/`signup_group_id`
 drive `SignupCommands` (`Signup` parks a `signups` row and emails an
 `email_verification` code, 202 whether or not the email has an account;
+code emails of sign-ups and challenges go out after the answer
+(`authsvc.deliverLater`, `Server.WaitDeliveries` at shutdown and in e2e), so
+timing never tells an account from an unknown address;
 `CompleteSignup` creates the verified user, membership and group membership in
 one `SignupTransaction.Join`, audited `user.signup`, no session — hosted
 `Flow.CompleteSignup` then continues through `hostedsvc.result`; per-client

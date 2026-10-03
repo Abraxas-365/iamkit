@@ -66,7 +66,7 @@ func TestIdentityIsolationJourney(t *testing.T) {
 	}
 	mail := &capturedMail{}
 	s := bootstrap.New(db, key, "https://iam.example", mail)
-	app := contracted(t, s.App())
+	app := contracted(t, s.App(), s.WaitDeliveries)
 	defer app.Shutdown()
 	call := func(method, path, token string, body any, want int) map[string]any {
 		t.Helper()

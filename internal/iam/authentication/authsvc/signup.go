@@ -3,7 +3,6 @@ package authsvc
 import (
 	"context"
 	"crypto/subtle"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -132,12 +131,12 @@ func (s *Service) Signup(ctx context.Context, input authentication.Signup) (iden
 	if err = tx.CreateSignup(ctx, pending); err != nil {
 		return identity.ChallengeID{}, err
 	}
-	message := authentication.Message{Email: email, Purpose: authentication.PurposeEmailVerification, Code: code, Locale: i18n.Match(input.Locale)}
-	if err = s.send(ctx, input.Environment, message); err != nil {
-		slog.ErrorContext(ctx, "sign-up delivery failed", "signup", id, "environment", input.Environment, "err", err)
-		return id, nil
+	if err = tx.Commit(); err != nil {
+		return identity.ChallengeID{}, err
 	}
-	return id, tx.Commit()
+	message := authentication.Message{Email: email, Purpose: authentication.PurposeEmailVerification, Code: code, Locale: i18n.Match(input.Locale)}
+	s.deliverLater(ctx, input.Environment, message, "signup", id, "environment", input.Environment, "purpose", message.Purpose)
+	return id, nil
 }
 
 // signupPassword checks a new account's password against the environment's

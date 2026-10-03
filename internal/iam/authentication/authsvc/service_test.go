@@ -156,8 +156,14 @@ func TestDeliveryFailureDoesNotRevealEligibility(t *testing.T) {
 		if err != nil || id.IsZero() {
 			t.Fatalf("eligibility leaked: %q %v", raw, err)
 		}
-		if tx.committed || !tx.rolledBack {
-			t.Fatal("failed delivery must roll back")
+		// The email goes out after the answer: an account's challenge is
+		// kept (it expires unused when the email fails); nothing is kept for
+		// an unknown address.
+		if !s.WaitDeliveries(time.Second) {
+			t.Fatal("delivery still running")
+		}
+		if tx.committed != (raw != "") || !tx.rolledBack {
+			t.Fatalf("committed=%v rolledBack=%v", tx.committed, tx.rolledBack)
 		}
 	}
 }

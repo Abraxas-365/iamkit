@@ -197,7 +197,7 @@ func newHarness(t *testing.T, opts ...bootstrap.Option) *Harness {
 	s := bootstrap.New(db, key, "https://iam.example", mail, opts...)
 	app := s.App()
 	t.Cleanup(func() { app.Shutdown() })
-	return &Harness{t: t, DB: db, App: contracted(t, app), Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp, Server: s}
+	return &Harness{t: t, DB: db, App: contracted(t, app, s.WaitDeliveries), Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp, Server: s}
 }
 
 // fakeDNS serves TXT records for domain verification; names in fail return

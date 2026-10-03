@@ -132,6 +132,7 @@ func TestSignup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	s.WaitDeliveries(time.Second)
 	pending := store.pending[id]
 	if pending == nil || pending.Email != "new@example.com" || pending.Name != "Ada" || pending.PasswordHash != "hash" {
 		t.Fatalf("pending: %+v", pending)

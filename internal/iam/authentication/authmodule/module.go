@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"sync/atomic"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
@@ -99,6 +100,9 @@ type Module struct {
 	// Brand sets where rendered emails read the environment's brand, once
 	// the module owning it is built.
 	Brand func(authentication.Branding)
+	// WaitDeliveries waits for code emails still being sent after their
+	// response (shutdown, tests).
+	WaitDeliveries func(timeout time.Duration) bool
 }
 type federationSessions struct{ service *authsvc.Service }
 
@@ -200,6 +204,7 @@ func New(deps Deps) Module {
 		SignInPolicies: signIns, SignInPoliciesHTTP: authhttp.NewSignInPolicyHandler(signIns, signIns, deps.ActorID),
 		Signups: service, SignupHTTP: authhttp.NewSignupHandler(service),
 		SMS: sms, SMSQueries: sms, SMSHTTP: authhttp.NewSMSHandler(sms, sms, deps.ActorID),
-		Brand: func(b authentication.Branding) { branding.b.Store(&b) },
+		Brand:          func(b authentication.Branding) { branding.b.Store(&b) },
+		WaitDeliveries: service.WaitDeliveries,
 	}
 }

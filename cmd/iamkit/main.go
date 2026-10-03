@@ -181,6 +181,9 @@ func run() error {
 	case <-ctx.Done():
 		slog.Info("shutting down")
 		err = app.ShutdownWithTimeout(10 * time.Second)
+		if s.WaitDeliveries != nil && !s.WaitDeliveries(10*time.Second) {
+			slog.Warn("code emails still being sent at exit")
+		}
 		if s.Workers != nil && !s.Workers.Wait(10*time.Second) {
 			slog.Warn("background jobs still running at exit")
 		}

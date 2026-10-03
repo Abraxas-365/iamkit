@@ -210,6 +210,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Actions = actionModule.HTTP
 	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Actions: actionModule.Runner, Usage: usageModule.Commands, Keys: signingModule.Keyring, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor, Passkeys: mfaModule.Passkeys, Cipher: o.sealer, Breaches: o.breaches, ActorID: server.OperatorID, Mail: o.mail})
 	s.Tokens = authenticationModule.Tokens
+	s.WaitDeliveries = authenticationModule.WaitDeliveries
 	s.Auth = authenticationModule.HTTP
 	s.PasswordPolicy = authenticationModule.PasswordPoliciesHTTP
 	s.SignInPolicy = authenticationModule.SignInPoliciesHTTP

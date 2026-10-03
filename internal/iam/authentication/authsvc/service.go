@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
@@ -29,6 +30,43 @@ type Service struct {
 	signups     authentication.SignupRepository
 	actions     authentication.Actions
 	usage       authentication.Usage
+	// mail tracks code emails still being sent after their response
+	// (deliverLater).
+	mail sync.WaitGroup
+}
+
+// deliverLater sends a code email after the caller answered: how long the
+// provider takes must not tell an account from an unknown address, whose
+// answer comes as soon as the lookup is done. A failure is logged; the code
+// never arrives and its challenge expires unused.
+func (s *Service) deliverLater(ctx context.Context, environment identity.EnvironmentID, message authentication.Message, attrs ...any) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.ExternalHTTPTimeout)
+	s.mail.Add(1)
+	go func() {
+		defer s.mail.Done()
+		defer cancel()
+		defer func() {
+			if r := recover(); r != nil {
+				slog.ErrorContext(ctx, "code delivery panicked", append(attrs, "panic", r)...)
+			}
+		}()
+		if err := s.send(ctx, environment, message); err != nil {
+			slog.ErrorContext(ctx, "code delivery failed", append(attrs, "err", err)...)
+		}
+	}()
+}
+
+// WaitDeliveries waits up to timeout for code emails still being sent
+// (shutdown, tests); false when some are left.
+func (s *Service) WaitDeliveries(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() { s.mail.Wait(); close(done) }()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
 }
 
 // SetActions runs the environment's sign-in and signup hooks.
@@ -460,23 +498,12 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 	if err = tx.CreateChallenge(ctx, id, user, purpose, environment, s.secrets.Hash(id.String()+":"+code)); err != nil {
 		return identity.ChallengeID{}, err
 	}
+	if err = tx.Commit(); err != nil {
+		return identity.ChallengeID{}, err
+	}
 	message := authentication.Message{Email: email, Purpose: purpose, Code: code, Locale: locale}
-	var sendErr error
-	if s.deliverySvc != nil {
-		sendErr = s.deliverySvc.Send(ctx, environment, message)
-	} else {
-		sendErr = s.delivery.Send(ctx, message)
-	}
-	if sendErr != nil {
-		slog.ErrorContext(ctx, "challenge delivery failed",
-			"challenge", id,
-			"environment", environment,
-			"purpose", purpose,
-			"err", sendErr,
-		)
-		return id, nil
-	}
-	return id, tx.Commit()
+	s.deliverLater(ctx, environment, message, "challenge", id, "environment", environment, "purpose", purpose)
+	return id, nil
 }
 
 func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.Context, challengeID identity.ChallengeID, code, purpose, password string) (authentication.Result, error) {

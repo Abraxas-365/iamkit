@@ -171,6 +171,9 @@ type Server struct {
 	// CloseCache closes the shared cache's connections after shutdown (nil:
 	// none).
 	CloseCache func() error
+	// WaitDeliveries waits up to timeout for code emails still being sent
+	// after their response (nil: none); true when none are left.
+	WaitDeliveries func(timeout time.Duration) bool
 
 	// Console is the embedded frontend filesystem (from internal/console).
 	// If nil, no SPA is served and clients must provide their own UI.

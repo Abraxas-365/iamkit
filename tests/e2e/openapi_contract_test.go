@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/api"
 	"github.com/getkin/kin-openapi/openapi3"
@@ -121,12 +122,24 @@ func truncate(b []byte) string {
 type App struct {
 	*fiber.App
 	t testing.TB
+	// wait lets code emails sent after a response arrive before Test
+	// returns, so tests read them at once (server.Server.WaitDeliveries).
+	wait func(time.Duration) bool
 }
 
-func contracted(t testing.TB, app *fiber.App) *App { return &App{App: app, t: t} }
+func contracted(t testing.TB, app *fiber.App, wait ...func(time.Duration) bool) *App {
+	a := &App{App: app, t: t}
+	if len(wait) > 0 {
+		a.wait = wait[0]
+	}
+	return a
+}
 
 // Test sends req like fiber.App.Test and validates the exchange.
 func (a *App) Test(req *http.Request, timeout ...int) (*http.Response, error) {
+	if a.wait != nil {
+		defer a.wait(15 * time.Second)
+	}
 	var body []byte
 	if req.Body != nil {
 		body, _ = io.ReadAll(req.Body)
