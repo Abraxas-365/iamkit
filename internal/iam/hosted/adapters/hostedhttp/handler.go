@@ -407,6 +407,19 @@ func (h *Handler) base(c *fiber.Ctx, r hosted.Request) (view, bool, error) {
 	return v, true, nil
 }
 
+// rebrand dresses the next page in the brand of the organization the step
+// just settled on (a choice, or the only organization, parked as Chosen):
+// base branded the request before the step ran. A failed read keeps the
+// brand the request had.
+func (h *Handler) rebrand(c *fiber.Ctx, v *view) {
+	page, err := h.flow.Page(c.UserContext(), h.request(c), c.FormValue("email"))
+	if err != nil {
+		return
+	}
+	v.Brand = brandOf(page.Settings, "")
+	h.word(c, v, page.Settings.Environment, page.Texts)
+}
+
 func (h *Handler) login(c *fiber.Ctx) error {
 	v, ok, err := h.base(c, h.request(c))
 	if !ok {
@@ -746,6 +759,9 @@ func (h *Handler) changePassword(c *fiber.Ctx) error {
 
 // result shows the next step or finishes the authorization.
 func (h *Handler) result(c *fiber.Ctx, v view, result hosted.Result) error {
+	if result.Login == nil {
+		h.rebrand(c, &v)
+	}
 	switch {
 	case result.Login != nil:
 		return h.finish(c, v.Ticket, *result.Login)

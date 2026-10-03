@@ -114,14 +114,19 @@ func TestOrganizationBranding(t *testing.T) {
 	if r := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}}); r.Status < 400 {
 		t.Fatalf("hint for a foreign organization: %d %s", r.Status, r.Body)
 	}
-	// Without a hint she chooses (the choice then brands later pages: unit
-	// tested, the next step here redirects).
+	// Without a hint she chooses; the page answering the choice already
+	// wears the chosen organization's brand (here: its required enrollment).
+	e.Must("PATCH", e.Base+"/organizations/"+e.Org, e.Owner, fiber.Map{"mfa_required": true}, 204)
 	b = e.browser()
 	tk = b.authorize(client).field("ticket")
 	choose := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}})
-	if len(choose.fields("organization_id")) != 2 {
+	if len(choose.fields("organization_id")) != 2 || strings.Contains(choose.Body, "Acme Corp") {
 		t.Fatalf("chooser: %d %s", choose.Status, choose.Body)
 	}
+	if enroll := b.post("/hosted/login/organization", url.Values{"ticket": {tk}, "organization_id": {e.Org}}); !strings.Contains(enroll.Body, "· Acme Corp</title>") || !strings.Contains(enroll.Body, "--accent:#aa0000") {
+		t.Fatalf("page after the choice: %d %s", enroll.Status, enroll.Body)
+	}
+	e.Must("PATCH", e.Base+"/organizations/"+e.Org, e.Owner, fiber.Map{"mfa_required": false}, 204)
 
 	// Invitations into the organization: page and email use its brand.
 	inv := e.Must("POST", e.Base+"/organizations/"+e.Org+"/invitations", e.Owner, fiber.Map{"email": "newbie@elsewhere.example"}, 201).JSON
