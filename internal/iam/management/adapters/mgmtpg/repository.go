@@ -60,7 +60,7 @@ func (r *Repository) RecoverOwner(ctx context.Context, workspace identity.Worksp
 	var operator string
 	err = tx.GetContext(ctx, &operator, `SELECT m.operator_id FROM workspace_members m JOIN operators o ON o.id=m.operator_id WHERE m.workspace_id=$1 AND o.email=$2 AND m.role='owner' AND m.active FOR UPDATE OF m`, workspace, email)
 	if errors.Is(err, sql.ErrNoRows) {
-		return errx.Wrap(err, "active owner not found", errx.TypeNotFound)
+		return errx.NotFound("no active owner with that email in that workspace")
 	}
 	if err != nil {
 		return errx.Wrap(err, "owner lookup failed", errx.TypeInternal)

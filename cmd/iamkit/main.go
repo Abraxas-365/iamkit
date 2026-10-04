@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/bootstrap"
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/telemetry"
@@ -24,6 +25,9 @@ func main() {
 	// Log lines carry the request id and trace/span ids of their context.
 	slog.SetDefault(slog.New(telemetry.LogHandler(slog.NewTextHandler(os.Stderr, nil))))
 	if err := run(); err != nil {
+		if errors.Is(err, errReported) {
+			os.Exit(2)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
@@ -38,57 +42,130 @@ func version() string {
 	return ""
 }
 
+// errReported marks an error already written to stderr (flag parsing prints
+// its own message and usage): main exits nonzero without printing it again.
+var errReported = errors.New("reported")
+
+const usage = "usage: iamkit [migrate | bootstrap | recover-owner] (see --help)"
+
+// credentialArgs are the flags of bootstrap and recover-owner.
+type credentialArgs struct {
+	email, output string
+	workspace     string
+	workspaceID   identity.WorkspaceID // recover-owner only
+}
+
+// parseCredentialArgs reads and checks the flags before any database or file
+// is touched, so a mistake leaves nothing behind. It returns flag.ErrHelp for
+// --help.
+func parseCredentialArgs(command string, argv []string) (credentialArgs, error) {
+	var in credentialArgs
+	args := flag.NewFlagSet(command, flag.ContinueOnError)
+	args.StringVar(&in.email, "email", "", "owner operator email")
+	args.StringVar(&in.workspace, "workspace", "", "workspace name for bootstrap; workspace UUID for recover-owner")
+	args.StringVar(&in.output, "output", "", "new private file for one-time management credential")
+	if err := args.Parse(argv); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return in, err
+		}
+		return in, errReported // the flag package already printed it
+	}
+	if args.NArg() > 0 {
+		return in, errx.Validation(fmt.Sprintf("unexpected argument %q; %s takes only --email, --workspace and --output", args.Arg(0), command))
+	}
+	switch {
+	case in.output == "":
+		return in, errx.Validation("--output is required; credential will not be written to logs")
+	case in.email == "":
+		return in, errx.Validation("--email is required")
+	case in.workspace == "" && command == "bootstrap":
+		return in, errx.Validation("--workspace is required: the name of the workspace to create")
+	case in.workspace == "":
+		return in, errx.Validation("--workspace is required: the UUID of the workspace to recover")
+	}
+	if _, err := identity.Email(in.email); err != nil {
+		return in, errx.Validation(fmt.Sprintf("--email %q is not a valid email address", in.email))
+	}
+	if command == "recover-owner" {
+		id, err := identity.ParseWorkspaceID(in.workspace)
+		if err != nil || id.IsZero() {
+			return in, errx.Validation(fmt.Sprintf("--workspace %q is not a workspace UUID (recover-owner takes the UUID, not the name)", in.workspace))
+		}
+		in.workspaceID = id
+	}
+	return in, nil
+}
+
 func run() error {
+	// Check the command line before connecting: a typo or --help must not
+	// need a database.
+	var credentials credentialArgs
+	command := ""
+	if len(os.Args) > 1 {
+		command = os.Args[1]
+	}
+	switch command {
+	case "":
+	case "migrate":
+		if len(os.Args) != 2 {
+			return errx.Validation(usage)
+		}
+	case "bootstrap", "recover-owner":
+		var err error
+		if credentials, err = parseCredentialArgs(command, os.Args[2:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return nil
+			}
+			return err
+		}
+	default:
+		return errx.Validation(usage)
+	}
+
 	db, err := bootstrap.OpenDatabase()
 	if err != nil {
 		return err
 	}
 	defer db.Close()
-	if len(os.Args) == 2 && os.Args[1] == "migrate" {
+	if command == "migrate" {
 		return migrations.Apply(context.Background(), db)
 	}
-	if len(os.Args) > 1 && (os.Args[1] == "bootstrap" || os.Args[1] == "recover-owner") {
-		args := flag.NewFlagSet(os.Args[1], flag.ContinueOnError)
-		email := args.String("email", "", "owner operator email")
-		name := args.String("workspace", "", "workspace name for bootstrap; workspace UUID for recover-owner")
-		output := args.String("output", "", "new private file for one-time management credential")
-		if err = args.Parse(os.Args[2:]); err != nil {
-			return err
-		}
-		if *output == "" {
-			return errx.Validation("--output is required; credential will not be written to logs")
-		}
-		f, err := os.OpenFile(*output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if command != "" {
+		f, err := os.OpenFile(credentials.output, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if err != nil {
-			return err
+			if errors.Is(err, os.ErrExist) {
+				return errx.Validation(fmt.Sprintf("--output %s already exists; choose a new file (an old credential is never overwritten)", credentials.output))
+			}
+			return fmt.Errorf("--output: %w", err)
 		}
 		defer f.Close()
 		var raw string
-		if os.Args[1] == "recover-owner" {
-			wsID, parseErr := identity.ParseWorkspaceID(*name)
-			if parseErr != nil {
-				return parseErr
-			}
-			raw, err = bootstrap.Management(db).RecoverOwner(context.Background(), wsID, *email)
+		if command == "recover-owner" {
+			raw, err = bootstrap.Management(db).RecoverOwner(context.Background(), credentials.workspaceID, credentials.email)
 		} else {
-			raw, err = bootstrap.Management(db).Bootstrap(context.Background(), *email, *name)
+			raw, err = bootstrap.Management(db).Bootstrap(context.Background(), credentials.email, credentials.workspace)
 		}
 		if err != nil {
 			f.Close()
-			os.Remove(*output)
+			os.Remove(credentials.output)
 			return err
 		}
 		if err = json.NewEncoder(f).Encode(map[string]string{"management_key": raw}); err != nil {
 			return errx.Wrap(err, "credential change committed but credential file write failed", errx.TypeInternal)
 		}
 		if err = f.Sync(); err != nil {
-			return err
+			return errx.Wrap(err, "credential change committed but credential file could not be flushed", errx.TypeInternal)
 		}
 		fmt.Println("Credential saved to the private output file; expires in 24 hours.")
+		if command == "bootstrap" {
+			// Only the automatic bootstrap reads IAMKIT_BOOTSTRAP_PASSWORD;
+			// say so instead of leaving an operator that cannot sign in.
+			if os.Getenv("IAMKIT_BOOTSTRAP_PASSWORD") != "" {
+				slog.Warn("IAMKIT_BOOTSTRAP_PASSWORD is ignored by the bootstrap command: the operator has no password")
+			}
+			fmt.Println("The operator has no password yet: set one with POST /management/v1/password and the credential's X-API-Key, or use \"Set up your account\" in the console.")
+		}
 		return nil
-	}
-	if len(os.Args) > 1 {
-		return errx.Validation("usage: iamkit [migrate | bootstrap | recover-owner] (see --help)")
 	}
 
 	// ── Auto-migrate ──────────────────────────────────────────────────
@@ -103,6 +180,13 @@ func run() error {
 		workspace := os.Getenv("IAMKIT_BOOTSTRAP_WORKSPACE")
 		if workspace == "" {
 			workspace = "Default"
+		}
+		// Refuse a password the policy would reject before the workspace
+		// exists: afterwards a restart would skip bootstrap and leave an
+		// owner with no password for good.
+		if password := os.Getenv("IAMKIT_BOOTSTRAP_PASSWORD"); password != "" &&
+			(len(password) < config.PasswordMinLength || len(password) > config.PasswordMaxLength) {
+			return errx.Validation(fmt.Sprintf("IAMKIT_BOOTSTRAP_PASSWORD must be %d-%d characters long", config.PasswordMinLength, config.PasswordMaxLength))
 		}
 		mgmt := bootstrap.ManagementWithPasswords(db)
 		raw, err := mgmt.Bootstrap(context.Background(), email, workspace)
