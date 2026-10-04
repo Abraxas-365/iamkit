@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Ban, KeyRound, Link2Off, Plus, RotateCcw, UserCog } from 'lucide-react'
+import { Ban, KeyRound, Link2Off, Plus, UserCog } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { ConfirmDialog, CopyField, DataTable, EmptyState, EntityRef, ErrorState, PageHeader, Status, Time } from '@/components/library/patterns'
+import { ConfirmDialog, CopyField, DataTable, EmptyState, EntityRef, ErrorState, PageHeader, Time } from '@/components/library/patterns'
 import { Badge } from '@/components/ui/badge'
 import { RowActions } from '@/components/ui/menu'
 import { formatDateTime, language, rich, t } from '@/lib/i18n'
@@ -66,8 +66,7 @@ export default function OperatorsPage() {
   const selfPassword = password && !breakGlass
   const names = new Map(providers.map(p => [p.id, p.name]))
   const [add, setAdd] = useState(false)
-  // reactivating: the invite dialog for a disabled operator's email.
-  const [reactivating, setReactivating] = useState<Operator | null>(null)
+  const [email, setEmail] = useState('')
   const [change, setChange] = useState<Operator | null>(null)
   const [newRole, setNewRole] = useState('admin')
   const [disable, setDisable] = useState<Operator | null>(null)
@@ -81,29 +80,35 @@ export default function OperatorsPage() {
   const pending = useRef(false)
   const ssoHint = sso && t('They can sign in with {{providers}} using this email.', { providers: new Intl.ListFormat(language(), { type: 'disjunction' }).format(providers.map(p => p.name)) })
   const inviteHint = [ssoHint, selfPassword && <>{rich('They receive an API key to set a console password at {{code}}.', { code: <code className="text-xs">{'/setup'}</code> })}</>, !password && t('Password sign-in is disabled; the API key is for the management API only.'), breakGlass && t('Passwords are for emergency access only; the API key is for the management API until you allow it.')].filter(Boolean)
-  // The server refuses demoting the last active owner; GET /operators
-  // returns every operator, so the list here is complete.
-  const lastOwner = list.data.filter(o => o.active && o.role === 'owner').length <= 1
-  const openInvite = (op: Operator | null) => { setReactivating(op); setAdd(true); setRole(op && op.role !== 'owner' ? op.role : 'admin'); setTtl('24h'); setError('') }
+  // GET /operators returns every operator and ignores search and paging,
+  // so the list is complete here. Disabled operators are not shown: inviting
+  // the same email again reactivates them (the server starts them fresh).
+  const active = list.data.filter(o => o.active)
+  const needle = list.search.trim().toLowerCase()
+  const shown = needle ? active.filter(o => o.email.toLowerCase().includes(needle)) : active
+  const view = { ...list, data: shown, total: shown.length, from: shown.length ? 1 : 0, to: shown.length, hasPrev: false, hasNext: false }
+  // The server refuses demoting the last active owner.
+  const lastOwner = active.filter(o => o.role === 'owner').length <= 1
+  const returning = list.data.some(o => !o.active && o.email.toLowerCase() === email.trim().toLowerCase())
+  const openInvite = () => { setEmail(''); setAdd(true); setRole('admin'); setTtl('24h'); setError('') }
 
   return <div className="space-y-6">
-    <PageHeader title={t('Operators')} description={t('Console operators and their workspace roles. Only owners can invite, disable or change the role of operators.')} actions={isOwner && <Button onClick={() => openInvite(null)}><Plus className="size-4" /> {t('Invite operator')}</Button>} />
-    <PaginationBar state={list} noun="operators" />
-    <DataTable columns={[t('Operator'), t('Role'), ...(sso ? [t('Single sign-on')] : []), t('Status'), ...(isOwner ? [t('Actions')] : [])]} loading={list.loading} error={list.error} retry={list.reload}
+    <PageHeader title={t('Operators')} description={t('Console operators and their workspace roles. Only owners can invite, disable or change the role of operators.')} actions={isOwner && <Button onClick={openInvite}><Plus className="size-4" /> {t('Invite operator')}</Button>} />
+    <PaginationBar state={view} noun="operators" />
+    <DataTable columns={[t('Operator'), t('Role'), ...(sso ? [t('Single sign-on')] : []), ...(isOwner ? [t('Actions')] : [])]} loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState icon={<UserCog />} title={t('No operators yet')} description={t('Invite teammates to help manage projects and environments.')} />}
-      rows={list.data.map(op => {
+      rows={shown.map(op => {
         const linked = op.sso_providers ?? []
         // Removing one's own access would end this very session (and lock
         // out an owner without a linked identity): another owner does it.
         const self = op.id === principal?.operator_id
         const actions = [
-          ...(op.active ? [{ label: t('Change role'), icon: <UserCog />, onSelect: () => { setChange(op); setNewRole(op.role); setError('') } }] : []),
-          ...(!op.active ? [{ label: t('Reactivate'), icon: <RotateCcw />, onSelect: () => openInvite(op) }] : []),
-          ...(breakGlass && op.active && !(self && op.password_allowed) ? [op.password_allowed
+          { label: t('Change role'), icon: <UserCog />, onSelect: () => { setChange(op); setNewRole(op.role); setError('') } },
+          ...(breakGlass && !(self && op.password_allowed) ? [op.password_allowed
             ? { label: t('Remove emergency access'), icon: <KeyRound />, destructive: true, onSelect: () => setAccess(op) }
             : { label: t('Allow emergency access'), icon: <KeyRound />, onSelect: () => setAccess(op) }] : []),
           ...(linked.length > 0 ? [{ label: t('Reset SSO link'), icon: <Link2Off />, destructive: true, onSelect: () => setReset(op) }] : []),
-          ...(op.active && op.role !== 'owner' ? [{ label: t('Disable operator'), icon: <Ban />, destructive: true, onSelect: () => setDisable(op) }] : []),
+          ...(op.role !== 'owner' ? [{ label: t('Disable operator'), icon: <Ban />, destructive: true, onSelect: () => setDisable(op) }] : []),
         ]
         return [
           <EntityRef name={op.email} id={op.id} secondary={op.id === principal?.operator_id ? t('You') : undefined} />,
@@ -111,26 +116,26 @@ export default function OperatorsPage() {
           ...(sso ? [linked.length > 0
             ? <span>{linked.map(id => names.get(id) ?? id).join(', ')}<span className="block text-xs text-muted-foreground">{op.last_sso_login_at ? <Time value={op.last_sso_login_at} prefix={t('Last sign-in')} /> : t('Linked')}</span></span>
             : <span className="text-muted-foreground">{t('Not linked')}</span>] : []),
-          <Status active={op.active} label={op.active ? t('Active') : t('Disabled')} />,
           ...(isOwner ? [actions.length > 0 && <RowActions label={t('Actions for {{email}}', { email: op.email })} actions={actions} />] : []),
         ]
       })} />
 
     {add && <Dialog open onOpenChange={open => { if (!open && !pending.current) setAdd(false) }}><DialogContent>
-      <DialogTitle className="pr-6 text-base font-semibold">{reactivating ? t('Reactivate {{email}}', { email: reactivating.email }) : t('Invite operator')}</DialogTitle>
-      <DialogDescription className="text-muted-foreground">{reactivating && <span>{t('They get a new API key and start fresh: earlier keys and sessions stay ended, emergency access is off, and their password and single sign-on links are cleared unless another workspace uses them.')} </span>}{inviteHint.map((h, i) => <span key={i}>{i > 0 && ' '}{h}</span>)}</DialogDescription>
+      <DialogTitle className="pr-6 text-base font-semibold">{t('Invite operator')}</DialogTitle>
+      <DialogDescription className="text-muted-foreground">{inviteHint.map((h, i) => <span key={i}>{i > 0 && ' '}{h}</span>)}</DialogDescription>
       <form className="space-y-4" onSubmit={async event => {
         event.preventDefault(); if (pending.current) return
-        const email = reactivating?.email ?? String(new FormData(event.currentTarget).get('email') ?? '').trim()
+        const address = email.trim()
         pending.current = true; setBusy(true); setError('')
         try {
-          const result = await api.post<Delegated>('/operators', { email, role, expires_in: ttl })
+          const result = await api.post<Delegated>('/operators', { email: address, role, expires_in: ttl })
           setSecret(result); setAdd(false); list.reload()
         } catch (e) { setError(message(e)) } finally { pending.current = false; setBusy(false) }
       }}>
         <div className="space-y-1.5">
           <label className="text-sm font-medium" htmlFor="invite-email">{t('Email')}</label>
-          <Input id="invite-email" name="email" type="email" required disabled={busy} readOnly={!!reactivating} defaultValue={reactivating?.email} />
+          <Input id="invite-email" name="email" type="email" required disabled={busy} value={email} onChange={e => setEmail(e.target.value)} />
+          {returning && <p role="status" className="text-xs text-muted-foreground">{t('This operator was disabled. Inviting them again reactivates them with a new API key and a fresh start: earlier keys and sessions stay ended, emergency access is off, and their password and single sign-on links are cleared unless another workspace uses them.')}</p>}
         </div>
         <RoleOptions options={roles} value={role} onChange={setRole} />
         <div className="space-y-1.5">
@@ -142,7 +147,7 @@ export default function OperatorsPage() {
         {error && <ErrorState error={error} />}
         <div className="flex justify-end gap-2 border-t pt-4">
           <Button type="button" variant="outline" disabled={busy} onClick={() => setAdd(false)}>{t('Cancel')}</Button>
-          <Button type="submit" disabled={busy}>{reactivating ? (busy ? t('Reactivating…') : t('Reactivate')) : (busy ? t('Inviting…') : t('Invite'))}</Button>
+          <Button type="submit" disabled={busy}>{returning ? (busy ? t('Reactivating…') : t('Reactivate')) : (busy ? t('Inviting…') : t('Invite'))}</Button>
         </div>
       </form>
     </DialogContent></Dialog>}

@@ -56,6 +56,11 @@ Roles apply the same way to both sign-in methods. `iam operators role
 OPERATOR_ID --role viewer` changes one at once, including live sessions. A
 `viewer` can still set its own password when passwords are permitted.
 
+The console's Operators page lists active operators only. A disabled operator
+disappears from it; to bring them back, invite the same email again (the dialog
+says it reactivates them). They start fresh: a new key, no password, no SSO
+links. `iam operators list` still shows disabled operators.
+
 ## How the embed works
 
 The Dockerfile has three stages:

@@ -134,21 +134,33 @@ it('keeps the last owner an owner', async () => {
   expect((within(dialog).getByRole('radio', { name: /Viewer/ }) as HTMLInputElement).disabled).toBe(true)
 })
 
-it('reactivates a disabled operator through the invite dialog', async () => {
+it('hides disabled operators and reactivates one by inviting the same email', async () => {
   const user = userEvent.setup()
   extra = [{ id: 'op-cid', email: 'cid@acme.com', role: 'viewer', active: false, password_allowed: false, sso_providers: [], last_sso_login_at: null }]
   open('/operators')
-  await screen.findByText('cid@acme.com')
-  await user.click(screen.getByRole('button', { name: 'Actions for cid@acme.com' }))
-  expect(screen.queryByRole('menuitem', { name: 'Change role' })).toBeNull()
-  await user.click(await screen.findByRole('menuitem', { name: 'Reactivate' }))
+  await screen.findByText('ann@acme.com')
+  expect(screen.queryByText('cid@acme.com')).toBeNull()
+  expect(screen.queryByRole('columnheader', { name: 'Status' })).toBeNull()
+  expect(screen.getByText('1–3 of 3 operators')).toBeTruthy()
+  await user.click(screen.getByRole('button', { name: /Invite operator/ }))
   const dialog = await screen.findByRole('dialog')
-  expect((within(dialog).getByLabelText('Email') as HTMLInputElement).value).toBe('cid@acme.com')
-  expect((within(dialog).getByRole('radio', { name: /Viewer/ }) as HTMLInputElement).checked).toBe(true)
-  await user.click(within(dialog).getByRole('radio', { name: /Admin/ }))
+  expect(within(dialog).queryByRole('status')).toBeNull()
+  await user.type(within(dialog).getByLabelText('Email'), 'CID@acme.com')
+  expect(within(dialog).getByRole('status').textContent).toMatch(/was disabled/)
+  await user.click(within(dialog).getByRole('radio', { name: /Viewer/ }))
   await user.click(within(dialog).getByRole('button', { name: 'Reactivate' }))
-  await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/operators') && init?.method === 'POST' && JSON.parse(String(init.body)).email === 'cid@acme.com' && JSON.parse(String(init.body)).role === 'admin')).toBe(true))
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/operators') && init?.method === 'POST' && JSON.parse(String(init.body)).email === 'CID@acme.com' && JSON.parse(String(init.body)).role === 'viewer')).toBe(true))
   expect(await screen.findByText('Operator reactivated')).toBeTruthy()
+})
+
+it('searches the visible operators by email', async () => {
+  const user = userEvent.setup()
+  open('/operators')
+  await screen.findByText('ann@acme.com')
+  await user.type(screen.getByLabelText('Search operators'), 'BOB')
+  await waitFor(() => expect(screen.queryByText('ann@acme.com')).toBeNull())
+  expect(screen.getByText('bob@acme.com')).toBeTruthy()
+  expect(screen.getByText('1–1 of 1 operators')).toBeTruthy()
 })
 
 it('offers no emergency access outside break-glass mode', async () => {
