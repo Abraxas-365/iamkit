@@ -21,6 +21,41 @@ curl --fail --silent --show-error "$IAMKIT_URL/management/v1/password" \
 Expect 204. Securely remove the temporary file after setup. This changes the
 currently authenticated operator's password, not an arbitrary user's password.
 
+With the [`iam` CLI](../reference/cli.md) configured with that key, the same step
+needs no file and keeps the password out of the shell history:
+
+```sh
+iam password set                       # prompts without echo, asks twice
+printf '%s\n' "$NEW" | iam password set --password-stdin
+iam password status                    # {set, usable, fresh, mode}
+```
+
+## Sign in with your identity provider instead of a password
+
+Operators can sign in to the console with Google, Microsoft or any OIDC
+provider, so they do not need a console password. The variables are in
+[operator single sign-on](../reference/configuration.md#operator-single-sign-on).
+Roll it out in this order so nobody is locked out:
+
+1. Invite every operator first (`iam operators create --email … --role admin|viewer`).
+   SSO never creates operators; the first sign-in links the identity to the
+   active operator with that email, which must be in `ALLOWED_DOMAINS`.
+2. Register `<JWT_ISSUER>/management/v1/sso/callback` at the provider, add the
+   `IAMKIT_OPERATOR_SSO_*` variables and restart. Keep
+   `IAMKIT_OPERATOR_PASSWORD_LOGIN=enabled` while you check that each operator
+   can sign in with SSO.
+3. Give the owner an emergency password, then restrict passwords:
+   `iam operators password-access OWNER_ID --allow`. With a provider
+   configured the default is `break_glass`: only operators with that access
+   can still use a password, everyone else must use SSO (403 `SSO_REQUIRED`).
+4. Optionally set `IAMKIT_OPERATOR_PASSWORD_LOGIN=disabled` to refuse
+   passwords altogether (403 `PASSWORD_LOGIN_DISABLED`). Management keys keep
+   working, so the CLI is unaffected.
+
+Roles apply the same way to both sign-in methods. `iam operators role
+OPERATOR_ID --role viewer` changes one at once, including live sessions. A
+`viewer` can still set its own password when passwords are permitted.
+
 ## How the embed works
 
 The Dockerfile has three stages:
