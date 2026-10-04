@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="400" viewBox="0 0 1200 400" role="img" aria-labelledby="title description">
   <title id="title">IAMKit — your identity layer, your product experience</title>
-  <desc id="description">IAMKit: self-hosted identity and access for apps and services. Sign in with passwords, email OTP or OIDC SSO. Model access with organizations, roles and permissions. Integrate with OAuth, SCIM and the Go SDK. Charcoal, warm-white and muted-blue colors match the operator console.</desc>
+  <desc id="description">IAMKit: self-hosted identity and access for apps and services. Choose hosted sign-in pages or your own UI, with passwords, passkeys, MFA and SSO. Scope roles and permissions to organizations and resources. Connect through OAuth/OIDC, SAML, SCIM, SDKs and webhooks. One Go binary and PostgreSQL, with an embedded operator console.</desc>
   <defs>
     <style>
       text { font-family: Inter, Arial, sans-serif; fill: #d4d0c8; }
@@ -21,14 +21,14 @@
 
   <rect x="670" y="40" width="482" height="320" rx="6" fill="#131311" stroke="#222220"/>
   <path d="M670 46Q670 40 676 40H1146Q1152 40 1152 46" fill="none" stroke="#7b9bae" stroke-width="2"/>
-  <text x="698" y="78" class="mono">ONE PLATFORM / YOUR OWN UI</text>
+  <text x="698" y="78" class="mono">HOSTED SIGN-IN / YOUR OWN UI</text>
   <text x="698" y="119" class="heading">Sign users in</text>
-  <text x="698" y="146" class="body">Password · email OTP · OIDC SSO</text>
+  <text x="698" y="146" class="body">Password · passkeys · MFA · SSO</text>
   <path d="M698 169H1124" stroke="#222220"/>
-  <text x="698" y="203" class="heading">Control access</text>
-  <text x="698" y="230" class="body">Organizations · roles · permissions</text>
+  <text x="698" y="203" class="heading">Scope access to each tenant</text>
+  <text x="698" y="230" class="body">Organizations · resources · roles</text>
   <path d="M698 253H1124" stroke="#222220"/>
   <text x="698" y="287" class="heading">Connect your services</text>
-  <text x="698" y="314" class="body">OAuth 2.0 · SCIM · Go SDK</text>
-  <text x="698" y="341" font-size="14" fill="#7b9bae">Operator console included in Docker</text>
+  <text x="698" y="314" class="body">OAuth/OIDC · SAML · SCIM · SDKs</text>
+  <text x="698" y="341" font-size="14" style="fill:#7b9bae">Operator console included</text>
 </svg>
