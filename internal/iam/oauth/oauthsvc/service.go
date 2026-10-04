@@ -297,8 +297,8 @@ func (s *Service) Access(ctx context.Context, client *oauth.Client, subject iden
 	return s.repository.Access(ctx, client, subject, session, organization)
 }
 func ValidateAuthorization(issuer string, client *oauth.Client, query map[string][]string) error {
-	if !strings.HasPrefix(issuer, "https://") {
-		return errx.Validation("OIDC requires HTTPS issuer")
+	if err := identity.ValidateIssuer(issuer); err != nil {
+		return err
 	}
 	get := func(key string) string {
 		v := query[key]

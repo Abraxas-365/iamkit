@@ -374,10 +374,10 @@ func OpenDatabase() (*sqlx.DB, error) {
 }
 func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 	issuer := os.Getenv("JWT_ISSUER")
-	u, err := url.Parse(issuer)
-	if err != nil || u.Hostname() == "" || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))) {
-		return nil, errx.Validation("JWT_ISSUER must be an HTTPS URL (HTTP allowed only on loopback)")
+	if err := identity.ValidateIssuer(issuer); err != nil {
+		return nil, errx.Wrap(err, "invalid JWT_ISSUER", errx.TypeValidation)
 	}
+	u, _ := url.Parse(issuer) // validated above
 	data, err := os.ReadFile(os.Getenv("JWT_PRIVATE_KEY_PATH"))
 	if err != nil {
 		return nil, errx.Wrap(err, "read signing key failed", errx.TypeInternal)

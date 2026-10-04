@@ -8,7 +8,7 @@ containers after changes. Keep secrets outside source control and frontend build
 | Variable | Requirement/default | Behavior |
 | --- | --- | --- |
 | `DATABASE_URL` | Required | PostgreSQL connection string; CLI commands need it too |
-| `JWT_ISSUER` | Required to serve | Absolute HTTPS URL; HTTP allowed only for localhost/127.0.0.1; no query/fragment; trailing slash normalized |
+| `JWT_ISSUER` | Required to serve | Absolute HTTPS URL; development HTTP allowed only for localhost/127.0.0.1/[::1] (including OAuth/hosted sign-in); no credentials/query/fragment; trailing slash normalized |
 | `JWT_PRIVATE_KEY_PATH` | Required to serve | Readable PEM RSA key, PKCS#1 or PKCS#8, at least 2048 bits |
 | `SERVER_PORT` | `8080` | Listening port; image healthcheck assumes 8080 |
 | `OIDC_HMAC_SECRET` | OAuth provider needs at least 32 bytes | Stable secret for OAuth; Compose templates require it explicitly |
@@ -35,6 +35,18 @@ containers after changes. Keep secrets outside source control and frontend build
 | `IAMKIT_FEATURES` | — | Deployment values of IAMKit's [feature flags](../guides/feature-flags.md): `name=true\|false,…` (e.g. `saml_idp=false`); unknown names are logged and ignored |
 | `IAMKIT_LIMITS` | — | Deployment caps of the [usage limits](../guides/usage-limits.md): `name=value,…` (e.g. `users_max=10000,requests_per_minute=600`); environments can only tighten them. Unknown names or invalid values stop start-up |
 | `IAMKIT_METRICS_ADDR` | Unset: no Prometheus listener | Address (for example `127.0.0.1:9464`) of a separate listener serving Prometheus `/metrics`; never the public port |
+
+## Local HTTP development
+
+For local OAuth and hosted sign-in, set `JWT_ISSUER=http://localhost:8080`
+(or `http://127.0.0.1:8080`). Use that same hostname consistently in browser
+URLs and client configuration. HTTP is refused for public hosts, LAN addresses
+and `0.0.0.0`; use HTTPS for those deployments.
+
+Browser bindings retain their `Secure`, `HttpOnly` and `__Host-` cookie
+protections. Use a browser that supports secure cookies on HTTP loopback
+(verified with Chrome), or a local TLS proxy if your browser or OIDC client
+requires HTTPS. Operator console SSO still requires an HTTPS issuer.
 
 ## Email
 
