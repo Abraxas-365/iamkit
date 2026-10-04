@@ -17,7 +17,7 @@ import (
 )
 
 // Subscriptions persists event webhook subscriptions and their delivery
-// outbox (migration 046; deliveries are queued by a trigger on events).
+// outbox (deliveries are queued by a trigger on events).
 type Subscriptions struct{ db *sqlx.DB }
 
 func NewSubscriptions(db *sqlx.DB) *Subscriptions { return &Subscriptions{db} }
@@ -167,7 +167,7 @@ func (r *Subscriptions) SubscriptionSecrets(ctx context.Context, environment ide
 const secretsColumn = `CASE WHEN s.previous_sealed IS NOT NULL AND s.previous_expires_at > now()
 	THEN ARRAY[s.secret_sealed, s.previous_sealed] ELSE ARRAY[s.secret_sealed] END`
 
-// typeMatch is the trigger's subscription match (migration 046) for an
+// typeMatch is the trigger's subscription match for an
 // events row e.
 const typeMatch = `(s.types = '{}' OR e.type = ANY (s.types) OR split_part(e.type, '.', 1) || '.*' = ANY (s.types))`
 

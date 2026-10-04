@@ -7,7 +7,7 @@ import (
 )
 
 // TestMoreFederationProviders covers the providers and linking options of
-// migration 030: a generic OAuth 2.0 connection whose claim mapping decides
+// a generic OAuth 2.0 connection whose claim mapping decides
 // what is verified, profile refresh on sign-in, organization connections
 // that link existing members by email without JIT, and the GitLab / GitHub
 // Enterprise presets.

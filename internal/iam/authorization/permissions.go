@@ -22,13 +22,13 @@ const (
 	PermServiceAccountsWrite = "iam:service-accounts:write"
 	PermDeliveryRead         = "iam:delivery:read"
 	PermDeliveryWrite        = "iam:delivery:write"
-	// PermEventsRead reads the environment's event log (migration 045).
+	// PermEventsRead reads the environment's event log.
 	PermEventsRead = "iam:events:read"
 	// PermWebhooksRead / PermWebhooksWrite manage event webhook
-	// subscriptions (migration 046).
+	// subscriptions.
 	PermWebhooksRead  = "iam:webhooks:read"
 	PermWebhooksWrite = "iam:webhooks:write"
-	// PermUsageRead reads the environment's usage and limits (migration 056).
+	// PermUsageRead reads the environment's usage and limits.
 	PermUsageRead = "iam:usage:read"
 )
 
@@ -49,7 +49,7 @@ const (
 	PermOrgSSOWrite         = "iam:org:sso:write"
 	PermOrgAuditRead        = "iam:org:audit:read"
 	// Resources the organization owns (resources.owner_organization_id)
-	// and their grants to other organizations (migration 039).
+	// and their grants to other organizations.
 	PermOrgResourcesRead  = "iam:org:resources:read"
 	PermOrgResourcesWrite = "iam:org:resources:write"
 )
@@ -66,9 +66,7 @@ var OrgPermissions = []string{
 
 // IAMResourcePermissions is the canonical list of all built-in IAM resource
 // permissions. Used when provisioning the system IAM resource for new
-// environments and kept in sync with the constants above (migrations 038
-// and 039 appended OrgPermissions to existing environments, 045
-// iam:events:read, 046 iam:webhooks:*, 056 iam:usage:read).
+// environments and kept in sync with the constants above.
 var IAMResourcePermissions = append([]string{
 	PermUsersRead, PermUsersWrite,
 	PermOrgsRead, PermOrgsWrite,
@@ -101,9 +99,7 @@ type SystemRole struct {
 	Permissions []string
 }
 
-// SystemRoles are the built-in roles created on every IAM resource
-// (migrations 038 and 039 have the same definitions for existing
-// environments).
+// SystemRoles are the built-in roles created on every IAM resource.
 var SystemRoles = []SystemRole{
 	{SystemRoleOrgOwner, "Organization owner", OrgPermissions},
 	{SystemRoleOrgViewer, "Organization viewer", []string{PermOrgRead, PermOrgMembersRead, PermOrgRolesRead}},

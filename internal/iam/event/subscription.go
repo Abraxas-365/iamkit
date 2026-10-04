@@ -11,7 +11,7 @@ import (
 
 // Event webhooks: an operator subscribes an HTTPS endpoint to event types.
 // Every matching event is queued for it in the event's own transaction
-// (trigger queue_event_deliveries, migration 046) and delivered at least
+// (trigger queue_event_deliveries) and delivered at least
 // once, in event order per subscription, signed per Standard Webhooks.
 
 // Subscription audit actions (the console's activity log names them).

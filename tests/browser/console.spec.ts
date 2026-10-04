@@ -49,7 +49,7 @@ test("users: create, open, edit, history", async ({ page }) => {
   await edit.getByLabel("Name", { exact: true }).fill("Console Renamed");
   await edit.locator("button[type=submit]").click();
   await expect(page.locator("#content").getByText("Console Renamed").first()).toBeVisible();
-  // The change history shows the diff (migration 047 trigger).
+  // The change history shows the diff (record_changes trigger).
   const history = page.locator("section").filter({ has: page.getByRole("heading", { name: "History", exact: true }) });
   await expect(history.getByText("Console Created").first()).toBeVisible();
   await expect(history.getByText("Console Renamed").first()).toBeVisible();

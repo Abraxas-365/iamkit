@@ -118,7 +118,7 @@ resources carry what changed as `data.changes`, `{"field": [old, new]}`:
   rows' events have no `changes`.
 
 The changes are captured by database triggers in the transaction of the
-update (migration 047), so every path that updates these tables (console, API,
+update, so every path that updates these tables (console, API,
 SCIM, federation profile refresh) records them without extra code.
 
 ### Per-entity history

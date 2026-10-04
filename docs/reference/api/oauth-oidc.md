@@ -230,5 +230,5 @@ Branding: GET/PUT `.../login-settings` `{display_name,logo_url,accent_color,them
 `.../login-settings/clients/:client` and previews at `.../login-settings/preview` (see [integrations](integrations.md)).
 
 Source: `internal/iam/oauth/adapters/oauthhttp/handler.go`,
-`oauthhttp/device.go`, `oauthhttp/exchange.go`, `oauthsvc/exchange.go`, `oauthpg/exchange.go`, `migrations/029_token_exchange.up.sql`, `oauthsvc/service.go`, `oauthsvc/backchannel.go`, `oauthsvc/device.go`, `migrations/027_backchannel_logout.up.sql`, `migrations/028_device_authorization.up.sql`, `internal/config/constants.go`. Follow the
+`oauthhttp/device.go`, `oauthhttp/exchange.go`, `oauthsvc/exchange.go`, `oauthpg/exchange.go`, `oauthsvc/service.go`, `oauthsvc/backchannel.go`, `oauthsvc/device.go`, `migrations/001_initial.up.sql`, `internal/config/constants.go`. Follow the
 [integration guide](../../guides/oauth-oidc.md) for the interaction sequence.

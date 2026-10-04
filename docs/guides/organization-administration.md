@@ -202,9 +202,7 @@ _, err = admin.SetPasswordPolicy(ctx, apiclient.OrgPasswordRequirements{MinLengt
 ```
 
 Source: `internal/iam/orgadmin`, `internal/server/api.go`,
-`frontend/src/org-admin`,
-`migrations/038_org_administration.up.sql`,
-`migrations/039_resource_grants.up.sql`,
-`migrations/044_org_admin_portal.up.sql`, `tests/e2e/org_admin_test.go`,
+`frontend/src/org-admin`, `migrations/001_initial.up.sql`,
+`tests/e2e/org_admin_test.go`,
 `tests/e2e/org_admin_portal_test.go`,
 `tests/e2e/resource_grants_test.go`, `tests/e2e/organization_branding_test.go`.

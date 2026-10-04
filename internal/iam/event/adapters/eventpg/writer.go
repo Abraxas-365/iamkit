@@ -1,5 +1,5 @@
 // Package eventpg writes and reads the semantic event log (the events
-// table, migration 045). Every *pg adapter records its audited changes
+// table). Every *pg adapter records its audited changes
 // through Audit, which writes the audit_events row the console shows and
 // the event it describes in the caller's transaction; changes without an
 // audit entry (creates, memberships) use Emit. Like authpg.Resolve this is

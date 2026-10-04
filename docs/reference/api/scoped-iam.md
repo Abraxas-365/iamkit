@@ -67,4 +67,4 @@ access; never expose them as an unrestricted browser signup proxy.
 See [service accounts](../../guides/service-accounts.md) and
 [signup](../../guides/signup-and-onboarding.md). Source:
 `internal/server/api.go`, `internal/server/apiauth/middleware.go` and
-`migrations/014_system_iam_resource.up.sql`.
+`migrations/001_initial.up.sql`.

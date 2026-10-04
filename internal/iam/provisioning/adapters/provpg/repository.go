@@ -186,7 +186,7 @@ func (r *Repository) insert(ctx context.Context, tx *sqlx.Tx, p provisioning.Pri
 
 // claim resolves a create that carries a client externalId for a live
 // identity this connection anchored internally (no externalId was ever sent,
-// or migration 002 re-keyed an email-valued externalId): the directory is
+// or an earlier release re-keyed an email-valued externalId): the directory is
 // naming its own user, so the anchor is upgraded instead of failing with 409.
 func (r *Repository) claim(ctx context.Context, tx *sqlx.Tx, p provisioning.Principal, u provisioning.User) (identity.UserID, error) {
 	var id identity.UserID

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -596,41 +595,6 @@ func TestOperatorPasswordChange(t *testing.T) {
 	}
 	if status, _, c := consolePassword(t, h, "owner@example.com", "set with the key"); status != 200 || c == nil {
 		t.Fatalf("login after key change: %d", status)
-	}
-}
-
-// TestOperatorPasswordAccessMigration: 015 grants emergency access to
-// active owners that already have a password, and nobody else.
-func TestOperatorPasswordAccessMigration(t *testing.T) {
-	db := freshDB(t)
-	ws := uuid.NewString()
-	ids := map[string]string{}
-	for _, n := range []string{"owner", "nopw", "admin", "gone"} {
-		ids[n] = uuid.NewString()
-	}
-	for _, q := range []string{
-		`INSERT INTO workspaces(id,name) VALUES('` + ws + `','W')`,
-		`INSERT INTO operators(id,email,password_hash) VALUES('` + ids["owner"] + `','o@x.com','h'),('` + ids["nopw"] + `','n@x.com',''),('` + ids["admin"] + `','a@x.com','h'),('` + ids["gone"] + `','g@x.com','h')`,
-		`INSERT INTO workspace_members(workspace_id,operator_id,role,active) VALUES('` + ws + `','` + ids["owner"] + `','owner',true),('` + ws + `','` + ids["nopw"] + `','owner',true),('` + ws + `','` + ids["admin"] + `','admin',true),('` + ws + `','` + ids["gone"] + `','owner',false)`,
-		`UPDATE workspace_members SET password_allowed=false`,
-	} {
-		if _, err := db.Exec(q); err != nil {
-			t.Fatal(err)
-		}
-	}
-	backfill, err := os.ReadFile("../../migrations/015_operator_password_access.up.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, update, _ := strings.Cut(string(backfill), "UPDATE workspace_members")
-	if _, err = db.Exec("UPDATE workspace_members" + update); err != nil {
-		t.Fatal(err)
-	}
-	if n := count(t, db, `SELECT count(*) FROM workspace_members WHERE password_allowed`); n != 1 {
-		t.Fatalf("granted: %d", n)
-	}
-	if n := count(t, db, `SELECT count(*) FROM workspace_members WHERE password_allowed AND operator_id=$1`, ids["owner"]); n != 1 {
-		t.Fatal("owner with a password not granted")
 	}
 }
 

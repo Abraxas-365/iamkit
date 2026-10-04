@@ -631,7 +631,7 @@ func TestSCIMConcurrentPatch(t *testing.T) {
 }
 
 // Identities anchored internally (externalId never sent, or an email-valued
-// externalId re-keyed by migration 002) are claimed when the directory later
+// externalId re-keyed by an earlier release) are claimed when the directory later
 // creates them with an externalId, and operators can re-anchor them.
 func TestSCIMClaimDerivedAnchor(t *testing.T) {
 	e := newEnv(t)

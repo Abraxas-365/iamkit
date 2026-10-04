@@ -87,7 +87,7 @@ const EventRetention = 90 * 24 * time.Hour
 // back-channel logout notifications.
 const LogoutDispatchInterval = 5 * time.Second
 
-// Event webhooks (event_subscriptions, migration 046).
+// Event webhooks (event_subscriptions).
 const (
 	// EventWebhookInterval is how often each replica looks for due
 	// deliveries.

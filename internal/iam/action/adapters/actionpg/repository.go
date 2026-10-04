@@ -1,5 +1,5 @@
 // Package actionpg persists action targets, executions and the
-// recent-calls log (migration 052).
+// recent-calls log.
 package actionpg
 
 import (
