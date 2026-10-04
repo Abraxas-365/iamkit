@@ -826,8 +826,8 @@ type SetDeliveryConfig struct {
 	WebhookURL   string `json:"webhook_url,omitempty"`
 	WebhookToken string `json:"webhook_token,omitempty"`
 	// InvitationURL is the app page that accepts invitations; the token is
-	// added as the "token" query parameter. Optional: with smtp or resend
-	// and no URL, invitations link to IAMKit's hosted invite page.
+	// added as the "token" query parameter. Optional: without it, every
+	// provider links invitations to IAMKit's hosted invite page.
 	InvitationURL string `json:"invitation_url,omitempty"`
 	FromEmail     string `json:"from_email,omitempty"`
 	FromName      string `json:"from_name,omitempty"`

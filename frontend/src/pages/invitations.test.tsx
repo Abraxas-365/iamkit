@@ -59,7 +59,7 @@ it('invites and shows the token once', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Send invitation' }))
   await screen.findByText('Invitation for dave@example.com')
   expect(screen.getByText('ik_inv_secret')).toBeTruthy()
-  expect(screen.getByText(/No delivery webhook is configured/)).toBeTruthy()
+  expect(screen.getByText(/Email delivery is not configured/)).toBeTruthy()
   expect(calls('POST')[0].body).toEqual({ email: 'dave@example.com', role_ids: [], group_ids: [] })
 })
 

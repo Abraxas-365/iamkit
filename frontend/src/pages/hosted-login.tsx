@@ -103,7 +103,7 @@ export default function HostedLoginPage() {
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>{rich('{{code}} then sends the browser to {{code2}} instead of returning the authorization ticket.', { code: <code className="text-xs">{'/oauth/authorize'}</code>, code2: <code className="text-xs">{'/hosted/login'}</code> })}</p>
           <p>{t('Users sign in with a password, an email code, social login or their organization\'s single sign-on, pick an organization when they belong to several, and return to your redirect URI with an authorization code.')}</p>
-          <p>{rich('Invitation links can point to {{code}}: set it as the invitation page in Notifications.', { code: <code className="text-xs">{'/hosted/invite'}</code> })}</p>
+          <p>{rich('Invitation links open {{code}} unless Notifications sets an invitation page of your own.', { code: <code className="text-xs">{'/hosted/invite'}</code> })}</p>
         </CardContent>
       </Card>
     </div>

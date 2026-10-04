@@ -496,8 +496,9 @@ type Invitation struct {
 }
 
 // IssuedInvitation is returned once by Invite and ResendInvitation: Token
-// (and Link, when the environment has an invitation_url) are never shown
-// again. Delivery is "sent", "failed" or "skipped".
+// and Link (the environment's invitation_url, else IAMKit's hosted page)
+// are never shown again. Delivery is "sent", "failed" or "skipped" (no
+// email delivery configured).
 type IssuedInvitation struct {
 	Invitation
 	Token    string `json:"token"`

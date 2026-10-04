@@ -14,8 +14,8 @@ import (
 )
 
 // Message is what the mail webhook receives. Challenge messages carry a
-// Code; invitation messages carry the Token, and a Link when the
-// environment configured an invitation_url. Empty fields are omitted so the
+// Code; invitation messages carry the Token and a Link (the environment's
+// invitation_url, else IAMKit's hosted page). Empty fields are omitted so the
 // challenge payload stays {email,purpose,code}. Environment and Locale are
 // for providers that render the email and never reach the webhook.
 type Message struct {

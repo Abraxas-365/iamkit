@@ -100,7 +100,7 @@ export function DeliveryForm({ path, existing, hostedURL, onClose, onSaved }: { 
 function InvitationField({ d, set, hostedURL }: { d: DeliveryDraft; set: (p: Partial<DeliveryDraft>) => void; hostedURL: string }) {
   const webhook = d.provider === 'webhook'
   const empty = webhook
-    ? t('Empty: your webhook gets the token but no link.')
+    ? t('Empty: your webhook gets a link to IAMKit’s hosted invitation page.')
     : t('Empty: the email links to IAMKit’s hosted invitation page.')
   return <div className="space-y-1.5">
     <label className="text-sm font-medium" htmlFor="invitation-url">{t('Invitation page (optional)')}</label>

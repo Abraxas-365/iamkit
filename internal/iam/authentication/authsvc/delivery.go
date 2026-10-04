@@ -181,28 +181,21 @@ func (s *DeliveryService) DeliveryStatus(ctx context.Context, environmentID iden
 	return out, nil
 }
 
-// InvitationURL returns the environment's invitation page. Without one,
-// emails IAMKit renders itself (SMTP, Resend) link to the hosted page, so
-// the link in the email and the one returned to the inviter agree; the
-// webhook gets none, as before.
+// InvitationURL returns the environment's invitation page, else IAMKit's
+// hosted one, whatever the provider (or none): the link delivered and the
+// one returned to the inviter always agree, and an invitation nothing
+// delivers can still be shared.
 func (s *DeliveryService) InvitationURL(ctx context.Context, environmentID identity.EnvironmentID) (string, error) {
-	provider := ""
 	cfg, _, err := s.repo.GetDeliveryConfig(ctx, environmentID)
 	switch {
-	case err == nil:
-		if cfg.InvitationURL != "" {
-			return cfg.InvitationURL, nil
-		}
-		provider = cfg.Provider
-	case !notFound(err):
+	case err == nil && cfg.InvitationURL != "":
+		return cfg.InvitationURL, nil
+	case err != nil && !notFound(err):
 		return "", err
-	case s.global != nil:
-		provider = s.globalProvider
+	case s.issuer == "":
+		return "", nil
 	}
-	if s.issuer != "" && (provider == authentication.ProviderSMTP || provider == authentication.ProviderResend) {
-		return s.issuer + "/hosted/invite", nil
-	}
-	return "", nil
+	return s.issuer + "/hosted/invite", nil
 }
 
 // Sample values of previews.

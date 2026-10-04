@@ -364,8 +364,8 @@ chooser leaves out organizations that refuse the method used.
 
 `/hosted/invite?token=ik_inv_…` previews and accepts an
 [invitation](organizations.md): a new account sets a password (unless the
-organization enforces SSO), an existing one just joins. Point the delivery
-`invitation_url` at `https://IAMKIT_HOST/hosted/invite` to send users there.
+organization enforces SSO), an existing one just joins. Invitations link here
+unless the delivery `invitation_url` names a page of your own.
 Accepting does not sign the user in; they sign in through your app next.
 
 ## Device approval

@@ -201,9 +201,11 @@ Invite a person by email into an organization. Prefix these paths with
 
 An invitation is `{id,organization_id,email,role_ids,group_ids,inviter,expires_at,accepted_at,accepted_user_id?,revoked_at,created_at,status}`.
 `status` is derived, never stored. Create and resend also return `token`,
-`link` (only when the environment's delivery config has an `invitation_url`)
-and `delivery`: `sent`, `failed` (the webhook rejected it; the invitation is
-still valid, share the token yourself) or `skipped` (no webhook configured).
+`link` (the delivery config's `invitation_url` with the token, else IAMKit's
+hosted page `https://IAMKIT_HOST/hosted/invite?token=…`) and `delivery`:
+`sent`, `failed` (the email provider or webhook rejected it; the invitation is
+still valid, share the link yourself) or `skipped` (no email delivery is
+configured for the environment, nor globally; share the link yourself).
 Only a SHA-256 hash of the token is stored; it cannot be shown again.
 
 Rules: email is normalized (trimmed, lowercased); up to 50 roles and 50 groups.

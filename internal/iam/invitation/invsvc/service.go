@@ -3,6 +3,7 @@ package invsvc
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
@@ -166,7 +167,12 @@ func (s *Service) issue(ctx context.Context, b invitation.Boundary, id identity.
 		slog.ErrorContext(ctx, "invitation inviter lookup failed", "invitation", id, "err", err)
 	}
 	mail := invitation.Mail{Email: inv.Email, Token: token, Link: out.Link, Organization: orgName, OrganizationID: b.Organization, Inviter: inviter, ExpiresAt: inv.ExpiresAt}
-	if err = s.mailer.Send(ctx, b.Environment, mail); err != nil {
+	switch err = s.mailer.Send(ctx, b.Environment, mail); {
+	case errors.Is(err, invitation.ErrNotDelivered):
+		// Nothing delivers this environment's email: the inviter shares
+		// the link, so this is not a failure.
+		return out, nil
+	case err != nil:
 		slog.ErrorContext(ctx, "invitation delivery failed", "invitation", id, "environment", b.Environment, "err", err)
 		out.Delivery = "failed"
 		return out, nil

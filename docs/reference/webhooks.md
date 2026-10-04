@@ -70,8 +70,9 @@ Invitations use purpose `invitation` and carry no code:
 {"email":"bob@example.com","purpose":"invitation","token":"ik_inv_…","link":"https://app.example.com/join?token=ik_inv_…","organization":"Acme","inviter":"owner@example.com","expires_at":"2026-10-03T12:00:00Z"}
 ```
 
-`link` is present only when the environment's delivery config sets
-`invitation_url`; otherwise build it from `token` yourself. The token is a
+`link` opens the environment delivery config's `invitation_url`, else IAMKit's
+hosted page (`https://IAMKIT_HOST/hosted/invite?token=…`); to use a page of
+your own without configuring one, build it from `token`. The token is a
 secret valid for seven days. `inviter` is the inviting operator's email (or
 name) when known. Absent fields are omitted, so challenge payloads are unchanged. No environment/app/resource,
 challenge ID or language is included (a requested `locale` is not forwarded). The webhook is a delivery adapter, not a general notification bus.

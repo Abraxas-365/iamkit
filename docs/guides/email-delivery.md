@@ -142,10 +142,10 @@ the API is `/management/v1/environments/ENV_UUID/delivery`:
   where the invited person accepts: a new person creates an account, an existing
   one joins the organization. For your own page, IAMKit appends `token=…`; the
   page posts it to [`/identity/v1/invitations/accept`](../reference/api/identity.md#invitations).
-  Webhooks receive the result as `link`; without it they get no
-  link. SMTP/Resend emails always have a button: without `invitation_url` it
-  opens IAMKit's own page (`https://IAMKIT_HOST/hosted/invite`,
-  [hosted login](hosted-login.md#invitations)). Use private request files, not
+  Without `invitation_url`, every invitation links to IAMKit's own page
+  (`https://IAMKIT_HOST/hosted/invite`, [hosted login](hosted-login.md#invitations)):
+  the SMTP/Resend button, the webhook's `link`, and the `link` returned to the
+  inviter, also when no delivery is configured at all. Use private request files, not
   tracked configuration or shell history: the configuration controls where codes go.
 - `DELETE`: 204; removes the override and **restores global fallback**, not
   necessarily disables delivery. Deleting an absent override returns 404.

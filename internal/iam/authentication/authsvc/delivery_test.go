@@ -215,24 +215,25 @@ func TestDeliveryStatusProvider(t *testing.T) {
 	}
 }
 
-// Without an invitation page, rendered providers link to the hosted one;
-// the webhook still gets none.
+// Without an invitation page, every provider (and no delivery at all) links
+// to the hosted one.
 func TestInvitationURL(t *testing.T) {
 	ctx, env := context.Background(), identity.NewEnvironmentID()
 	const issuer = "https://id.acme.io"
+	hosted := issuer + "/hosted/invite"
 	for _, tc := range []struct {
 		name   string
 		cfg    *authentication.DeliveryConfig
 		global string // "" = no global delivery
 		want   string
 	}{
-		{"none", nil, "", ""},
-		{"global webhook", nil, "webhook", ""},
-		{"global smtp", nil, "smtp", issuer + "/hosted/invite"},
-		{"webhook", &authentication.DeliveryConfig{Provider: "webhook"}, "", ""},
-		{"resend", &authentication.DeliveryConfig{Provider: "resend"}, "", issuer + "/hosted/invite"},
+		{"none", nil, "", hosted},
+		{"global webhook", nil, "webhook", hosted},
+		{"global smtp", nil, "smtp", hosted},
+		{"webhook", &authentication.DeliveryConfig{Provider: "webhook"}, "", hosted},
+		{"resend", &authentication.DeliveryConfig{Provider: "resend"}, "", hosted},
 		{"own page", &authentication.DeliveryConfig{Provider: "smtp", InvitationURL: "https://app.acme.io/join"}, "", "https://app.acme.io/join"},
-		{"env webhook over global smtp", &authentication.DeliveryConfig{Provider: "webhook"}, "smtp", ""},
+		{"own page over webhook", &authentication.DeliveryConfig{Provider: "webhook", InvitationURL: "https://app.acme.io/join"}, "smtp", "https://app.acme.io/join"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var global authentication.Delivery

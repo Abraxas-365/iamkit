@@ -119,8 +119,10 @@ func (f Filter) Validate() error {
 }
 
 // Issued is returned once when an invitation is created or resent: the raw
-// token and link are never shown again. Delivery reports the webhook result
-// ("sent", "failed", or "skipped" when no delivery is configured).
+// token and link are never shown again. Link opens the environment's
+// invitation page, else IAMKit's hosted one. Delivery reports the send:
+// "sent", "failed" (the provider refused it), or "skipped" when nothing
+// delivers the environment's email.
 type Issued struct {
 	Invitation
 	Token    string `json:"token"`
@@ -175,6 +177,10 @@ func ValidToken(token string) error {
 // ErrInvalid is the uniform answer for unknown, used, revoked or expired
 // tokens on accept.
 var ErrInvalid = errx.Unauthorized("invalid or expired invitation")
+
+// ErrNotDelivered is what a Mailer returns when nothing delivers the
+// environment's email: the invitation is "skipped", not "failed".
+var ErrNotDelivered = errx.External("email delivery is not configured")
 
 // Accepted is the accept result. The invitee signs in afterwards: with a
 // password, or through SSO when SSORequired.

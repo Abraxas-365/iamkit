@@ -113,9 +113,9 @@ function InviteDialog({ base, path, onClose, onIssued }: { base: string; path: s
 }
 
 const deliveryText: Record<Issued['delivery'], string> = {
-  sent: t('The invitation was sent to the delivery webhook.'),
-  failed: t('The delivery webhook failed. Share the link or token below with the invitee yourself.'),
-  skipped: t('No delivery webhook is configured. Share the link or token below with the invitee yourself.'),
+  sent: t('The invitation was sent by email.'),
+  failed: t('Email delivery failed. Share the link or token below with the invitee yourself.'),
+  skipped: t('Email delivery is not configured. Share the link or token below with the invitee yourself.'),
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`

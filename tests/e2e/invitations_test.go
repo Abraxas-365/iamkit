@@ -1,9 +1,11 @@
 package e2e_test
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 
+	"github.com/Abraxas-365/iamkit/internal/bootstrap"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -24,17 +26,18 @@ func TestInvitationsJourney(t *testing.T) {
 	e.Must("POST", invitations, e.Owner, fiber.Map{"email": "bob@example.com", "group_ids": []string{"00000000-0000-4000-8000-000000000000"}}, 422)
 	e.Must("POST", invitations, e.Owner, fiber.Map{"email": e.AliceEmail}, 409)
 
-	// Invite: token shown once, webhook gets the invitation (no link: the
-	// environment has no invitation page).
+	// Invite: token shown once, webhook gets the invitation with a link to
+	// the hosted page (the environment has no invitation page of its own).
 	inv := e.Must("POST", invitations, e.Owner, fiber.Map{"email": " Bob@Example.com ", "role_ids": []string{reader, reader}, "group_ids": []string{writers}}, 201).JSON
 	token, _ := inv["token"].(string)
-	if !strings.HasPrefix(token, "ik_inv_") || inv["email"] != "bob@example.com" || inv["status"] != "pending" || inv["delivery"] != "sent" || inv["link"] != nil ||
+	hostedLink := "https://iam.example/hosted/invite?token=" + token
+	if !strings.HasPrefix(token, "ik_inv_") || inv["email"] != "bob@example.com" || inv["status"] != "pending" || inv["delivery"] != "sent" || inv["link"] != hostedLink ||
 		len(inv["role_ids"].([]any)) != 1 || len(inv["group_ids"].([]any)) != 1 {
 		t.Fatalf("invite = %s", mustJSON(inv))
 	}
 	id := inv["id"].(string)
 	mail, ok := e.Mail.Last("invitation")
-	if !ok || mail.Email != "bob@example.com" || mail.Token != token || mail.Organization != "Acme" || mail.Inviter != "owner@example.com" || mail.Link != "" || mail.Code != "" || mail.ExpiresAt == nil {
+	if !ok || mail.Email != "bob@example.com" || mail.Token != token || mail.Organization != "Acme" || mail.Inviter != "owner@example.com" || mail.Link != hostedLink || mail.Code != "" || mail.ExpiresAt == nil {
 		t.Fatalf("mail = %+v", mail)
 	}
 	var stored []byte
@@ -170,6 +173,39 @@ func TestInvitationsJourney(t *testing.T) {
 	var left int
 	if err := e.DB.Get(&left, `SELECT count(*) FROM invitations WHERE email='bob@example.com'`); err != nil || left != 0 {
 		t.Fatalf("erased invitations = %d %v", left, err)
+	}
+}
+
+// TestInvitationWithoutDelivery: with nothing configured to deliver email
+// (local development), an invitation is "skipped", not "failed", and still
+// returns a link to the hosted page that works.
+func TestInvitationWithoutDelivery(t *testing.T) {
+	e := newEnv(t)
+	const issuer = "http://localhost:18998"
+	s := bootstrap.New(e.DB, e.Key, issuer, nil)
+	app := s.App()
+	t.Cleanup(func() { app.Shutdown() })
+	e.App = contracted(t, app, s.WaitDeliveries)
+	invitations := e.Base + "/organizations/" + e.Org + "/invitations"
+
+	inv := e.Must("POST", invitations, e.Owner, fiber.Map{"email": "prov-a@alfa.example"}, 201).JSON
+	token, _ := inv["token"].(string)
+	link, _ := inv["link"].(string)
+	if inv["delivery"] != "skipped" || link != issuer+"/hosted/invite?token="+token {
+		t.Fatalf("invite = %s", mustJSON(inv))
+	}
+	// Resend: a new token and its link, still skipped.
+	again := e.Must("POST", invitations+"/"+inv["id"].(string)+"/resend", e.Owner, nil, 200).JSON
+	if again["delivery"] != "skipped" || again["token"] == token || again["link"] != issuer+"/hosted/invite?token="+again["token"].(string) {
+		t.Fatalf("resend = %s", mustJSON(again))
+	}
+	// The link opens the hosted accept page.
+	u, err := url.Parse(again["link"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page := e.Do("GET", u.RequestURI(), "", nil); page.Status != 200 || !strings.Contains(page.Body, `action="/hosted/invite"`) {
+		t.Fatalf("hosted invite page = %d", page.Status)
 	}
 }
 

@@ -152,4 +152,9 @@ func TestInviteChecksAndDelivery(t *testing.T) {
 	if err != nil || out.Delivery != "skipped" {
 		t.Fatalf("no mailer = %+v %v", out, err)
 	}
+	// Nothing configured to deliver: skipped, still with the link to share.
+	out, err = New(fakeRepo{tx: &fakeTx{}}, fakeSecrets{}, nil, fakeMailer{err: invitation.ErrNotDelivered}, nil).Invite(ctx, b, m, invitation.Input{Email: "bob@example.com"})
+	if err != nil || out.Delivery != "skipped" || out.Link == "" {
+		t.Fatalf("not delivered = %+v %v", out, err)
+	}
 }

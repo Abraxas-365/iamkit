@@ -360,7 +360,7 @@ it('explains what the invitation page is for', async () => {
   const field = screen.getByLabelText('Invitation page (optional)')
   const described = field.getAttribute('aria-describedby')!.split(' ').map(id => document.getElementById(id)!.textContent).join(' ')
   expect(described).toContain('where they accept')
-  expect(described).toContain('Empty: your webhook gets the token but no link.')
+  expect(described).toContain('Empty: your webhook gets a link to IAMKit’s hosted invitation page.')
   expect(field.getAttribute('autocomplete')).toBe('off')
   await userEvent.click(screen.getByRole('radio', { name: /SMTP/ }))
   expect(document.getElementById('invitation-url-hint')!.textContent).toContain('Empty: the email links to IAMKit’s hosted invitation page.')

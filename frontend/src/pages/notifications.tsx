@@ -172,9 +172,7 @@ export default function NotificationsPage() {
         <CardContent>
           {config?.invitation_url
             ? <span className="break-all font-mono text-sm">{config.invitation_url}{config.invitation_url === status.hosted_invitation_url && <Badge variant="secondary" className="ml-2 font-sans">{t('Hosted page')}</Badge>}</span>
-            : rendered(provider)
-              ? <span className="text-sm text-muted-foreground">{t('IAMKit’s hosted page')} <Badge variant="secondary" className="ml-1">{t('Hosted page')}</Badge></span>
-              : <p className="text-sm text-muted-foreground">{config ? t('Not set: invitation emails carry only the token.') : status.global_configured ? t('Invitation links need this environment’s own delivery settings; the global webhook receives only the token.') : t('Configure delivery to set an invitation page.')}</p>}
+            : <span className="text-sm text-muted-foreground">{t('IAMKit’s hosted page')} <Badge variant="secondary" className="ml-1">{t('Hosted page')}</Badge></span>}
         </CardContent>
       </Card>
     </div>
