@@ -22,5 +22,5 @@ carry attribution and do not grant a refresh session.
 Password changes invalidate sessions/challenges through database enforcement.
 Test reset and revocation with live introspection, not just decoding claims.
 
-See [token claims](../reference/token-claims.md), [password login](../guides/password-login.md)
-and [protected API](../guides/protect-an-api.md).
+See [token claims](../reference/token-claims.md), [password login](../guides/sign-in/passwords.md)
+and [protected API](../start/protect-an-api.md).

@@ -18,7 +18,7 @@ import type { Page } from './session'
 import { rich, t } from '@/lib/i18n'
 
 // Wire shapes of /organizations/:organization/admin (see
-// docs/guides/organization-administration.md).
+// docs/guides/organizations/organization-administration.md).
 interface Organization { id: string; name: string; mfa_required: boolean; mfa_for_federated: boolean; allow_password: boolean; allow_email_code: boolean; allow_social: boolean; allow_passkey: boolean }
 interface Member { user_id: string; user_name: string; user_email: string; active: boolean; sso_bypass: boolean }
 interface User { id: string; name: string; email: string; username: string; avatar_url: string; state: string; active: boolean; phone: string }

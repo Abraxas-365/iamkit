@@ -5,16 +5,16 @@ and `http_status`. Treat HTTP status as the transport result and code as a
 machine-readable classification; do not branch on English messages. Internal
 errors must not be surfaced as stack traces or secret payloads. A few client
 errors add a `details` object: `PASSWORD_POLICY` (400, a new password breaks the
-[password policy](../guides/password-policy.md)) carries `rule`
+[password policy](../guides/sign-in/password-policy.md)) carries `rule`
 (`length`, `upper`, `lower`, `digit`, `symbol`, `breached`, `reused`) and
 `min_length`. `PASSWORD_CHANGE_REQUIRED` (403) means the password matched but has
 expired; resend the login with `new_password`. `METHOD_NOT_ALLOWED` (403) means
 the environment or organization does not allow that
-[sign-in method](../guides/sign-in-methods.md); `PASSWORD_RESET_DISABLED` (403)
+[sign-in method](../guides/sign-in/sign-in-methods.md); `PASSWORD_RESET_DISABLED` (403)
 that the environment does not offer password reset. `SIGNUP_DISABLED` (403)
-means [sign-up](../guides/signup-and-onboarding.md#self-service-sign-up) is off;
+means [sign-up](../guides/sign-in/signup-and-onboarding.md#self-service-sign-up) is off;
 `ACCOUNT_EXISTS` (409) that the email got an account before the sign-up was
-confirmed. `ACTION_DENIED` (403) means an [action](../guides/actions.md) refused
+confirmed. `ACTION_DENIED` (403) means an [action](../guides/platform/actions.md) refused
 the request (its message is the receiver's); `ACTION_FAILED` (502) that an
 action target set to interrupt on error failed.
 

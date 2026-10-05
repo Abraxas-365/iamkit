@@ -39,7 +39,7 @@ Owner/admin writes; viewers read. Entity lists use the
 | `GET /grants` | — | 200 page |
 | `GET /grants/:id` | — | 200 grant |
 | `DELETE /grants/:id` | — | 204 |
-| `GET /saml/identity-provider` | — | 200 `{entity_id,sso_url,metadata_url,certificate}` ([SAML applications](../../guides/saml-apps.md)) |
+| `GET /saml/identity-provider` | — | 200 `{entity_id,sso_url,metadata_url,certificate}` ([SAML applications](../../guides/applications/saml-apps.md)) |
 | `POST /saml/service-providers` | `name`, `application_id`, `resource_id` (linked), `entity_id`, `acs_urls` (1–10 HTTPS), optional `name_id_format` (`email` default \| `persistent`), `attributes` (name → `email`\|`name`\|`user_id`\|`organization_id`\|`permissions`, ≤ 32) | 201 service provider; 409 for a taken entity ID or an unlinked resource; audited `saml_service_provider.create` |
 | `GET /saml/service-providers` | Optional `application_id`, `search` (name, entity ID), list parameters | 200 page of `{id,environment_id,name,application_id,application_name,resource_id,resource_name,entity_id,acs_urls,name_id_format,attributes,created_at}` |
 | `GET /saml/service-providers/:id` | — | 200 service provider |
@@ -87,7 +87,7 @@ roles and permissions. With it true, tokens, roles and direct grants for the
 resource count only in the owner organization and in organizations holding a
 resource grant — and, in the latter, only the granted roles (`role_ids`,
 `null` = all). Owner organizations' administrators manage grants of their
-resources themselves ([organization administration](../../guides/organization-administration.md#resource-grants-vendor-organizations)).
+resources themselves ([organization administration](../../guides/organizations/organization-administration.md#resource-grants-vendor-organizations)).
 Resource grant routes need `iam:roles:read`/`iam:roles:write` on `/api/v1`;
 `PUT /resources/:id/access` needs `iam:resources:write`.
 

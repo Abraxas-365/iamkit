@@ -32,12 +32,12 @@ own the product experience.
 
 **IAMKit can also be your OAuth/OIDC provider.** Register your apps as clients
 and use authorization code + PKCE to obtain access tokens and OIDC ID tokens.
-Turn on [hosted sign-in pages](docs/guides/hosted-login.md) per client, or
-build your own with the [custom sign-in SDKs](docs/guides/custom-sign-in-ui.md).
+Turn on [hosted sign-in pages](docs/guides/applications/hosted-login.md) per client, or
+build your own with the [custom sign-in SDKs](docs/guides/applications/custom-sign-in-ui.md).
 This is different from **external federation**, where IAMKit lets users sign in
 through Google, Microsoft, a SAML or LDAP directory or another provider.
-See [OAuth/OIDC client integration](docs/guides/oauth-oidc.md) and
-[external federation](docs/guides/federation.md).
+See [OAuth/OIDC client integration](docs/guides/applications/oauth-oidc.md) and
+[external federation](docs/guides/enterprise/federation.md).
 
 IAMKit separates **administration** from **authentication**:
 
@@ -56,7 +56,7 @@ IAMKit separates **administration** from **authentication**:
   The Docker image includes a built-in **operator management console** (React SPA)
   served at the root URL — no separate frontend deployment needed. The console
   source lives in [`frontend/`](frontend/README.md). An opt-in
-  [organization admin portal](docs/guides/organization-administration.md)
+  [organization admin portal](docs/guides/organizations/organization-administration.md)
   lets your customers manage their own members.
 
 **A service account is not a workspace operator credential.** It exchanges its
@@ -198,7 +198,7 @@ override) as well as your private environment file. The
 | Container variable | Purpose |
 | :--- | :--- |
 | `DATABASE_URL` | PostgreSQL connection string; supplied by the example Compose stack |
-| `JWT_PRIVATE_KEY_PATH` | Mounted RSA private key; `/secrets/jwt.pem` in the example. Per-environment [signing keys](docs/guides/signing-keys.md) can replace it |
+| `JWT_PRIVATE_KEY_PATH` | Mounted RSA private key; `/secrets/jwt.pem` in the example. Per-environment [signing keys](docs/guides/applications/signing-keys.md) can replace it |
 | `JWT_ISSUER` | Stable public issuer URL; HTTPS outside loopback development |
 | `SERVER_PORT` | API port inside the container; keep 8080 to match the example healthcheck |
 | `OIDC_HMAC_SECRET` | Stable OAuth secret, at least 32 random bytes |
@@ -208,7 +208,7 @@ override) as well as your private environment file. The
 | `REDIS_URL` | Optional; replicas share rate limits, usage windows and a small cache |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`, `IAMKIT_METRICS_ADDR` | Traces/metrics over OTLP, Prometheus listener ([observability](docs/operations/observability.md)) |
 | `IAMKIT_OPERATOR_SSO_PROVIDERS` | Console single sign-on for operators ([operator SSO](docs/reference/configuration.md#operator-single-sign-on)) |
-| `IAMKIT_FEATURES`, `IAMKIT_LIMITS` | Deployment [feature flags](docs/guides/feature-flags.md) and [usage limit](docs/guides/usage-limits.md) ceilings |
+| `IAMKIT_FEATURES`, `IAMKIT_LIMITS` | Deployment [feature flags](docs/guides/platform/feature-flags.md) and [usage limit](docs/guides/platform/usage-limits.md) ceilings |
 
 Email codes, email verification, password reset, sign-up and invitations need
 email delivery. With a **webhook**, IAMKit sends `{email, purpose, code}` and
@@ -220,14 +220,14 @@ or the management API (`PUT /environments/:id/delivery`). Per-environment config
 takes priority. SMS factor codes and phone verification use a per-environment
 Twilio or webhook provider. Do
 not log codes or webhook payloads. See
-[email delivery](docs/guides/email-delivery.md).
+[email delivery](docs/guides/platform/email-delivery.md).
 
 Federation connections store their client secret sealed with the encryption
 key (or reference an approved `FEDERATION_CREDENTIAL_BINDINGS` entry, see
 [`.env.example`](.env.example)). Organization connections can provision users
 on first sign-in (JIT) or link an existing member by verified email. See
-[federation](docs/guides/federation.md) and
-[social login](docs/guides/social-login.md).
+[federation](docs/guides/enterprise/federation.md) and
+[social login](docs/guides/enterprise/social-login.md).
 
 ## Integrate your application
 
@@ -280,7 +280,7 @@ signup transaction: handle partial failures/retries in your onboarding workflow.
 Do not trust a public form to select privileged roles, arbitrary orgs or grants.
 Add abuse prevention and email-ownership verification appropriate to your product.
 
-If anyone may join, turn on [self-service sign-up](docs/guides/signup-and-onboarding.md#self-service-sign-up)
+If anyone may join, turn on [self-service sign-up](docs/guides/sign-in/signup-and-onboarding.md#self-service-sign-up)
 instead: `POST /identity/v1/signup` confirms the email with a code and places
 every new account in one chosen organization (and optional group). To bring
 people into an existing organization, send [invitations](docs/reference/api/identity.md#invitations).
@@ -310,7 +310,7 @@ IAMKit. IDs are identifiers, not secrets; IAMKit checks the requested boundary
 against actual memberships, bindings and grants. Select tenant context through a
 trusted onboarding/invitation flow, not by granting whatever the browser requests.
 If Alice has a second factor, the answer is a pending MFA login instead of
-tokens; see [MFA](docs/guides/mfa.md).
+tokens; see [MFA](docs/guides/sign-in/mfa.md).
 
 **Call your API:** send `Authorization: Bearer <access_token>` to the Invoices API.
 The API must validate the token, require `invoices:read`, and match its
@@ -332,8 +332,8 @@ online introspection when you need current session/access status.
 | Email code | `POST /identity/v1/challenges` with environment, email and `purpose: "login"`; then `/challenges/verify` with challenge ID, 8-digit code, purpose and full boundary | User has codes enabled; email delivery configured; same access prerequisites |
 | Passkey | `/identity/v1/passkeys/login/begin` and `/finish` (WebAuthn) | Passkey enrolled; HTTPS origin; passkeys allowed by the sign-in policy |
 | Social or enterprise SSO | `POST /identity/v1/federation/start` with connection ID and full boundary; follow provider redirect/callback. LDAP posts the password to `/federation/ldap/login` | Federation connection (OIDC, OAuth 2.0, SAML or LDAP), linked or JIT-provisioned identity and appropriate local access |
-| OAuth/OIDC client flow | Register an OAuth client bound to an app/resource, then use authorization code + S256 PKCE | [Hosted pages](docs/guides/hosted-login.md) or your own UI with [`@iamkit/js`/`@iamkit/react`](docs/guides/custom-sign-in-ui.md); HTTPS; see the [OAuth guide](docs/guides/oauth-oidc.md) |
-| Machines | Service-account `client_credentials`, machine-user personal access tokens or signed JWT assertions | See [service accounts](docs/guides/service-accounts.md) and [machine users](docs/guides/machine-users.md) |
+| OAuth/OIDC client flow | Register an OAuth client bound to an app/resource, then use authorization code + S256 PKCE | [Hosted pages](docs/guides/applications/hosted-login.md) or your own UI with [`@iamkit/js`/`@iamkit/react`](docs/guides/applications/custom-sign-in-ui.md); HTTPS; see the [OAuth guide](docs/guides/applications/oauth-oidc.md) |
+| Machines | Service-account `client_credentials`, machine-user personal access tokens or signed JWT assertions | See [service accounts](docs/guides/machines/service-accounts.md) and [machine users](docs/guides/machines/machine-users.md) |
 
 OAuth clients represent **apps obtaining tokens from IAMKit**; federation
 connections represent **external providers authenticating users to IAMKit**.
@@ -346,7 +346,7 @@ providers. These resolve to the same local user, but each successful login
 creates its own session. A sign-in code is a login method; **multi-factor
 authentication** is separate: TOTP, email or SMS codes and security keys,
 required per environment or organization, with recovery codes. See
-[MFA](docs/guides/mfa.md).
+[MFA](docs/guides/sign-in/mfa.md).
 
 Forgot password uses `/challenges` with `purpose: "password_reset"`, followed by
 `/challenges/verify` with environment, challenge ID, code, purpose and the new
@@ -354,11 +354,11 @@ password. Success returns 204, not a login session. It requires an
 existing password and configured email delivery. Hosted pages include this
 flow; with headless APIs your app supplies the UI.
 
-New passwords follow the environment's [password policy](docs/guides/password-policy.md)
+New passwords follow the environment's [password policy](docs/guides/sign-in/password-policy.md)
 (default 12–72 bytes; optional composition rules and breached-password check),
 which can also lock accounts after repeated wrong passwords and expire old ones.
 Organizations can add stricter requirements for their members. The
-[sign-in methods](docs/guides/sign-in-methods.md) policy turns password,
+[sign-in methods](docs/guides/sign-in/sign-in-methods.md) policy turns password,
 password reset, email code, passkey, social sign-in or sign-up off per
 environment or organization.
 
@@ -389,15 +389,15 @@ Also included:
   signing-key rotation.
 - **Events and extensibility:** a typed [event log](docs/reference/events.md)
   with change history and export, signed [event webhooks](docs/reference/event-webhooks.md),
-  and [actions](docs/guides/actions.md) — synchronous hooks that can deny a
+  and [actions](docs/guides/platform/actions.md) — synchronous hooks that can deny a
   sign-in or add token claims.
 - **Users:** profile schemas and metadata, usernames, verified phone numbers,
   deactivation, "sign out everywhere", forced password change, owner-only
-  audited [impersonation](docs/guides/impersonation.md).
-- **B2B:** [SCIM provisioning](docs/guides/scim-provisioning.md), per-organization
+  audited [impersonation](docs/guides/organizations/impersonation.md).
+- **B2B:** [SCIM provisioning](docs/guides/enterprise/scim-provisioning.md), per-organization
   branding, MFA and password rules, sign-in method restrictions, SSO enforcement
-  and an [organization admin portal](docs/guides/organization-administration.md).
-- **Operations:** [usage limits](docs/guides/usage-limits.md), [feature flags](docs/guides/feature-flags.md),
+  and an [organization admin portal](docs/guides/organizations/organization-administration.md).
+- **Operations:** [usage limits](docs/guides/platform/usage-limits.md), [feature flags](docs/guides/platform/feature-flags.md),
   OpenTelemetry tracing and Prometheus metrics, optional Redis for replicas,
   background workers and embedded checksummed migrations.
 - **Clients:** a Go SDK with Fiber middleware, `@iamkit/api` (typed TypeScript
@@ -453,19 +453,19 @@ Before triggering publication:
    digest before recommending it to users.
 
 No registry push is required to use a locally built image. See
-[releases](docs/maintainers/releases.md).
+[releases](docs/contributing/releases.md).
 
 ## Development and documentation
 
 Start at the [documentation hub](docs/index.md):
 [Docker quickstart](docs/start/docker-quickstart.md),
 [first application](docs/start/first-application.md),
-[application integration](docs/guides/application-integration.md),
+[application integration](docs/guides/applications/application-integration.md),
 [API reference](docs/reference/api/index.md) and
 [operations checklist](docs/operations/launch-checklist.md).
-See the [validation record](docs/maintainers/validation.md) for tested examples
-and remaining deployment acceptance work, and [local development](docs/maintainers/local-development.md)
-and [testing](docs/maintainers/testing.md) for contributor setup.
+See the [validation record](docs/contributing/validation.md) for tested examples
+and remaining deployment acceptance work, and [local development](docs/contributing/local-development.md)
+and [testing](docs/contributing/testing.md) for contributor setup.
 The default `docker-compose.yml` is for local infrastructure; the Docker
 quickstart above explicitly selects the full-stack file.
 

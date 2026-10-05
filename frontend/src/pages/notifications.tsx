@@ -24,7 +24,7 @@ export type { Attempt } from '@/lib/delivery'
 
 const DESCRIPTION = t('Configure how login codes, password resets, email verification and invitations are delivered.')
 
-// The webhook contract (docs/reference/webhooks.md).
+// The webhook contract (docs/reference/email-webhooks.md).
 const PURPOSES = [
   { purpose: 'login', label: t('Login code'), fields: ['email', 'purpose', 'code'], validity: t('5 minutes, single use'), example: { email: 'ada@example.com', purpose: 'login', code: '48213907' } },
   { purpose: 'password_reset', label: t('Password reset'), fields: ['email', 'purpose', 'code'], validity: t('5 minutes, single use'), example: { email: 'ada@example.com', purpose: 'password_reset', code: '48213907' } },

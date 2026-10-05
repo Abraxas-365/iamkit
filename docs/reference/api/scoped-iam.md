@@ -23,11 +23,11 @@ These are environment-wide administrative permissions, not organization-limited
 ones: a token with `iam:users:write` can change any user of its environment.
 Keep such tokens on trusted backends. Organization-limited administration uses
 the `iam:org:*` permissions under `/organizations/:organization/admin`; see
-[organization administration](../../guides/organization-administration.md).
+[organization administration](../../guides/organizations/organization-administration.md).
 
 The setup is an application binding to the built-in IAM resource and a
 service account with selected IAM permissions. Its credential is exchanged at
-`/identity/v1/machine-token` for a JWT. A [machine user](../../guides/machine-users.md)'s
+`/identity/v1/machine-token` for a JWT. A [machine user](../../guides/machines/machine-users.md)'s
 personal access token for the IAM resource is accepted directly as the bearer,
 with the IAM permissions the machine user holds in the token's organization.
 
@@ -53,7 +53,7 @@ GET/HEAD select the read permission; mutations select write.
 | Event log (`GET /events`, `GET /events/export`, see [event log](../events.md)) | `iam:events:read` |
 | Entity history (`GET /users/:id/history`, also `organizations`, `applications`, `roles`, `resources`; see [change history](../events.md#change-history)) | `iam:events:read` and the collection's read permission |
 | Event webhooks (`/webhooks…`, see [event webhooks](../event-webhooks.md)) | `iam:webhooks:read` / `iam:webhooks:write` |
-| Daily usage (`GET /usage`, see [usage and limits](../../guides/usage-limits.md)) | `iam:usage:read` |
+| Daily usage (`GET /usage`, see [usage and limits](../../guides/platform/usage-limits.md)) | `iam:usage:read` |
 | Delivery configuration (`GET`, `PUT`, `DELETE /delivery`; `GET /delivery/status`; `POST /delivery/test`; `GET`, `POST /delivery/preview`; `GET /delivery/templates`; `GET`, `PUT`, `DELETE /delivery/templates/:purpose/:locale`) | `iam:delivery:read` (`GET`), `iam:delivery:write` (others, including draft `POST /delivery/preview`) |
 
 There are no workspace/operator, federation, OAuth-client or SCIM-credential
@@ -64,7 +64,7 @@ The middleware validates JWTs online (revoked sessions and removed permissions s
 working immediately). Grants/roles/service-account writes can delegate
 access; never expose them as an unrestricted browser signup proxy.
 
-See [service accounts](../../guides/service-accounts.md) and
-[signup](../../guides/signup-and-onboarding.md). Source:
+See [service accounts](../../guides/machines/service-accounts.md) and
+[signup](../../guides/sign-in/signup-and-onboarding.md). Source:
 `internal/server/api.go`, `internal/server/apiauth/middleware.go` and
 `migrations/001_initial.up.sql`.

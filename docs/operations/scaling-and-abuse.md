@@ -37,7 +37,7 @@ With `REDIS_URL`, every replica uses one Redis for:
   hold for the deployment instead of per replica. Two replicas reading and
   writing one counter at the same moment may each admit a request, so a limit
   can be exceeded by a few requests under heavy concurrency.
-- **Per-minute [usage limits](../guides/usage-limits.md)** (`requests_per_minute`,
+- **Per-minute [usage limits](../guides/platform/usage-limits.md)** (`requests_per_minute`,
   `action_calls_per_minute`): one atomic counter per environment and minute.
 - **Caches** of reads that happen on every sign-in or token: feature flag
   overrides and action bindings (30 seconds) and identity providers' OIDC

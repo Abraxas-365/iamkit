@@ -82,7 +82,7 @@ Types are `<subject>.<verb>`. The catalog lives in
 | `session.*`, `login.*` | `session.created` (every sign-in; `data.amr`, `data.user_id`, application and client), `session.revoked`, `login.failed` (wrong password; `data.failures`, `data.locked`) |
 | `mfa.*` | `enrolled`, `removed`, `reset`, `locked`, `recovery_used`, `recovery_regenerated`, `clone_detected` |
 | `webhook.*` | `created`, `updated`, `deleted`, `secret_rotated`, `replayed`, `delivery_retried`, `disabled` (by IAMKit after three days of failures; actor `system`) |
-| `action.*`, `action_target.*`, `action_execution.*` | [Actions](../guides/actions.md): `action.failed` (a target failed or was skipped; subject = the target, `data.condition`, `outcome`, `error`, `interrupted`; actor `system`), `action_target.created`/`updated`/`deleted`/`secret_rotated`, `action_execution.updated`/`deleted` (subject = the condition) |
+| `action.*`, `action_target.*`, `action_execution.*` | [Actions](../guides/platform/actions.md): `action.failed` (a target failed or was skipped; subject = the target, `data.condition`, `outcome`, `error`, `interrupted`; actor `system`), `action_target.created`/`updated`/`deleted`/`secret_rotated`, `action_execution.updated`/`deleted` (subject = the condition) |
 | Settings | `branding.*`, `sign_in_options.*`, `password_policy.*`, `sign_in_policy.*`, `delivery.*`, `email_template.*`, `sign_in_texts.*`, `sms.*`, `signing_key.*`, `saml_service_provider.*`, `feature.*` (`updated`: `data.enabled`; `reset`; subject = the feature name), `limits.updated` (`data.limits`: the environment's limits) |
 
 `data` never contains secrets, password hashes or codes. Unknown fields may be

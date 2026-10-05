@@ -43,9 +43,9 @@ A password alone is insufficient. Removing the membership or grant must prevent
 new access; online introspection observes changes while offline JWT validation
 cannot see them before expiry.
 
-Next run the [protected API example](../guides/protect-an-api.md), which separately
+Next run the [protected API example](protect-an-api.md), which separately
 verifies tenant isolation when serving API requests, not merely during login.
-See [signup orchestration](../guides/signup-and-onboarding.md) for application-owned
+See [signup orchestration](../guides/sign-in/signup-and-onboarding.md) for application-owned
 onboarding and [scoped IAM](../reference/api/scoped-iam.md) for server automation.
 
 ## Cleanup

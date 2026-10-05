@@ -18,12 +18,12 @@ containers after changes. Keep secrets outside source control and frontend build
 | `IAMKIT_PROVIDER_*` | As referenced by a binding | External provider client secret; server-only |
 | `IAMKIT_ENCRYPTION_KEY` | Unset: features storing secrets fail | Base64 of 32 bytes; encrypts stored secrets (organization SSO client secrets, SMTP passwords, Resend API keys). See [encryption key](#encryption-key) |
 | `IAMKIT_ENCRYPTION_KEYS_OLD` | Empty | Comma-separated previous keys, decrypt-only, for rotation |
-| `IAMKIT_LDAP_ALLOWED_HOSTS` | Empty: public addresses only | Comma-separated hosts or `host:port` of [LDAP directories](../guides/ldap.md) on private networks that IAMKit may dial; every other directory must resolve to a public address |
-| `IAMKIT_WEBAUTHN_ORIGINS` | Empty: only the issuer's origin | Comma-separated extra origins (custom sign-in UIs) allowed to run [security key and passkey](../guides/mfa.md#security-keys-and-passkeys) ceremonies; the relying-party ID stays the issuer's host |
+| `IAMKIT_LDAP_ALLOWED_HOSTS` | Empty: public addresses only | Comma-separated hosts or `host:port` of [LDAP directories](../guides/enterprise/ldap.md) on private networks that IAMKit may dial; every other directory must resolve to a public address |
+| `IAMKIT_WEBAUTHN_ORIGINS` | Empty: only the issuer's origin | Comma-separated extra origins (custom sign-in UIs) allowed to run [security key and passkey](../guides/sign-in/mfa.md#security-keys-and-passkeys) ceremonies; the relying-party ID stays the issuer's host |
 | `CORS_ALLOWED_ORIGINS` | Empty: no CORS middleware | Comma-separated allowed origins; enables credentials, so never use untrusted origins or wildcard |
 | `IAMKIT_TRUSTED_PROXIES` | Empty: the socket address is the client | Comma-separated IPs/CIDRs of the reverse proxies whose `X-Forwarded-For` names the client (and whose `X-Forwarded-Proto`/`-Host` are read); see [forwarded headers](../operations/reverse-proxy.md#forwarded-headers). An invalid entry stops start-up |
 | `RATE_LIMIT_PER_MINUTE` | 120 | Per-IP limit on authenticated management and scoped API routes, per process (shared by the replicas with `REDIS_URL`); invalid/non-positive values fall back to default |
-| `REDIS_URL` | Unset: everything per process, no cache | Optional `redis://` or `rediss://` URL. Replicas then share per-IP rate limits and per-minute [usage limits](../guides/usage-limits.md), and cache a few hot reads; PostgreSQL stays the source of truth. See [scaling](../operations/scaling-and-abuse.md#redis-optional). An invalid URL stops start-up; an unreachable server does not |
+| `REDIS_URL` | Unset: everything per process, no cache | Optional `redis://` or `rediss://` URL. Replicas then share per-IP rate limits and per-minute [usage limits](../guides/platform/usage-limits.md), and cache a few hot reads; PostgreSQL stays the source of truth. See [scaling](../operations/scaling-and-abuse.md#redis-optional). An invalid URL stops start-up; an unreachable server does not |
 | `IAMKIT_BOOTSTRAP_EMAIL` | Unset: no automatic bootstrap | First-boot owner email; automatic bootstrap logs a one-time key |
 | `IAMKIT_BOOTSTRAP_WORKSPACE` | `Default` | First-boot workspace name |
 | `IAMKIT_BOOTSTRAP_PASSWORD` | Optional | Sets a temporary password only when bootstrap creates the owner: the first console sign-in must replace it. Not a reset mechanism; remove it after bootstrap (a warning is logged while it stays set) |
@@ -32,8 +32,8 @@ containers after changes. Keep secrets outside source control and frontend build
 | `OTEL_EXPORTER_OTLP_ENDPOINT` and other standard `OTEL_*` | Unset: no traces or metrics exported | OpenTelemetry export over OTLP/HTTP; see [observability](../operations/observability.md#tracing-and-metrics) |
 | `IAMKIT_EVENT_RETENTION` | `2160h` (90 days) | How long the [event log](events.md) keeps events (Go duration, at least `1h`); older ones are pruned hourly |
 | `IAMKIT_WORKERS` | `true` | `false` turns off background jobs (back-channel logout delivery, event pruning) on this replica; keep them on in at least one. See [background jobs](../operations/observability.md#background-jobs) |
-| `IAMKIT_FEATURES` | — | Deployment values of IAMKit's [feature flags](../guides/feature-flags.md): `name=true\|false,…` (e.g. `saml_idp=false`); unknown names are logged and ignored |
-| `IAMKIT_LIMITS` | — | Deployment caps of the [usage limits](../guides/usage-limits.md): `name=value,…` (e.g. `users_max=10000,requests_per_minute=600`); environments can only tighten them. Unknown names or invalid values stop start-up |
+| `IAMKIT_FEATURES` | — | Deployment values of IAMKit's [feature flags](../guides/platform/feature-flags.md): `name=true\|false,…` (e.g. `saml_idp=false`); unknown names are logged and ignored |
+| `IAMKIT_LIMITS` | — | Deployment caps of the [usage limits](../guides/platform/usage-limits.md): `name=value,…` (e.g. `users_max=10000,requests_per_minute=600`); environments can only tighten them. Unknown names or invalid values stop start-up |
 | `IAMKIT_METRICS_ADDR` | Unset: no Prometheus listener | Address (for example `127.0.0.1:9464`) of a separate listener serving Prometheus `/metrics`; never the public port |
 
 ## Local HTTP development
@@ -51,14 +51,14 @@ requires HTTPS. Operator console SSO still requires an HTTPS issuer.
 ## Email
 
 The global fallback for environments without their own
-[delivery configuration](../guides/email-delivery.md). Values are validated at
+[delivery configuration](../guides/platform/email-delivery.md). Values are validated at
 startup; an invalid one stops the server naming the variable.
 
 | Variable | Requirement/default | Behavior |
 | --- | --- | --- |
 | `EMAIL_PROVIDER` | `webhook` | `webhook`, `smtp` or `resend` |
 | `EMAIL_WEBHOOK_URL` | webhook: unset disables global fallback | Trusted HTTPS endpoint (HTTP on localhost/127.0.0.1); may be private; no URL userinfo/fragment |
-| `EMAIL_WEBHOOK_TOKEN` | webhook | Sent as Bearer token and used to [sign requests](webhooks.md#signature) |
+| `EMAIL_WEBHOOK_TOKEN` | webhook | Sent as Bearer token and used to [sign requests](email-webhooks.md#signature) |
 | `EMAIL_FROM` | smtp, resend: required | Sender address |
 | `EMAIL_FROM_NAME`, `EMAIL_REPLY_TO` | Optional | Sender name, Reply-To address |
 | `SMTP_HOST` | smtp: required | Host name or IP, no scheme or port; may be private |
@@ -66,7 +66,7 @@ startup; an invalid one stops the server naming the variable.
 | `SMTP_TLS` | `tls` on 465, else `starttls` | `starttls` or `tls` (implicit); plaintext is not supported |
 | `SMTP_USERNAME`, `SMTP_PASSWORD` | Optional; password required with a username | Server-only secret |
 | `RESEND_API_KEY` | resend: required | Server-only secret |
-| `EMAIL_LOCALE` | English | Default language of emails IAMKit writes: any available [language](../guides/hosted-login.md#language) code (`en`, `es`, `de`, `fr`, …) |
+| `EMAIL_LOCALE` | English | Default language of emails IAMKit writes: any available [language](../guides/applications/hosted-login.md#language) code (`en`, `es`, `de`, `fr`, …) |
 
 Per-environment configurations are stored in PostgreSQL and managed through
 `/management/v1/environments/:environment/delivery`. Deleting one restores global
@@ -95,7 +95,7 @@ Accepted values are those of Go's `strconv.ParseBool` (`true`/`false`, `1`/`0`,
 and these outbound calls may reach any address:
 
 - environment email and SMS webhooks and SMTP servers;
-- [event webhooks](event-webhooks.md) and [action](../guides/actions.md) targets;
+- [event webhooks](event-webhooks.md) and [action](../guides/platform/actions.md) targets;
 - OAuth clients' `jwks_uri` (`private_key_jwt`) and `backchannel_logout_uri`
   (still https only: give the local receiver a TLS certificate);
 - identity providers of federation connections with a stored client secret.
@@ -200,7 +200,7 @@ A published host port defaults to all interfaces unless explicitly restricted.
 ## Fixed contracts (not environment settings)
 
 - Password length: 12–72 bytes for operators and, by default, end users (an
-  environment's [password policy](../guides/password-policy.md) can raise the
+  environment's [password policy](../guides/sign-in/password-policy.md) can raise the
   end-user minimum and add rules); bcrypt cost 12.
 - JWTs: 15 minutes; user session/refresh window: 24 hours; operator session: 1 hour.
 - Challenges: 5 minutes, 8-character code, at most 5 wrong attempts; a new challenge
@@ -216,4 +216,4 @@ Do not invent environment overrides for these constants. Source:
 `internal/config/constants.go`, `internal/identity/model.go`,
 `internal/bootstrap/container.go`, `internal/server/server.go` and `cmd/iamkit/main.go`.
 
-See [CLI](cli.md), [webhook](webhooks.md) and [deployment](../operations/deployment.md).
+See [CLI](cli.md), [webhook](email-webhooks.md) and [deployment](../operations/deployment.md).

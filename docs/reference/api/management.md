@@ -76,9 +76,9 @@ the attempt. `GET /delivery/preview?purpose=&locale=` renders a sample email
 (`{subject,html,text}`), `POST /delivery/preview` the same with unsaved `template`
 wording. Email wording: `GET /delivery/templates`, `GET|PUT|DELETE
 /delivery/templates/:purpose/:locale` (audited `email_template.updated`/`.reset`).
-See [email delivery](../../guides/email-delivery.md) for precedence, fields, wording and rotation.
+See [email delivery](../../guides/platform/email-delivery.md) for precedence, fields, wording and rotation.
 
-The end-user [password policy](../../guides/password-policy.md) uses
+The end-user [password policy](../../guides/sign-in/password-policy.md) uses
 `GET /password-policy` (200 policy; the default with `custom: false` when none is
 saved), `PUT /password-policy` (the complete policy: `min_length`, `require_upper`,
 `require_lower`, `require_digit`, `require_symbol`, `max_age_days`,
@@ -90,26 +90,26 @@ use `GET|PUT|DELETE /organizations/:id/password-policy` (`min_length`,
 404 for an unknown organization), audited as
 `organization_password_policy.update`/`.delete`.
 
-The [sign-in methods](../../guides/sign-in-methods.md) policy uses
+The [sign-in methods](../../guides/sign-in/sign-in-methods.md) policy uses
 `GET|PUT|DELETE /sign-in-policy` (`allow_password`, `allow_email_code`,
-`allow_social`, `allow_passkey` ([passkeys](../../guides/mfa.md#passkeys); omitted = keep),
+`allow_social`, `allow_passkey` ([passkeys](../../guides/sign-in/mfa.md#passkeys); omitted = keep),
 `allow_password_reset`, `mfa_required`, `mfa_for_federated`,
 `allowed_factors` (second-factor kinds, default `["totp","webauthn"]`;
-omitted = keep — see [MFA](../../guides/mfa.md#allowed-factors)),
+omitted = keep — see [MFA](../../guides/sign-in/mfa.md#allowed-factors)),
 `allow_signup`, `signup_organization_id`, `signup_group_id`, `require_terms`
 (omitted = keep) — see
-[sign-up](../../guides/signup-and-onboarding.md#self-service-sign-up);
+[sign-up](../../guides/sign-in/signup-and-onboarding.md#self-service-sign-up);
 `custom: false` for the default), audited as
 `sign_in_policy.update`/`sign_in_policy.delete`.
 
-The [organization admin portal](../../guides/organization-administration.md#hosted-portal)
+The [organization admin portal](../../guides/organizations/organization-administration.md#hosted-portal)
 uses `GET|PUT|DELETE /org-admin-portal` (`enabled`, `client_id`,
 `application_id`, `url`; `PUT` takes an empty body and is idempotent;
 `DELETE` ends the portal's sessions), audited as
 `org_admin_portal.enabled`/`.disabled`. Its OAuth client lists with
 `system: "org_admin"`; `PATCH`/`DELETE` on it answer 409.
 
-The SMS provider for [email and SMS second factors](../../guides/mfa.md#sms-provider)
+The SMS provider for [email and SMS second factors](../../guides/sign-in/mfa.md#sms-provider)
 uses `GET|PUT|DELETE /sms` (`provider` `twilio` with `account_sid`,
 `auth_token`, `from_number` or `messaging_service_sid`; or `webhook` with
 `webhook_url`, `webhook_token`; secrets never returned, omitted = keep),
@@ -118,7 +118,7 @@ audited `sms.update`/`sms.delete`/`sms.test`.
 
 ### Signing keys
 
-[Environment signing keys](../../guides/signing-keys.md) use `GET /signing-keys`
+[Environment signing keys](../../guides/applications/signing-keys.md) use `GET /signing-keys`
 (page of keys, active first: `kid,environment_id,alg,state,created_at,
 activated_at,retire_after,retired_at,public_jwk`; `public_jwk` omitted once
 retired), `GET /signing-keys/:kid`, `POST /signing-keys` (201 `next` key; 422
@@ -132,7 +132,7 @@ without `force`). Writes need owner/admin and are audited
 
 ### Features
 
-[Feature flags](../../guides/feature-flags.md): `GET /features`
+[Feature flags](../../guides/platform/feature-flags.md): `GET /features`
 (`{"items":[…]}` of `name,description,scope,default,deployment,environment,
 enabled,updated_at`; `deployment`/`environment` are `null` when unset),
 `GET /features/:name` (404 `UNKNOWN_FEATURE`), `PUT /features/:name`
@@ -142,7 +142,7 @@ Writes need owner/admin and are audited `feature.updated`/`feature.reset`.
 
 ### Usage and limits
 
-[Usage and limits](../../guides/usage-limits.md): `GET /limits`
+[Usage and limits](../../guides/platform/usage-limits.md): `GET /limits`
 (`{deployment, environment, effective, updated_at}`, maps of limit name to
 value; a missing name is unlimited), `PUT /limits` (a map of limit name to a
 number or `null`; replaces the environment's limits; workspace owners only,
@@ -152,7 +152,7 @@ default 30: `days`, `totals`, `now`). Creates past a total limit answer 422
 
 ### Actions
 
-[Actions](../../guides/actions.md#api): `GET /action-conditions`,
+[Actions](../../guides/platform/actions.md#api): `GET /action-conditions`,
 `…/action-targets` (CRUD; create and `POST /:id/rotate-secret` return the
 `whsec_` secret once; `POST /:id/test`), `GET /action-executions`,
 `PUT`/`DELETE /action-executions/:condition` (`{"targets":[…]}` in call

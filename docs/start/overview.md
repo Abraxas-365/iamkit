@@ -34,8 +34,8 @@ environment and to the route families their IAM permissions name.
 
 The backend image serves the operator management console at the root URL and,
 for OAuth clients with `hosted_login`, [hosted end-user sign-in
-pages](../guides/hosted-login.md); otherwise your application supplies the
-login UI. [Self-service sign-up](../guides/signup-and-onboarding.md) is off by
+pages](../guides/applications/hosted-login.md); otherwise your application supplies the
+login UI. [Self-service sign-up](../guides/sign-in/signup-and-onboarding.md) is off by
 default and lands every account in one organization; for anything conditional,
 use your backend to enforce signup policy before making privileged provisioning
 calls. Memberships, application bindings and grants are necessary for scoped

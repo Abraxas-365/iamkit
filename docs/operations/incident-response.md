@@ -18,7 +18,7 @@ proof every existing session has ended.
 
 ## Suspicious end user
 
-1. Optionally [impersonate](../guides/impersonation.md) the user (with a reason)
+1. Optionally [impersonate](../guides/organizations/impersonation.md) the user (with a reason)
    to see what they see, then end the impersonation session.
 2. Sign the user out everywhere: `POST /users/:id/revoke-sessions` (**Sign out
    everywhere** in the user's Recent sessions, `iam users revoke-sessions

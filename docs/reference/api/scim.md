@@ -166,4 +166,4 @@ SCIM Error schema with string `status`, `detail` and, for 400/409, a `scimType`
 `uniqueness`). Bulk, sort, password change, ETags and `POST …/.search` are not supported.
 
 Source: `internal/iam/provisioning/adapters/provhttp/{handler,patch,schema,groups}.go`,
-`provsvc/{service,groups}.go`. See [connection setup](../../guides/scim-provisioning.md).
+`provsvc/{service,groups}.go`. See [connection setup](../../guides/enterprise/scim-provisioning.md).

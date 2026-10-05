@@ -33,7 +33,7 @@ Hosted login: `OAuthClient.HostedLogin` at creation, `UpdateOAuthClient(ctx, id,
 OAuthClientPatch{HostedLogin: &on})`, branding with `LoginSettings` /
 `SetLoginSettings` (`LoginTheme` for mode, colors, header and footer), and per-client
 styles with `ClientLoginStyles`, `ClientLoginSettings`, `SetClientLoginSettings` and
-`DeleteClientLoginSettings` (see [hosted login](../../guides/hosted-login.md)).
+`DeleteClientLoginSettings` (see [hosted login](../../guides/applications/hosted-login.md)).
 Sign-in methods per client: `ClientSignIn`, `ClientSignIns`, `SetClientSignIn(ctx,
 client, SignIn{...})` and `DeleteClientSignIn`. Social login: `CreateFederation`
 with `Provider` (`ProviderGoogle`, `ProviderMicrosoft`, `ProviderGitHub`,
@@ -41,25 +41,25 @@ with `Provider` (`ProviderGoogle`, `ProviderMicrosoft`, `ProviderGitHub`,
 `Options *FederationOptions` (`BaseURL`; for OAuth 2.0 the endpoints, `Scopes`
 and `Claims *FederationClaimMap`) and `Signup`/`LinkEmail`/`UpdateProfile`; the
 detail's `CallbackURL` is the redirect URI to register (see
-[social login](../../guides/social-login.md)).
+[social login](../../guides/enterprise/social-login.md)).
 MFA: `SetOrganizationMFA(ctx, org, OrganizationMFA{Required: &on})`,
 `SetOrganizationFactors(ctx, org, OrganizationFactors{AllowedFactors: …})`,
 `SignInPolicy.AllowedFactors`, `UserFactors` and `ResetUserFactors`; the SMS
 provider: `SMSConfig`, `SetSMSConfig`, `DeleteSMSConfig`, `SMSStatus`,
-`TestSMS` (see [MFA](../../guides/mfa.md)).
+`TestSMS` (see [MFA](../../guides/sign-in/mfa.md)).
 Signing keys: `SigningKeys`, `SigningKey(ctx, kid)`, `CreateSigningKey`,
 `ActivateSigningKey(ctx, kid)` and `RetireSigningKey(ctx, kid, force)` (see
-[signing keys](../../guides/signing-keys.md)).
+[signing keys](../../guides/applications/signing-keys.md)).
 Feature flags: `Features`, `Feature(ctx, name)`, `SetFeature(ctx, name,
 enabled)` and `ResetFeature(ctx, name)` (see
-[feature flags](../../guides/feature-flags.md)).
+[feature flags](../../guides/platform/feature-flags.md)).
 
 Usage and limits: `Limits`, `SetLimits(ctx, map[string]int64)` (the
 `Limit*` constants name them) and `Usage(ctx, days)` (see
-[usage and limits](../../guides/usage-limits.md)).
+[usage and limits](../../guides/platform/usage-limits.md)).
 SAML applications (IAMKit as the identity provider): `SAMLIdentityProvider`,
 `SAMLApps`, `SAMLApp(ctx, id)`, `CreateSAMLApp`, `UpdateSAMLApp(ctx, id, …)`
-and `DeleteSAMLApp(ctx, id)` (see [SAML applications](../../guides/saml-apps.md)).
+and `DeleteSAMLApp(ctx, id)` (see [SAML applications](../../guides/applications/saml-apps.md)).
 User states: `User.State` (`UserSuspended`, `UserLocked`, `UserInitial`,
 `UserInactive`, `UserActive`) and `LastSignedInAt`, `UsersInState`,
 `DeactivateUser` and `ReactivateUser` (also on `apiclient`, with
@@ -68,40 +68,40 @@ Machine users: `CreateMachineUser`, `MachineUsers`, `User.Kind`, `CreateAccessTo
 (answers `IssuedAccessToken.Token`, shown once), `AccessTokens` and
 `RevokeAccessToken`, keys `AddUserKey` (answers `IssuedUserKey.PrivateKey` for a
 generated pair, shown once), `UserKeys` and `RemoveUserKey` (also on `apiclient`,
-with `iam:users:read`/`iam:users:write`; see [machine users](../../guides/machine-users.md)).
+with `iam:users:read`/`iam:users:write`; see [machine users](../../guides/machines/machine-users.md)).
 Metadata and profiles: `UserMetadata`, `SetUserMetadata`, `DeleteUserMetadata`,
 `OrganizationMetadata`, `SetOrganizationMetadata`, `DeleteOrganizationMetadata`,
 `UpdateUserProfile` (merge patch), `UserSchema`, `SaveUserSchema` (answers
 `NonConforming`) and `DeleteUserSchema`; `User.Profile` (also on `apiclient`;
-see [metadata and profiles](../../guides/user-profiles.md)).
+see [metadata and profiles](../../guides/organizations/user-profiles.md)).
 Passwords: `PasswordPolicy`, `SetPasswordPolicy` (replaces the whole policy),
 `DeletePasswordPolicy` and `UnlockUser` (also on `apiclient`, with
 `iam:users:write`); a rejected password is `apierror.CodePasswordPolicy` with
-`Rule()` naming the failed rule (see [password policy](../../guides/password-policy.md)).
+`Rule()` naming the failed rule (see [password policy](../../guides/sign-in/password-policy.md)).
 Organization password requirements: `OrganizationPasswordPolicy`,
 `SetOrganizationPasswordPolicy`, `DeleteOrganizationPasswordPolicy`.
 Organization branding (nil fields inherit, see
-[organization branding](../../guides/hosted-login.md#organization-branding)):
+[organization branding](../../guides/applications/hosted-login.md#organization-branding)):
 `OrganizationBranding`, `SetOrganizationBranding`, `DeleteOrganizationBranding`;
 organization administrators use `apiclient` `OrgAdmin.Branding`/`SaveBranding`/`DeleteBranding`
 and `PasswordPolicy`/`SetPasswordPolicy`/`DeletePasswordPolicy`.
 Sign-in texts (per language; `TextScope{}` = environment, or one of
-`ClientID`/`OrganizationID`, see [sign-in texts](../../guides/hosted-login.md#sign-in-texts)):
+`ClientID`/`OrganizationID`, see [sign-in texts](../../guides/applications/hosted-login.md#sign-in-texts)):
 `SignInTextCatalog`, `SignInTextSets`, `SignInTexts`, `SetSignInTexts`,
 `DeleteSignInTexts`.
 Sign-in methods: `SignInPolicy`, `SetSignInPolicy`, `DeleteSignInPolicy` and,
 per organization, `SetOrganizationMethods` (see
-[sign-in methods](../../guides/sign-in-methods.md)). Passkeys:
+[sign-in methods](../../guides/sign-in/sign-in-methods.md)). Passkeys:
 `SignInPolicy.AllowPasskey`, `OrganizationMethods.Passkey` and
-`SignIn.Passkey` for hosted clients (see [passkeys](../../guides/mfa.md#passkeys)).
+`SignIn.Passkey` for hosted clients (see [passkeys](../../guides/sign-in/mfa.md#passkeys)).
 Organization admin portal: `OrgAdminPortal`, `EnableOrgAdminPortal` (returns
 the link in `URL`) and `DisableOrgAdminPortal` (see
-[hosted portal](../../guides/organization-administration.md#hosted-portal)).
+[hosted portal](../../guides/organizations/organization-administration.md#hosted-portal)).
 Resource grants: `SetResourceAccess(ctx, resource, ResourceAccess{OwnerOrganizationID, RequireGrant})`,
 `ResourceGrants`, `ResourceGrant`, `PutResourceGrant` (`RoleIDs` nil = every
 role) and `DeleteResourceGrant`; `Resource.OwnerOrganizationID`/`RequireGrant`
 (also on `apiclient`, whose `ResourceGrants(ctx, resource, organization)`
-filters; see [resource grants](../../guides/organization-administration.md#resource-grants-vendor-organizations)).
+filters; see [resource grants](../../guides/organizations/organization-administration.md#resource-grants-vendor-organizations)).
 Event log (also on `apiclient`, with `iam:events:read`; see
 [event log](../events.md)): `Events(ctx, EventFilter{Types, Subject,
 OrganizationID, After, Before, Limit})` returns an `EventPage{Items, Next}`.
@@ -119,7 +119,7 @@ once), `UpdateWebhook` (`Active` re-enables), `DeleteWebhook`,
 from)`, `WebhookDeliveries(ctx, id, status)` and `RetryWebhookDelivery`.
 Receivers verify requests with package `sdk/webhook` (`webhook.Verify(secret,
 r)` → `webhook.Event`).
-[Actions](../../guides/actions.md) (`iamclient` only): `ActionConditions`,
+[Actions](../../guides/platform/actions.md) (`iamclient` only): `ActionConditions`,
 `ActionTargets`, `ActionTarget`, `CreateActionTarget(ctx,
 ActionTargetInput{Name, URL, Kind, TimeoutMS, InterruptOnError})` →
 `ActionSecret` (shown once), `UpdateActionTarget`, `DeleteActionTarget`,
@@ -152,7 +152,7 @@ the client's token; coordinate concurrent use rather than racing token mutation.
 Never pass raw `ik_svc_` credentials to `apiclient`.
 
 `Environment.OrgAdmin(organization)` returns an `apiclient.OrgAdmin` for
-[organization administration](../../guides/organization-administration.md):
+[organization administration](../../guides/organizations/organization-administration.md):
 pass the access token of a user signed in to that organization for the IAM
 resource. It covers settings, members, home users, roles, invitations,
 domains, SSO connections, audit events and resource grants (`Resources`,

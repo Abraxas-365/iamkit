@@ -23,4 +23,4 @@ reference users in the same provisioning connection. Rotate credentials on the
 same connection to preserve external-ID ownership.
 
 See [SCIM reference](../api/scim.md) and
-[provisioning guide](../../guides/scim-provisioning.md).
+[provisioning guide](../../guides/enterprise/scim-provisioning.md).

@@ -28,7 +28,7 @@ prove live response compatibility. `iamclient.Do` rejects query strings in its
 path; filtered/paginated requests may require direct HTTP with URL encoding.
 
 See [management](management.md), [authentication](authentication.md),
-[Fiber](fiber.md), [net/http](http.md), [SCIM](scim.md) and the
+[Fiber](middleware.md#fiber), [net/http](middleware.md#nethttp), [SCIM](scim.md) and the
 [compilable API example](../../examples/go-api/main.go).
 
 Build/test the SDK independently: `cd sdk && go test ./... && go vet ./...`.

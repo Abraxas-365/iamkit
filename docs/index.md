@@ -2,64 +2,58 @@
 
 Self-host authentication and tenant-aware authorization while your application
 owns onboarding, UI and business data. Start with one working application, then
-choose the login methods and operational controls you need.
+add the sign-in methods and operational controls you need.
 
 ## Start here
 
-1. [Overview and responsibilities](start/overview.md)
+1. [Overview and responsibilities](start/overview.md): what IAMKit does and what stays yours.
 2. [Run IAMKit with Docker](start/docker-quickstart.md)
 3. [Provision your first application](start/first-application.md)
-4. [Protect an API and reject cross-tenant access](guides/protect-an-api.md)
+4. [Protect an API and reject cross-tenant access](start/protect-an-api.md)
 5. [Set up the management console](start/management-console.md)
 
-## Understand the model
+Then read the [concepts](concepts/identity-model.md): the
+[identity hierarchy](concepts/identity-model.md),
+[credentials and boundaries](concepts/credentials-and-boundaries.md),
+[authorization](concepts/authorization.md) and
+[sessions and tokens](concepts/sessions-and-tokens.md). The
+[glossary](concepts/glossary.md) defines the terms.
 
-[Identity hierarchy](concepts/identity-model.md) ·
-[Credentials and boundaries](concepts/credentials-and-boundaries.md) ·
-[Authorization](concepts/authorization.md) ·
-[Sessions and tokens](concepts/sessions-and-tokens.md)
+## Guides by goal
 
-## Integrate an application
+| I want to… | Read |
+| --- | --- |
+| Choose how people sign in | [Sign-in methods](guides/sign-in/sign-in-methods.md), [passwords](guides/sign-in/passwords.md), [email codes](guides/sign-in/email-otp.md), [multi-factor and passkeys](guides/sign-in/mfa.md), [password policy](guides/sign-in/password-policy.md), [signup](guides/sign-in/signup-and-onboarding.md) |
+| Connect my application | [Integration architecture](guides/applications/application-integration.md), [OAuth/OIDC clients](guides/applications/oauth-oidc.md), [hosted login](guides/applications/hosted-login.md), [custom sign-in UI](guides/applications/custom-sign-in-ui.md), [signing keys](guides/applications/signing-keys.md), [IAMKit as a SAML IdP](guides/applications/saml-apps.md) |
+| Let customers bring their identity provider | [OIDC federation](guides/enterprise/federation.md), [social login](guides/enterprise/social-login.md), [SAML](guides/enterprise/saml.md), [LDAP / Active Directory](guides/enterprise/ldap.md), [SCIM provisioning](guides/enterprise/scim-provisioning.md) |
+| Model tenants and people | [Organizations](guides/organizations/organizations.md), [customer-side administration](guides/organizations/organization-administration.md), [user profiles](guides/organizations/user-profiles.md), [impersonation](guides/organizations/impersonation.md) |
+| Authenticate services | [Service accounts](guides/machines/service-accounts.md), [machine users and access tokens](guides/machines/machine-users.md) |
+| Extend and tune the platform | [Actions](guides/platform/actions.md), [email delivery](guides/platform/email-delivery.md), [feature flags](guides/platform/feature-flags.md), [usage and limits](guides/platform/usage-limits.md) |
 
-- [Architecture and responsibility split](guides/application-integration.md)
-- [Signup and onboarding](guides/signup-and-onboarding.md)
-- [Password login](guides/password-login.md), [email OTP](guides/email-otp.md),
-  [password reset](guides/password-reset.md), [email verification](guides/email-verification.md),
-  [multi-factor (TOTP)](guides/mfa.md), [password policy, lockout and expiry](guides/password-policy.md),
-  [user metadata and profile schemas](guides/user-profiles.md),
-  [sign-in methods](guides/sign-in-methods.md)
-- [Email delivery (webhook, SMTP, Resend) and email wording](guides/email-delivery.md)
-- [OIDC federation](guides/federation.md): [social login (Google, Microsoft, GitHub, Apple)](guides/social-login.md),
-  [Google](guides/google-login.md), [Microsoft](guides/microsoft-login.md),
-  [SAML 2.0 single sign-on](guides/saml.md), [LDAP / Active Directory](guides/ldap.md)
-- [OAuth/OIDC clients](guides/oauth-oidc.md), [hosted login pages](guides/hosted-login.md),
-  [custom sign-in UI (`@iamkit/js`, `@iamkit/react`)](guides/custom-sign-in-ui.md),
-  [signing keys and rotation](guides/signing-keys.md), [SAML applications (IAMKit as IdP)](guides/saml-apps.md),
-  [feature flags (beta features)](guides/feature-flags.md), [actions (sign-in, token and request hooks)](guides/actions.md),
-  [usage and limits](guides/usage-limits.md)
-- [Organizations](guides/organizations.md), [let customers administer their organization](guides/organization-administration.md), [service accounts](guides/service-accounts.md), [machine users, personal access tokens and keys](guides/machine-users.md),
-  [SCIM provisioning](guides/scim-provisioning.md), [impersonation](guides/impersonation.md)
-- [Runnable examples and prerequisites](examples/README.md)
+Runnable code is in the [examples](examples/README.md).
 
 ## Reference
 
-[API families](reference/api/index.md) · [Go SDK](reference/sdk/go.md) ·
-[Configuration](reference/configuration.md) · [CLI](reference/cli.md) ·
-[Token claims](reference/token-claims.md) · [Event log](reference/events.md) · [Event webhooks](reference/event-webhooks.md) · [Webhooks](reference/webhooks.md) ·
-[Errors and pagination](reference/errors-and-pagination.md) · [Glossary](reference/glossary.md)
+- **HTTP API:** [overview and families](reference/api/index.md), including the
+  [OpenAPI document](reference/api/openapi.md).
+- **Go SDK:** [overview](reference/sdk/go.md), [middleware](reference/sdk/middleware.md),
+  [authentication](reference/sdk/authentication.md), [management](reference/sdk/management.md)
+  and [SCIM](reference/sdk/scim.md).
+- **Platform:** [configuration](reference/configuration.md), [CLI](reference/cli.md),
+  [token claims](reference/token-claims.md), [errors and pagination](reference/errors-and-pagination.md).
+- **Events:** [event log](reference/events.md), [event webhooks](reference/event-webhooks.md)
+  and the [email webhook contract](reference/email-webhooks.md).
 
 ## Operate
 
-[Deployment](operations/deployment.md) · [TLS/proxy/CORS](operations/reverse-proxy.md) ·
-[Secrets](operations/secrets-and-keys.md) · [Migrations](operations/database-and-migrations.md) ·
-[Backup and restore](operations/backup-and-restore.md) ·
-[Upgrades and rollback](operations/upgrades-and-rollback.md) ·
-[Observability](operations/observability.md) · [Scaling and abuse](operations/scaling-and-abuse.md) ·
-[Incident response](operations/incident-response.md) ·
-[Troubleshooting](operations/troubleshooting.md) · [Launch checklist](operations/launch-checklist.md)
+| Stage | Read |
+| --- | --- |
+| Deploy | [Deployment](operations/deployment.md), [TLS, proxy and CORS](operations/reverse-proxy.md), [secrets and keys](operations/secrets-and-keys.md), [database and migrations](operations/database-and-migrations.md) |
+| Run | [Observability](operations/observability.md), [scaling and abuse](operations/scaling-and-abuse.md), [upgrades and rollback](operations/upgrades-and-rollback.md), [backup and restore](operations/backup-and-restore.md) |
+| Prepare and respond | [Launch checklist](operations/launch-checklist.md), [incident response](operations/incident-response.md), [troubleshooting](operations/troubleshooting.md) |
 
-## Maintain
+## Contribute
 
-[Architecture](maintainers/architecture.md) · [Local development](maintainers/local-development.md) ·
-[Testing](maintainers/testing.md) · [Releases](maintainers/releases.md) ·
-[Validation record and remaining acceptance work](maintainers/validation.md)
+[Architecture](contributing/architecture.md) · [Local development](contributing/local-development.md) ·
+[Testing](contributing/testing.md) · [Releases](contributing/releases.md) ·
+[Validation record](contributing/validation.md)

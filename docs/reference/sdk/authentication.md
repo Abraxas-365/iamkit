@@ -10,7 +10,7 @@ routes. Supply deadlines and never log token-pair values.
 - `ExchangeAccessToken(ctx, personalAccessToken)` trades a machine user's `ik_pat_`
   token for an access token (no refresh); `Validator` never accepts the raw `ik_pat_`.
 - `NewKeyLogin(url, machineUserID, keyID, key)` then `Token(ctx, KeyBoundary{...})`
-  signs a machine user in with one of its [keys](../../guides/machine-users.md#keys-jwt-bearer-login)
+  signs a machine user in with one of its [keys](../../guides/machines/machine-users.md#keys-jwt-bearer-login)
   (RFC 7523 JWT-bearer grant, fresh one-minute assertion per call, no refresh);
   `ParsePrivateKey(pem)` reads the private key IAMKit generated.
 - `InitiateChallenge(ctx, environment, email, purpose)` (or `InitiateChallengeWith`
@@ -23,7 +23,7 @@ routes. Supply deadlines and never log token-pair values.
   [invitations](../api/identity.md#invitations)).
 - `Signup(ctx, SignupRequest{...})` then `CompleteSignup(ctx, environment,
   challengeID, code)` for your own sign-up page when the environment allows
-  [sign-up](../../guides/signup-and-onboarding.md#self-service-sign-up); the
+  [sign-up](../../guides/sign-in/signup-and-onboarding.md#self-service-sign-up); the
   account signs in next (errors `apierror.CodeSignupDisabled`,
   `CodeAccountExists`).
 - `Profile`, `UpdateProfile`, `Organizations`, `Logout`, `AddMember`.
@@ -48,7 +48,7 @@ routes. Supply deadlines and never log token-pair values.
   `RenameWebAuthn(…, factor, name)`, `RemoveWebAuthn(…, factor, WebAuthnProof{…})`
   (all but `ListFactors` need a sign-in within 10
   minutes, else 403 `REAUTHENTICATION_REQUIRED`). `Claims.HasMFA()` checks the `amr` claim
-  (see [MFA](../../guides/mfa.md)).
+  (see [MFA](../../guides/sign-in/mfa.md)).
 - `Introspect(ctx, token, issuer, audience, environment, application, resource)`
   validates current state plus configured boundaries.
 
@@ -57,8 +57,8 @@ explicitly offline. `ValidateWithKeySet(ctx, raw, keys, …same boundaries)` pic
 the key by the token's `kid` from `NewKeySet(jwksURL, client)`, which caches
 `/.well-known/jwks.json` (refresh every `MaxAge`, 10 minutes, and on an unknown
 `kid` at most once per `MinRefresh`, 30 seconds), so tokens keep validating
-across [signing-key rotations](../../guides/signing-keys.md). After either validation mode, check organization and required
-permissions. See [protected API example](../../guides/protect-an-api.md).
+across [signing-key rotations](../../guides/applications/signing-keys.md). After either validation mode, check organization and required
+permissions. See [protected API example](../../start/protect-an-api.md).
 
 OAuth helpers: `NewOAuth`, `NewPKCE`, `Exchange`, `Refresh`, `Revoke`,
 `ClientCredentials` (service accounts: `NewOAuth(url, accountID, secret)`),

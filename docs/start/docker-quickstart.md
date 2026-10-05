@@ -102,7 +102,7 @@ The registry template is `docker-compose.iamkit.yml`; it expects
 `IAMKIT_DB_PASSWORD` rather than `POSTGRES_PASSWORD`. Replace its image with a
 verified release tag/digest and use the same non-root key and secret precautions.
 A configured image reference does not establish that the package is public. See
-[release verification](../maintainers/releases.md).
+[release verification](../contributing/releases.md).
 
 ## Troubleshooting
 

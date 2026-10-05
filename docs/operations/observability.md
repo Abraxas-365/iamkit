@@ -15,7 +15,7 @@ pruning; `event_prune`, which deletes [events](../reference/events.md) past
 `IAMKIT_EVENT_RETENTION`; `event_webhook` and `event_webhook_maintenance`,
 which send [event webhooks](../reference/event-webhooks.md) and disable
 failing subscriptions; `action_call_prune`; `usage_rollup` and `usage_prune`,
-which add sign-ins and created users to the [daily usage](../guides/usage-limits.md#usage)
+which add sign-ins and created users to the [daily usage](../guides/platform/usage-limits.md#usage)
 and prune it). Each replica also writes its in-memory usage counters every
 30 seconds and at shutdown, whether or not it runs workers. Every replica runs them by default; they claim database rows with
 `FOR UPDATE SKIP LOCKED`, so replicas never process the same row. Set

@@ -7,8 +7,8 @@ issuer, including the public HTTPS origin.
 | Endpoint | Contract |
 | --- | --- |
 | `GET /oauth/authorize` | Authorization code request; returns JSON ticket/context and Secure binding cookie, or `303` to `/hosted/login?ticket=…` for `hosted_login` clients |
-| `POST /oauth/authorize/complete` | JSON `authorization_ticket`, `approve`; requires browser cookie and matching user Bearer token; `303` to the client, or `200 {redirect_to}` for `Accept: application/json` without `text/html` ([custom sign-in UI](../../guides/custom-sign-in-ui.md)); 403 `ORGANIZATION_HINT` for a session in another organization than the request named |
-| `GET /hosted/login`, `POST /hosted/login/*` | [Hosted sign-in pages](../../guides/hosted-login.md) (HTML forms); every step requires the ticket and binding cookie |
+| `POST /oauth/authorize/complete` | JSON `authorization_ticket`, `approve`; requires browser cookie and matching user Bearer token; `303` to the client, or `200 {redirect_to}` for `Accept: application/json` without `text/html` ([custom sign-in UI](../../guides/applications/custom-sign-in-ui.md)); 403 `ORGANIZATION_HINT` for a session in another organization than the request named |
+| `GET /hosted/login`, `POST /hosted/login/*` | [Hosted sign-in pages](../../guides/applications/hosted-login.md) (HTML forms); every step requires the ticket and binding cookie |
 | `GET,POST /hosted/invite` | Hosted invitation preview/accept (`token`) |
 | `POST /oauth/device_authorization` | RFC 8628; form `client_id` (+ client authentication), optional `scope`; `{device_code,user_code,verification_uri,verification_uri_complete,expires_in,interval}` |
 | `GET,POST /hosted/device`, `POST /hosted/device/approve`, `POST /hosted/device/deny` | Hosted device approval: enter the user code, confirm, then the hosted sign-in |
@@ -17,7 +17,7 @@ issuer, including the public HTTPS origin.
 | `GET,POST /oauth/userinfo` | OIDC UserInfo; Bearer OAuth access token (or `access_token` form field on POST); `401` + `WWW-Authenticate: Bearer error="invalid_token"` otherwise |
 | `POST /oauth/introspect` | RFC 7662; form `token` (+ optional `token_type_hint`), `client_secret_basic` of a confidential client |
 | `GET,POST /oauth/end_session` | OIDC RP-Initiated Logout; `id_token_hint`, `client_id`, `post_logout_redirect_uri`, `state` |
-| `GET /saml/:environment/metadata` | [SAML IdP](../../guides/saml-apps.md) metadata (`application/samlmetadata+xml`); 404 for an unknown environment |
+| `GET /saml/:environment/metadata` | [SAML IdP](../../guides/applications/saml-apps.md) metadata (`application/samlmetadata+xml`); 404 for an unknown environment |
 | `GET,POST /saml/:environment/sso` | SAML AuthnRequest (HTTP-Redirect or HTTP-POST, `SAMLRequest`, `RelayState`) of a registered service provider; `303` to `/hosted/login?ticket=ik_samlreq_…` with the binding cookie; the hosted sign-in ends in a page posting the signed `SAMLResponse` to the ACS URL; 400 for an invalid or unregistered request |
 
 Authorize requires `client_id`, `response_type=code`, registered `redirect_uri`,
@@ -27,7 +27,7 @@ A refused request answers 400 naming the problem.
 An optional organization hint — `organization_id=<id>` or a
 `urn:iamkit:org:id:<id>` scope (the same organization when both; a malformed
 one is `invalid_request`) — brands the hosted pages with the
-[organization's overrides](../../guides/hosted-login.md#organization-branding)
+[organization's overrides](../../guides/applications/hosted-login.md#organization-branding)
 and limits the sign-in to that organization (another organization's session
 is refused, 403).
 No implicit or password grant is advertised. `prompt`/`max_age` are unsupported.
@@ -39,7 +39,7 @@ Discovery advertises `userinfo_endpoint`, `introspection_endpoint`,
 are only ever added.
 
 **UserInfo** answers `sub`, `environment_id` and `organization_id` always,
-`name`, `picture` (when the user has an avatar) and `preferred_username` (when they have a username) with the `profile` scope (plus the [user schema's](../../guides/user-profiles.md) `x-iamkit-claim`
+`name`, `picture` (when the user has an avatar) and `preferred_username` (when they have a username) with the `profile` scope (plus the [user schema's](../../guides/organizations/user-profiles.md) `x-iamkit-claim`
 attributes, also added to ID tokens), `email` + `email_verified` with `email`,
 `phone_number` + `phone_number_verified` with `phone` (when the user has a phone; also in ID tokens). It
 needs an access token IAMKit issued at `/oauth/token` with the `openid` scope
@@ -131,7 +131,7 @@ token_type: Bearer, expires_in}`, `Cache-Control: no-store`. Two subject types:
 
 **JWT bearer** ([RFC 7523](https://www.rfc-editor.org/rfc/rfc7523) §2.1,
 `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer`, advertised in
-discovery) signs in a [machine user](../../guides/machine-users.md#keys-jwt-bearer-login)
+discovery) signs in a [machine user](../../guides/machines/machine-users.md#keys-jwt-bearer-login)
 with one of its keys; no client authentication (a `client_assertion` is
 `invalid_request`). Fields: `assertion` (header `kid` = key ID; `iss` = `sub`
 = the machine user ID; `aud` = the issuer or its token endpoint; `exp` at most
@@ -144,7 +144,7 @@ ends when the key is removed. Every refusal (unknown or expired key, bad
 signature or claims, replay, inactive user, no access) is `400 invalid_grant`.
 
 **Client credentials** (`grant_type=client_credentials`) is for
-[service accounts](../../guides/service-accounts.md): `client_id` is the
+[service accounts](../../guides/machines/service-accounts.md): `client_id` is the
 account ID. It authenticates with its `ik_svc_` secret (`client_secret_basic`
 or `client_secret_post`) or, when configured, `private_key_jwt`
 (`client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`,
@@ -231,4 +231,4 @@ Branding: GET/PUT `.../login-settings` `{display_name,logo_url,accent_color,them
 
 Source: `internal/iam/oauth/adapters/oauthhttp/handler.go`,
 `oauthhttp/device.go`, `oauthhttp/exchange.go`, `oauthsvc/exchange.go`, `oauthpg/exchange.go`, `oauthsvc/service.go`, `oauthsvc/backchannel.go`, `oauthsvc/device.go`, `migrations/001_initial.up.sql`, `internal/config/constants.go`. Follow the
-[integration guide](../../guides/oauth-oidc.md) for the interaction sequence.
+[integration guide](../../guides/applications/oauth-oidc.md) for the interaction sequence.

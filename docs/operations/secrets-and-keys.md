@@ -20,7 +20,7 @@ offline JWT consumer aware of the event. Choose online checking when necessary.
 
 ## Signing key change
 
-Prefer [environment signing keys](../guides/signing-keys.md): they rotate with
+Prefer [environment signing keys](../guides/applications/signing-keys.md): they rotate with
 overlap (publish, activate, retire) and need no restart or re-login. Their
 private halves are sealed with `IAMKIT_ENCRYPTION_KEY`; keep the old key in
 `IAMKIT_ENCRYPTION_KEYS_OLD` while any active or retiring environment key was
@@ -54,7 +54,7 @@ and only then drop the old key:
 - Event webhook and action target secrets: `POST …/rotate-secret` (receivers get
   a new secret; the previous one, still under the old key, keeps signing during
   the 24-hour overlap while that key is available and is skipped once it is not).
-- Signing keys: [rotate](../guides/signing-keys.md) so the active key is one
+- Signing keys: [rotate](../guides/applications/signing-keys.md) so the active key is one
   created after the restart, and retire the older ones.
 
 TOTP secrets cannot be re-saved: keep the old key in `IAMKIT_ENCRYPTION_KEYS_OLD`

@@ -25,5 +25,5 @@ result in the target topology; do not infer it from the presence of documentatio
 - [ ] Named operators, incident procedure, secret expiry and retention owners assigned.
 
 Record test date, image/database versions, actual results and unresolved items.
-The [documentation validation record](../maintainers/validation.md) describes
+The [documentation validation record](../contributing/validation.md) describes
 repository checks only, not acceptance of your deployment.
