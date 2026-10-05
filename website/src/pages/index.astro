@@ -1,0 +1,147 @@
+---
+import { Code } from 'astro:components'
+import { Image } from 'astro:assets'
+import consoleDark from '../assets/console-dark.png'
+import consoleLight from '../assets/console-light.png'
+import organizationDark from '../assets/organization-dark.png'
+import organizationLight from '../assets/organization-light.png'
+import brandingDark from '../assets/branding-dark.png'
+import brandingLight from '../assets/branding-light.png'
+import mark from '../../../docs/assets/iamkit-mark.svg'
+import '../styles/landing.css'
+
+const features = [
+  { number: '01', title: 'Make the flow yours.', text: 'Run actions at sign-in and token issuance. Deliver identity changes to your services through signed webhooks.', tags: 'Actions · Events · Webhooks', href: '/docs/guides/platform/actions/' },
+  { number: '02', title: 'Manage more than people.', text: 'Give backend services their own identity and resource-scoped access, separate from your end users.', tags: 'Service accounts · OAuth 2.0', href: '/docs/reference/api/' },
+  { number: '03', title: 'Work the way you build.', text: 'Use the built-in console, management API or CLI. Delegate member management with an organization admin portal.', tags: 'Console · API · CLI', href: '/docs/start/management-console/' },
+]
+const snippet = `mux := http.NewServeMux()
+mux.Handle("/invoices", httpauth.Authenticate(validate,
+    httpauth.RequireOrganization(
+        httpauth.RequirePermissions(
+            invoicesHandler, "invoices:read",
+        ),
+        configuredTenantID,
+    ),
+))`
+---
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IAMKit — Identity and access, on your terms.</title>
+    <meta name="description" content="Self-hosted identity and tenant-aware access control for your applications. Hosted or custom sign-in, enterprise SSO, and explicit authorization boundaries in one Go backend." />
+    <meta property="og:title" content="IAMKit — Identity and access, on your terms." />
+    <meta property="og:description" content="Your application. Your infrastructure. One identity layer for sign-in, organizations and resource-scoped access." />
+    <meta property="og:type" content="website" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script is:inline>
+      // Share the user's explicit choice with the documentation, before first paint.
+      try {
+        const saved = localStorage.getItem('starlight-theme');
+        document.documentElement.dataset.theme = saved === 'light' || (!saved && matchMedia('(prefers-color-scheme: light)').matches) ? 'light' : 'dark';
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="header">
+      <nav class="wrap navigation" aria-label="Main navigation">
+        <a class="brand" href="/" aria-label="IAMKit home"><img src={mark.src} width="30" height="30" alt="" />IAMKit</a>
+        <div class="nav-links"><a href="#capabilities">Product</a><a href="#integration">Developers</a><a href="#trust">Trust</a><a href="/docs/">Documentation</a></div>
+        <div class="nav-actions">
+          <button id="theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" /></svg></button>
+          <a class="github-link" href="https://github.com/Abraxas-365/iamkit">GitHub <span aria-hidden="true">↗</span></a>
+        </div>
+      </nav>
+    </header>
+    <main id="main">
+      <section class="hero wrap" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="signal" aria-hidden="true"></span> Self-hosted identity infrastructure</p>
+          <h1 id="hero-title">Authentication and access control.<br /><span>On your infrastructure.</span></h1>
+          <p class="hero-description">Sign-in, organizations, enterprise SSO and resource-scoped permissions.<br class="desktop-break" /> One identity layer. A management console included.</p>
+          <div class="actions"><a class="button primary" href="/docs/start/docker-quickstart/">Start locally <span aria-hidden="true">→</span></a><a class="button secondary" href="#console">See the console <span aria-hidden="true">↓</span></a></div>
+          <p class="hero-note">Go + PostgreSQL <span aria-hidden="true">/</span> Hosted or custom sign-in <span aria-hidden="true">/</span> Self-hosted</p>
+        </div>
+      </section>
+      <section id="console" class="product-showcase wrap" aria-labelledby="console-title">
+        <div class="showcase-heading"><h2 id="console-title">Your identity stack. In view.</h2><a class="text-link" href="/docs/start/management-console/">Explore the console <span aria-hidden="true">↗</span></a></div>
+        <figure class="console-frame">
+          <div class="window-bar"><span class="window-dots" aria-hidden="true"><i></i><i></i><i></i></span><span>IAMKit Console</span><span class="demo-label">Local demo · Roles &amp; permissions</span></div>
+          <a class="screen-link" href={consoleDark.src} target="_blank" rel="noopener" aria-label="Open full-size dark console screenshot in a new tab"><Image class="theme-dark" src={consoleDark} alt="IAMKit console showing reusable roles, resources and permission sets in a local supplier portal demo." width={1440} widths={[720, 1160, 1740, 2320, 3480]} sizes="(max-width: 760px) calc(100vw - 40px), (max-width: 1224px) calc(100vw - 64px), 1160px" format="webp" quality={100} loading="eager" fetchpriority="high" /></a>
+          <a class="screen-link" href={consoleLight.src} target="_blank" rel="noopener" aria-label="Open full-size light console screenshot in a new tab"><Image class="theme-light" src={consoleLight} alt="IAMKit console showing reusable roles, resources and permission sets in a local supplier portal demo." width={1440} widths={[720, 1160, 1740, 2320, 3480]} sizes="(max-width: 760px) calc(100vw - 40px), (max-width: 1224px) calc(100vw - 64px), 1160px" format="webp" quality={100} loading="eager" /></a>
+          <figcaption>Actual product capture. Local demonstration data, not a customer endorsement. Select the image to view full size.</figcaption>
+        </figure>
+        <div class="product-highlights"><p><span class="mono">01 / IDENTITY</span>One place to manage people.</p><p><span class="mono">02 / ACCESS</span>Roles with explicit resource boundaries.</p><p><span class="mono">03 / CONTROL</span>Your infrastructure. Your configuration.</p></div>
+      </section>
+      <div class="protocol-strip"><div class="wrap protocol-inner"><p>Built on familiar protocols.</p><ul aria-label="Supported protocols"><li>OAuth 2.0</li><li>OpenID Connect</li><li>SAML 2.0</li><li>SCIM 2.0</li><li>WebAuthn</li></ul></div></div>
+      <section id="capabilities" class="section wrap" aria-labelledby="capabilities-title">
+        <div class="section-heading"><div><p class="eyebrow">From the first sign-in onward</p><h2 id="capabilities-title">Less identity plumbing.<br />More of your product.</h2></div><p>For multi-tenant SaaS, business portals and the APIs behind them. Connect the user experience to the access model—not another collection of disconnected tools.</p></div>
+        <article class="product-story">
+          <div class="story-copy"><p class="eyebrow">01 / Sign people in</p><h3>Your sign-in.<br />Not someone else's brand.</h3><p>Use hosted pages or build your own experience with the JavaScript and React SDKs. Offer passwords, email codes and passkeys, with MFA when your policy requires it.</p><ul class="story-points"><li>Hosted UI or headless integration</li><li>Branding for your application and organizations</li><li>Passkeys and multi-factor authentication</li></ul><a class="text-link" href="/docs/guides/applications/custom-sign-in-ui/">Choose your sign-in experience <span aria-hidden="true">→</span></a></div>
+          <figure class="configuration-preview"><a class="screen-link" href={brandingDark.src} target="_blank" rel="noopener" aria-label="Open full-size dark branding configuration screenshot"><Image class="theme-dark" src={brandingDark} alt="IAMKit hosted login configuration with branding controls and a server-rendered sign-in preview." width={1440} widths={[1440, 2160, 2880, 4320]} sizes="(max-width: 760px) 140vw, 900px" format="webp" quality={100} loading="lazy" /></a><a class="screen-link" href={brandingLight.src} target="_blank" rel="noopener" aria-label="Open full-size light branding configuration screenshot"><Image class="theme-light" src={brandingLight} alt="IAMKit hosted login configuration with branding controls and a server-rendered sign-in preview." width={1440} widths={[1440, 2160, 2880, 4320]} sizes="(max-width: 760px) 140vw, 900px" format="webp" quality={100} loading="lazy" /></a><figcaption>Hosted login configuration · actual editor with sample preview · select to enlarge</figcaption></figure>
+        </article>
+        <article class="product-story reverse">
+          <div class="story-copy"><p class="eyebrow">02 / Define who belongs where</p><h3>Organizations first.<br />Access with context.</h3><p>Manage memberships, groups and roles around your tenants. Set organization-specific sign-in policies while keeping resource access explicit.</p><ul class="story-points"><li>Organizations, memberships and groups</li><li>Resource-scoped roles and grants</li><li>Organization policies and delegated administration</li></ul><a class="text-link" href="/docs/concepts/authorization/">Explore the access model <span aria-hidden="true">→</span></a></div>
+          <figure class="organization-preview"><Image class="theme-dark" src={organizationDark} alt="Organization settings in the actual IAMKit console, including membership tabs and multi-factor authentication policy." width={1440} widths={[1440, 2160, 2880, 4320]} sizes="(max-width: 760px) 210vw, 1250px" format="webp" quality={100} loading="lazy" /><Image class="theme-light" src={organizationLight} alt="Organization settings in the actual IAMKit console, including membership tabs and multi-factor authentication policy." width={1440} widths={[1440, 2160, 2880, 4320]} sizes="(max-width: 760px) 210vw, 1250px" format="webp" quality={100} loading="lazy" /><figcaption>Organization controls · local demo</figcaption></figure>
+        </article>
+        <article class="product-story">
+          <div class="story-copy"><p class="eyebrow">03 / Connect their identity</p><h3>Meet your customers<br />where they sign in.</h3><p>Connect existing identity providers rather than asking every organization to start over. Use federation for sign-in and SCIM for user and group provisioning.</p><ul class="story-points"><li>OIDC and OAuth provider connections</li><li>Organization SAML and LDAP/AD connections</li><li>SCIM user and group provisioning</li></ul><a class="text-link" href="/docs/guides/enterprise/federation/">See federation options <span aria-hidden="true">→</span></a></div>
+          <div class="federation-visual" aria-label="Conceptual flow: existing identity providers connect to IAMKit, which connects to your application."><p class="mono visual-caption">CONNECT EXISTING IDENTITY</p><div class="provider-list"><span>OpenID Connect</span><span>SAML 2.0</span><span>LDAP / AD</span></div><div class="flow-line" aria-hidden="true">↓</div><div class="federation-hub"><img src={mark.src} width="32" height="32" alt="" /><strong>IAMKit</strong><span>Organization connection</span></div><div class="flow-line" aria-hidden="true">↓</div><div class="destination">Your application <span>One identity layer</span></div><p class="visual-note">SCIM provisions users and groups alongside the sign-in flow.</p></div>
+        </article>
+        <div class="feature-grid">{features.map(feature => <article class="feature"><span class="feature-number">{feature.number} /</span><h3><a href={feature.href}>{feature.title}<span aria-hidden="true">↗</span></a></h3><p>{feature.text}</p><span class="feature-tags">{feature.tags}</span></article>)}</div>
+      </section>
+      <section class="architecture-section wrap" aria-labelledby="architecture-title">
+        <div><p class="eyebrow">Fits your stack</p><h2 id="architecture-title">The identity layer.<br />Not your entire backend.</h2><p class="section-description">IAMKit handles identity and access configuration. Your services validate tokens, enforce permissions and scope business data to the right organization.</p><a class="text-link" href="/docs/concepts/identity-model/">Understand the boundaries <span aria-hidden="true">→</span></a></div>
+        <div class="system-card" aria-label="Architecture illustration: your applications connect to IAMKit for identity, organizations and access; your APIs enforce permissions and tenant boundaries.">
+          <div class="panel-bar"><span class="panel-label">THE IDENTITY LAYER</span><span class="panel-caption">Architecture / 01</span></div>
+          <div class="system-body">
+            <div class="app-row"><span>Web app</span><span>Mobile app</span><span>Your services</span></div>
+            <div class="connector"><span>OIDC / Identity API</span></div>
+            <div class="iam-node"><div class="node-title"><img src={mark.src} width="28" height="28" alt="" /><strong>IAMKit</strong><span>Self-hosted</span></div><div class="node-modules"><span>Identity</span><span>Organizations</span><span>Access</span></div></div>
+            <div class="connector"><span>Resource-scoped access tokens</span></div>
+            <div class="api-node"><span class="mono">Your APIs</span><span class="check-label">Validate &amp; enforce <span aria-hidden="true">✓</span></span></div>
+            <div class="boundary"><span class="boundary-title">EXPLICIT BOUNDARIES</span><div><span>Environment</span><i aria-hidden="true">/</i><span>Application</span><i aria-hidden="true">/</i><span>Resource</span></div><p>Check the organization. Enforce the permission.</p></div>
+          </div>
+          <div class="panel-footer"><span class="signal" aria-hidden="true"></span> Your infrastructure. Your data.</div>
+        </div>
+      </section>
+      <section id="integration" class="integration-section" aria-labelledby="integration-title"><div class="wrap integration-grid">
+        <div><p class="eyebrow">Built for developers</p><h2 id="integration-title">A successful login<br />isn't a permission.</h2><p class="section-description">Keep authentication and authorization distinct. Validate the token, match the tenant, then check what the caller is allowed to do.</p>
+          <ol class="steps"><li><span>01</span><div><h3>Choose your sign-in experience</h3><p>Hosted pages, your own UI, or a standard OAuth/OIDC client.</p></div></li><li><span>02</span><div><h3>Define who gets access</h3><p>Your backend manages memberships, roles and grants.</p></div></li><li><span>03</span><div><h3>Enforce it in your API</h3><p>Check trusted boundaries and scope data queries to the validated organization.</p></div></li></ol>
+          <a class="text-link" href="/docs/guides/applications/application-integration/">Read the integration guide <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="code-panel"><div class="panel-bar"><span class="panel-label">api / routes.go</span><span class="panel-caption">Go · net/http</span></div><Code code={snippet} lang="go" theme="css-variables" /><div class="code-note"><strong>Three checks. One route.</strong><p>Excerpt using <code>authclient/httpauth</code>. Supply a trusted token validator, your tenant configuration and your handler.</p><a class="text-link" href="/docs/reference/sdk/middleware/">See the full middleware guide <span aria-hidden="true">↗</span></a></div></div>
+      </div></section>
+      <section id="deployment" class="section wrap" aria-labelledby="deployment-title"><div class="section-heading"><div><p class="eyebrow">Own the infrastructure</p><h2 id="deployment-title">Your stack.<br />Not another black box.</h2></div><p>A Go backend with an embedded operator console and PostgreSQL for persistence. Start locally, then choose the deployment that fits your team.</p></div>
+        <div class="deployment-grid"><a href="/docs/start/docker-quickstart/" class="deployment-card"><span class="mono card-kicker">01 / LOCAL</span><h3>Start with Docker <span aria-hidden="true">↗</span></h3><p>Build the stack, bootstrap a workspace and connect your first application.</p></a><a href="/docs/operations/deployment/" class="deployment-card"><span class="mono card-kicker">02 / DEPLOY</span><h3>Compose or Kubernetes <span aria-hidden="true">↗</span></h3><p>Use the TLS Compose templates or Helm chart with your own secrets and storage.</p></a><a href="/docs/operations/launch-checklist/" class="deployment-card"><span class="mono card-kicker">03 / OPERATE</span><h3>Plan beyond day one <span aria-hidden="true">↗</span></h3><p>Review TLS, backups, key rotation, monitoring and recovery before going live.</p></a></div>
+        <div class="responsibility"><span class="mono">A clear division of responsibility.</span><p>IAMKit provides the identity layer. You own onboarding policy, application authorization checks, TLS, backups and secret storage.</p></div>
+      </section>
+      <section id="trust" class="trust-section wrap" aria-labelledby="trust-title"><div class="section-heading"><div><p class="eyebrow">Evaluate, don't take our word for it</p><h2 id="trust-title">Confidence comes<br />from what you can inspect.</h2></div><p>Review the implementation, understand the operating model and test against your requirements before putting identity on the critical path.</p></div><div class="trust-grid"><article><span class="mono card-kicker">SOURCE &amp; CHANGES</span><h3>Inspect the implementation.</h3><p>Read the source and commit history. Check how the capabilities you need are implemented—not just whether they appear on a feature list.</p><a class="text-link" href="https://github.com/Abraxas-365/iamkit">Browse the repository ↗</a></article><article><span class="mono card-kicker">SECURITY &amp; OPERATIONS</span><h3>Plan for the full lifecycle.</h3><p>Review secret storage, signing keys, backup and recovery procedures, and incident response before deployment.</p><a class="text-link" href="/docs/operations/launch-checklist/">Review the launch checklist →</a><a class="text-link" href="/docs/operations/secrets-and-keys/">Understand secrets and keys →</a></article><article><span class="mono card-kicker">PROJECT STATUS</span><h3>Know what you're adopting.</h3><p>IAMKit is a younger project. Review protocol limitations and resolve the repository's provenance and licensing requirements before distribution or adoption.</p><a class="text-link" href="https://github.com/Abraxas-365/iamkit#provenance--license">Read provenance &amp; licensing ↗</a></article></div><p class="trust-note">Protocol support is not a certification. Self-hosting gives you control; secure operation still requires your team's configuration and review.</p></section>
+      <section class="section wrap faq-section" aria-labelledby="faq-title"><div><p class="eyebrow">A few useful answers</p><h2 id="faq-title">Before you build.</h2></div><div class="faq-list">
+        <details><summary>Do I have to use the hosted login UI?</summary><p>No. Use branded hosted pages, build your own UI with the JavaScript and React SDKs, or integrate through the identity APIs. <a href="/docs/guides/applications/custom-sign-in-ui/">Explore custom sign-in.</a></p></details>
+        <details><summary>How does multi-tenancy work?</summary><p>Organizations represent tenants. Memberships, roles and grants define access; application and resource boundaries scope tokens. Your API must still match the requested tenant and constrain its data queries. <a href="/docs/concepts/identity-model/">Read the identity model.</a></p></details>
+        <details><summary>Can I connect an existing identity provider?</summary><p>Yes. IAMKit supports OIDC and OAuth federation, organization SAML connections, and LDAP/AD. SCIM supports directory provisioning. <a href="/docs/guides/enterprise/federation/">Read the federation guide.</a></p></details>
+        <details><summary>What should I review before adopting IAMKit?</summary><p>Review the deployment and security requirements, protocol limitations, and the repository's provenance and licensing notes. IAMKit is a younger project; evaluate it against your requirements rather than assuming feature parity with established platforms. <a href="https://github.com/Abraxas-365/iamkit#provenance--license">Read the publication requirements.</a></p></details>
+      </div></section>
+      <section class="closing wrap" aria-labelledby="closing-title"><p class="eyebrow">Build on your terms</p><h2 id="closing-title">Make identity part of your stack.<br /><span>Not the whole project.</span></h2><div class="actions"><a class="button primary" href="/docs/start/docker-quickstart/">Get started with IAMKit <span aria-hidden="true">→</span></a><a class="button secondary" href="https://github.com/Abraxas-365/iamkit">Explore the source <span aria-hidden="true">↗</span></a></div></section>
+    </main>
+    <footer class="footer"><div class="wrap footer-inner"><div><a class="brand" href="/"><img src={mark.src} width="24" height="24" alt="" />IAMKit</a><p>Identity and access, on your terms.</p></div><nav aria-label="Footer navigation"><a href="/docs/">Documentation</a><a href="/docs/reference/api/">API reference</a><a href="https://github.com/Abraxas-365/iamkit">GitHub</a><a href="https://github.com/Abraxas-365/iamkit#provenance--license">Licensing</a></nav><span class="footer-note">Self-hosted. Explicit by design.</span></div></footer>
+    <script>
+      const toggle = document.querySelector<HTMLButtonElement>('#theme-toggle')!
+      function labelTheme() {
+        toggle.setAttribute('aria-label', `Switch to ${document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'} theme`)
+      }
+      labelTheme()
+      toggle.addEventListener('click', () => {
+        const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'
+        document.documentElement.dataset.theme = theme
+        try { localStorage.setItem('starlight-theme', theme) } catch {}
+        labelTheme()
+      })
+    </script>
+  </body>
+</html>

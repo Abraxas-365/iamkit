@@ -1,0 +1,116 @@
+import { page, group } from '../scripts/docs.mjs'
+
+// Curated reading order. Add every new document here: docs.test.mjs fails otherwise.
+export const sidebar = [
+  page('index', 'Documentation home'),
+  group('Start here', [
+    page('start/overview'),
+    page('start/docker-quickstart'),
+    page('start/first-application'),
+    page('start/protect-an-api'),
+    page('start/management-console'),
+  ], false),
+  group('Concepts', [
+    page('concepts/identity-model'),
+    page('concepts/credentials-and-boundaries'),
+    page('concepts/authorization'),
+    page('concepts/sessions-and-tokens'),
+    page('concepts/glossary'),
+  ], false),
+  group('Guides', [
+    group('Sign-in methods', [
+      page('guides/sign-in/sign-in-methods'),
+      page('guides/sign-in/passwords'),
+      page('guides/sign-in/email-otp'),
+      page('guides/sign-in/mfa'),
+      page('guides/sign-in/password-policy'),
+      page('guides/sign-in/signup-and-onboarding'),
+    ]),
+    group('Applications and sign-in UI', [
+      page('guides/applications/application-integration'),
+      page('guides/applications/oauth-oidc'),
+      page('guides/applications/hosted-login'),
+      page('guides/applications/custom-sign-in-ui'),
+      page('guides/applications/signing-keys'),
+      page('guides/applications/saml-apps'),
+    ]),
+    group('Enterprise SSO and provisioning', [
+      page('guides/enterprise/federation'),
+      page('guides/enterprise/social-login', 'Social login'),
+      page('guides/enterprise/saml'),
+      page('guides/enterprise/ldap'),
+      page('guides/enterprise/scim-provisioning'),
+    ]),
+    group('Organizations and users', [
+      page('guides/organizations/organizations'),
+      page('guides/organizations/organization-administration'),
+      page('guides/organizations/user-profiles'),
+      page('guides/organizations/impersonation'),
+    ]),
+    group('Machines and services', [
+      page('guides/machines/service-accounts'),
+      page('guides/machines/machine-users'),
+    ]),
+    group('Platform and extensibility', [
+      page('guides/platform/actions'),
+      page('guides/platform/email-delivery'),
+      page('guides/platform/feature-flags'),
+      page('guides/platform/usage-limits'),
+    ]),
+  ], false),
+  group('Reference', [
+    group('HTTP API', [
+      page('reference/api/index', 'API overview'),
+      page('reference/api/management'),
+      page('reference/api/users-and-organizations'),
+      page('reference/api/applications-and-authorization'),
+      page('reference/api/integrations'),
+      page('reference/api/scoped-iam'),
+      page('reference/api/identity'),
+      page('reference/api/oauth-oidc'),
+      page('reference/api/scim'),
+      page('reference/api/openapi'),
+    ]),
+    group('Go SDK', [
+      page('reference/sdk/go', 'Go SDK overview'),
+      page('reference/sdk/authentication'),
+      page('reference/sdk/management'),
+      page('reference/sdk/middleware'),
+      page('reference/sdk/scim'),
+    ]),
+    page('reference/configuration'),
+    page('reference/cli'),
+    page('reference/token-claims'),
+    page('reference/events'),
+    page('reference/event-webhooks'),
+    page('reference/email-webhooks'),
+    page('reference/errors-and-pagination'),
+  ]),
+  group('Operations', [
+    group('Deploy', [
+      page('operations/deployment'),
+      page('operations/reverse-proxy'),
+      page('operations/secrets-and-keys'),
+      page('operations/database-and-migrations'),
+    ]),
+    group('Run', [
+      page('operations/observability'),
+      page('operations/scaling-and-abuse'),
+      page('operations/upgrades-and-rollback'),
+      page('operations/backup-and-restore'),
+    ]),
+    group('Prepare and respond', [
+      page('operations/launch-checklist'),
+      page('operations/incident-response'),
+      page('operations/troubleshooting'),
+    ]),
+  ]),
+  page('examples/README', 'Runnable examples'),
+  group('Contributing', [
+    page('contributing/architecture'),
+    page('contributing/local-development'),
+    page('contributing/testing'),
+    page('contributing/releases'),
+    page('contributing/validation'),
+  ]),
+]
