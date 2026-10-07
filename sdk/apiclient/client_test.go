@@ -107,7 +107,7 @@ func TestAllAPIPaths(t *testing.T) {
 	env.CreateUser(ctx, CreateUser{Email: "a@b.com", Name: "A"})
 	env.Users(ctx)
 	env.User(ctx, "u1")
-	env.UpdateUser(ctx, "u1", UpdateUser{})
+	env.UpdateUser(ctx, "u1", UserPatch{})
 	env.SuspendUser(ctx, "u1")
 	env.UnlockUser(ctx, "u1")
 
@@ -115,7 +115,7 @@ func TestAllAPIPaths(t *testing.T) {
 	env.CreateOrganization(ctx, "Acme")
 	env.Organizations(ctx)
 	env.Organization(ctx, "o1")
-	env.UpdateOrganization(ctx, "o1", nil)
+	env.UpdateOrganization(ctx, "o1", OrganizationPatch{})
 
 	// Members
 	env.AddMember(ctx, Membership{OrganizationID: "o1", UserID: "u1"})
@@ -126,16 +126,16 @@ func TestAllAPIPaths(t *testing.T) {
 	env.CreateApplication(ctx, Application{Name: "App"})
 	env.Applications(ctx)
 	env.Application(ctx, "a1")
-	env.UpdateApplication(ctx, "a1", nil)
+	env.UpdateApplication(ctx, "a1", ApplicationPatch{})
 
 	// Resources
 	env.CreateResource(ctx, Resource{Name: "R"})
 	env.Resources(ctx)
 	env.Resource(ctx, "r1")
-	env.UpdateResource(ctx, "r1", nil)
+	env.UpdateResource(ctx, "r1", ResourcePatch{})
 	env.BindResource(ctx, "a1", "r1")
 	env.UnbindResource(ctx, "a1", "r1")
-	env.ResourcesByApplication(ctx, "a1")
+	env.ApplicationResources(ctx, "a1")
 
 	// Roles
 	env.Roles(ctx)
@@ -144,7 +144,7 @@ func TestAllAPIPaths(t *testing.T) {
 	env.DeleteRole(ctx, "role1")
 	env.AssignRole(ctx, RoleAssignment{})
 	env.RoleAssignments(ctx)
-	env.UnassignRole(ctx, "role1", "o1", "u1")
+	env.UnassignRole(ctx, RoleAssignment{RoleID: "role1", OrganizationID: "o1", UserID: "u1"})
 
 	// Grants
 	env.Grants(ctx)

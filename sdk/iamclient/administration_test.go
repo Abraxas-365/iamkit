@@ -415,7 +415,7 @@ func TestLiveListShapes(t *testing.T) {
 	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
 	ctx := context.Background()
 	// The API requires name and organization_id (400 without them).
-	cred, err := env.CreateProvisioningCredential(ctx, Credential{Name: "Okta", OrganizationID: "org-1", ExpiresIn: "720h"})
+	cred, err := env.CreateProvisioningCredential(ctx, CreateCredential{Name: "Okta", OrganizationID: "org-1", ExpiresIn: "720h"})
 	if err != nil || cred.Secret != "ik_scim_x" {
 		t.Fatal(cred, err)
 	}
@@ -566,7 +566,7 @@ func TestResourceGrantRoutes(t *testing.T) {
 	if err := env.SetResourceAccess(ctx, "r1", ResourceAccess{RequireGrant: true}); err != nil {
 		t.Fatal(err)
 	}
-	grants, err := env.ResourceGrants(ctx)
+	grants, err := env.ResourceGrants(ctx, "", "")
 	if err != nil || len(grants) != 1 || grants[0].RoleIDs[0] != "x" {
 		t.Fatalf("grants = %+v, %v", grants, err)
 	}

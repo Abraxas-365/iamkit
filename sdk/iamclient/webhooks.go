@@ -126,14 +126,7 @@ func (e Environment) WebhookDeliveries(ctx context.Context, id, status string) (
 	if status != "" {
 		query = url.Values{"status": {status}}
 	}
-	var out paginated[WebhookDelivery]
-	if err := e.client.do(ctx, "GET", e.path("webhooks/"+id+"/deliveries"), query, nil, &out); err != nil {
-		return nil, err
-	}
-	if out.Items == nil {
-		return []WebhookDelivery{}, nil
-	}
-	return out.Items, nil
+	return first[WebhookDelivery](ctx, e.client, e.path("webhooks/"+id+"/deliveries"), query)
 }
 
 // RetryWebhookDelivery queues a failed delivery again.

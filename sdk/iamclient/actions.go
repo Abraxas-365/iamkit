@@ -179,12 +179,5 @@ func (e Environment) ActionCalls(ctx context.Context, filter ActionCallFilter) (
 	if filter.Limit > 0 {
 		query.Set("limit", strconv.Itoa(filter.Limit))
 	}
-	var out paginated[ActionCall]
-	if err := e.client.do(ctx, "GET", e.path("action-calls"), query, nil, &out); err != nil {
-		return nil, err
-	}
-	if out.Items == nil {
-		return []ActionCall{}, nil
-	}
-	return out.Items, nil
+	return first[ActionCall](ctx, e.client, e.path("action-calls"), query)
 }

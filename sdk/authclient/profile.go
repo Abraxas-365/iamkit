@@ -20,7 +20,6 @@ type Profile struct {
 type Organization struct {
 	ID        string  `json:"id"`
 	Name      string  `json:"name"`
-	Role      string  `json:"role"`
 	OrgUnitID *string `json:"org_unit_id"`
 	ManagerID *string `json:"manager_id"`
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,40 +27,79 @@ func (e Environment) path(collection string) string {
 	return "/environments/" + e.id + "/" + collection
 }
 
-// paginated wraps the list response envelope: {"items":[...],"page":{...}}.
-type paginated[T any] struct {
+// page is one response of a paginated collection: {"items":[...],
+// "page":{...}}. A few collections answer a plain array instead.
+type page[T any] struct {
 	Items []T `json:"items"`
+	Page  *struct {
+		Total int `json:"total"`
+	} `json:"page"`
 }
 
-// list fetches a paginated collection and unwraps the items.
-func list[T any](e Environment, ctx context.Context, collection string) ([]T, error) {
-	var out paginated[T]
-	err := e.client.Do(ctx, "GET", e.path(collection), nil, &out)
-	if err != nil {
+func (p *page[T]) UnmarshalJSON(raw []byte) error {
+	if trimmed := strings.TrimSpace(string(raw)); strings.HasPrefix(trimmed, "[") || trimmed == "null" {
+		p.Page = nil
+		return json.Unmarshal(raw, &p.Items)
+	}
+	type plain page[T]
+	return json.Unmarshal(raw, (*plain)(p))
+}
+
+// collect GETs every page of a collection (query filters kept) and
+// returns the items, never nil.
+func collect[T any](ctx context.Context, c *Client, path string, query url.Values) ([]T, error) {
+	out := []T{}
+	params := url.Values{}
+	for k, v := range query {
+		params[k] = v
+	}
+	for {
+		var p page[T]
+		if err := c.do(ctx, "GET", path, params, nil, &p); err != nil {
+			return nil, err
+		}
+		out = append(out, p.Items...)
+		if p.Page == nil || len(p.Items) == 0 || len(out) >= p.Page.Total {
+			return out, nil
+		}
+		params.Set("limit", strconv.Itoa(maxPage))
+		params.Set("offset", strconv.Itoa(len(out)))
+	}
+}
+
+// first GETs one page of a collection (logs and outboxes, read newest
+// first) and returns its items, never nil.
+func first[T any](ctx context.Context, c *Client, path string, query url.Values) ([]T, error) {
+	var p page[T]
+	if err := c.do(ctx, "GET", path, query, nil, &p); err != nil {
 		return nil, err
 	}
-	if out.Items == nil {
+	if p.Items == nil {
 		return []T{}, nil
 	}
-	return out.Items, nil
+	return p.Items, nil
 }
 
-// listOp is like list but uses operation (path segments with validation).
-func listOp[T any](e Environment, ctx context.Context, parts []string) ([]T, error) {
+// maxPage is the server's largest page.
+const maxPage = 100
+
+// list fetches every item of a paginated collection.
+func list[T any](e Environment, ctx context.Context, collection string) ([]T, error) {
+	return collect[T](ctx, e.client, e.path(collection), nil)
+}
+
+// listOp is like list but validates each path segment.
+func listOp[T any](e Environment, ctx context.Context, parts []string, query ...url.Values) ([]T, error) {
 	for _, part := range parts {
 		if err := safeSegment(part); err != nil {
 			return nil, err
 		}
 	}
-	var out paginated[T]
-	err := e.client.Do(ctx, "GET", e.path(strings.Join(parts, "/")), nil, &out)
-	if err != nil {
-		return nil, err
+	var q url.Values
+	if len(query) > 0 {
+		q = query[0]
 	}
-	if out.Items == nil {
-		return []T{}, nil
-	}
-	return out.Items, nil
+	return collect[T](ctx, e.client, e.path(strings.Join(parts, "/")), q)
 }
 
 // ── Shared types ──
@@ -97,6 +137,12 @@ type User struct {
 	// Metadata and Profile are returned when one user is read.
 	Metadata map[string]any `json:"metadata,omitempty"`
 	Profile  map[string]any `json:"profile,omitempty"`
+	// Account status, returned when one user is read.
+	EmailVerified          bool       `json:"email_verified,omitempty"`
+	OTPEnabled             bool       `json:"otp_enabled,omitempty"`
+	PasswordChangeRequired bool       `json:"password_change_required,omitempty"`
+	FailedLogins           int        `json:"failed_logins,omitempty"`
+	LockedUntil            *time.Time `json:"locked_until,omitempty"`
 }
 
 // User states (User.State, UsersInState).
@@ -124,8 +170,13 @@ type CreateUser struct {
 }
 
 type Organization struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Active bool   `json:"active"`
+	// MembershipActive is set when listing a user's organizations.
+	MembershipActive *bool `json:"membership_active,omitempty"`
+	// Metadata is returned when one organization is read.
+	Metadata map[string]any `json:"metadata,omitempty"`
 	// The MFA policy and sign-in methods are filled by Organization(id)
 	// only; list results leave them false.
 	MFARequired     bool `json:"mfa_required,omitempty"`
@@ -158,10 +209,55 @@ type UserFactors struct {
 	LockedUntil *time.Time `json:"locked_until,omitempty"`
 }
 
+// Membership adds a user to an organization (roles are assigned with
+// AssignRole).
 type Membership struct {
 	OrganizationID string `json:"organization_id"`
 	UserID         string `json:"user_id"`
-	Role           string `json:"role"`
+}
+
+// Member is a user's membership in an organization.
+type Member struct {
+	UserID    string `json:"user_id"`
+	UserName  string `json:"user_name"`
+	UserEmail string `json:"user_email"`
+	Active    bool   `json:"active"`
+	// ManagerID and ManagerName come from the member profile.
+	ManagerID   *string `json:"manager_id"`
+	ManagerName *string `json:"manager_name"`
+	// SSOBypass lets the member use password sign-in where the
+	// organization enforces SSO.
+	SSOBypass bool `json:"sso_bypass"`
+}
+
+// OrganizationPatch changes an organization; nil fields are left
+// unchanged.
+type OrganizationPatch struct {
+	Name   *string `json:"name,omitempty"`
+	Active *bool   `json:"active,omitempty"`
+	// Metadata replaces the organization's metadata.
+	Metadata        map[string]any `json:"metadata,omitempty"`
+	MFARequired     *bool          `json:"mfa_required,omitempty"`
+	MFAForFederated *bool          `json:"mfa_for_federated,omitempty"`
+	AllowPassword   *bool          `json:"allow_password,omitempty"`
+	AllowEmailCode  *bool          `json:"allow_email_code,omitempty"`
+	AllowSocial     *bool          `json:"allow_social,omitempty"`
+	AllowPasskey    *bool          `json:"allow_passkey,omitempty"`
+	AllowedFactors  []string       `json:"allowed_factors,omitempty"`
+}
+
+// ApplicationPatch changes an application; nil fields are left unchanged.
+type ApplicationPatch struct {
+	Name         *string  `json:"name,omitempty"`
+	Active       *bool    `json:"active,omitempty"`
+	RedirectURIs []string `json:"redirect_uris,omitempty"`
+}
+
+// ResourcePatch replaces a resource's name and permission catalog. The
+// audience is fixed at creation; ownership changes with SetResourceAccess.
+type ResourcePatch struct {
+	Name        string   `json:"name"`
+	Permissions []string `json:"permissions"`
 }
 
 type Application struct {
@@ -181,6 +277,8 @@ type Resource struct {
 	// organizations holding a ResourceGrant. Set both with SetResourceAccess.
 	OwnerOrganizationID string `json:"owner_organization_id,omitempty"`
 	RequireGrant        bool   `json:"require_grant,omitempty"`
+	// Prefix is the permission prefix derived from the audience. Read-only.
+	Prefix string `json:"prefix,omitempty"`
 }
 
 // ResourceAccess sets a resource's owner organization (nil = the
@@ -209,6 +307,10 @@ type Grant struct {
 	UserID         string   `json:"user_id"`
 	ResourceID     string   `json:"resource_id"`
 	Permissions    []string `json:"permissions"`
+	// Names, read-only.
+	OrganizationName string `json:"organization_name,omitempty"`
+	UserName         string `json:"user_name,omitempty"`
+	ResourceName     string `json:"resource_name,omitempty"`
 }
 
 type Role struct {
@@ -220,12 +322,27 @@ type Role struct {
 	// (org_owner, org_viewer, org_user_manager, org_settings_manager) of
 	// the IAM resource; those cannot be changed or deleted. Read-only.
 	SystemRole string `json:"system_role,omitempty"`
+	// ResourceName is read-only.
+	ResourceName string `json:"resource_name,omitempty"`
 }
 
 type RoleAssignment struct {
 	OrganizationID string `json:"organization_id"`
 	UserID         string `json:"user_id"`
 	RoleID         string `json:"role_id"`
+}
+
+// RoleAssignmentView is a role assignment with names.
+type RoleAssignmentView struct {
+	OrganizationID   string `json:"organization_id"`
+	OrganizationName string `json:"organization_name"`
+	UserID           string `json:"user_id"`
+	UserName         string `json:"user_name"`
+	UserEmail        string `json:"user_email"`
+	RoleID           string `json:"role_id"`
+	RoleName         string `json:"role_name"`
+	ResourceID       string `json:"resource_id"`
+	ResourceName     string `json:"resource_name"`
 }
 
 type OrgUnit struct {
@@ -263,20 +380,20 @@ func (e Environment) UpdateUser(ctx context.Context, id string, input UserPatch)
 	return e.operation(ctx, "PATCH", []string{"users", id}, input, nil)
 }
 
-// UsersInState lists the first page of users in state (see UserActive…).
+// UsersInState lists the users in state (see UserActive…).
 func (e Environment) UsersInState(ctx context.Context, state string) ([]User, error) {
-	var out paginated[User]
-	if err := e.client.do(ctx, "GET", e.path("users"), url.Values{"state": {state}}, nil, &out); err != nil {
-		return nil, err
-	}
-	if out.Items == nil {
-		return []User{}, nil
-	}
-	return out.Items, nil
+	return collect[User](ctx, e.client, e.path("users"), url.Values{"state": {state}})
 }
 
 func (e Environment) SuspendUser(ctx context.Context, id string) error {
 	return e.operation(ctx, "DELETE", []string{"users", id}, nil, nil)
+}
+
+// DeleteUserPermanently erases the user and everything referencing them
+// (sessions, memberships, grants, factors, identities…). Irreversible:
+// prefer SuspendUser or DeactivateUser unless the data must be erased.
+func (e Environment) DeleteUserPermanently(ctx context.Context, id string) error {
+	return e.operation(ctx, "DELETE", []string{"users", id, "permanent"}, nil, nil)
 }
 
 // DeactivateUser suspends the user (audited user.deactivated): sessions
@@ -326,16 +443,9 @@ func (e Environment) CreateMachineUser(ctx context.Context, name, homeOrganizati
 	return out, err
 }
 
-// MachineUsers lists the first page of machine users.
+// MachineUsers lists the machine users.
 func (e Environment) MachineUsers(ctx context.Context) ([]User, error) {
-	var out paginated[User]
-	if err := e.client.do(ctx, "GET", e.path("users"), url.Values{"kind": {"machine"}}, nil, &out); err != nil {
-		return nil, err
-	}
-	if out.Items == nil {
-		return []User{}, nil
-	}
-	return out.Items, nil
+	return collect[User](ctx, e.client, e.path("users"), url.Values{"kind": {"machine"}})
 }
 
 // AccessToken is a machine user's personal access token (never its secret).
@@ -455,7 +565,7 @@ func (e Environment) Organization(ctx context.Context, id string) (Organization,
 	return out, err
 }
 
-func (e Environment) UpdateOrganization(ctx context.Context, id string, input UserPatch) error {
+func (e Environment) UpdateOrganization(ctx context.Context, id string, input OrganizationPatch) error {
 	return e.operation(ctx, "PATCH", []string{"organizations", id}, input, nil)
 }
 
@@ -521,8 +631,8 @@ func (e Environment) AddMember(ctx context.Context, input Membership) error {
 	return e.client.Do(ctx, "POST", e.path("memberships"), input, nil)
 }
 
-func (e Environment) Members(ctx context.Context, org string) ([]Membership, error) {
-	return listOp[Membership](e, ctx, []string{"organizations", org, "members"})
+func (e Environment) Members(ctx context.Context, org string) ([]Member, error) {
+	return listOp[Member](e, ctx, []string{"organizations", org, "members"})
 }
 
 func (e Environment) RemoveMember(ctx context.Context, org, user string) error {
@@ -551,7 +661,7 @@ func (e Environment) Application(ctx context.Context, id string) (Application, e
 	return out, err
 }
 
-func (e Environment) UpdateApplication(ctx context.Context, id string, input Application) error {
+func (e Environment) UpdateApplication(ctx context.Context, id string, input ApplicationPatch) error {
 	return e.operation(ctx, "PATCH", []string{"applications", id}, input, nil)
 }
 
@@ -573,7 +683,7 @@ func (e Environment) Resource(ctx context.Context, id string) (Resource, error) 
 	return out, err
 }
 
-func (e Environment) UpdateResource(ctx context.Context, id string, input Resource) error {
+func (e Environment) UpdateResource(ctx context.Context, id string, input ResourcePatch) error {
 	return e.operation(ctx, "PUT", []string{"resources", id}, input, nil)
 }
 
@@ -597,9 +707,17 @@ func (e Environment) SetResourceAccess(ctx context.Context, resource string, inp
 	return e.operation(ctx, "PUT", []string{"resources", resource, "access"}, input, nil)
 }
 
-// ResourceGrants lists every resource grant of the environment.
-func (e Environment) ResourceGrants(ctx context.Context) ([]ResourceGrant, error) {
-	return list[ResourceGrant](e, ctx, "resource-grants")
+// ResourceGrants lists the environment's resource grants, optionally of
+// one resource and/or one organization ("" for any).
+func (e Environment) ResourceGrants(ctx context.Context, resource, organization string) ([]ResourceGrant, error) {
+	q := url.Values{}
+	if resource != "" {
+		q.Set("resource_id", resource)
+	}
+	if organization != "" {
+		q.Set("organization_id", organization)
+	}
+	return collect[ResourceGrant](ctx, e.client, e.path("resource-grants"), q)
 }
 
 func (e Environment) ResourceGrant(ctx context.Context, id string) (ResourceGrant, error) {
@@ -674,8 +792,8 @@ func (e Environment) AssignRole(ctx context.Context, input RoleAssignment) error
 	return e.client.Do(ctx, "POST", e.path("role-assignments"), input, nil)
 }
 
-func (e Environment) RoleAssignments(ctx context.Context) ([]RoleAssignment, error) {
-	return list[RoleAssignment](e, ctx, "role-assignments")
+func (e Environment) RoleAssignments(ctx context.Context) ([]RoleAssignmentView, error) {
+	return list[RoleAssignmentView](e, ctx, "role-assignments")
 }
 
 func (e Environment) UnassignRole(ctx context.Context, input RoleAssignment) error {
@@ -1245,10 +1363,11 @@ type EmailPreview struct {
 
 // PreviewDelivery renders a sample email with the environment's branding
 // and wording (or input.Template). It works with any provider; only smtp
-// and resend send what it shows. Without a Template it is a read (GET).
+// and resend send what it shows. Without Template and AppName it is a
+// read (GET).
 func (e Environment) PreviewDelivery(ctx context.Context, input DeliveryPreview) (EmailPreview, error) {
 	var out EmailPreview
-	if input.Template == nil {
+	if input.Template == nil && input.AppName == nil {
 		q := url.Values{"purpose": {input.Purpose}}
 		if input.Locale != "" {
 			q.Set("locale", input.Locale)
@@ -1344,6 +1463,10 @@ type LoginLegal struct {
 type Locale struct {
 	Code string `json:"code"`
 	Name string `json:"name"`
+	// Dir is the writing direction, "ltr" or "rtl".
+	Dir string `json:"dir"`
+	// Beta languages are offered only with the beta_languages feature.
+	Beta bool `json:"beta,omitempty"`
 }
 
 // Locales lists the languages available for emails and hosted pages.

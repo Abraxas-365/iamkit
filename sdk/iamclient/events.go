@@ -41,7 +41,8 @@ type EventFilter struct {
 	OrganizationID string
 	After          *int64
 	Before         int64
-	Limit          int
+	// Limit is the page size of Events and History (export ignores it).
+	Limit int
 }
 
 // EventPage is one page of events. With EventFilter.After, pass Next as the
@@ -55,14 +56,15 @@ type EventPage struct {
 // Events reads the environment's event log.
 func (e Environment) Events(ctx context.Context, filter EventFilter) (EventPage, error) {
 	var out EventPage
-	err := e.client.do(ctx, "GET", e.path("events"), filter.values(), nil, &out)
+	err := e.client.do(ctx, "GET", e.path("events"), filter.Query(), nil, &out)
 	if out.Items == nil {
 		out.Items = []Event{}
 	}
 	return out, err
 }
 
-func (f EventFilter) values() url.Values {
+// Query encodes the filter as query parameters.
+func (f EventFilter) Query() url.Values {
 	q := url.Values{}
 	if len(f.Types) > 0 {
 		q["type"] = f.Types
@@ -98,7 +100,7 @@ func (e Environment) History(ctx context.Context, collection, id string, filter 
 	if err := safeSegment(id); err != nil {
 		return out, err
 	}
-	err := e.client.do(ctx, "GET", e.path(collection+"/"+id+"/history"), filter.values(), nil, &out)
+	err := e.client.do(ctx, "GET", e.path(collection+"/"+id+"/history"), filter.Query(), nil, &out)
 	if out.Items == nil {
 		out.Items = []Event{}
 	}
@@ -110,7 +112,9 @@ func (e Environment) History(ctx context.Context, collection, id string, filter 
 // fn for each until the log ends or fn returns an error.
 func (e Environment) ExportEvents(ctx context.Context, filter EventFilter, fn func(Event) error) error {
 	path := "/management/v1" + e.path("events/export")
-	if q := filter.values(); len(q) > 0 {
+	// The export streams to the end of the log: no page size.
+	filter.Limit = 0
+	if q := filter.Query(); len(q) > 0 {
 		path += "?" + q.Encode()
 	}
 	if !strings.HasPrefix(e.client.key, "ik_mgmt_") {

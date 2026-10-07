@@ -33,8 +33,8 @@ The SDK has **four client packages** with distinct API authority:
 |---------|-----------|----------|
 | `iamclient` | `ik_mgmt_*` | Backend → Management API (users, orgs, resources, grants) |
 | `authclient` | User tokens / `ik_svc_*` | Identity API (login, tokens, profile, federation) |
-| `apiclient` | JWT with explicit IAM permissions | Permission-scoped `/api/v1` management |
-| `scimclient` | `ik_scim_*` | SCIM 2.0 provisioning (enterprise user sync) |
+| `apiclient` | JWT with explicit IAM permissions | Permission-scoped `/api/v1` management (same methods and types as `iamclient` on shared routes, plus `OrgAdmin`) |
+| `scimclient` | `ik_scim_*` | SCIM 2.0 provisioning (enterprise user and group sync) |
 
 Plus framework integrations:
 - `authclient/fiberauth` — Fiber v2 middleware for token validation
@@ -548,7 +548,7 @@ oauth.Revoke(ctx, tokens.AccessToken)
 
 ## scimclient — SCIM 2.0 Provisioning
 
-Used by enterprise identity providers to sync users. Requires a provisioning credential (`ik_scim_*`).
+Used by enterprise identity providers to sync users and groups. Requires a provisioning credential (`ik_scim_*`).
 
 ```go
 import "github.com/Abraxas-365/iamkit/sdk/scimclient"
@@ -575,6 +575,17 @@ user, _ = client.Patch(ctx, user.ID, []scimclient.Operation{
 
 // Delete
 client.Delete(ctx, user.ID)
+
+// Groups (members are user IDs)
+group, _ := client.CreateGroup(ctx, scimclient.Group{
+    DisplayName: "Engineering",
+    Members:     []scimclient.Member{{Value: user.ID}},
+})
+groups, _ := client.Groups(ctx, `displayName eq "Engineering"`, 1, 10, false)
+client.PatchGroup(ctx, group.ID, []scimclient.Operation{
+    {Op: "remove", Path: `members[value eq "` + user.ID + `"]`},
+})
+client.DeleteGroup(ctx, group.ID)
 ```
 
 ---

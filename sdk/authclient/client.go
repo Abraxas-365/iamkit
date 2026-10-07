@@ -157,6 +157,13 @@ type ChallengeVerification struct {
 type FederationStart struct {
 	LoginContext
 	ConnectionID string `json:"connection_id"`
+	// ReturnTo and CodeChallenge (S256 of a verifier the caller keeps) make
+	// the callback redirect the browser to ReturnTo (an origin allowed on an
+	// OAuth client of the application) with a one-time federation_result;
+	// redeem it with RedeemFederation. Without them the callback answers the
+	// tokens itself.
+	ReturnTo      string `json:"return_to,omitempty"`
+	CodeChallenge string `json:"code_challenge,omitempty"`
 }
 
 type FederationResult struct {
@@ -603,6 +610,31 @@ func (c *Client) StartFederation(ctx context.Context, input FederationStart) (Fe
 	return out, err
 }
 
+// RedeemFederation exchanges the federation_result a custom sign-in UI
+// received at its return_to (see FederationStart.ReturnTo) and the PKCE
+// verifier for the session, answered like Login (possibly MFARequired).
+// A wrong verifier spends the result.
+func (c *Client) RedeemFederation(ctx context.Context, result, verifier string) (TokenPair, error) {
+	var out TokenPair
+	err := c.request(ctx, "/federation/result", "", map[string]string{"federation_result": result, "code_verifier": verifier}, &out)
+	return out, err
+}
+
+// OrgAdminPortal is an environment's hosted organization admin portal.
+type OrgAdminPortal struct {
+	ClientID      string `json:"client_id"`
+	EnvironmentID string `json:"environment_id"`
+	URL           string `json:"url"`
+}
+
+// OrgAdminPortal returns the environment's organization admin portal;
+// apierror 404 when it is not enabled.
+func (c *Client) OrgAdminPortal(ctx context.Context, environment string) (OrgAdminPortal, error) {
+	var out OrgAdminPortal
+	err := c.requestMethod(ctx, "GET", "/org-admin/"+url.PathEscape(environment), "", nil, &out)
+	return out, err
+}
+
 // ── Session management ──
 
 // Logout invalidates the user's session.
@@ -642,6 +674,29 @@ func (c *Client) UpdateOwnProfile(ctx context.Context, token, environment, audie
 		body["avatar_url"] = *change.AvatarURL
 	}
 	return c.requestMethod(ctx, "PATCH", "/me", token, body, nil)
+}
+
+// ProfileAttributes returns the user's own profile attributes: the
+// properties the environment's user schema marks x-iamkit-self.
+func (c *Client) ProfileAttributes(ctx context.Context, token, environment, audience string) (map[string]any, error) {
+	var out struct {
+		Profile map[string]any `json:"profile"`
+	}
+	q := "?environment_id=" + url.QueryEscape(environment) + "&audience=" + url.QueryEscape(audience)
+	err := c.requestMethod(ctx, "GET", "/me/profile"+q, token, nil, &out)
+	return out.Profile, err
+}
+
+// UpdateProfileAttributes merges attributes into the user's profile; only
+// x-iamkit-self write properties may change, and the result must satisfy
+// the user schema. It returns the self-visible profile.
+func (c *Client) UpdateProfileAttributes(ctx context.Context, token, environment, audience string, attributes map[string]any) (map[string]any, error) {
+	var out struct {
+		Profile map[string]any `json:"profile"`
+	}
+	body := map[string]any{"environment_id": environment, "audience": audience, "profile": attributes}
+	err := c.requestMethod(ctx, "PATCH", "/me/profile", token, body, &out)
+	return out.Profile, err
 }
 
 // PhoneCodeSent answers StartPhoneVerification.

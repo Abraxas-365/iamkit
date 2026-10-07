@@ -3,6 +3,8 @@ package iamclient
 import (
 	"context"
 	"encoding/json"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,6 +55,11 @@ type ServiceAccount struct {
 	// CanImpersonate: the account may exchange a user ID for that user's
 	// token (token exchange). Read-only here; see SetServiceAccountImpersonation.
 	CanImpersonate bool `json:"can_impersonate,omitempty"`
+	// Read-only.
+	ApplicationName string     `json:"application_name,omitempty"`
+	ResourceName    string     `json:"resource_name,omitempty"`
+	ExpiresAt       *time.Time `json:"expires_at,omitempty"`
+	RevokedAt       *time.Time `json:"revoked_at,omitempty"`
 	// ClientAuthentication is how the account authenticates at /oauth/token
 	// (client_credentials); client_secret_basic when empty.
 	ClientAuthentication
@@ -81,34 +88,50 @@ type ServiceAccountKey struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
-// Credential is a SCIM provisioning credential. Create it with Name and
-// OrganizationID (required) and optionally ConnectionID and ExpiresIn; the
-// Secret (ik_scim_) is returned once, on create.
-type Credential struct {
-	ID     string `json:"id"`
-	Secret string `json:"secret"`
-	// Name labels the credential (required on create).
-	Name string `json:"name,omitempty"`
-	// OrganizationID is the organization the directory provisions into
-	// (required on create).
-	OrganizationID   string `json:"organization_id,omitempty"`
-	OrganizationName string `json:"organization_name,omitempty"`
-	ConnectionID     string `json:"connection_id,omitempty"`
-	ConnectionName   string `json:"connection_name,omitempty"`
-	// ExpiresIn is the lifetime on create, a Go duration ("720h") or
-	// "never"; empty uses the server default.
-	ExpiresIn string     `json:"expires_in,omitempty"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
+// CreateCredential creates a SCIM provisioning credential: Name and
+// OrganizationID are required.
+type CreateCredential struct {
+	Name string `json:"name"`
+	// OrganizationID is the organization the directory provisions into.
+	OrganizationID string `json:"organization_id"`
+	// ConnectionID ties provisioned users to a federation connection.
+	ConnectionID string `json:"connection_id,omitempty"`
+	// ExpiresIn is the lifetime, a Go duration ("720h") or "never"; empty
+	// uses the server default.
+	ExpiresIn string `json:"expires_in,omitempty"`
 	// AdoptExistingMembers links SCIM-created users to existing organization
 	// members with the same email instead of failing with 409.
 	AdoptExistingMembers *bool `json:"adopt_existing_members,omitempty"`
 	// AdoptScope is "any" or "verified_domains" (adopt only emails on the
-	// organization's verified domains). nil keeps the current setting.
+	// organization's verified domains).
 	AdoptScope *string `json:"adopt_scope,omitempty"`
 	// MapPhone maps SCIM phoneNumbers[type eq "mobile"] to the user's
-	// phone number (off by default). nil keeps the current setting.
+	// phone number (off by default).
 	MapPhone *bool `json:"map_phone,omitempty"`
+}
+
+// IssuedCredential is a new SCIM credential; Secret (ik_scim_) is
+// returned only here.
+type IssuedCredential struct {
+	ID           string    `json:"id"`
+	Secret       string    `json:"secret"`
+	ConnectionID string    `json:"connection_id,omitempty"`
+	ExpiresAt    time.Time `json:"expires_at"`
+}
+
+// Credential is a SCIM provisioning credential (never its secret).
+type Credential struct {
+	ID                   string     `json:"id"`
+	Name                 string     `json:"name"`
+	OrganizationID       string     `json:"organization_id"`
+	OrganizationName     string     `json:"organization_name"`
+	ConnectionID         string     `json:"connection_id,omitempty"`
+	ConnectionName       string     `json:"connection_name,omitempty"`
+	ExpiresAt            time.Time  `json:"expires_at"`
+	RevokedAt            *time.Time `json:"revoked_at,omitempty"`
+	AdoptExistingMembers bool       `json:"adopt_existing_members"`
+	AdoptScope           string     `json:"adopt_scope"`
+	MapPhone             bool       `json:"map_phone"`
 }
 
 type OAuthClient struct {
@@ -180,9 +203,46 @@ type OAuthClientPatch struct {
 	JWKSURI                 *string          `json:"jwks_uri,omitempty"`
 }
 
+// OAuthCredential is a newly registered OAuth client. ClientSecret is
+// returned only here (empty for public and private_key_jwt clients).
 type OAuthCredential struct {
+	ID           string `json:"id"`
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret,omitempty"`
+	// Warnings are accepted settings to review (http loopback redirects).
+	Warnings []ClientWarning `json:"warnings"`
+}
+
+// ClientWarning flags an accepted OAuth client setting to review.
+type ClientWarning struct {
+	Code  string `json:"code"`
+	Field string `json:"field"`
+	Value string `json:"value"`
+}
+
+// OAuthClientView is a registered OAuth client (never its secret).
+type OAuthClientView struct {
+	ID                     string   `json:"id"`
+	ApplicationID          string   `json:"application_id"`
+	ApplicationName        string   `json:"application_name"`
+	ResourceID             string   `json:"resource_id"`
+	ResourceName           string   `json:"resource_name"`
+	RedirectURIs           []string `json:"redirect_uris"`
+	PostLogoutRedirectURIs []string `json:"post_logout_redirect_uris"`
+	Public                 bool     `json:"public"`
+	HostedLogin            bool     `json:"hosted_login"`
+	Active                 bool     `json:"active"`
+	AccessTokenFormat      string   `json:"access_token_format"`
+	GrantTypes             []string `json:"grant_types"`
+	AllowedOrigins         []string `json:"allowed_origins"`
+
+	BackchannelLogoutURI             string `json:"backchannel_logout_uri"`
+	BackchannelLogoutSessionRequired bool   `json:"backchannel_logout_session_required"`
+	// System names a client IAMKit registers itself ("org_admin"); it
+	// cannot be changed.
+	System   string          `json:"system,omitempty"`
+	Warnings []ClientWarning `json:"warnings"`
+	ClientAuthentication
 }
 
 // Federation providers. Presets derive their issuer; ProviderOIDC (the
@@ -317,12 +377,13 @@ type Federation struct {
 	Enforcement string `json:"enforcement,omitempty"`
 	// Read-only. SecretSource is "env", "sealed" or "none" (SAML); SAML
 	// is set on SAML connections.
-	CallbackURL  string               `json:"callback_url,omitempty"`
-	SAML         *SAMLServiceProvider `json:"saml,omitempty"`
-	SecretSource string               `json:"secret_source,omitempty"`
-	Active       bool                 `json:"active,omitempty"`
-	Linked       int                  `json:"linked,omitempty"`
-	CreatedAt    *time.Time           `json:"created_at,omitempty"`
+	CallbackURL      string               `json:"callback_url,omitempty"`
+	SAML             *SAMLServiceProvider `json:"saml,omitempty"`
+	SecretSource     string               `json:"secret_source,omitempty"`
+	Active           bool                 `json:"active,omitempty"`
+	Linked           int                  `json:"linked,omitempty"`
+	OrganizationName string               `json:"organization_name,omitempty"`
+	CreatedAt        *time.Time           `json:"created_at,omitempty"`
 }
 
 // FederationPatch changes a connection; nil fields are left unchanged.
@@ -387,13 +448,23 @@ type MemberPatch struct {
 }
 
 type Session struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"user_id"`
-	OrganizationID string     `json:"organization_id"`
-	ApplicationID  string     `json:"application_id"`
-	ResourceID     string     `json:"resource_id"`
-	ExpiresAt      time.Time  `json:"expires_at"`
-	RevokedAt      *time.Time `json:"revoked_at"`
+	ID               string     `json:"id"`
+	UserID           string     `json:"user_id"`
+	UserName         string     `json:"user_name"`
+	UserEmail        string     `json:"user_email"`
+	OrganizationID   string     `json:"organization_id"`
+	OrganizationName string     `json:"organization_name"`
+	ApplicationID    string     `json:"application_id"`
+	ApplicationName  string     `json:"application_name"`
+	ResourceID       string     `json:"resource_id"`
+	ResourceName     string     `json:"resource_name"`
+	AuthenticatedAt  time.Time  `json:"authenticated_at"`
+	ExpiresAt        time.Time  `json:"expires_at"`
+	RevokedAt        *time.Time `json:"revoked_at"`
+	// Impersonated sessions name the Impersonator and the reason.
+	Impersonated        bool   `json:"impersonated"`
+	Impersonator        string `json:"impersonator"`
+	ImpersonationReason string `json:"impersonation_reason"`
 }
 
 type AuditEvent struct {
@@ -605,8 +676,8 @@ func (e Environment) RevokeServiceAccount(ctx context.Context, id string) error 
 
 // ── Provisioning Credentials ──
 
-func (e Environment) CreateProvisioningCredential(ctx context.Context, input Credential) (Credential, error) {
-	var out Credential
+func (e Environment) CreateProvisioningCredential(ctx context.Context, input CreateCredential) (IssuedCredential, error) {
+	var out IssuedCredential
 	err := e.operation(ctx, "POST", []string{"provisioning-credentials"}, input, &out)
 	return out, err
 }
@@ -631,8 +702,16 @@ func (e Environment) CreateOAuthClient(ctx context.Context, input OAuthClient) (
 	return out, err
 }
 
-func (e Environment) OAuthClients(ctx context.Context) ([]OAuthCredential, error) {
-	return listOp[OAuthCredential](e, ctx, []string{"oauth-clients"})
+// OAuthClients lists the environment's OAuth clients.
+func (e Environment) OAuthClients(ctx context.Context) ([]OAuthClientView, error) {
+	return listOp[OAuthClientView](e, ctx, []string{"oauth-clients"})
+}
+
+// OAuthClient reads one OAuth client.
+func (e Environment) OAuthClient(ctx context.Context, id string) (OAuthClientView, error) {
+	var out OAuthClientView
+	err := e.operation(ctx, "GET", []string{"oauth-clients", id}, nil, &out)
+	return out, err
 }
 
 func (e Environment) DisableOAuthClient(ctx context.Context, id string) error {
@@ -691,6 +770,11 @@ func (e Environment) DisableFederation(ctx context.Context, id string) error {
 	return e.operation(ctx, "DELETE", []string{"federation-connections", id}, nil, nil)
 }
 
+// EnableFederation re-enables a disabled connection.
+func (e Environment) EnableFederation(ctx context.Context, id string) error {
+	return e.operation(ctx, "POST", []string{"federation-connections", id, "enable"}, nil, nil)
+}
+
 func (e Environment) LinkExternalIdentity(ctx context.Context, input ExternalIdentity) error {
 	return e.operation(ctx, "POST", []string{"external-identities"}, input, nil)
 }
@@ -716,7 +800,7 @@ func (e Environment) RevokeSession(ctx context.Context, id string) error {
 }
 
 func (e Environment) AuditEvents(ctx context.Context) ([]AuditEvent, error) {
-	return listOp[AuditEvent](e, ctx, []string{"audit-events"})
+	return first[AuditEvent](ctx, e.client, e.path("audit-events"), url.Values{"limit": {strconv.Itoa(maxPage)}})
 }
 
 // LogoutDelivery is a back-channel logout notification. Status is
@@ -740,14 +824,11 @@ type LogoutDelivery struct {
 // LogoutDeliveries lists back-channel logout notifications, newest first;
 // status "" lists all.
 func (e Environment) LogoutDeliveries(ctx context.Context, status string) ([]LogoutDelivery, error) {
-	collection := "logout-deliveries"
+	query := url.Values{}
 	if status != "" {
-		if err := safeSegment(status); err != nil {
-			return nil, err
-		}
-		collection += "?status=" + status
+		query.Set("status", status)
 	}
-	return list[LogoutDelivery](e, ctx, collection)
+	return listOp[LogoutDelivery](e, ctx, []string{"logout-deliveries"}, query)
 }
 
 // RetryLogoutDelivery queues a failed notification again.

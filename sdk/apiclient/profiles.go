@@ -3,7 +3,6 @@ package apiclient
 import (
 	"context"
 	"encoding/json"
-	"time"
 )
 
 // ── Metadata & profiles ──
@@ -56,20 +55,6 @@ func (e Environment) UpdateUserProfile(ctx context.Context, user string, patch m
 	}
 	err := e.client.Do(ctx, "PATCH", e.path("users", user, "profile"), patch, &out)
 	return out.Profile, err
-}
-
-// UserSchema is an environment's profile schema. Properties may carry
-// "x-iamkit-self": "read"|"write" (visible/editable at
-// /identity/v1/me/profile) and "x-iamkit-claim": "<name>" (released in ID
-// tokens and UserInfo with the profile scope).
-type UserSchema struct {
-	Schema    json.RawMessage `json:"schema"`
-	Version   int             `json:"version"`
-	UpdatedAt *time.Time      `json:"updated_at,omitempty"`
-	// NonConforming counts existing profiles the saved schema rejects
-	// (answered by SaveUserSchema only); they must conform on their next
-	// write.
-	NonConforming int `json:"non_conforming,omitempty"`
 }
 
 // UserSchema returns the environment's user schema (404 when none).

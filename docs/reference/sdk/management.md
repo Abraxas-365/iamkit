@@ -88,7 +88,18 @@ and `PasswordPolicy`/`SetPasswordPolicy`/`DeletePasswordPolicy`.
 Sign-in texts (per language; `TextScope{}` = environment, or one of
 `ClientID`/`OrganizationID`, see [sign-in texts](../../guides/applications/hosted-login.md#sign-in-texts)):
 `SignInTextCatalog`, `SignInTextSets`, `SignInTexts`, `SetSignInTexts`,
-`DeleteSignInTexts`.
+`DeleteSignInTexts`. Page previews (HTML): `PreviewPage(ctx, scope,
+PageOptions{Page, Scheme, Locale, SignIn})`, `PreviewDraftPage` (unsaved
+branding) and `PreviewSignInTexts` (unsaved texts).
+Groups (see [groups](../../guides/organizations/organizations.md#groups-and-group-roles)): `Groups(ctx, org,
+GroupFilter{…})`, `Group`, `CreateGroup`, `UpdateGroup`, `DeleteGroup`,
+`GroupMembers`, `ChangeGroupMembers`, `MemberGroups`, `AssignGroupRole`,
+`UnassignGroupRole`, `GroupRoleAssignments` and `EffectiveRoles` (direct and
+group-inherited roles, each with its `Source`).
+Incident actions: `RevokeUserSessions`, `RequirePasswordChange`;
+`DeleteUserPermanently` erases a user (`SuspendUser` only deactivates).
+`EnableFederation` re-enables a disabled connection. `LoginOptions` (no
+environment) lists the operator console's sign-in methods.
 Sign-in methods: `SignInPolicy`, `SetSignInPolicy`, `DeleteSignInPolicy` and,
 per organization, `SetOrganizationMethods` (see
 [sign-in methods](../../guides/sign-in/sign-in-methods.md)). Passkeys:
@@ -100,8 +111,7 @@ the link in `URL`) and `DisableOrgAdminPortal` (see
 Resource grants: `SetResourceAccess(ctx, resource, ResourceAccess{OwnerOrganizationID, RequireGrant})`,
 `ResourceGrants`, `ResourceGrant`, `PutResourceGrant` (`RoleIDs` nil = every
 role) and `DeleteResourceGrant`; `Resource.OwnerOrganizationID`/`RequireGrant`
-(also on `apiclient`, whose `ResourceGrants(ctx, resource, organization)`
-filters; see [resource grants](../../guides/organizations/organization-administration.md#resource-grants-vendor-organizations)).
+(`ResourceGrants(ctx, resource, organization)` filters, "" for any; see [resource grants](../../guides/organizations/organization-administration.md#resource-grants-vendor-organizations)).
 Event log (also on `apiclient`, with `iam:events:read`; see
 [event log](../events.md)): `Events(ctx, EventFilter{Types, Subject,
 OrganizationID, After, Before, Limit})` returns an `EventPage{Items, Next}`.
@@ -145,6 +155,11 @@ Typed slice list methods currently need envelope compatibility work; see
 explicit HTTP URL query handling for filters until a matching helper exists.
 
 `apiclient.New(baseURL, jwt, ...)` targets `/api/v1`, not `/management/v1`.
+Its `Environment` has the same methods and types as `iamclient`'s for every
+route the two APIs share (`apiclient.User` is `iamclient.User`, and so on):
+users, organizations, members, groups, domains, invitations, org structure,
+applications, resources, roles, grants, service accounts, delivery, SMS,
+events, webhooks and usage, each gated by its `iam:*` permission.
 Exchange a service credential with `authclient.MachineToken` (or
 `authclient.NewOAuth(url, accountID, secret).ClientCredentials`), pass its access JWT,
 and refresh that token through another exchange when needed. `SetToken` updates

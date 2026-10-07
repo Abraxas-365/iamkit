@@ -1,7 +1,9 @@
-// Package scimclient provisions organization memberships using scoped credentials.
+// Package scimclient provisions organization memberships and groups using
+// scoped credentials (SCIM 2.0, RFC 7643/7644).
 //
 //	client := scimclient.New("http://localhost:8080", "ik_scim_...")
 //	user, err := client.Create(ctx, scimclient.User{...})
+//	group, err := client.CreateGroup(ctx, scimclient.Group{DisplayName: "Engineering"})
 package scimclient
 
 import (
@@ -56,24 +58,57 @@ type Email struct {
 	Primary bool   `json:"primary,omitempty"`
 }
 
+// Name is the SCIM name attribute; displayName wins when both are sent.
+type Name struct {
+	Formatted  string `json:"formatted,omitempty"`
+	GivenName  string `json:"givenName,omitempty"`
+	FamilyName string `json:"familyName,omitempty"`
+}
+
+// PhoneNumber is a SCIM phoneNumbers[] element. Only the type "mobile"
+// number is stored, and only when the connection maps phones.
+type PhoneNumber struct {
+	Value   string `json:"value"`
+	Type    string `json:"type,omitempty"`
+	Primary bool   `json:"primary,omitempty"`
+}
+
+// Meta is the read-only resource metadata.
+type Meta struct {
+	ResourceType string `json:"resourceType"`
+	Created      string `json:"created,omitempty"`
+	LastModified string `json:"lastModified,omitempty"`
+	Location     string `json:"location,omitempty"`
+}
+
 type User struct {
-	Schemas     []string    `json:"schemas,omitempty"`
-	ID          string      `json:"id,omitempty"`
-	ExternalID  string      `json:"externalId,omitempty"`
-	UserName    string      `json:"userName"`
-	DisplayName string      `json:"displayName"`
-	Active      *bool       `json:"active,omitempty"`
-	Emails      []Email     `json:"emails,omitempty"`
-	Enterprise  *Enterprise `json:"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User,omitempty"`
+	Schemas      []string      `json:"schemas,omitempty"`
+	ID           string        `json:"id,omitempty"`
+	ExternalID   string        `json:"externalId,omitempty"`
+	UserName     string        `json:"userName"`
+	DisplayName  string        `json:"displayName"`
+	Name         *Name         `json:"name,omitempty"`
+	Active       *bool         `json:"active,omitempty"`
+	Emails       []Email       `json:"emails,omitempty"`
+	PhoneNumbers []PhoneNumber `json:"phoneNumbers,omitempty"`
+	Enterprise   *Enterprise   `json:"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User,omitempty"`
+	Meta         *Meta         `json:"meta,omitempty"`
 }
 
-type List struct {
-	TotalResults int    `json:"totalResults"`
-	StartIndex   int    `json:"startIndex"`
-	ItemsPerPage int    `json:"itemsPerPage"`
-	Resources    []User `json:"Resources"`
+// List is a page of users (ListResponse).
+type List = ListResponse[User]
+
+// ListResponse is a SCIM ListResponse; StartIndex is 1-based.
+type ListResponse[T any] struct {
+	TotalResults int `json:"totalResults"`
+	StartIndex   int `json:"startIndex"`
+	ItemsPerPage int `json:"itemsPerPage"`
+	Resources    []T `json:"Resources"`
 }
 
+const patchSchema = "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+
+// Operation is one PatchOp operation: op "add", "remove" or "replace".
 type Operation struct {
 	Op    string `json:"op"`
 	Path  string `json:"path,omitempty"`
@@ -121,10 +156,14 @@ func (c *Client) request(ctx context.Context, method, path string, input, output
 }
 
 func userPath(id string) (string, error) {
-	if id == "" || strings.ContainsAny(id, "/\\?#.%") {
+	if !safeID(id) {
 		return "", fmt.Errorf("invalid user ID")
 	}
 	return "/Users/" + id, nil
+}
+
+func safeID(id string) bool {
+	return id != "" && !strings.ContainsAny(id, "/\\?#.%")
 }
 
 // Create provisions a new user.
@@ -145,12 +184,32 @@ func (c *Client) Get(ctx context.Context, id string) (User, error) {
 	return out, err
 }
 
-// List queries users with a SCIM filter.
+// List queries users with a SCIM filter (`attribute eq "value"`; "" for
+// all). start is 1-based; count 0 uses the server's page size.
 func (c *Client) List(ctx context.Context, filter string, start, count int) (List, error) {
 	var out List
-	q := url.Values{"filter": {filter}, "startIndex": {strconv.Itoa(start)}, "count": {strconv.Itoa(count)}}
-	err := c.request(ctx, "GET", "/Users?"+q.Encode(), nil, &out)
+	err := c.request(ctx, "GET", "/Users"+listQuery(filter, start, count, nil), nil, &out)
 	return out, err
+}
+
+func listQuery(filter string, start, count int, extra url.Values) string {
+	q := url.Values{}
+	for k, v := range extra {
+		q[k] = v
+	}
+	if filter != "" {
+		q.Set("filter", filter)
+	}
+	if start > 0 {
+		q.Set("startIndex", strconv.Itoa(start))
+	}
+	if count > 0 {
+		q.Set("count", strconv.Itoa(count))
+	}
+	if len(q) == 0 {
+		return ""
+	}
+	return "?" + q.Encode()
 }
 
 // Replace fully replaces a user.
@@ -171,7 +230,7 @@ func (c *Client) Patch(ctx context.Context, id string, operations []Operation) (
 	if err != nil {
 		return out, err
 	}
-	err = c.request(ctx, "PATCH", path, map[string]any{"schemas": []string{"urn:ietf:params:scim:api:messages:2.0:PatchOp"}, "Operations": operations}, &out)
+	err = c.request(ctx, "PATCH", path, map[string]any{"schemas": []string{patchSchema}, "Operations": operations}, &out)
 	return out, err
 }
 

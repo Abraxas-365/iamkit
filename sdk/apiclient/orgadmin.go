@@ -352,6 +352,12 @@ func (a OrgAdmin) DisableConnection(ctx context.Context, connection string) erro
 	return a.env.client.Do(ctx, "DELETE", a.path("connections", connection), nil, nil)
 }
 
+// EnableConnection re-enables a disabled SSO connection
+// (iam:org:sso:write).
+func (a OrgAdmin) EnableConnection(ctx context.Context, connection string) error {
+	return a.env.client.Do(ctx, "POST", a.path("connections", connection, "enable"), nil, nil)
+}
+
 // Events lists the first page of the organization's audit events, newest
 // first, optionally those whose action starts with action
 // (iam:org:audit:read).
