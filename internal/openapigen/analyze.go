@@ -359,6 +359,19 @@ func (w *walker) call(src *funcSource, info *types.Info, call *ast.CallExpr, ctx
 		return
 	}
 	sel, ok := call.Fun.(*ast.SelectorExpr)
+	// Raw query arguments: c.Context().QueryArgs().Peek/PeekMulti("name").
+	if ok && (sel.Sel.Name == "Peek" || sel.Sel.Name == "PeekMulti") && len(call.Args) == 1 {
+		if args, isCall := sel.X.(*ast.CallExpr); isCall {
+			if as, isSel := args.Fun.(*ast.SelectorExpr); isSel && as.Sel.Name == "QueryArgs" && w.ctxMethod(info, args, ctx) {
+				if name, known := w.stringValue(info, call.Args[0]); known {
+					if _, exists := w.op.Query[name]; !exists {
+						w.op.Query[name] = "string"
+					}
+				}
+				return
+			}
+		}
+	}
 	if ok && sel.Sel.Name == "SetBodyStreamWriter" && w.ctxMethod(info, call, ctx) {
 		w.op.Responses = append(w.op.Responses, Response{Status: 200, ContentType: w.contentType})
 		return

@@ -62,4 +62,11 @@ func TestAnalyze(t *testing.T) {
 	if r := status(revoke, 400); r == nil || r.Schema == nil {
 		t.Errorf("revoke 400 = %+v", r)
 	}
+
+	// Raw query arguments read through a helper given the ctx
+	// (eventhttp.Filter: QueryArgs().PeekMulti("type")).
+	events := analyze("iam/event/adapters/eventhttp.(*Handler).List")
+	if events.Query["type"] != "string" || events.Query["after"] == "" {
+		t.Errorf("events query = %v", events.Query)
+	}
 }

@@ -9024,6 +9024,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -9921,6 +9928,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -10003,6 +10017,13 @@
           {
             "in": "query",
             "name": "subject",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
             "schema": {
               "type": "string"
             }
@@ -10985,6 +11006,13 @@
           {
             "in": "query",
             "name": "subject",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
             "schema": {
               "type": "string"
             }
@@ -17837,6 +17865,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -18559,6 +18594,13 @@
           {
             "in": "query",
             "name": "subject",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
             "schema": {
               "type": "string"
             }
@@ -20273,6 +20315,13 @@
           {
             "in": "query",
             "name": "subject",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
             "schema": {
               "type": "string"
             }
@@ -27134,6 +27183,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -28150,6 +28206,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -28235,6 +28298,13 @@
           {
             "in": "query",
             "name": "subject",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
             "schema": {
               "type": "string"
             }
@@ -32784,6 +32854,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -33351,6 +33428,13 @@
           {
             "in": "query",
             "name": "subject",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
             "schema": {
               "type": "string"
             }
@@ -38015,6 +38099,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -38764,6 +38855,13 @@
           {
             "in": "query",
             "name": "subject",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
             "schema": {
               "type": "string"
             }
@@ -41738,6 +41836,13 @@
           {
             "in": "query",
             "name": "subject",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
             "schema": {
               "type": "string"
             }

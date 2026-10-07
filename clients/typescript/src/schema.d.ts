@@ -8323,6 +8323,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -8896,6 +8897,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -8942,6 +8944,7 @@ export interface operations {
                 before?: string;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -9527,6 +9530,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -13708,6 +13712,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -14132,6 +14137,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -15256,6 +15262,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -19790,6 +19797,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -20408,6 +20416,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -20454,6 +20463,7 @@ export interface operations {
                 before?: string;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -23135,6 +23145,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -23486,6 +23497,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -26285,6 +26297,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -26709,6 +26722,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
@@ -28570,6 +28584,7 @@ export interface operations {
                 limit?: number;
                 organization_id?: string;
                 subject?: string;
+                type?: string;
             };
             header?: never;
             path: {
