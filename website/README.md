@@ -70,3 +70,37 @@ Refresh captures against a local demo installation with read-only access. Do not
 include credentials, real customer identities or production data. Wait for data,
 fonts and theme transitions before capturing; check each image before publishing.
 The console preview opens the full-size capture, not an administrative session.
+
+## Launch videos
+
+`npm run videos` records one pool of takes of the console (mocked API, fictional "Northwind Cloud"
+data, `scripts/demo-extra.mjs`) with Playwright, composes `scripts/video/stage.html` and writes four
+videos, one per buyer: `public/videos/iamkit-{platform,security,corporate,saas}.{mp4,webm,jpg}`
+(`--reuse` recomposes without re-recording, `--only users,keys` re-records those takes,
+`--video security` composes just one). Needs `ffmpeg` and a Playwright Chromium.
+Music: "Business Moves" by ende.app (CC BY 4.0); sound effects by Kenney (CC0).
+
+### Full enterprise walkthrough
+
+`npm run videos -- --reuse --video enterprise` composes the long-form walkthrough
+from recorded takes, at 0.85× playback with seven chapter cards. Output:
+`public/videos/iamkit-enterprise.{mp4,webm,jpg}` and `.chapters.json`.
+Record its additional workflows with `--only environments,register,oauth,groupRoles,signup,providers,directory,machines,actions,saml --takes-only`, then compose.
+Music loops to cover the complete demonstration; no take is cut to fit the song.
+
+For the revised, non-looping soundtrack run
+`npm run videos -- --reuse --video enterprise --audio-only`.
+This copies the original MP4/WebM video streams unchanged and writes separate
+`iamkit-enterprise-music-v2.{mp4,webm}` files. Three Kevin MacLeod tracks
+(Clean Soul, Floating Cities, Dreams Become Real; CC BY 4.0) transition across
+the directory and security chapters, with quieter music and reduced effects.
+Publish with `public/videos/iamkit-enterprise-music-v2-credits.txt`; attribution
+is also embedded in the media metadata. Original videos remain untouched.
+
+The real console runs against fictional, stateful API responses. SSO configuration
+for Entra ID / Google Workspace is distinct from inbound SCIM provisioning; the
+video does not perform a live directory sync or an external provider login.
+Environment separation is shown, not cloning, promotion or a built-in test runner.
+SAML IdP requires the deployment feature to be enabled. Preserve the music credit
+when publishing; no real customer data or credentials appear in the recordings.
+

@@ -8,7 +8,8 @@
     "preview": "astro preview --host 127.0.0.1 --port 4321",
     "check": "astro check",
     "test": "node --test scripts/*.test.mjs",
-    "check:links": "python3 scripts/check_links.py"
+    "check:links": "python3 scripts/check_links.py",
+    "videos": "node scripts/videos.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "0.42.5",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
+    "playwright-core": "^1.63.0",
     "typescript": "^5.9.3"
   }
 }

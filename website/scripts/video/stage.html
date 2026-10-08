@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>stage</title>
+<!--
+  Compositor de los videos (scripts/videos.mjs). Cada cuadro es una función pura
+  del tiempo: window.render(t) coloca todo y espera la imagen de la toma. Nada usa
+  transiciones CSS ni relojes, así el render cuadro a cuadro es exacto.
+-->
+<style>
+  @font-face { font-family: 'Inter'; src: url('/fonts/inter.woff2') format('woff2'); font-weight: 100 900; }
+  @font-face { font-family: 'JetBrains Mono'; src: url('/fonts/mono.woff2') format('woff2'); font-weight: 100 900; }
+  :root { --accent: #7b9bae; --ink: #0c0c0a; --night: #0c0c0a; --fg: #d4d0c8; }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--night); }
+  body { font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .layer { position: absolute; inset: 0; }
+  #bg { background: var(--night); }
+  #glow { background: radial-gradient(900px 600px at var(--gx, 70%) var(--gy, 30%), rgba(123,155,174,.26), transparent 70%); }
+  #grid { background-image: linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px); background-size: 64px 64px; }
+
+  /* Ventana del navegador con la toma */
+  #win { position: absolute; left: 200px; top: 50px; width: 1520px; transform-origin: 50% 60%; border-radius: 18px; overflow: hidden;
+         box-shadow: 0 40px 120px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.08); background: #1c1c1f; }
+  #chrome { height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #1c1c1f; }
+  #chrome i { width: 12px; height: 12px; border-radius: 50%; background: #3a3a3f; display: block; }
+  #chrome i:first-child { background: var(--accent); }
+  #chrome span { margin-left: 18px; flex: 0 0 440px; height: 24px; border-radius: 7px; background: #2a2a2e; color: #9a9ba1; font: 500 13px/24px 'JetBrains Mono', monospace; padding: 0 12px; }
+  #view { position: relative; width: 1520px; height: 950px; overflow: hidden; background: #0c0c0a; }
+  #shot { position: absolute; left: 0; top: 0; width: 1520px; height: 950px; transform-origin: 0 0; }
+
+  /* Rótulo de paso sobre la ventana */
+  #kicker { position: absolute; left: 96px; bottom: 84px; display: flex; align-items: center; gap: 22px; padding: 20px 34px 20px 20px; border-radius: 20px;
+            background: rgba(12,12,10,.95); color: #f2efe8; box-shadow: 0 24px 70px rgba(0,0,0,.45); }
+  #kicker b { display: grid; place-items: center; width: 70px; height: 70px; border-radius: 14px; background: var(--accent); color: var(--ink); font: 700 30px 'JetBrains Mono', monospace; }
+  #kicker div { font: 700 46px/1 'JetBrains Mono', monospace; letter-spacing: -.02em; }
+  #kicker small { display: block; margin-top: 8px; font: 500 21px/1.2 Inter, sans-serif; letter-spacing: 0; color: #C9CBD1; }
+
+  /* Golpe: dato que salta a la vista */
+  #pop { position: absolute; right: 120px; bottom: 150px; padding: 18px 28px; border-radius: 18px; background: var(--accent); color: var(--ink);
+         font: 700 40px/1.05 'JetBrains Mono', monospace; letter-spacing: -.02em; box-shadow: 0 24px 60px rgba(0,0,0,.4); transform-origin: 100% 100%; white-space: nowrap; }
+  #pop small { display: block; font: 600 18px/1.2 'JetBrains Mono', monospace; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+
+  /* Tipografía de las escenas de texto */
+  #text { display: flex; flex-direction: column; justify-content: center; padding: 0 150px; }
+  .line { font: 700 100px/1.08 'JetBrains Mono', monospace; letter-spacing: -.045em; color: #f2efe8; white-space: nowrap; }
+  .line.small { font-size: 40px; font-weight: 500; letter-spacing: -.02em; color: #a8a59d; margin-bottom: 22px; }
+  .mark { padding: 0 .12em; margin: 0 -.04em; border-radius: .08em; }
+  .caret { display: inline-block; width: .08em; height: .9em; vertical-align: -.08em; margin-left: .06em; background: var(--accent); }
+  .eyebrow { font: 600 24px 'JetBrains Mono', monospace; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 30px; }
+  .cta { display: inline-flex; align-items: center; gap: 14px; margin-top: 54px; padding: 22px 34px; border-radius: 16px; font: 600 30px 'JetBrains Mono', sans-serif; align-self: flex-start; }
+  #logo { position: absolute; left: 150px; bottom: 90px; height: 44px; }
+
+  #wipe { background: var(--accent); }
+</style>
+</head>
+<body>
+<div id="bg" class="layer"></div>
+<div id="glow" class="layer"></div>
+<div id="grid" class="layer"></div>
+<div id="win"><div id="chrome"><i></i><i></i><i></i><span>console.iamkit.example</span></div><div id="view"><img id="shot" alt=""></div></div>
+<div id="kicker"><b></b><div></div></div>
+<div id="pop"></div>
+<div id="text" class="layer"></div>
+<img id="logo" alt="">
+<div id="wipe" class="layer"></div>
+<script>
+const $ = id => document.getElementById(id)
+const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v))
+const lerp = (a, b, k) => a + (b - a) * k
+const ease = k => (k = clamp(k), k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2)
+const out = k => 1 - Math.pow(1 - clamp(k), 3)
+const back = k => { k = clamp(k); const c = 1.6; return 1 + (c + 1) * Math.pow(k - 1, 3) + c * Math.pow(k - 1, 2) }
+const spring = k => { k = clamp(k); return 1 - Math.exp(-6 * k) * Math.cos(9 * k) }
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+const show = (el, on) => { el.style.display = on ? '' : 'none' }
+
+let spec, clips, textKey = ''
+
+window.setup = s => { spec = s; clips = s.clips; return document.fonts.ready.then(() => true) }
+
+/** Cámara de una toma: claves {t, x, y, zoom} en px del viewport (1440×900). */
+function camera(clip, ct) {
+  let cur = { x: 720, y: 450, zoom: 1 }
+  for (const k of clip.cams) {
+    if (k.t > ct) break
+    const p = ease((ct - k.t) / (k.dur ?? .7))
+    cur = { x: lerp(cur.x, k.x, p), y: lerp(cur.y, k.y, p), zoom: lerp(cur.zoom, k.zoom, p) }
+  }
+  // The cursor never leaves the frame: the camera follows it when needed.
+  const pts = clip.cur ?? []
+  if (pts.length) {
+    let a = pts[0], b = pts[0]
+    for (const q of pts) { if (q.t <= ct) a = q; if (q.t > ct) { b = q; break } b = q }
+    const k = b.t > a.t ? clamp((ct - a.t) / (b.t - a.t)) : 1
+    const mx = lerp(a.x, b.x, k), my = lerp(a.y, b.y, k)
+    const w = 1440 / cur.zoom, h = 900 / cur.zoom, m = Math.min(150, w * .2), mv = Math.min(110, h * .2)
+    const fit = (c, size, lim, mar, p) => {
+      c = clamp(c, size / 2, lim - size / 2)
+      c = clamp(c, p - size / 2 + mar, p + size / 2 - mar)
+      return clamp(c, size / 2, lim - size / 2)
+    }
+    cur = { ...cur, x: fit(cur.x, w, 1440, m, mx), y: fit(cur.y, h, 900, mv, my) }
+  }
+  return cur
+}
+
+function frameOf(scene, t) {
+  const clip = clips[scene.clip]
+  const ct = clamp((scene.in ?? 0) + (t - scene.from) * (scene.speed ?? 1), 0, clip.duration - .001)
+  return { clip, ct, src: `/frames/${scene.clip}/${String(Math.floor(ct * clip.fps) + 1).padStart(5, '0')}.jpg` }
+}
+
+/** Renderiza el instante t; resuelve cuando la imagen de la toma está lista. */
+window.render = async t => {
+  const scene = spec.scenes.find(s => t >= s.from && t < s.to) ?? spec.scenes.at(-1)
+  const local = t - scene.from, len = scene.to - scene.from
+  const accent = scene.bg === 'accent'
+  $('bg').style.background = accent ? 'var(--accent)' : 'var(--night)'
+  show($('glow'), !accent); show($('grid'), !accent)
+  $('glow').style.setProperty('--gx', `${60 + 15 * Math.sin(t * .5)}%`)
+  $('glow').style.setProperty('--gy', `${30 + 10 * Math.cos(t * .4)}%`)
+
+  // Ventana con la toma
+  let wait = null
+  show($('win'), scene.type === 'clip'); show($('kicker'), false); show($('pop'), false)
+  if (scene.type === 'clip') {
+    const { clip, ct, src } = frameOf(scene, t)
+    const img = $('shot')
+    if (!img.src.endsWith(src)) { img.src = src; wait = img.decode().catch(() => {}) }
+    const cam = camera(clip, ct), W = 1520, H = 950, base = W / 1440
+    const z = cam.zoom
+    const ox = clamp(W / 2 - cam.x * base * z, W - W * z, 0), oy = clamp(H / 2 - cam.y * base * z, H - H * z, 0)
+    img.style.transform = `translate(${ox}px, ${oy}px) scale(${z})`
+    const enter = scene.enter ? back(local / .8) : 1
+    const drift = 1 + .018 * (local / len)
+    const tilt = scene.enter ? (1 - out(local / .8)) * 22 : 0
+    $('win').style.transform = `perspective(2200px) translateY(${(1 - enter) * 160}px) rotateX(${tilt}deg) scale(${(.86 + .14 * enter) * drift})`
+    $('win').style.opacity = scene.enter ? clamp(local / .25) : 1
+
+    // Captions: one per step inside the scene (scene.caps) or a fixed one (scene.title)
+    const caps = scene.caps ?? (scene.title ? [{ at: .15, until: len, title: scene.title, sub: scene.sub }] : [])
+    const cap = caps.find(c => local >= c.at && local < c.until)
+    const k = $('kicker')
+    show(k, !!cap)
+    if (cap) {
+      const kin = out((local - cap.at) / .4), kout = ease((local - (cap.until - .22)) / .22)
+      k.querySelector('b').textContent = scene.step ?? ''
+      k.querySelector('div').innerHTML = `${esc(cap.title)}${cap.sub ? `<small>${esc(cap.sub)}</small>` : ''}`
+      k.style.transform = `translateX(${(1 - kin) * -80 - kout * 40}px)`
+      k.style.opacity = kin * (1 - kout)
+    }
+    const pop = (scene.pops ?? []).find(p => local >= p.at && local < (p.until ?? len))
+    if (pop) {
+      const el = $('pop'), k = local - pop.at
+      show(el, true)
+      el.innerHTML = `${pop.label ? `<small>${esc(pop.label)}</small>` : ''}${esc(pop.text)}`
+      const s = spring(k / .7)
+      el.style.transform = `scale(${.4 + .6 * s}) rotate(${(1 - s) * -6}deg)`
+      el.style.opacity = clamp(k / .12) * (1 - ease(((pop.until ?? len) - local < .25) ? 1 - ((pop.until ?? len) - local) / .25 : 0))
+    }
+  }
+
+  // Escenas de texto
+  const text = $('text')
+  show(text, scene.type !== 'clip'); show($('logo'), scene.type === 'end')
+  if (scene.type !== 'clip') {
+    const key = scene.from + scene.type
+    const fg = accent ? 'var(--ink)' : '#f2efe8'
+    if (textKey !== key) {
+      textKey = key
+      if (scene.type === 'type') text.innerHTML = scene.lines.map((l, i) => `<div class="line ${l.small ? 'small' : ''}" data-i="${i}"></div>`).join('')
+      if (scene.type === 'slam') text.innerHTML = (scene.eyebrow ? `<div class="eyebrow">${esc(scene.eyebrow)}</div>` : '') + scene.words.map((w, i) => `<div class="line" data-i="${i}"><span class="${w.mark ? 'mark' : ''}">${esc(w.text)}</span></div>`).join('')
+      if (scene.type === 'end') text.innerHTML = `<div class="eyebrow">${esc(scene.eyebrow)}</div><div class="line" data-i="0">${esc(scene.title)}</div><div class="line small" data-i="1" style="margin:28px 0 0">${esc(scene.tagline)}</div><div class="cta">${esc(scene.cta)} <span>→</span></div>`
+    }
+    text.querySelectorAll('.line').forEach(el => { el.style.color = el.classList.contains('small') ? (accent ? 'rgba(12,12,10,.74)' : '#a8a59d') : fg })
+    const eb = text.querySelector('.eyebrow')
+    if (eb) { eb.style.color = accent ? 'var(--ink)' : 'var(--accent)'; eb.style.opacity = out(local / .4) }
+
+    if (scene.type === 'type') {
+      scene.lines.forEach((l, i) => {
+        const el = text.querySelector(`[data-i="${i}"]`)
+        const n = Math.round(clamp((local - l.at) / (l.dur ?? .6)) * l.text.length)
+        const typing = local >= l.at && (i === scene.lines.length - 1 || local < scene.lines[i + 1].at)
+        el.innerHTML = esc(l.text.slice(0, n)) + (typing && Math.floor(t * 3) % 2 === 0 ? '<span class="caret"></span>' : '')
+        el.style.visibility = local >= l.at ? 'visible' : 'hidden'
+      })
+    }
+    if (scene.type === 'slam') {
+      scene.words.forEach((w, i) => {
+        const el = text.querySelector(`[data-i="${i}"]`), k = local - w.at
+        const s = back(k / .45)
+        el.style.opacity = clamp(k / .1)
+        el.style.transform = `translateY(${(1 - s) * 70}px) scale(${1 + (1 - clamp(k / .3)) * .25})`
+        el.style.transformOrigin = '0 50%'
+        const m = el.querySelector('.mark')
+        if (m) {
+          const p = out((k - .15) / .35)
+          m.style.background = `linear-gradient(90deg, ${accent ? 'var(--ink)' : 'var(--accent)'} ${p * 100}%, transparent ${p * 100}%)`
+          m.style.color = p > .5 ? (accent ? 'var(--accent)' : 'var(--ink)') : fg
+        }
+      })
+    }
+    if (scene.type === 'end') {
+      text.querySelectorAll('.line').forEach((el, i) => {
+        const k = out((local - .1 - i * .18) / .5)
+        el.style.opacity = k; el.style.transform = `translateY(${(1 - k) * 50}px)`
+      })
+      const cta = text.querySelector('.cta'), k = back((local - .55) / .5)
+      cta.style.background = 'var(--ink)'; cta.style.color = '#f2efe8'
+      cta.style.opacity = clamp((local - .55) / .15); cta.style.transform = `scale(${.7 + .3 * k})`
+      const logo = $('logo'); logo.src = '/brand/logo-ink.svg'; logo.style.opacity = clamp((local - .8) / .3)
+    }
+  }
+
+  // Cortina accent entre escenas: entra desde la izquierda y sale por la derecha
+  const w = $('wipe'), cut = spec.scenes.find(s => s.wipe && Math.abs(t - s.from) < .22)
+  if (cut) {
+    const k = (t - cut.from + .22) / .44
+    const x0 = ease(clamp((k - .5) * 2)) * 100, x1 = ease(clamp(k * 2)) * 100
+    w.style.clipPath = `polygon(${x0}% 0, ${x1}% 0, ${x1 - 6}% 100%, ${x0 - 6}% 100%)`
+    w.style.background = cut.bg === 'accent' ? 'var(--night)' : 'var(--accent)'
+    show(w, true)
+  } else show(w, false)
+
+  if (wait) await wait
+  return true
+}
+</script>
+</body>
+</html>
