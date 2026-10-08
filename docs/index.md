@@ -39,6 +39,8 @@ Runnable code is in the [examples](examples/README.md).
 - **Go SDK:** [overview](reference/sdk/go.md), [middleware](reference/sdk/middleware.md),
   [authentication](reference/sdk/authentication.md), [management](reference/sdk/management.md)
   and [SCIM](reference/sdk/scim.md).
+- **Node.js SDK:** [`@iamkit/node`](reference/sdk/node.md) — token verification,
+  Express/Connect middleware, OAuth client, webhooks and actions.
 - **Platform:** [configuration](reference/configuration.md), [CLI](reference/cli.md),
   [token claims](reference/token-claims.md), [errors and pagination](reference/errors-and-pagination.md).
 - **Events:** [event log](reference/events.md), [event webhooks](reference/event-webhooks.md)

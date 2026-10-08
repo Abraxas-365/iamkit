@@ -59,7 +59,7 @@ failures upload the trace, screenshots and `.stack/iamkit.log`.
 ## TypeScript clients and the custom sign-in parity suite
 
 ```sh
-make api-client                     # @iamkit/api, @iamkit/js, @iamkit/react: typecheck, tests, build
+make api-client                     # @iamkit/api, @iamkit/js, @iamkit/react, @iamkit/node: typecheck, tests, build
 cd examples/nextjs-login && npm ci && npx playwright install chromium && bash e2e/run.sh
 ```
 

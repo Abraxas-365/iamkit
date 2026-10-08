@@ -32,6 +32,7 @@ api-client:
 	cd clients/typescript && npm ci && npm run generate && npm test && npm run build
 	cd clients/js && npm ci && npm run typecheck && npm test && npm run build
 	cd clients/react && npm ci && npm run typecheck && npm test && npm run build
+	cd clients/node && npm ci && npm run typecheck && npm test && npm run build
 
 test-e2e:
 	IAMKIT_TEST_E2E=1 go test -count=1 -timeout=10m -v ./tests/e2e

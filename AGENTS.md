@@ -15,6 +15,7 @@ api/                     openapi.json (generated, embedded as api.Spec, served a
 clients/typescript/      @iamkit/api — openapi-typescript types + openapi-fetch client
 clients/js/              @iamkit/js — browser sign-in SDK (authorize ticket, login flows, MFA, passkeys, federation, complete)
 clients/react/           @iamkit/react — headless SignInFlow, hooks, unstyled <SignInForm>/<AcceptInvitation>
+clients/node/            @iamkit/node — server-side SDK mirroring sdk/ (jose token verification, Connect middleware, OAuthClient, KeyLogin, webhook/action verification, re-exports @iamkit/api)
 examples/nextjs-login/   Next.js custom sign-in app + Playwright parity journeys (e2e/run.sh)
 deploy/compose/          Production Compose (traefik/, caddy/: TLS proxy + IAMKit + PostgreSQL, profiles redis/otel); setup.sh writes .env + secrets, smoke.sh checks a variant
 deploy/helm/iamkit/      Helm chart (migrations as a pre-install/pre-upgrade hook Job, probes on /health, HPA/PDB/ServiceMonitor); ct.yaml + ci/ for chart-testing on kind (.github/workflows/deploy.yml), pushed to GHCR OCI by release.yml

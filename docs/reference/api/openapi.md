@@ -73,5 +73,7 @@ const { data, error } = await iam.POST("/management/v1/environments/{environment
 bearer token for `/api/v1`, `/identity/v1` and SCIM. See
 [the package README](../../../clients/typescript/README.md).
 
-Go services keep using the hand-written SDKs in `sdk/`
-([Go SDK reference](../sdk/go.md)). gRPC/Connect APIs are not planned.
+Node.js servers get it re-exported, with token verification, middleware and
+the OAuth client, from [`@iamkit/node`](../sdk/node.md). Go services keep
+using the hand-written SDKs in `sdk/` ([Go SDK reference](../sdk/go.md)).
+gRPC/Connect APIs are not planned.

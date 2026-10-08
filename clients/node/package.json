@@ -1,0 +1,36 @@
+{
+  "name": "@iamkit/node",
+  "version": "0.1.0",
+  "description": "Server-side IAMKit SDK for Node.js: access token verification (JWKS or introspection), OAuth/OIDC client flows, webhook and action verification, Express/Connect middleware and the typed management client",
+  "type": "module",
+  "license": "SEE LICENSE IN ../../README.md",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@iamkit/api": "file:../typescript",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

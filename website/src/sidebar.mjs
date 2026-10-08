@@ -77,6 +77,7 @@ export const sidebar = [
       page('reference/sdk/management'),
       page('reference/sdk/middleware'),
       page('reference/sdk/scim'),
+      page('reference/sdk/node', 'Node.js SDK'),
     ]),
     page('reference/configuration'),
     page('reference/cli'),

@@ -51,6 +51,7 @@ jobs:
             clients/typescript/package-lock.json
             clients/js/package-lock.json
             clients/react/package-lock.json
+            clients/node/package-lock.json
       - name: OpenAPI document is current
         env:
           GOWORK: 'off'
@@ -72,6 +73,13 @@ jobs:
           npm run build
       - name: React kit (@iamkit/react) typechecks, passes its tests and builds
         working-directory: clients/react
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Node.js SDK (@iamkit/node) typechecks, passes its tests and builds
+        working-directory: clients/node
         run: |
           npm ci
           npm run typecheck
