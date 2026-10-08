@@ -1,0 +1,19 @@
+Music for IAMKit enterprise walkthrough — music v2
+
+"Clean Soul", "Floating Cities", "Dreams Become Real"
+Kevin MacLeod (incompetech.com)
+Licensed under Creative Commons: By Attribution 4.0
+https://creativecommons.org/licenses/by/4.0/
+
+Sources:
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1300033
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1600018
+https://incompetech.com/music/royalty-free/index.html?isrc=USUAN1500027
+License: https://incompetech.com/music/royalty-free/licenses/
+
+Changes: excerpts, loudness normalization, chapter transitions, crossfades,
+volume automation and mixing with interface sound effects. No track loops.
+Sound effects: Kenney (CC0).
+
+Include these music credits in the publishing page or video description.
+Credits are also embedded in the video file's comment metadata.
