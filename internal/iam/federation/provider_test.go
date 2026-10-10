@@ -135,6 +135,28 @@ func TestMicrosoftTenants(t *testing.T) {
 	}
 }
 
+func TestPromptOption(t *testing.T) {
+	cases := []struct {
+		provider string
+		o        Options
+		ok       bool
+	}{
+		{ProviderMicrosoft, Options{Tenant: TenantCommon, Prompt: " select_account "}, true},
+		{ProviderMicrosoft, Options{Tenant: tenantA, Prompt: PromptLogin}, true},
+		{ProviderGoogle, Options{Prompt: PromptSelectAccount}, true},
+		{ProviderOIDC, Options{Prompt: PromptSelectAccount}, true},
+		{ProviderMicrosoft, Options{Tenant: tenantA, Prompt: "none"}, false},
+		{ProviderMicrosoft, Options{Tenant: tenantA, Prompt: "consent"}, false},
+		{ProviderGitHub, Options{Prompt: PromptSelectAccount}, false},
+		{ProviderApple, Options{Team: "ABCDEFGHIJ", Key: "ABCDEFGHIJ", Prompt: PromptSelectAccount}, false},
+	}
+	for _, c := range cases {
+		if err := validOptions(c.provider, c.o.Normalized()); (err == nil) != c.ok {
+			t.Errorf("%s %+v: %v", c.provider, c.o, err)
+		}
+	}
+}
+
 func TestSignupRules(t *testing.T) {
 	org := identity.NewOrganizationID()
 	base := func() ConnectionInput {
@@ -238,6 +260,10 @@ func TestUpdateOptions(t *testing.T) {
 	got, err := (ConnectionUpdate{Options: &o}).Apply(c)
 	if err != nil || len(got.Options.Tenants) != 1 {
 		t.Fatalf("tenant allow-list: %+v %v", got.Options, err)
+	}
+	o = Options{Tenant: TenantCommon, Prompt: PromptSelectAccount}
+	if got, err = (ConnectionUpdate{Options: &o}).Apply(c); err != nil || got.Options.Prompt != PromptSelectAccount || got.Validate() != nil {
+		t.Fatalf("account choice: %+v %v", got.Options, err)
 	}
 	o = Options{Tenant: TenantOrganizations}
 	if _, err = (ConnectionUpdate{Options: &o}).Apply(c); err == nil {

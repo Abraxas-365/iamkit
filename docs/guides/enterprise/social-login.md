@@ -204,6 +204,20 @@ environment); `signup_group_id` must be an operator-managed group of it.
 use `signup`; they have [JIT provisioning](federation.md#just-in-time-provisioning)
 and [email linking of members](federation.md#linking-members-by-email).
 
+## Choosing the account
+
+A provider that already has a session in the browser signs the user in with
+it without asking. `options.prompt` (Microsoft, Google and generic OIDC; console:
+**Account choice** on the connection) decides what happens on every sign-in:
+
+| `options.prompt` | Console | The provider… |
+|---|---|---|
+| omitted or `""` | Sign in with the current account | reuses its session silently (picker only with several signed-in accounts) |
+| `select_account` | Always choose the account | always shows its account picker, with "Use another account" |
+| `login` | Always ask for the password | asks for the credentials again |
+
+It can change at any time (`PATCH` with the whole `options`).
+
 ## Keeping profiles in sync
 
 A provider's `picture` claim (GitHub: `avatar_url`; `oauth2`: the mapped

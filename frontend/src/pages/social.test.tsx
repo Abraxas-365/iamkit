@@ -88,6 +88,18 @@ it('builds and patches a SAML connection', () => {
   expect(connectionPatch(byURL, { ...same, name_id_format: 'unspecified', metadata_url: 'https://idp/m' })).toEqual({ options: { metadata_url: 'https://idp/m' } })
 })
 
+it('patches the account choice of a Microsoft connection', () => {
+  const conn: ConnectionDetail = { ...google, provider: 'microsoft', secret_env: '', secret_source: 'sealed', jit_group_id: null, enforcement: 'optional', created_at: '', options: { tenant: 'common', tenants: ['t1'] } }
+  const same = { name: 'Google', tenants: 't1', prompt: 'auto' }
+  expect(connectionPatch(conn, same)).toEqual({})
+  // The other options are kept, alone or changed in the same save.
+  expect(connectionPatch(conn, { ...same, prompt: 'select_account' })).toEqual({ options: { tenant: 'common', tenants: ['t1'], prompt: 'select_account' } })
+  expect(connectionPatch(conn, { ...same, tenants: 't1,t2', prompt: 'login' })).toEqual({ options: { tenant: 'common', tenants: ['t1', 't2'], prompt: 'login' } })
+  const picking: ConnectionDetail = { ...conn, options: { ...conn.options, prompt: 'select_account' } }
+  expect(connectionPatch(picking, { ...same, prompt: 'select_account' })).toEqual({})
+  expect(connectionPatch(picking, same)).toEqual({ options: { tenant: 'common', tenants: ['t1'] } })
+})
+
 it('builds the create request of each provider', () => {
   expect(connectionBody(values)).toEqual({ provider: 'google', name: 'Google', client_id: 'gid', client_secret: 's', link_email: true })
   expect(connectionBody({ ...values, provider: 'oidc', issuer: 'https://idp.example ', scope: 'organization', organization_id: 'o1', link_email: true })).toEqual({ provider: 'oidc', name: 'Google', client_id: 'gid', client_secret: 's', issuer: 'https://idp.example', organization_id: 'o1' })

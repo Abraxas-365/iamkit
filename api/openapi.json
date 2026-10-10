@@ -4026,6 +4026,9 @@
           "name_id_format": {
             "type": "string"
           },
+          "prompt": {
+            "type": "string"
+          },
           "scopes": {
             "items": {
               "type": "string"
@@ -4127,6 +4130,9 @@
             "type": "string"
           },
           "name_id_format": {
+            "type": "string"
+          },
+          "prompt": {
             "type": "string"
           },
           "scopes": {

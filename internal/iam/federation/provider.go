@@ -76,6 +76,9 @@ const (
 	TenantConsumers     = "consumers"     // personal Microsoft accounts
 	// ConsumerTenant is the tenant ID of personal Microsoft accounts.
 	ConsumerTenant = "9188040d-6c67-4c5b-b112-36a304b66dad"
+	// PromptSelectAccount and PromptLogin are the Options.Prompt values.
+	PromptSelectAccount = "select_account"
+	PromptLogin         = "login"
 	// MaxTenants bounds the allow-list of a multi-tenant connection.
 	MaxTenants = 100
 	// MaxDomains bounds the Workspace domains of a Google connection.
@@ -94,6 +97,12 @@ type Options struct {
 	// organizations to these tenant IDs.
 	Tenant  string   `json:"tenant,omitempty"`
 	Tenants []string `json:"tenants,omitempty"`
+	// Prompt is sent as the OIDC prompt of every authorization of a
+	// Microsoft, Google or generic OIDC connection: select_account makes
+	// the provider show its account picker even with one signed-in
+	// account, login asks for the credentials again. "" lets the provider
+	// reuse its session silently.
+	Prompt string `json:"prompt,omitempty"`
 	// Domains restricts a Google connection to Google Workspace accounts of
 	// these domains (the ID token's hd claim); empty accepts any account.
 	Domains []string `json:"domains,omitempty"`
@@ -349,6 +358,7 @@ func Preset(provider string, o Options) string {
 // Normalized lowercases and orders the options' identifiers.
 func (o Options) Normalized() Options {
 	o.Tenant = strings.ToLower(strings.TrimSpace(o.Tenant))
+	o.Prompt = strings.TrimSpace(o.Prompt)
 	tenants := make([]string, 0, len(o.Tenants))
 	for _, t := range o.Tenants {
 		tenants = append(tenants, strings.ToLower(strings.TrimSpace(t)))
@@ -412,6 +422,13 @@ func validOptions(provider string, o Options) error {
 	case ProviderOIDC, ProviderGoogle, ProviderMicrosoft, ProviderGitHub, ProviderApple, ProviderGitLab, ProviderGitHubEnterprise, ProviderOAuth2, ProviderSAML, ProviderLDAP:
 	default:
 		return errx.Validation("provider must be oidc, google, microsoft, github, apple, gitlab, github_enterprise, oauth2, saml or ldap")
+	}
+	switch {
+	case o.Prompt == "":
+	case provider != ProviderMicrosoft && provider != ProviderGoogle && provider != ProviderOIDC:
+		return errx.Validation("options.prompt applies to microsoft, google and oidc connections")
+	case o.Prompt != PromptSelectAccount && o.Prompt != PromptLogin:
+		return errx.Validation("options.prompt must be select_account, login or empty")
 	}
 	if microsoft && provider != ProviderMicrosoft || apple && provider != ProviderApple || google && provider != ProviderGoogle ||
 		oauth2 && provider != ProviderOAuth2 || o.SAML() && provider != ProviderSAML || o.LDAP() && provider != ProviderLDAP ||

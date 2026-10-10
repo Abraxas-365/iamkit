@@ -236,6 +236,9 @@ func (p Provider) Authorize(ctx context.Context, c federation.Connection, state,
 	default:
 		options = append(options, oidc.Nonce(nonce))
 	}
+	if c.Options.Prompt != "" {
+		options = append(options, oauth2.SetAuthURLParam("prompt", c.Options.Prompt))
+	}
 	return s.config.AuthCodeURL(state, options...), nil
 }
 

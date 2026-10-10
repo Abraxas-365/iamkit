@@ -6822,6 +6822,7 @@ export interface components {
             metadata_url?: string;
             metadata_xml?: string;
             name_id_format?: string;
+            prompt?: string;
             scopes?: string[] | null;
             sign_requests?: boolean;
             start_tls?: boolean;
@@ -6846,6 +6847,7 @@ export interface components {
             metadata_url?: string;
             metadata_xml?: string;
             name_id_format?: string;
+            prompt?: string;
             scopes?: string[] | null;
             sign_requests?: boolean;
             start_tls?: boolean;

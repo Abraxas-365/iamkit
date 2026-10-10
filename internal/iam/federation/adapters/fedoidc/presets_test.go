@@ -341,6 +341,14 @@ func TestMicrosoftSingleTenant(t *testing.T) {
 	const work = "11111111-2222-3333-4444-555555555555"
 	idp := newIdP(t)
 	c := connection(federation.ProviderMicrosoft, federation.Options{Tenant: work}, "secret")
+	if q := authorizeURL(t, idp.provider(), c); q.Has("prompt") {
+		t.Fatalf("no prompt option sent prompt: %v", q)
+	}
+	c.Options.Prompt = federation.PromptSelectAccount
+	if q := authorizeURL(t, idp.provider(), c); q.Get("prompt") != "select_account" || q.Get("nonce") != "nonce-1" {
+		t.Fatalf("prompt option not sent: %v", q)
+	}
+	c.Options.Prompt = ""
 	idp.issuer = MicrosoftIssuer(work)
 	idp.claims = jwt.MapClaims{"sub": "m-1", "nonce": "nonce-1", "tid": work, "email": "ann@contoso.com"}
 	claims, err := idp.provider().Verify(context.Background(), c, "code", "nonce-1", "v")

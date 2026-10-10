@@ -18,7 +18,7 @@ import { formatDateTime, t } from '@/lib/i18n'
 export interface ConnectionDetail {
   id: string; organization_id: string | null; name: string; issuer: string; client_id: string
   provider?: string; options?: {
-    tenant?: string; tenants?: string[]; domains?: string[]; team_id?: string; key_id?: string; base_url?: string
+    tenant?: string; tenants?: string[]; domains?: string[]; team_id?: string; key_id?: string; base_url?: string; prompt?: string
     authorize_url?: string; token_url?: string; userinfo_url?: string; scopes?: string[]
     claims?: { subject?: string; email?: string; email_verified?: string; name?: string }
     metadata_url?: string; metadata_xml?: string; name_id_format?: string; sign_requests?: boolean
@@ -39,6 +39,13 @@ interface ExternalIdentity {
 
 const origins: Record<string, string> = { jit: 'Just-in-time', email: t('Verified email'), signup: 'Sign-up', linked: t('Linked') }
 const tenants: Record<string, string> = { common: t('Work, school and personal accounts'), organizations: t('Work and school accounts'), consumers: t('Personal accounts') }
+
+// prompts are the choices of options.prompt ('auto' = none sent).
+export const prompts = () => [
+  { label: t('Sign in with the current account'), value: 'auto' },
+  { label: t('Always choose the account'), value: 'select_account' },
+  { label: t('Always ask for the password'), value: 'login' },
+]
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.email || item.id), inactive: item.active === false })
 
@@ -255,6 +262,9 @@ export function editFields(conn: ConnectionDetail, base: string): Field[] {
   if (conn.provider === 'google') {
     fields.push({ name: 'domains', label: t('Workspace domains'), type: 'tags', optional: true, tags: conn.options?.domains ?? [], hint: conn.organization_id ? t('Only Google accounts of these Workspace domains can sign in. Keep the organization\'s domains here.') : t('Only Google Workspace accounts of these domains can sign in; empty accepts any Google account.') })
   }
+  if (conn.provider === 'microsoft' || conn.provider === 'google' || conn.provider === 'oidc') {
+    fields.push({ name: 'prompt', label: t('Account choice'), type: 'dropdown', value: conn.options?.prompt || 'auto', options: prompts(), hint: t('What the provider shows at sign-in when the browser is already signed in to it.') })
+  }
   if (conn.provider === 'oauth2') {
     const o = conn.options ?? {}
     fields.push(
@@ -330,6 +340,14 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
     }))) patch.options = next
   }
   if (values.update_profile !== undefined && values.update_profile !== !!conn.update_profile) patch.update_profile = values.update_profile
+  if (typeof values.prompt === 'string') {
+    // The prompt rides on whatever options the other fields produced.
+    const next = values.prompt === 'auto' ? '' : values.prompt
+    if (next !== (conn.options?.prompt ?? '')) {
+      const { prompt: _, ...rest } = (patch.options ?? conn.options ?? {}) as Record<string, unknown>
+      patch.options = next ? { ...rest, prompt: next } : rest
+    }
+  }
   if (values.link_email !== undefined && values.link_email !== !!conn.link_email) patch.link_email = values.link_email
   if (!conn.organization_id) {
     if (values.signup !== undefined && values.signup !== !!conn.signup) patch.signup = values.signup
