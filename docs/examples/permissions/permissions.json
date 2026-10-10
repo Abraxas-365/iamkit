@@ -1,0 +1,15 @@
+{
+  "resource": {"name": "Invoices API", "prefix": "invoices"},
+  "permissions": [
+    {"name": "invoices:invoices:read", "label": "View invoices"},
+    {"name": "invoices:invoices:write", "label": "Create and edit invoices"},
+    {"name": "invoices:invoices:review", "label": "Approve or reject invoices"},
+    {"name": "invoices:reports:read", "label": "View reports"},
+    {"name": "invoices:reports:export", "label": "Export reports"}
+  ],
+  "roles": [
+    {"name": "Invoices admin", "permissions": ["invoices:invoices:read", "invoices:invoices:write", "invoices:invoices:review", "invoices:reports:read", "invoices:reports:export"]},
+    {"name": "Reviewer", "permissions": ["invoices:invoices:read", "invoices:invoices:review", "invoices:reports:read"]},
+    {"name": "Viewer", "permissions": ["invoices:invoices:read", "invoices:reports:read"]}
+  ]
+}

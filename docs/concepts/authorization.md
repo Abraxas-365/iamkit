@@ -38,5 +38,9 @@ Permissions are exact strings, not wildcard patterns. Use the resource's catalog
 IAM administrative permissions deserve separate service credentials and review.
 There is no wildcard superuser scope for application tokens.
 
+Keep each catalog and its roles in one manifest in your repository, generate the
+constants your code checks, and sync IAMKit from it without dropping permissions
+that running code still checks: see [permissions as code](../guides/applications/permissions-as-code.md).
+
 Follow [first application](../start/first-application.md) and
 [protect an API](../start/protect-an-api.md) to verify both allowed access and denial.

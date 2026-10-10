@@ -33,6 +33,7 @@ export const sidebar = [
       page('guides/applications/custom-sign-in-ui'),
       page('guides/applications/signing-keys'),
       page('guides/applications/saml-apps'),
+      page('guides/applications/permissions-as-code'),
     ]),
     group('Enterprise SSO and provisioning', [
       page('guides/enterprise/federation'),
