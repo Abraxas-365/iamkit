@@ -1,6 +1,8 @@
 package federation
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -74,5 +76,76 @@ func TestAdmit(t *testing.T) {
 	}
 	if got := (Claims{}).DisplayName("bob@example.com"); got != "bob" {
 		t.Errorf("display name = %q", got)
+	}
+}
+
+func TestGroupMappingValidation(t *testing.T) {
+	org, group := identity.NewOrganizationID(), identity.NewGroupID()
+	base := ConnectionInput{Organization: org, Name: "a", Issuer: "https://i", Client: "c", ClientSecret: "s"}
+	ok := base
+	ok.GroupMappings = []GroupMapping{{Value: " eng ", Group: group}, {Value: "eng", Group: identity.NewGroupID()}}
+	if err := ok.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	c := ok.Connection(identity.NewEnvironmentID())
+	if c.GroupMappings[0].Value != "eng" || c.Validate() != nil {
+		t.Fatalf("mappings %+v", c.GroupMappings)
+	}
+	tooMany := make([]GroupMapping, MaxGroupMappings+1)
+	for i := range tooMany {
+		tooMany[i] = GroupMapping{Value: fmt.Sprint(i), Group: group}
+	}
+	for name, m := range map[string][]GroupMapping{
+		"empty value": {{Value: "  ", Group: group}},
+		"long value":  {{Value: strings.Repeat("x", MaxGroupValue+1), Group: group}},
+		"no group":    {{Value: "eng"}},
+		"duplicate":   {{Value: "eng", Group: group}, {Value: "eng ", Group: group}},
+		"too many":    tooMany,
+	} {
+		in := base
+		in.GroupMappings = m
+		if in.Validate() == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+	env := ConnectionInput{Name: "a", Issuer: "https://i", Client: "c", ClientSecret: "s", GroupMappings: []GroupMapping{{Value: "eng", Group: group}}}
+	if env.Validate() == nil {
+		t.Error("environment connection with mappings accepted")
+	}
+}
+
+func TestUpdateGroupMappings(t *testing.T) {
+	group := identity.NewGroupID()
+	c := Connection{Organization: identity.NewOrganizationID(), JIT: true, Enforcement: EnforcementOptional, GroupMappings: []GroupMapping{{Value: "a", Group: group}}}
+	if got, err := (ConnectionUpdate{}).Apply(c); err != nil || len(got.GroupMappings) != 1 {
+		t.Fatalf("nil must keep: %+v %v", got.GroupMappings, err)
+	}
+	if got, err := (ConnectionUpdate{GroupMappings: []GroupMapping{}}).Apply(c); err != nil || len(got.GroupMappings) != 0 {
+		t.Fatalf("[] must clear: %+v %v", got.GroupMappings, err)
+	}
+	if got, err := (ConnectionUpdate{GroupMappings: []GroupMapping{{Value: " b ", Group: group}}}).Apply(c); err != nil || got.GroupMappings[0].Value != "b" {
+		t.Fatalf("replace: %+v %v", got.GroupMappings, err)
+	}
+	if (ConnectionUpdate{GroupMappings: []GroupMapping{{Value: "", Group: group}}}).Validate() == nil {
+		t.Error("invalid mapping accepted")
+	}
+	env := Connection{Enforcement: EnforcementOptional}
+	// The service validates the updated connection (check).
+	if got, err := (ConnectionUpdate{GroupMappings: []GroupMapping{{Value: "a", Group: group}}}).Apply(env); err != nil || got.Validate() == nil {
+		t.Errorf("mappings on an environment connection accepted: %v", err)
+	}
+}
+
+func TestCleanGroups(t *testing.T) {
+	var in []string
+	for i := 0; i < 300; i++ {
+		in = append(in, fmt.Sprint("g", i))
+	}
+	out := CleanGroups(append([]string{" a ", "", "a", strings.Repeat("x", MaxGroupValue+1), "b"}, in...))
+	if len(out) != MaxGroupValues || out[0] != "a" || out[1] != "b" || out[2] != "g0" {
+		t.Fatalf("clean: %d %q", len(out), out[:3])
+	}
+	if CleanGroups(nil) != nil {
+		t.Fatal("nil in, non-nil out")
 	}
 }

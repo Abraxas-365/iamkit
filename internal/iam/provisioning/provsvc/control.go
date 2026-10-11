@@ -7,6 +7,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Control struct {
@@ -43,6 +44,12 @@ func (s *Control) Revoke(ctx context.Context, m provisioning.Mutation, id identi
 	}
 	return s.repository.RevokeCredential(ctx, m, id)
 }
+func (s *Control) RevokeOrganization(ctx context.Context, m provisioning.Mutation, organization identity.OrganizationID, id identity.CredentialID) error {
+	if id.IsZero() || organization.IsZero() {
+		return errx.Validation("invalid credential")
+	}
+	return s.repository.RevokeOrganizationCredential(ctx, m, organization, id)
+}
 func (s *Control) Link(ctx context.Context, m provisioning.Mutation, input provisioning.Link) error {
 	if err := input.Validate(); err != nil {
 		return err
@@ -51,4 +58,7 @@ func (s *Control) Link(ctx context.Context, m provisioning.Mutation, input provi
 }
 func (s *Control) Credentials(ctx context.Context, environment identity.EnvironmentID) ([]provisioning.CredentialView, error) {
 	return s.repository.Credentials(ctx, environment)
+}
+func (s *Control) OrganizationCredentials(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[provisioning.CredentialView], error) {
+	return s.repository.OrganizationCredentials(ctx, environment, organization, page)
 }

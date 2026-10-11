@@ -2,6 +2,7 @@ package fedsvc
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
@@ -128,6 +129,19 @@ func (s *Service) check(ctx context.Context, c federation.Connection) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
+	if c.Options.IdPInitiatedClientID != "" {
+		client, err := identity.ParseClientID(c.Options.IdPInitiatedClientID)
+		if err != nil {
+			return errx.Validation("options.idp_initiated_client_id must be an OAuth client ID")
+		}
+		if _, err = s.repository.LoginClient(ctx, c.Environment, c.Organization, client); err != nil {
+			var e *errx.Error
+			if errors.As(err, &e) && e.Type == errx.TypeNotFound {
+				return errx.Validation("options.idp_initiated_client_id must be an active OAuth client of this environment with an initiate_login_uri, whose application the organization can use")
+			}
+			return err
+		}
+	}
 	if !c.JITGroup.IsZero() {
 		ok, err := s.repository.OperatorGroup(ctx, c.Environment, c.Organization, c.JITGroup)
 		if err != nil {
@@ -135,6 +149,19 @@ func (s *Service) check(ctx context.Context, c federation.Connection) error {
 		}
 		if !ok {
 			return errx.Validation("jit_group_id must be an operator-managed group of the organization")
+		}
+	}
+	if len(c.GroupMappings) > 0 {
+		groups := make([]identity.GroupID, len(c.GroupMappings))
+		for i, m := range c.GroupMappings {
+			groups[i] = m.Group
+		}
+		missing, err := s.repository.MissingOperatorGroups(ctx, c.Environment, c.Organization, groups)
+		if err != nil {
+			return err
+		}
+		if len(missing) > 0 {
+			return errx.Validation("group_mappings[].group_id must be an operator-managed group of the organization (not a SCIM group): " + missing[0].String())
 		}
 	}
 	if c.Signup {
@@ -411,15 +438,20 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 	if out.Hosted() {
 		// The hosted pages choose the organization and issue the session.
 		out.Verified = authentication.Verified{User: user.ID, Email: user.Email, Method: authentication.MethodSSO, Organization: connection.Organization}
-		return out, nil
+		// Keep the group changes the sign-in made; the hosted journey
+		// issues the session in its own transaction.
+		return out, tx.Commit()
 	}
 	// Only the organization's own identity provider stands in for its
 	// second factor; social providers do not.
 	if row.Return.Set() {
 		// A custom sign-in UI redeems the identity with its verifier; the
 		// session is issued then, in its own transaction. Release the user
-		// lock first: the parked row's foreign key needs it.
-		tx.Rollback()
+		// lock first (committing the group changes of this sign-in): the
+		// parked row's foreign key needs it.
+		if err = tx.Commit(); err != nil {
+			return out, err
+		}
 		handle, hash, err := s.secrets.Generate(federation.ResultPrefix)
 		if err != nil {
 			return out, err
@@ -435,6 +467,11 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 	if (connection.Scoped() || connection.Social()) && unauthorized(err) {
 		// The provider proved the identity; what is missing is access
 		// (inactive membership, or no roles for a just-provisioned user).
+		// The refusal wrote nothing: keep the group changes of this
+		// sign-in, which may be what took the access away.
+		if err = tx.Commit(); err != nil {
+			return out, err
+		}
 		return out, errx.Forbidden("signed in, but the user has no access to this application")
 	}
 	return out, err
@@ -478,7 +515,7 @@ func (s *Service) account(ctx context.Context, connection federation.Connection,
 			return nil, federation.Account{}, err
 		}
 	}
-	tx, user, err := s.repository.LinkedUser(ctx, connection.Environment, connection.ID, claims.Subject)
+	tx, user, err := s.repository.LinkedUser(ctx, connection.Environment, connection.ID, claims.Subject, claims.Groups)
 	if err != nil || tx != nil {
 		return tx, user, err
 	}
@@ -488,7 +525,7 @@ func (s *Service) account(ctx context.Context, connection federation.Connection,
 	if err = s.join(ctx, connection, claims); err != nil {
 		return nil, federation.Account{}, err
 	}
-	if tx, user, err = s.repository.LinkedUser(ctx, connection.Environment, connection.ID, claims.Subject); err != nil {
+	if tx, user, err = s.repository.LinkedUser(ctx, connection.Environment, connection.ID, claims.Subject, claims.Groups); err != nil {
 		return nil, federation.Account{}, err
 	}
 	if tx == nil {
@@ -518,6 +555,10 @@ func (s *Service) Directory(ctx context.Context, b authentication.Context, id id
 	defer tx.Rollback()
 	result, err := s.sessions.SignIn(ctx, tx, b, user.ID, user.Email, true)
 	if unauthorized(err) {
+		// Nothing was written by the refusal: keep the group changes.
+		if err = tx.Commit(); err != nil {
+			return result, err
+		}
 		return result, errx.Forbidden("signed in, but the user has no access to this application")
 	}
 	return result, err
@@ -534,6 +575,9 @@ func (s *Service) DirectoryHosted(ctx context.Context, environment identity.Envi
 		return authentication.Verified{}, err
 	}
 	defer tx.Rollback()
+	if err = tx.Commit(); err != nil {
+		return authentication.Verified{}, err
+	}
 	return authentication.Verified{User: user.ID, Email: user.Email, Method: authentication.MethodSSO, Organization: connection.Organization}, nil
 }
 
@@ -607,7 +651,7 @@ func unauthorized(err error) bool {
 }
 
 func identityInput(c federation.Connection, claims federation.Claims) *action.IdentityInput {
-	return &action.IdentityInput{Connection: c.ID, Provider: c.Provider, Subject: claims.Subject, Email: claims.Email, Name: claims.Name}
+	return &action.IdentityInput{Connection: c.ID, Provider: c.Provider, Subject: claims.Subject, Email: claims.Email, Name: claims.Name, Groups: claims.Groups}
 }
 
 // postFederation runs function:post_federation, which may refuse the
@@ -687,6 +731,86 @@ func (s *Service) Assertion(ctx context.Context, state, response string) (string
 		return "", err
 	}
 	return handle, nil
+}
+
+// IdPInitiated handles a SAML response that answers no request of ours. It
+// never signs anybody in: the response is verified like any other (the
+// connection's IdP signature, audience, destination, validity, no replay),
+// then the browser is sent to the sign-in endpoint of the connection's OAuth
+// client, which starts an ordinary SP-initiated login for the connection.
+// Every refusal is an error page: nothing about the response is trusted
+// before the connection's own verification, and the connection is found from
+// the response's audience (our SP entity ID, which embeds environment and
+// connection).
+func (s *Service) IdPInitiated(ctx context.Context, response, relayState string) (string, error) {
+	if response == "" || len(response) > config.SAMLResponseMax {
+		return "", errx.Validation("SAML response missing or too large")
+	}
+	// Until the signature checks out every refusal is the same 401, whatever
+	// the reason: an unauthenticated caller learns neither which audiences
+	// are active connections nor whether IdP-initiated sign-in is enabled.
+	refused := func() error { return errx.Unauthorized("invalid SAML response") }
+	hint, err := s.provider.Hint(response)
+	if err != nil || hint.InResponseTo != "" {
+		// A response to a request needs the state that request made.
+		return "", refused()
+	}
+	environment, id, err := federation.ResponseConnection(s.issuer, hint)
+	if err != nil {
+		return "", refused()
+	}
+	connection, err := s.repository.Find(ctx, environment, id)
+	if err != nil || connection.Provider != federation.ProviderSAML || !connection.Scoped() {
+		return "", refused()
+	}
+	claims, err := s.provider.VerifyUnsolicited(ctx, connection, response)
+	if err != nil {
+		return "", err
+	}
+	// Only a validly signed response may learn the option is off.
+	if connection.Options.IdPInitiatedClientID == "" {
+		return "", federation.ErrIdPInitiatedOff()
+	}
+	// The client the connection names; the RelayState may pick another one
+	// the organization can use, never one that is unusable.
+	relay := federation.ParseRelayState(relayState)
+	client, err := identity.ParseClientID(connection.Options.IdPInitiatedClientID)
+	if err != nil {
+		return "", federation.ErrIdPInitiatedOff()
+	}
+	chosen := client
+	if !relay.Client.IsZero() {
+		chosen = relay.Client
+	}
+	target, err := s.repository.LoginClient(ctx, environment, connection.Organization, chosen)
+	if err != nil && chosen != client {
+		chosen, relay = client, federation.RelayState{}
+		target, err = s.repository.LoginClient(ctx, environment, connection.Organization, chosen)
+	}
+	if err != nil {
+		return "", federation.ErrIdPInitiatedOff()
+	}
+	to, err := target.Target(s.issuer, id, connection.Organization, relay)
+	if err != nil {
+		return "", err
+	}
+	if err = s.repository.AcceptInitiated(ctx, connection, chosen, claims.Assertion, claims.AssertionExpires); err != nil {
+		return "", err
+	}
+	return to, nil
+}
+
+// Lookup describes an active connection as a sign-in route.
+func (s *Service) Lookup(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Discovery, error) {
+	c, err := s.repository.Find(ctx, environment, id)
+	if err != nil {
+		return federation.Discovery{}, err
+	}
+	d := federation.Discovery{Method: federation.MethodSSO, Connection: &c.ID, Required: c.Enforcement == federation.EnforcementEnforced, Provider: c.Provider}
+	if c.Scoped() {
+		d.Organization = &c.Organization
+	}
+	return d, nil
 }
 
 func (s *Service) SAMLMetadata(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) ([]byte, error) {

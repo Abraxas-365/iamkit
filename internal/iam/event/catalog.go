@@ -78,8 +78,14 @@ const (
 	OAuthClientDisabled    = "oauth_client.disabled"
 	OrgAdminPortalEnabled  = "org_admin_portal.enabled"
 	OrgAdminPortalDisabled = "org_admin_portal.disabled"
-	LogoutDeliveryFailed   = "logout_delivery.failed"
-	LogoutDeliveryRetried  = "logout_delivery.retried"
+	// OrgSetupLink*: an organization setup link was created or revoked
+	// (actor: the operator or owner) or exchanged for a session (actor: the
+	// link itself); subject = the link.
+	OrgSetupLinkCreated   = "org_setup_link.created"
+	OrgSetupLinkUsed      = "org_setup_link.used"
+	OrgSetupLinkRevoked   = "org_setup_link.revoked"
+	LogoutDeliveryFailed  = "logout_delivery.failed"
+	LogoutDeliveryRetried = "logout_delivery.retried"
 
 	ResourceCreated       = "resource.created"
 	ResourceUpdated       = "resource.updated"
@@ -105,8 +111,11 @@ const (
 	ConnectionUpdated  = "connection.updated"
 	ConnectionDisabled = "connection.disabled"
 	ConnectionEnabled  = "connection.enabled"
-	IdentityLinked     = "identity.linked"
-	IdentityUnlinked   = "identity.unlinked"
+	// ConnectionIdPInitiated: a verified IdP-initiated SAML response was
+	// handed to the connection's OAuth client sign-in endpoint (no session).
+	ConnectionIdPInitiated = "connection.idp_initiated"
+	IdentityLinked         = "identity.linked"
+	IdentityUnlinked       = "identity.unlinked"
 
 	ProvisioningCredentialCreated = "provisioning_credential.created"
 	ProvisioningCredentialRevoked = "provisioning_credential.revoked"

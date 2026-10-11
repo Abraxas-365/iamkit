@@ -102,6 +102,8 @@ type User struct {
 	Name         string
 	// Attributes are extra attributes by name.
 	Attributes map[string]string
+	// MultiAttributes are multi-valued attributes by name (group lists).
+	MultiAttributes map[string][]string
 	// Edit changes the assertion before it is signed (tests of invalid
 	// responses).
 	Edit func(*saml.Assertion)
@@ -124,9 +126,45 @@ func (i *IdP) Answer(redirect string, user User) (Form, error) {
 	if err = req.Validate(); err != nil {
 		return Form{}, err
 	}
+	return i.respond(req, user)
+}
+
+// Unsolicited returns the response an identity provider posts when the user
+// starts at the IdP (IdP-initiated): signed like any other, but answering no
+// AuthnRequest (no InResponseTo). The service provider must have been
+// registered with Trust; relayState may be empty.
+func (i *IdP) Unsolicited(serviceProvider, relayState string, user User) (Form, error) {
+	metadata, ok := i.sps[serviceProvider]
+	if !ok {
+		return Form{}, os.ErrNotExist
+	}
+	req := &saml.IdpAuthnRequest{IDP: i.idp, HTTPRequest: httptest.NewRequest(http.MethodPost, "/", nil), RelayState: relayState, Now: time.Now(), ServiceProviderMetadata: metadata}
+	for d := range metadata.SPSSODescriptors {
+		for _, endpoint := range metadata.SPSSODescriptors[d].AssertionConsumerServices {
+			if endpoint.Binding == saml.HTTPPostBinding && req.ACSEndpoint == nil {
+				endpoint, descriptor := endpoint, metadata.SPSSODescriptors[d]
+				req.ACSEndpoint, req.SPSSODescriptor = &endpoint, &descriptor
+			}
+		}
+	}
+	if req.ACSEndpoint == nil {
+		return Form{}, os.ErrNotExist
+	}
+	return i.respond(req, user)
+}
+
+func (i *IdP) respond(req *saml.IdpAuthnRequest, user User) (Form, error) {
+	var err error
 	session := &saml.Session{ID: "session", NameID: user.NameID, NameIDFormat: user.NameIDFormat, UserEmail: user.Email, UserCommonName: user.Name, CreateTime: time.Now(), ExpireTime: time.Now().Add(time.Hour)}
 	for name, value := range user.Attributes {
 		session.CustomAttributes = append(session.CustomAttributes, saml.Attribute{Name: name, Values: []saml.AttributeValue{{Type: "xs:string", Value: value}}})
+	}
+	for name, values := range user.MultiAttributes {
+		attribute := saml.Attribute{Name: name}
+		for _, v := range values {
+			attribute.Values = append(attribute.Values, saml.AttributeValue{Type: "xs:string", Value: v})
+		}
+		session.CustomAttributes = append(session.CustomAttributes, attribute)
 	}
 	if err = (saml.DefaultAssertionMaker{}).MakeAssertion(req, session); err != nil {
 		return Form{}, err

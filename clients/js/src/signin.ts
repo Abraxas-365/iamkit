@@ -111,6 +111,9 @@ export class SignIn {
    * application's query (`client_id`, `redirect_uri`, `code_challenge`, …).
    * IAMKit answers the ticket and binds it to this browser with a cookie;
    * hosted-login clients are refused (they redirect to IAMKit's pages).
+   * Pass the `connection_id` (and `organization_id`) an IdP-initiated login
+   * sent to your sign-in endpoint to start that connection's sign-in (a hint:
+   * `Authorization.connection_id` tells whether it was usable).
    */
   async authorize(query: string | URLSearchParams | Record<string, string>): Promise<AuthorizationStart> {
     const search = new URLSearchParams(query as Record<string, string>).toString();

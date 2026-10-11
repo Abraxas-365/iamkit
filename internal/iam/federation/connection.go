@@ -1,11 +1,13 @@
 package federation
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,6 +55,10 @@ type Connection struct {
 	// UpdateProfile refreshes a linked user's name (and verified email, see
 	// Profile) from the provider at every sign-in.
 	UpdateProfile bool
+	// GroupMappings send IdP group values to operator-managed groups of the
+	// organization at every sign-in (organization connections only). Find
+	// loads them; Update replaces the stored set with them.
+	GroupMappings []GroupMapping
 }
 
 // Scoped reports whether the connection belongs to one organization.
@@ -87,7 +93,88 @@ func (c Connection) Validate() error {
 	if !c.Signup && !c.SignupGroup.IsZero() {
 		return errx.Validation("signup_group_id requires signup")
 	}
+	if len(c.GroupMappings) > 0 && !c.Scoped() {
+		return errx.Validation("group_mappings apply to organization connections; organization_id is required")
+	}
+	return ValidateGroupMappings(c.GroupMappings)
+}
+
+// MaxGroupMappings bounds the group mappings of a connection.
+const MaxGroupMappings = 100
+
+// Limits of the group values a sign-in carries.
+const (
+	MaxGroupValues = 200
+	MaxGroupValue  = 512
+)
+
+// GroupMapping sends one value of the IdP's group claim or attribute to a
+// group of the connection's organization.
+type GroupMapping struct {
+	Value string           `json:"value" db:"value"`
+	Group identity.GroupID `json:"group_id" db:"group_id"`
+}
+
+// ValidateGroupMappings checks the shape of a connection's mappings: at
+// most MaxGroupMappings, each with a value (1 to MaxGroupValue characters,
+// no control characters) and a group, and no value-group pair twice. That
+// the groups belong to the organization and are operator-managed is the
+// service's check.
+func ValidateGroupMappings(mappings []GroupMapping) error {
+	if len(mappings) > MaxGroupMappings {
+		return errx.Validation("group_mappings has at most 100 entries")
+	}
+	seen := make(map[GroupMapping]bool, len(mappings))
+	for _, m := range mappings {
+		if m.Value == "" || len(m.Value) > MaxGroupValue || strings.ContainsFunc(m.Value, func(r rune) bool { return r < ' ' }) {
+			return errx.Validation("group_mappings[].value is required, at most 512 characters, without control characters")
+		}
+		if m.Group.IsZero() {
+			return errx.Validation("group_mappings[].group_id is required")
+		}
+		if seen[m] {
+			return errx.Validation("group_mappings lists the same value and group twice")
+		}
+		seen[m] = true
+	}
 	return nil
+}
+
+// NormalizeGroupMappings trims the values and orders the mappings by value,
+// then group, so equal sets compare equal. nil stays nil: it means "not
+// given" on an update.
+func NormalizeGroupMappings(mappings []GroupMapping) []GroupMapping {
+	if mappings == nil {
+		return nil
+	}
+	out := make([]GroupMapping, len(mappings))
+	for i, m := range mappings {
+		out[i] = GroupMapping{Value: strings.TrimSpace(m.Value), Group: m.Group}
+	}
+	slices.SortFunc(out, func(a, b GroupMapping) int {
+		return cmp.Or(strings.Compare(a.Value, b.Value), strings.Compare(a.Group.String(), b.Group.String()))
+	})
+	return out
+}
+
+// CleanGroups is the group values a provider reported, ready for mapping:
+// trimmed, without empty or over-long values and duplicates, in order of
+// appearance and at most MaxGroupValues of them.
+func CleanGroups(values []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v == "" || len(v) > MaxGroupValue || seen[v] {
+			continue
+		}
+		if len(out) == MaxGroupValues {
+			break
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
 }
 
 // ConnectionInput creates a connection. Exactly one of ClientSecret (stored
@@ -112,6 +199,9 @@ type ConnectionInput struct {
 	SignupOrganization identity.OrganizationID `json:"signup_organization_id"`
 	SignupGroup        identity.GroupID        `json:"signup_group_id"`
 	UpdateProfile      bool                    `json:"update_profile"`
+	// GroupMappings (organization connections): IdP group values and the
+	// groups of the organization they put users in.
+	GroupMappings []GroupMapping `json:"group_mappings"`
 }
 
 // provider is the input's provider, oidc by default.
@@ -133,6 +223,12 @@ func (i ConnectionInput) issuer() string {
 func (i ConnectionInput) Validate() error {
 	if strings.TrimSpace(i.Name) == "" || len(i.Name) > 200 {
 		return errx.Validation("name is required and at most 200 characters")
+	}
+	if len(i.GroupMappings) > 0 && i.Organization.IsZero() {
+		return errx.Validation("group_mappings apply to organization connections; organization_id is required")
+	}
+	if err := ValidateGroupMappings(NormalizeGroupMappings(i.GroupMappings)); err != nil {
+		return err
 	}
 	if err := validOptions(i.provider(), i.Options.Normalized()); err != nil {
 		return err
@@ -207,7 +303,7 @@ func (i ConnectionInput) Validate() error {
 // service seals ClientSecret separately.
 func (i ConnectionInput) Connection(environment identity.EnvironmentID) Connection {
 	c := Connection{Environment: environment, Organization: i.Organization, Name: strings.TrimSpace(i.Name), Issuer: i.issuer(), Client: strings.TrimSpace(i.Client), SecretEnv: i.SecretEnv, JIT: !i.Organization.IsZero(), JITGroup: i.JITGroup, Enforcement: i.Enforcement,
-		Provider: i.provider(), Options: i.Options.Normalized(), Signup: i.Signup, LinkEmail: i.LinkEmail, SignupOrganization: i.SignupOrganization, SignupGroup: i.SignupGroup, UpdateProfile: i.UpdateProfile}
+		Provider: i.provider(), Options: i.Options.Normalized(), Signup: i.Signup, LinkEmail: i.LinkEmail, SignupOrganization: i.SignupOrganization, SignupGroup: i.SignupGroup, UpdateProfile: i.UpdateProfile, GroupMappings: NormalizeGroupMappings(i.GroupMappings)}
 	if i.JIT != nil {
 		c.JIT = *i.JIT
 	}
@@ -247,9 +343,15 @@ type ConnectionUpdate struct {
 	SignupOrganization *identity.OrganizationID `json:"signup_organization_id"`
 	SignupGroup        *identity.GroupID        `json:"signup_group_id"`
 	UpdateProfile      *bool                    `json:"update_profile"`
+	// GroupMappings replaces the connection's mappings: absent or null keeps
+	// them, [] clears them.
+	GroupMappings []GroupMapping `json:"group_mappings"`
 }
 
 func (u ConnectionUpdate) Validate() error {
+	if err := ValidateGroupMappings(NormalizeGroupMappings(u.GroupMappings)); err != nil {
+		return err
+	}
 	if u.Name != nil && (strings.TrimSpace(*u.Name) == "" || len(*u.Name) > 200) {
 		return errx.Validation("name is required and at most 200 characters")
 	}
@@ -291,6 +393,9 @@ func (u ConnectionUpdate) Apply(c Connection) (Connection, error) {
 	}
 	if u.UpdateProfile != nil {
 		c.UpdateProfile = *u.UpdateProfile
+	}
+	if u.GroupMappings != nil {
+		c.GroupMappings = NormalizeGroupMappings(u.GroupMappings)
 	}
 	// Turning sign-up off drops where it signed users up to.
 	if u.Signup != nil && !*u.Signup {
@@ -339,6 +444,10 @@ type Claims struct {
 	// Picture is the provider's avatar URL (OIDC picture); only an https
 	// URL is kept (Avatar).
 	Picture string
+	// Groups are the group values the provider reported (SAML attribute,
+	// ID token claim, userinfo member or directory attribute), cleaned by
+	// CleanGroups; the connection's group mappings read them.
+	Groups []string
 	// HostedDomain is Google's hd claim: the Workspace domain of the
 	// account, empty for personal Google accounts.
 	HostedDomain string
@@ -656,6 +765,9 @@ type ConnectionDetail struct {
 	SignupOrganization *identity.OrganizationID `json:"signup_organization_id" db:"signup_organization_id"`
 	SignupGroup        *identity.GroupID        `json:"signup_group_id" db:"signup_group_id"`
 	UpdateProfile      bool                     `json:"update_profile" db:"update_profile"`
+	// GroupMappings are the IdP group values mapped to groups of the
+	// organization; empty for environment connections.
+	GroupMappings []GroupMapping `json:"group_mappings" db:"-"`
 	// Callback is the redirect URI to register at the provider (for SAML the
 	// assertion consumer service).
 	Callback string `json:"callback_url" db:"-"`

@@ -20,6 +20,9 @@ func authMutation(p orgadmin.Principal) authentication.Mutation {
 // Branding
 
 func (s *Service) Branding(ctx context.Context, p orgadmin.Principal) (hosted.OrganizationSettings, error) {
+	if err := p.RequireAccount(); err != nil {
+		return hosted.OrganizationSettings{}, err
+	}
 	if err := p.Require(authorization.PermOrgRead); err != nil {
 		return hosted.OrganizationSettings{}, err
 	}
@@ -43,6 +46,9 @@ func (s *Service) DeleteBranding(ctx context.Context, p orgadmin.Principal) erro
 // Password policy
 
 func (s *Service) PasswordPolicy(ctx context.Context, p orgadmin.Principal) (authentication.PasswordRequirements, error) {
+	if err := p.RequireAccount(); err != nil {
+		return authentication.PasswordRequirements{}, err
+	}
 	if err := p.Require(authorization.PermOrgRead); err != nil {
 		return authentication.PasswordRequirements{}, err
 	}

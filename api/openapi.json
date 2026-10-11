@@ -405,6 +405,9 @@
           "email": {
             "type": "string"
           },
+          "groups": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -417,6 +420,9 @@
       "AttributeMappingInput": {
         "properties": {
           "email": {
+            "type": "string"
+          },
+          "groups": {
             "type": "string"
           },
           "name": {
@@ -538,6 +544,13 @@
           "client_id": {
             "description": "UUID (empty when unset)",
             "type": "string"
+          },
+          "connection_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "connections": {
             "items": {
@@ -721,6 +734,9 @@
           "email_verified": {
             "type": "string"
           },
+          "groups": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
@@ -742,6 +758,9 @@
             "type": "string"
           },
           "email_verified": {
+            "type": "string"
+          },
+          "groups": {
             "type": "string"
           },
           "name": {
@@ -819,6 +838,12 @@
           "hosted_login": {
             "type": [
               "boolean",
+              "null"
+            ]
+          },
+          "initiate_login_uri": {
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -915,6 +940,9 @@
             "description": "UUID (empty when unset)",
             "type": "string"
           },
+          "initiate_login_uri": {
+            "type": "string"
+          },
           "jwks": {
             "anyOf": [
               {},
@@ -984,6 +1012,7 @@
           "grant_types",
           "hosted_login",
           "id",
+          "initiate_login_uri",
           "jwks_uri",
           "post_logout_redirect_uris",
           "public",
@@ -1096,6 +1125,15 @@
           "enforcement": {
             "type": "string"
           },
+          "group_mappings": {
+            "items": {
+              "$ref": "#/components/schemas/GroupMapping"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "id": {
             "description": "UUID (empty when unset)",
             "type": "string"
@@ -1181,6 +1219,7 @@
           "client_id",
           "created_at",
           "enforcement",
+          "group_mappings",
           "id",
           "issuer",
           "jit_group_id",
@@ -1211,6 +1250,15 @@
           },
           "enforcement": {
             "type": "string"
+          },
+          "group_mappings": {
+            "items": {
+              "$ref": "#/components/schemas/GroupMappingInput"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "issuer": {
             "type": "string"
@@ -1292,6 +1340,15 @@
           "enforcement": {
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "group_mappings": {
+            "items": {
+              "$ref": "#/components/schemas/GroupMappingInput"
+            },
+            "type": [
+              "array",
               "null"
             ]
           },
@@ -1909,6 +1966,31 @@
           "user_code",
           "verification_uri",
           "verification_uri_complete"
+        ],
+        "type": "object"
+      },
+      "Directories": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CredentialView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          },
+          "scim_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "scim_url"
         ],
         "type": "object"
       },
@@ -2757,6 +2839,34 @@
         },
         "type": "object"
       },
+      "GroupMapping": {
+        "properties": {
+          "group_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "group_id",
+          "value"
+        ],
+        "type": "object"
+      },
+      "GroupMappingInput": {
+        "properties": {
+          "group_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "GroupMemberView": {
         "properties": {
           "active": {
@@ -2926,6 +3036,15 @@
           },
           "email": {
             "type": "string"
+          },
+          "groups": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -3275,6 +3394,36 @@
         ],
         "type": "object"
       },
+      "IssuedDirectory": {
+        "properties": {
+          "connection_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "scim_url": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "connection_id",
+          "expires_at",
+          "id",
+          "scim_url",
+          "secret"
+        ],
+        "type": "object"
+      },
       "IssuedKey": {
         "properties": {
           "created_at": {
@@ -3319,6 +3468,37 @@
           "last_used_at",
           "public_key",
           "user_id"
+        ],
+        "type": "object"
+      },
+      "IssuedSetupLink": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "intents": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at",
+          "id",
+          "intents",
+          "url"
         ],
         "type": "object"
       },
@@ -4014,6 +4194,12 @@
               "null"
             ]
           },
+          "groups_claim": {
+            "type": "string"
+          },
+          "idp_initiated_client_id": {
+            "type": "string"
+          },
           "key_id": {
             "type": "string"
           },
@@ -4119,6 +4305,12 @@
               "array",
               "null"
             ]
+          },
+          "groups_claim": {
+            "type": "string"
+          },
+          "idp_initiated_client_id": {
+            "type": "string"
           },
           "key_id": {
             "type": "string"
@@ -5034,6 +5226,27 @@
         ],
         "type": "object"
       },
+      "PaginatedSetupLink": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SetupLink"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object"
+      },
       "PaginatedSignIn": {
         "properties": {
           "items": {
@@ -5749,6 +5962,9 @@
           },
           "hosted_login": {
             "type": "boolean"
+          },
+          "initiate_login_uri": {
+            "type": "string"
           },
           "jwks": {
             "anyOf": [
@@ -6913,6 +7129,129 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "SetupExchangeInput": {
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SetupLink": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_by": {
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "intents": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "created_at",
+          "created_by",
+          "expires_at",
+          "id",
+          "intents",
+          "last_used_at",
+          "revoked_at"
+        ],
+        "type": "object"
+      },
+      "SetupLinkInputInput": {
+        "properties": {
+          "expires_in": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "intents": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "SetupSession": {
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "environment_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer"
+          },
+          "intents": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "organization_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "organization_name": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "environment_id",
+          "expires_in",
+          "intents",
+          "organization_id",
+          "organization_name",
+          "token_type"
+        ],
         "type": "object"
       },
       "SignIn": {
@@ -11983,6 +12322,220 @@
         ]
       }
     },
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/directories": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDirectories",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Directories"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "directories lists the organization's SCIM credentials and the SCIM base URL.",
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDirectories",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedDirectory"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "createDirectory answers 201 with the credential; its secret is shown once.",
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/directories/{credential}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDirectoriesbyCredential",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "credential",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
     "/api/v1/environments/{environment}/organizations/{organization}/admin/domains": {
       "get": {
         "operationId": "getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDomains",
@@ -12407,6 +12960,91 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaginatedResourceGrant"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/groups": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminGroups",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedGroup"
                 }
               }
             },
@@ -13716,6 +14354,219 @@
               }
             },
             "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/setup-links": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminSetupLinks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedSetupLink"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminSetupLinks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedSetupLink"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "createSetupLink answers 201 with the link's URL, shown once.",
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/setup-links/{link}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminSetupLinksbyLink",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
           },
           "4XX": {
             "content": {
@@ -17106,6 +17957,227 @@
             },
             "description": "Created"
           },
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/organizations/{organization}/setup-links": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedSetupLink"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupLinkInputInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedSetupLink"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/organizations/{organization}/setup-links/{link}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinksbyLink",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
           "204": {
             "description": "No content"
           },
@@ -25125,6 +26197,57 @@
           }
         },
         "summary": "AssertMFA starts the security key prompt of a pending login: pass options to navigator.credentials.get, then post the answer to /mfa/verify.",
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
+    "/identity/v1/org-admin/setup": {
+      "post": {
+        "operationId": "postIdentityOrgAdminSetup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupExchangeInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupSession"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Exchange answers POST /identity/v1/org-admin/setup: the link's secret for a short-lived bearer limited to the link's intents.",
         "tags": [
           "Identity API"
         ]
@@ -36877,6 +38000,236 @@
             },
             "description": "Created"
           },
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/organizations/{organization}/setup-links": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedSetupLink"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupLinkInputInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssuedSetupLink"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/organizations/{organization}/setup-links/{link}": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinksbyLink",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "link",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
           "204": {
             "description": "No content"
           },

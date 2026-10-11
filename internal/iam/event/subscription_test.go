@@ -91,3 +91,14 @@ func TestClassifyConnectionEnabled(t *testing.T) {
 		}
 	}
 }
+
+func TestClassifyOrganizationDirectories(t *testing.T) {
+	const base = "/api/v1/environments/0b3c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11/organizations/9a0c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11/admin/directories/"
+	const id = "7f0c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11"
+	for method, typ := range map[string]string{"POST": ProvisioningCredentialCreated, "DELETE": ProvisioningCredentialRevoked} {
+		c, ok := Classify(method, base+id)
+		if !ok || c.Type != typ || c.Subject.Kind != "provisioning_credential" || c.Subject.ID != id {
+			t.Errorf("%s: %+v %v", method, c, ok)
+		}
+	}
+}

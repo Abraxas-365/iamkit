@@ -22,6 +22,10 @@ type Authorization struct {
 	// (organization_id or the urn:iamkit:org:id: scope): the sign-in must
 	// complete in it.
 	Organization *identity.OrganizationID `json:"organization_id,omitempty"`
+	// Connection is the authorize request's connection_id hint when this
+	// client may sign in with it (an active, offered connection): start it
+	// with the federation flow instead of asking for an identifier.
+	Connection *identity.ConnectionID `json:"connection_id,omitempty"`
 	// LoginHint is the request's login_hint, to prefill the identifier.
 	LoginHint string `json:"login_hint,omitempty"`
 	// Locale is the language to show: the request's ui_locales, the

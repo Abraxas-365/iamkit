@@ -12,6 +12,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/orgadmin/adapters/orgadminpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/orgadmin/orgadminsvc"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
+	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
@@ -30,6 +31,7 @@ type Deps struct {
 	OrganizationViews   organization.Queries
 	Domains             organization.DomainCommands
 	DomainViews         organization.DomainQueries
+	GroupViews          organization.GroupQueries
 	Grants              authorization.GrantCommands
 	GrantViews          authorization.GrantQueries
 	ResourceViews       authorization.ResourceQueries
@@ -43,6 +45,10 @@ type Deps struct {
 	BrandingViews       hosted.Queries
 	PasswordPolicies    authentication.PasswordPolicyCommands
 	PasswordPolicyViews authentication.PasswordPolicyQueries
+	Directories         provisioning.ControlCommands
+	DirectoryViews      provisioning.ControlQueries
+	// SetupSecrets generates the setup link secrets (mgmtsecret.Generator).
+	SetupSecrets orgadmin.SetupSecrets
 }
 
 type Module struct {
@@ -53,22 +59,31 @@ type Module struct {
 	PortalCommands orgadmin.PortalCommands
 	PortalQueries  orgadmin.PortalQueries
 	PortalHTTP     *orgadminhttp.Portal
+	// SetupLinks are the organization setup links (operators, the public
+	// exchange, and the bearer check apiauth uses).
+	SetupLinkCommands orgadmin.SetupLinkCommands
+	SetupLinkQueries  orgadmin.SetupLinkQueries
+	SetupLinkHTTP     *orgadminhttp.SetupLinks
 }
 
 func New(deps Deps) Module {
+	links := orgadminsvc.NewSetupLinks(orgadminpg.NewSetupLinks(deps.DB), deps.SetupSecrets, deps.Issuer)
 	service := orgadminsvc.New(orgadminsvc.Deps{
+		SetupLinks: links, SetupLinkViews: links,
 		Repository: orgadminpg.New(deps.DB),
 		Users:      deps.Users, UserQueries: deps.UserQueries,
 		Organizations: deps.Organizations, OrganizationViews: deps.OrganizationViews,
-		Domains: deps.Domains, DomainViews: deps.DomainViews,
+		Domains: deps.Domains, DomainViews: deps.DomainViews, GroupViews: deps.GroupViews,
 		Grants: deps.Grants, GrantViews: deps.GrantViews,
 		ResourceViews: deps.ResourceViews, ResourceGrants: deps.ResourceGrants, ResourceGrantViews: deps.ResourceGrantViews,
 		Invitations: deps.Invitations, InvitationViews: deps.InvitationViews,
 		Connections: deps.Connections, ConnectionViews: deps.ConnectionViews,
 		Branding: deps.Branding, BrandingViews: deps.BrandingViews,
 		PasswordPolicies: deps.PasswordPolicies, PasswordPolicyViews: deps.PasswordPolicyViews,
+		Directories: deps.Directories, DirectoryViews: deps.DirectoryViews, Issuer: deps.Issuer,
 	})
 	portals := orgadminsvc.NewPortals(orgadminpg.NewPortal(deps.DB), deps.Issuer)
 	return Module{Commands: service, Queries: service, HTTP: orgadminhttp.New(service, service, deps.Caller),
-		PortalCommands: portals, PortalQueries: portals, PortalHTTP: orgadminhttp.NewPortal(portals, portals, deps.ActorID)}
+		PortalCommands: portals, PortalQueries: portals, PortalHTTP: orgadminhttp.NewPortal(portals, portals, deps.ActorID),
+		SetupLinkCommands: links, SetupLinkQueries: links, SetupLinkHTTP: orgadminhttp.NewSetupLinks(links, links, deps.ActorID)}
 }

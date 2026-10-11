@@ -284,7 +284,11 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, code, non
 	if err = verified.Claims(&claims); err != nil {
 		return federation.Claims{}, errx.Unauthorized("invalid provider identity")
 	}
-	out := federation.Claims{Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name, Picture: claims.Picture, Issuer: c.Issuer}
+	groups, err := idTokenGroups(verified, c.Options.GroupsClaim)
+	if err != nil {
+		return federation.Claims{}, errx.Unauthorized("invalid provider identity")
+	}
+	out := federation.Claims{Groups: groups, Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name, Picture: claims.Picture, Issuer: c.Issuer}
 	if c.Provider == federation.ProviderGoogle {
 		out.HostedDomain = claims.HostedDomain
 		if !c.Options.AcceptsHostedDomain(claims.HostedDomain) {
@@ -299,6 +303,47 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, code, non
 		out.Issuer = verified.Issuer // checked against the tenant above
 	}
 	return out, nil
+}
+
+// idTokenGroups reads the groups of a verified ID token from claim (default
+// "groups"): an array of strings, or one string.
+func idTokenGroups(token *oidc.IDToken, claim string) ([]string, error) {
+	if claim == "" {
+		claim = "groups"
+	}
+	var all map[string]json.RawMessage
+	if err := token.Claims(&all); err != nil {
+		return nil, err
+	}
+	return groupValues(all[claim]), nil
+}
+
+// groupValues decodes a group claim: a JSON array of strings or one string.
+// Anything else yields no groups.
+func groupValues(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var list []any
+	if json.Unmarshal(raw, &list) != nil {
+		var one string
+		if json.Unmarshal(raw, &one) != nil {
+			return nil
+		}
+		list = []any{one}
+	}
+	return federation.CleanGroups(stringValues(list))
+}
+
+// stringValues keeps the string members of a decoded JSON array.
+func stringValues(list []any) []string {
+	var out []string
+	for _, v := range list {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // flag reads email_verified, which some providers send as a string. An
@@ -333,6 +378,14 @@ func (Provider) Prepare(_ context.Context, c federation.Connection) (federation.
 // Metadata is SAML only.
 func (Provider) Metadata(context.Context, federation.Connection) ([]byte, error) {
 	return nil, errx.NotFound("SAML connection not found")
+}
+
+// Hint and VerifyUnsolicited are SAML only.
+func (Provider) Hint(string) (federation.ResponseHint, error) {
+	return federation.ResponseHint{}, errx.Validation("not a SAML connection")
+}
+func (Provider) VerifyUnsolicited(context.Context, federation.Connection, string) (federation.Claims, error) {
+	return federation.Claims{}, errx.Validation("not a SAML connection")
 }
 
 var _ federation.Provider = Provider{}

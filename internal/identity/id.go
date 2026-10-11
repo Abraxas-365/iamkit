@@ -127,6 +127,7 @@ type (
 	userKeyTag       struct{} // public key of a machine user (JWT-bearer login)
 	subscriptionTag  struct{} // event webhook subscription
 	targetTag        struct{} // action target (hook endpoint)
+	setupLinkTag     struct{} // organization setup link
 )
 
 // tagName returns a human-readable name for error messages.
@@ -193,6 +194,8 @@ func tagName[T any]() string {
 		return "subscription_id"
 	case targetTag:
 		return "target_id"
+	case setupLinkTag:
+		return "link_id"
 	default:
 		return "id"
 	}
@@ -237,6 +240,8 @@ type (
 	SubscriptionID = ID[subscriptionTag]
 	// TargetID names an action target (an endpoint hooks call).
 	TargetID = ID[targetTag]
+	// SetupLinkID names an organization setup link.
+	SetupLinkID = ID[setupLinkTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -273,6 +278,7 @@ func NewAccessTokenID() AccessTokenID     { return NewID[accessTokenTag]() }
 func NewUserKeyID() UserKeyID             { return NewID[userKeyTag]() }
 func NewSubscriptionID() SubscriptionID   { return NewID[subscriptionTag]() }
 func NewTargetID() TargetID               { return NewID[targetTag]() }
+func NewSetupLinkID() SetupLinkID         { return NewID[setupLinkTag]() }
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -310,6 +316,7 @@ func ParseAccessTokenID(raw string) (AccessTokenID, error)   { return ParseID[ac
 func ParseUserKeyID(raw string) (UserKeyID, error)           { return ParseID[userKeyTag](raw) }
 func ParseSubscriptionID(raw string) (SubscriptionID, error) { return ParseID[subscriptionTag](raw) }
 func ParseTargetID(raw string) (TargetID, error)             { return ParseID[targetTag](raw) }
+func ParseSetupLinkID(raw string) (SetupLinkID, error)       { return ParseID[setupLinkTag](raw) }
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.
 func MustParseEnvironmentID(raw string) EnvironmentID   { return MustParseID[environmentTag](raw) }
@@ -346,3 +353,4 @@ func MustParseAccessTokenID(raw string) AccessTokenID   { return MustParseID[acc
 func MustParseUserKeyID(raw string) UserKeyID           { return MustParseID[userKeyTag](raw) }
 func MustParseSubscriptionID(raw string) SubscriptionID { return MustParseID[subscriptionTag](raw) }
 func MustParseTargetID(raw string) TargetID             { return MustParseID[targetTag](raw) }
+func MustParseSetupLinkID(raw string) SetupLinkID       { return MustParseID[setupLinkTag](raw) }

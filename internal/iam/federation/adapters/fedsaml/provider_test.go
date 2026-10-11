@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -220,4 +221,111 @@ func TestCertificateStableAcrossReplicas(t *testing.T) {
 	if a, b := cert(), cert(); a == "" || a != b {
 		t.Fatal("certificate differs between replicas")
 	}
+}
+
+func groupsOf(t *testing.T, options federation.Options, user samltest.User) []string {
+	t.Helper()
+	p, idp, c := setup(t, options)
+	user.NameID, user.NameIDFormat, user.Email = "u-1", string(saml.PersistentNameIDFormat), "e@example.com"
+	form := login(t, p, idp, c, "n", user)
+	claims, err := p.Verify(context.Background(), c, form.SAMLResponse, "n", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return claims.Groups
+}
+
+func TestGroups(t *testing.T) {
+	// Default attribute names; every value of a multi-valued attribute.
+	got := groupsOf(t, federation.Options{}, samltest.User{MultiAttributes: map[string][]string{"groups": {"eng", " ops ", "eng", ""}}})
+	if !slices.Equal(got, []string{"eng", "ops"}) {
+		t.Fatalf("groups: %q", got)
+	}
+	got = groupsOf(t, federation.Options{}, samltest.User{MultiAttributes: map[string][]string{"memberOf": {"cn=a", "cn=b"}}})
+	if !slices.Equal(got, []string{"cn=a", "cn=b"}) {
+		t.Fatalf("memberOf: %q", got)
+	}
+	ms := "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"
+	got = groupsOf(t, federation.Options{}, samltest.User{MultiAttributes: map[string][]string{ms: {"guid-1", "guid-2"}}})
+	if !slices.Equal(got, []string{"guid-1", "guid-2"}) {
+		t.Fatalf("microsoft claim: %q", got)
+	}
+	// A configured attribute replaces the defaults.
+	user := samltest.User{MultiAttributes: map[string][]string{"roles": {"x", "y"}, "groups": {"ignored"}}}
+	got = groupsOf(t, federation.Options{Attributes: &federation.AttributeMapping{Groups: "roles"}}, user)
+	if !slices.Equal(got, []string{"x", "y"}) {
+		t.Fatalf("configured: %q", got)
+	}
+	if got = groupsOf(t, federation.Options{}, samltest.User{Attributes: map[string]string{"other": "v"}}); len(got) != 0 {
+		t.Fatalf("no groups attribute: %q", got)
+	}
+}
+
+func unsolicited(t *testing.T, idp *samltest.IdP, c federation.Connection, user samltest.User) samltest.Form {
+	t.Helper()
+	sp := federation.SAMLServiceProvider(issuer, c.Environment, c.ID)
+	form, err := idp.Unsolicited(sp.EntityID, "", user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return form
+}
+
+func TestVerifyUnsolicited(t *testing.T) {
+	p, idp, c := setup(t, federation.Options{})
+	ctx := context.Background()
+	user := samltest.User{NameID: "u-1", NameIDFormat: string(saml.PersistentNameIDFormat), Email: "e@example.com"}
+
+	claims, err := p.VerifyUnsolicited(ctx, c, unsolicited(t, idp, c, user).SAMLResponse)
+	if err != nil || claims.Assertion == "" || claims.Issuer != idp.EntityID() {
+		t.Fatalf("valid: %+v %v", claims, err)
+	}
+
+	refused := map[string]func(*saml.Assertion){
+		"no audience restriction": func(a *saml.Assertion) { a.Conditions.AudienceRestrictions = nil },
+		"empty audience":          func(a *saml.Assertion) { a.Conditions.AudienceRestrictions = []saml.AudienceRestriction{{}} },
+		"foreign audience": func(a *saml.Assertion) {
+			a.Conditions.AudienceRestrictions = []saml.AudienceRestriction{{Audience: saml.Audience{Value: "https://other.example.com"}}}
+		},
+		"solicited assertion re-wrapped": func(a *saml.Assertion) {
+			for _, sc := range a.Subject.SubjectConfirmations {
+				sc.SubjectConfirmationData.InResponseTo = "id-of-one-of-our-requests"
+			}
+		},
+	}
+	for name, edit := range refused {
+		t.Run(name, func(t *testing.T) {
+			u := user
+			u.Edit = edit
+			if _, err := p.VerifyUnsolicited(ctx, c, unsolicited(t, idp, c, u).SAMLResponse); err == nil {
+				t.Fatal("accepted")
+			}
+		})
+	}
+
+	t.Run("two assertions", func(t *testing.T) {
+		raw, _ := base64.StdEncoding.DecodeString(unsolicited(t, idp, c, user).SAMLResponse)
+		xml := string(raw)
+		start := strings.Index(xml, "<saml:Assertion")
+		end := strings.Index(xml, "</saml:Assertion>") + len("</saml:Assertion>")
+		if start < 0 || end < start {
+			t.Fatalf("no assertion in %s", xml)
+		}
+		doubled := xml[:end] + xml[start:end] + xml[end:]
+		if n := fedsaml.CountAssertions([]byte(doubled)); n != 2 {
+			t.Fatalf("count = %d", n)
+		}
+		if n := fedsaml.CountAssertions(raw); n != 1 {
+			t.Fatalf("count of the original = %d", n)
+		}
+		if _, err := p.VerifyUnsolicited(ctx, c, base64.StdEncoding.EncodeToString([]byte(doubled))); err == nil {
+			t.Fatal("two assertions accepted")
+		}
+	})
+
+	t.Run("solicited response", func(t *testing.T) {
+		if _, err := p.VerifyUnsolicited(ctx, c, login(t, p, idp, c, "n", user).SAMLResponse); err == nil {
+			t.Fatal("a response to a request was accepted as unsolicited")
+		}
+	})
 }

@@ -157,21 +157,64 @@ export async function userInfo(environment: string, signal?: AbortSignal): Promi
 
 export interface Page<T> { items: T[]; page: { total: number; limit: number; offset: number } }
 
+/** Setup is a setup-link session: the bearer the public exchange answered,
+ * limited to the link's intents. It has no refresh: when it ends the link
+ * must be opened again. */
+export interface Setup {
+  access_token: string; expires_at: number; organization_id: string; organization_name: string; intents: string[]
+}
+
+const setupKey = (environment: string) => `iamkit-org-admin-setup:${environment}`
+
+export function readSetup(environment: string): Setup | null {
+  try {
+    const raw = sessionStorage.getItem(setupKey(environment))
+    const setup = raw ? JSON.parse(raw) as Setup : null
+    return setup && setup.expires_at > Date.now() ? setup : null
+  } catch { return null }
+}
+export function clearSetup(environment: string) { sessionStorage.removeItem(setupKey(environment)) }
+
+/** exchangeSetup swaps the setup link's secret (the URL fragment) for the
+ * session bearer. The answer is kept in sessionStorage for this tab only. */
+export function exchangeSetup(environment: string, secret: string): Promise<Setup> {
+  return fetch('/identity/v1/org-admin/setup', { method: 'POST', credentials: 'omit', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: secret }) })
+    .then(async res => {
+      const body = await res.json().catch(() => null)
+      if (!res.ok || !body?.access_token) throw new PortalError(res.status || 400, res.status === 401 ? t('This setup link is invalid, has expired or was revoked.') : (body?.error?.message || t('The setup link could not be opened. Try again.')))
+      if (body.environment_id && body.environment_id !== environment) throw new PortalError(401, t('This setup link is invalid, has expired or was revoked.'))
+      const setup: Setup = {
+        access_token: body.access_token, expires_at: Date.now() + (Number(body.expires_in) || 300) * 1000,
+        organization_id: body.organization_id, organization_name: body.organization_name ?? '', intents: body.intents ?? [],
+      }
+      sessionStorage.setItem(setupKey(environment), JSON.stringify(setup))
+      return setup
+    })
+}
+
 /** Client calls the organization's /admin routes with the bearer token,
- * refreshing it once on expiry. `onExpired` runs when the session is gone. */
+ * refreshing it once on expiry. `onExpired` runs when the session is gone.
+ * With `setup` it sends the setup session's bearer instead and never
+ * refreshes. */
 export class Client {
-  constructor(private environment: string, private portal: Portal, public organization: string, private onExpired: () => void) {}
+  constructor(private environment: string, private portal: Portal, public organization: string, private onExpired: () => void, private setup = false) {}
+
+  private expire() {
+    if (this.setup) clearSetup(this.environment)
+    this.onExpired()
+  }
 
   get base() { return `/api/v1/environments/${this.environment}/organizations/${this.organization}/admin` }
 
   async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
-    const tokens = readTokens(this.environment)
-    if (!tokens) { this.onExpired(); throw new PortalError(401, t('Your session ended. Sign in again.')) }
+    const tokens = this.setup ? readSetup(this.environment) : readTokens(this.environment)
+    if (!tokens) { this.expire(); throw new PortalError(401, this.setup ? t('This setup link is invalid, has expired or was revoked.') : t('Your session ended. Sign in again.')) }
     const res = await fetch(`${this.base}${path}`, {
       ...init, credentials: 'omit',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokens.access_token}`, ...init.headers },
     })
-    if (res.status === 401 && retry) {
+    if (res.status === 401 && this.setup) this.expire()
+    else if (res.status === 401 && retry) {
       if (await refresh(this.environment, this.portal.client_id)) return this.request<T>(path, init, false)
       this.onExpired()
     }

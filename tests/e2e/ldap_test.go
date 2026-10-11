@@ -160,3 +160,39 @@ func TestLDAPStartTLSAnonymous(t *testing.T) {
 		}
 	}
 }
+
+// TestLDAPGroupMapping: memberOf values map to organization groups at every
+// directory sign-in.
+func TestLDAPGroupMapping(t *testing.T) {
+	e := newEnv(t, loopbackLDAP())
+	dir := directory(t, true)
+	dn := "uid=dora," + ldapBase
+	if !dir.SetAttribute(dn, "memberOf", "cn=eng,ou=groups,dc=example,dc=com") {
+		t.Fatal("no entry")
+	}
+	e.Grant(e.Org, e.Alice, e.Res)
+	groups := e.Base + "/organizations/" + e.Org + "/groups"
+	eng := e.ID("POST", groups, fiber.Map{"name": "Engineering"})
+	writer := e.ID("POST", e.Base+"/roles", fiber.Map{"name": "writer", "resource_id": e.Res, "permissions": []string{"invoices:write"}})
+	e.Must("POST", e.Base+"/group-role-assignments", e.Owner, fiber.Map{"role_id": writer, "organization_id": e.Org, "group_id": eng}, 204)
+	domain := e.ID("POST", e.Base+"/organizations/"+e.Org+"/domains", fiber.Map{"domain": "example.com"})
+	e.Must("POST", e.Base+"/organizations/"+e.Org+"/domains/"+domain+"/force-verify", e.Owner, nil, 200)
+	conn := e.ID("POST", e.Base+"/federation-connections", fiber.Map{"organization_id": e.Org, "name": "AD", "provider": "ldap", "client_secret": "service-pass",
+		"group_mappings": []fiber.Map{{"value": "cn=eng,ou=groups,dc=example,dc=com", "group_id": eng}},
+		"options":        fiber.Map{"url": dir.URL, "bind_dn": "cn=iam,dc=example,dc=com", "user_base_dn": ldapBase, "ca_pem": dir.CA}})
+	login := func() Response {
+		return e.Do("POST", "/identity/v1/federation/ldap/login", "", fiber.Map{"environment_id": e.EnvID, "organization_id": e.Org, "application_id": e.Client, "resource_id": e.Res, "connection_id": conn, "email": "dora@example.com", "password": "dora-pass"})
+	}
+	r := login()
+	if r.Status != 200 || !equal(e.permissions(r.JSON["access_token"].(string)), []string{"invoices:write"}) {
+		t.Fatalf("first login: %d %s", r.Status, r.Body)
+	}
+	dir.SetAttribute(dn, "memberOf")
+	if r = login(); r.Status != 403 {
+		t.Fatalf("login without the group: %d %s", r.Status, r.Body)
+	}
+	var n int
+	if err := e.DB.Get(&n, `SELECT count(*) FROM group_members WHERE group_id=$1`, eng); err != nil || n != 0 {
+		t.Fatalf("members after the group left the directory: %d %v", n, err)
+	}
+}

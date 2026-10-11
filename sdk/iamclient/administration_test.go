@@ -501,6 +501,30 @@ func TestFederationProviderOptionsWire(t *testing.T) {
 	if _, ok := body["client_secret"]; ok {
 		t.Fatalf("saml body has a secret: %v", body)
 	}
+	_, err = env.CreateFederation(ctx, Federation{Name: "Okta", Provider: ProviderSAML, OrganizationID: "org-1",
+		Options:       &FederationOptions{MetadataURL: "https://idp/m", Attributes: &SAMLAttributes{Groups: "roles"}},
+		GroupMappings: []FederationGroupMapping{{Value: "eng", GroupID: "g-1"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mapping := body["group_mappings"].([]any)[0].(map[string]any)
+	if mapping["value"] != "eng" || mapping["group_id"] != "g-1" || body["options"].(map[string]any)["attributes"].(map[string]any)["groups"] != "roles" {
+		t.Fatalf("group mapping body = %v", body)
+	}
+	// nil keeps the mappings; an empty slice clears them.
+	if err = env.UpdateFederation(ctx, "conn-1", FederationPatch{UpdateProfile: &off}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := body["group_mappings"]; ok {
+		t.Fatalf("patch without mappings sent them: %v", body)
+	}
+	none := []FederationGroupMapping{}
+	if err = env.UpdateFederation(ctx, "conn-1", FederationPatch{GroupMappings: &none}); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := body["group_mappings"].([]any); !ok || len(v) != 0 {
+		t.Fatalf("clearing body = %v", body)
+	}
 }
 
 func TestSAMLAppRoutes(t *testing.T) {

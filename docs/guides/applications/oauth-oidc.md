@@ -98,6 +98,15 @@ loses access or is deleted — give the client a back-channel logout URL
 API: `PATCH …/oauth-clients/:id {"backchannel_logout_uri":"https://…"}`; empty
 turns it off). The URL must be HTTPS on a public address.
 
+To accept logins that start at the customer's identity provider (SAML
+[IdP-initiated login](../enterprise/saml.md#idp-initiated-login)), give the
+client a sign-in endpoint (`initiate_login_uri`; console client page; CLI
+`iam oauth-clients update CLIENT --initiate-login-uri https://app.example/login`;
+API `PATCH …/oauth-clients/:id {"initiate_login_uri":"https://…"}`). IAMKit
+redirects there with `iss`, `connection_id` and `organization_id`; your
+endpoint then redirects to `/oauth/authorize` adding `connection_id` (and
+`organization_id`) so the hosted login goes straight to that connection.
+
 When a session the client signed in (through `/oauth/authorize`) ends, IAMKit
 POSTs `logout_token=<JWT>` (form-encoded) to the URL. The token is signed with
 the environment's key (verify with the JWKS), `aud` is your `client_id`, and it

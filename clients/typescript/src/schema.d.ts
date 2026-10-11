@@ -514,6 +514,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/directories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** directories lists the organization's SCIM credentials and the SCIM base URL. */
+        get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDirectories"];
+        put?: never;
+        /** createDirectory answers 201 with the credential; its secret is shown once. */
+        post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDirectories"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/directories/{credential}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDirectoriesbyCredential"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/organizations/{organization}/admin/domains": {
         parameters: {
             query?: never;
@@ -586,6 +620,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminGrantedResources"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminGroups"];
         put?: never;
         post?: never;
         delete?: never;
@@ -798,6 +848,39 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/setup-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminSetupLinks"];
+        put?: never;
+        /** createSetupLink answers 201 with the link's URL, shown once. */
+        post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminSetupLinks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/setup-links/{link}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminSetupLinksbyLink"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1262,6 +1345,38 @@ export interface paths {
         put: operations["putApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationPositionsbyId"];
         post?: never;
         delete: operations["deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationPositionsbyId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/setup-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks"];
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/setup-links/{link}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinksbyLink"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2638,6 +2753,23 @@ export interface paths {
         put?: never;
         /** AssertMFA starts the security key prompt of a pending login: pass options to navigator.credentials.get, then post the answer to /mfa/verify. */
         post: operations["postIdentityMfaWebauthn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity/v1/org-admin/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exchange answers POST /identity/v1/org-admin/setup: the link's secret for a short-lived bearer limited to the link's intents. */
+        post: operations["postIdentityOrgAdminSetup"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4211,6 +4343,38 @@ export interface paths {
         put: operations["putManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationPositionsbyId"];
         post?: never;
         delete: operations["deleteManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationPositionsbyId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/organizations/{organization}/setup-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks"];
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/organizations/{organization}/setup-links/{link}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinksbyLink"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5857,11 +6021,13 @@ export interface components {
         };
         AttributeMapping: {
             email?: string;
+            groups?: string;
             name?: string;
             subject?: string;
         };
         AttributeMappingInput: {
             email?: string;
+            groups?: string;
             name?: string;
             subject?: string;
         };
@@ -5898,6 +6064,8 @@ export interface components {
             branding: components["schemas"]["Branding"];
             /** @description UUID (empty when unset) */
             client_id: string;
+            /** @description UUID (empty when unset) */
+            connection_id?: string | null;
             connections: components["schemas"]["ConnectionSummary"][] | null;
             /** @description UUID (empty when unset) */
             environment_id: string;
@@ -5944,6 +6112,7 @@ export interface components {
         ClaimMapping: {
             email?: string;
             email_verified?: string;
+            groups?: string;
             name?: string;
             picture?: string;
             subject: string;
@@ -5951,6 +6120,7 @@ export interface components {
         ClaimMappingInput: {
             email?: string;
             email_verified?: string;
+            groups?: string;
             name?: string;
             picture?: string;
             subject?: string;
@@ -5968,6 +6138,7 @@ export interface components {
             backchannel_logout_uri?: string | null;
             grant_types?: string[] | null;
             hosted_login?: boolean | null;
+            initiate_login_uri?: string | null;
             jwks?: unknown | null;
             jwks_uri?: string | null;
             post_logout_redirect_uris?: string[] | null;
@@ -5988,6 +6159,7 @@ export interface components {
             hosted_login: boolean;
             /** @description UUID (empty when unset) */
             id: string;
+            initiate_login_uri: string;
             jwks?: unknown | null;
             jwks_uri: string;
             post_logout_redirect_uris: string[] | null;
@@ -6029,6 +6201,7 @@ export interface components {
             /** Format: date-time */
             created_at: string;
             enforcement: string;
+            group_mappings: components["schemas"]["GroupMapping"][] | null;
             /** @description UUID (empty when unset) */
             id: string;
             issuer: string;
@@ -6057,6 +6230,7 @@ export interface components {
             client_id?: string;
             client_secret?: string;
             enforcement?: string;
+            group_mappings?: components["schemas"]["GroupMappingInput"][] | null;
             issuer?: string;
             /** @description UUID (empty when unset) */
             jit_group_id?: string;
@@ -6084,6 +6258,7 @@ export interface components {
         ConnectionUpdateInput: {
             client_secret?: string | null;
             enforcement?: string | null;
+            group_mappings?: components["schemas"]["GroupMappingInput"][] | null;
             /** @description UUID (empty when unset) */
             jit_group_id?: string | null;
             jit_provisioning?: boolean | null;
@@ -6252,6 +6427,11 @@ export interface components {
             user_code: string;
             verification_uri: string;
             verification_uri_complete: string;
+        };
+        Directories: {
+            items: components["schemas"]["CredentialView"][] | null;
+            page: components["schemas"]["Page"];
+            scim_url: string;
         };
         Discovery: {
             authorization_endpoint: string;
@@ -6465,6 +6645,16 @@ export interface components {
             description?: string;
             name?: string;
         };
+        GroupMapping: {
+            /** @description UUID (empty when unset) */
+            group_id: string;
+            value: string;
+        };
+        GroupMappingInput: {
+            /** @description UUID (empty when unset) */
+            group_id?: string;
+            value?: string;
+        };
         GroupMemberView: {
             active: boolean;
             /** Format: date-time */
@@ -6517,6 +6707,7 @@ export interface components {
             /** @description UUID (empty when unset) */
             connection_id?: string;
             email?: string;
+            groups?: string[] | null;
             name?: string;
             provider?: string;
             subject?: string;
@@ -6613,6 +6804,16 @@ export interface components {
             /** @description UUID (empty when unset) */
             user_id: string;
         };
+        IssuedDirectory: {
+            /** @description UUID (empty when unset) */
+            connection_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            scim_url: string;
+            secret: string;
+        };
         IssuedKey: {
             /** Format: date-time */
             created_at: string;
@@ -6626,6 +6827,14 @@ export interface components {
             public_key: unknown | null;
             /** @description UUID (empty when unset) */
             user_id: string;
+        };
+        IssuedSetupLink: {
+            /** Format: date-time */
+            expires_at: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            intents: string[] | null;
+            url: string;
         };
         JWK: {
             alg: string;
@@ -6818,6 +7027,8 @@ export interface components {
             ca_pem?: string;
             claims?: components["schemas"]["ClaimMapping"] | null;
             domains?: string[] | null;
+            groups_claim?: string;
+            idp_initiated_client_id?: string;
             key_id?: string;
             metadata_url?: string;
             metadata_xml?: string;
@@ -6843,6 +7054,8 @@ export interface components {
             ca_pem?: string;
             claims?: components["schemas"]["ClaimMappingInput"] | null;
             domains?: string[] | null;
+            groups_claim?: string;
+            idp_initiated_client_id?: string;
             key_id?: string;
             metadata_url?: string;
             metadata_xml?: string;
@@ -7029,6 +7242,10 @@ export interface components {
         };
         PaginatedSettings: {
             items: components["schemas"]["Settings"][] | null;
+            page: components["schemas"]["Page"];
+        };
+        PaginatedSetupLink: {
+            items: components["schemas"]["SetupLink"][] | null;
             page: components["schemas"]["Page"];
         };
         PaginatedSignIn: {
@@ -7230,6 +7447,7 @@ export interface components {
             backchannel_logout_uri?: string;
             grant_types?: string[] | null;
             hosted_login?: boolean;
+            initiate_login_uri?: string;
             jwks?: unknown | null;
             jwks_uri?: string;
             post_logout_redirect_uris?: string[] | null;
@@ -7554,6 +7772,38 @@ export interface components {
             theme?: components["schemas"]["ThemeInput"];
             /** Format: date-time */
             updated_at?: string | null;
+        };
+        SetupExchangeInput: {
+            token?: string;
+        };
+        SetupLink: {
+            /** Format: date-time */
+            created_at: string;
+            created_by: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            intents: string[] | null;
+            /** Format: date-time */
+            last_used_at: string | null;
+            /** Format: date-time */
+            revoked_at: string | null;
+        };
+        SetupLinkInputInput: {
+            expires_in?: string | null;
+            intents?: string[] | null;
+        };
+        SetupSession: {
+            access_token: string;
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            expires_in: number;
+            intents: string[] | null;
+            /** @description UUID (empty when unset) */
+            organization_id: string;
+            organization_name: string;
+            token_type: string;
         };
         SignIn: {
             all_connections: boolean;
@@ -10161,6 +10411,135 @@ export interface operations {
             };
         };
     };
+    getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDirectories: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Directories"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDirectories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedDirectory"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDirectoriesbyCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                credential: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminDomains: {
         parameters: {
             query?: {
@@ -10403,6 +10782,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginatedResourceGrant"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminGroups: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedGroup"];
                 };
             };
             /** @description Client error */
@@ -11181,6 +11606,135 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PaginatedRole"];
                 };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminSetupLinks: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedSetupLink"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminSetupLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedSetupLink"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminSetupLinksbyLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                link: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Client error */
             "4XX": {
@@ -13234,6 +13788,139 @@ export interface operations {
                 environment: string;
                 organization: string;
                 id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedSetupLink"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SetupLinkInputInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedSetupLink"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinksbyLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                link: string;
             };
             cookie?: never;
         };
@@ -18529,6 +19216,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WebAuthnOptions"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postIdentityOrgAdminSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SetupExchangeInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupSession"];
                 };
             };
             /** @description Client error */
@@ -25525,6 +26255,139 @@ export interface operations {
                 environment: string;
                 organization: string;
                 id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedSetupLink"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SetupLinkInputInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssuedSetupLink"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentOrganizationsbyOrganizationSetupLinksbyLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                link: string;
             };
             cookie?: never;
         };

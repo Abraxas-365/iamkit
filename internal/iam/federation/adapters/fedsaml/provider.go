@@ -269,6 +269,124 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, response,
 	return Claims(c, assertion)
 }
 
+// hintResponse is the part of a SAML response Hint reads.
+type hintResponse struct {
+	InResponseTo string `xml:"InResponseTo,attr"`
+	Assertions   []struct {
+		Conditions struct {
+			Restrictions []struct {
+				Audiences []string `xml:"urn:oasis:names:tc:SAML:2.0:assertion Audience"`
+			} `xml:"urn:oasis:names:tc:SAML:2.0:assertion AudienceRestriction"`
+		} `xml:"urn:oasis:names:tc:SAML:2.0:assertion Conditions"`
+	} `xml:"urn:oasis:names:tc:SAML:2.0:assertion Assertion"`
+}
+
+// Hint reads the audiences and InResponseTo of a base64 SAML response
+// without verifying it, to find the connection it is addressed to. Encrypted
+// assertions hide their audience: such a response names no connection.
+func (Provider) Hint(response string) (federation.ResponseHint, error) {
+	var out federation.ResponseHint
+	invalid := errx.Unauthorized("invalid SAML response")
+	raw, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(response), ""))
+	if err != nil || xrv.Validate(bytes.NewReader(raw)) != nil {
+		return out, invalid
+	}
+	var parsed hintResponse
+	if err = xml.Unmarshal(raw, &parsed); err != nil {
+		return out, invalid
+	}
+	out.InResponseTo = parsed.InResponseTo
+	for _, a := range parsed.Assertions {
+		for _, r := range a.Conditions.Restrictions {
+			out.Audiences = append(out.Audiences, r.Audiences...)
+		}
+	}
+	return out, nil
+}
+
+// VerifyUnsolicited checks an IdP-initiated response like Verify checks a
+// solicited one — signature by the connection's identity provider, issuer,
+// audience, destination, validity window — except that no request is
+// answered (crewjam's AllowIDPInitiated). Only the assertion's ID and
+// replay window come back: no identity is read, because nobody is signed in
+// from an unsolicited response.
+func (p Provider) VerifyUnsolicited(ctx context.Context, c federation.Connection, response string) (claims federation.Claims, err error) {
+	sp, err := p.serviceProvider(ctx, c)
+	if err != nil {
+		return claims, err
+	}
+	sp.AllowIDPInitiated = true
+	raw, err := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(response), ""))
+	if err != nil {
+		return claims, errx.Unauthorized("invalid SAML response")
+	}
+	defer func() {
+		if recover() != nil {
+			claims, err = federation.Claims{}, errx.Unauthorized("invalid SAML response")
+		}
+	}()
+	// crewjam returns the first valid assertion and passes one without an
+	// AudienceRestriction: an unsolicited response is checked more strictly.
+	if countAssertions(raw) != 1 {
+		return claims, errx.Unauthorized("invalid SAML response")
+	}
+	assertion, err := sp.ParseXMLResponse(raw, []string{""}, sp.AcsURL)
+	if err != nil {
+		return claims, errx.Wrap(err, "invalid SAML response", errx.TypeAuthorization)
+	}
+	if assertion.Conditions == nil || assertion.ID == "" || assertion.Subject == nil || !audienceNamed(assertion, sp.EntityID) {
+		return claims, errx.Unauthorized("invalid SAML response")
+	}
+	// A response to one of our requests (a solicited assertion re-wrapped as
+	// unsolicited) names it in the confirmation data: never accepted here.
+	for _, confirmation := range assertion.Subject.SubjectConfirmations {
+		if confirmation.SubjectConfirmationData == nil || confirmation.SubjectConfirmationData.InResponseTo != "" {
+			return claims, errx.Unauthorized("invalid SAML response")
+		}
+	}
+	claims = federation.Claims{Issuer: c.Issuer, Assertion: assertion.ID, AssertionExpires: assertion.Conditions.NotOnOrAfter.Add(saml.MaxClockSkew)}
+	if claims.AssertionExpires.Before(time.Now().Add(config.FederationStateTTL)) {
+		claims.AssertionExpires = time.Now().Add(config.FederationStateTTL)
+	}
+	return claims, nil
+}
+
+// countAssertions counts the Assertion and EncryptedAssertion children of
+// the response element: an unsolicited response carries exactly one.
+func countAssertions(raw []byte) int {
+	decoder := xml.NewDecoder(bytes.NewReader(raw))
+	depth, count := 0, 0
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			return count
+		}
+		switch t := token.(type) {
+		case xml.StartElement:
+			if depth == 1 && t.Name.Space == "urn:oasis:names:tc:SAML:2.0:assertion" && (t.Name.Local == "Assertion" || t.Name.Local == "EncryptedAssertion") {
+				count++
+			}
+			depth++
+		case xml.EndElement:
+			depth--
+		}
+	}
+}
+
+// audienceNamed reports whether the assertion's audience restrictions name
+// the service provider (and at least one exists).
+func audienceNamed(a *saml.Assertion, entity string) bool {
+	if a.Conditions == nil {
+		return false
+	}
+	for _, restriction := range a.Conditions.AudienceRestrictions {
+		if restriction.Audience.Value == entity {
+			return true
+		}
+	}
+	return false
+}
+
 // Claims maps a verified assertion to the identity federation uses.
 func Claims(c federation.Connection, a *saml.Assertion) (federation.Claims, error) {
 	if a.Subject == nil || a.Conditions == nil || a.ID == "" {
@@ -307,6 +425,11 @@ func Claims(c federation.Connection, a *saml.Assertion) (federation.Claims, erro
 	} else if out.Name = attribute(a, nameAttributes...); out.Name == "" {
 		out.Name = strings.TrimSpace(attribute(a, givenNameAttributes...) + " " + attribute(a, surnameAttributes...))
 	}
+	groups := groupAttributes
+	if mapping.Groups != "" {
+		groups = []string{mapping.Groups}
+	}
+	out.Groups = federation.CleanGroups(attributeValues(a, groups...))
 	return out, nil
 }
 
@@ -315,7 +438,34 @@ var (
 	nameAttributes      = []string{"displayName", "urn:oid:2.16.840.1.113730.3.1.241", "http://schemas.microsoft.com/identity/claims/displayname", "cn", "urn:oid:2.5.4.3", "fullName"}
 	givenNameAttributes = []string{"givenName", "firstName", "urn:oid:2.5.4.42", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname"}
 	surnameAttributes   = []string{"sn", "surname", "lastName", "urn:oid:2.5.4.4", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname"}
+	// groupAttributes are read when options.attributes.groups is unset.
+	groupAttributes = []string{"groups", "memberOf", "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"}
 )
+
+// attributeValues returns every non-empty value of the first of names that
+// an attribute (by Name or FriendlyName, case-insensitively) carries; an
+// attribute repeated in several statements contributes all of its values.
+func attributeValues(a *saml.Assertion, names ...string) []string {
+	for _, name := range names {
+		var out []string
+		for _, statement := range a.AttributeStatements {
+			for _, attr := range statement.Attributes {
+				if !strings.EqualFold(attr.Name, name) && !strings.EqualFold(attr.FriendlyName, name) {
+					continue
+				}
+				for _, v := range attr.Values {
+					if s := strings.TrimSpace(v.Value); s != "" {
+						out = append(out, s)
+					}
+				}
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return nil
+}
 
 // attribute returns the first non-empty value of the first attribute whose
 // Name or FriendlyName matches one of names (case-insensitively).

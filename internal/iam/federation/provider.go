@@ -132,6 +132,14 @@ type Options struct {
 	NameIDFormat string            `json:"name_id_format,omitempty"`
 	Attributes   *AttributeMapping `json:"attributes,omitempty"`
 	SignRequests bool              `json:"sign_requests,omitempty"`
+	// IdPInitiatedClientID is the OAuth client (of this environment, with an
+	// initiate_login_uri) that IdP-initiated responses of a SAML connection
+	// are handed to. Empty: unsolicited responses are refused.
+	IdPInitiatedClientID string `json:"idp_initiated_client_id,omitempty"`
+	// GroupsClaim is the ID token claim holding the user's groups (an array
+	// of strings, or one string) on an OpenID Connect connection; "" reads
+	// "groups". The values feed the connection's group mappings.
+	GroupsClaim string `json:"groups_claim,omitempty"`
 	// URL is an LDAP directory (ldaps://host[:port], or ldap:// with
 	// StartTLS); BindDN is the service account that searches it (its
 	// password is the connection's client_secret; neither means an
@@ -151,16 +159,19 @@ type Options struct {
 // persistent (a transient NameID changes every sign-in). Email and Name
 // empty look for the usual attributes (mail, email, the emailaddress and
 // name claims, displayName, givenName and sn); an email NameID is the
-// email when no attribute has it.
+// email when no attribute has it. Groups names the (multi-valued) attribute
+// holding the user's groups: SAML reads groups, memberOf and the Microsoft
+// groups claim when it is empty, LDAP reads memberOf.
 type AttributeMapping struct {
 	Subject string `json:"subject,omitempty"`
 	Email   string `json:"email,omitempty"`
 	Name    string `json:"name,omitempty"`
+	Groups  string `json:"groups,omitempty"`
 }
 
 // SAML reports whether the options configure a SAML connection.
 func (o Options) SAML() bool {
-	return o.MetadataURL != "" || o.MetadataXML != "" || o.NameIDFormat != "" || o.SignRequests
+	return o.MetadataURL != "" || o.MetadataXML != "" || o.NameIDFormat != "" || o.SignRequests || o.IdPInitiatedClientID != ""
 }
 
 // LDAP reports whether the options configure an LDAP connection.
@@ -230,7 +241,7 @@ func validAttributes(a *AttributeMapping) error {
 	if a == nil {
 		return nil
 	}
-	for _, name := range []string{a.Subject, a.Email, a.Name} {
+	for _, name := range []string{a.Subject, a.Email, a.Name, a.Groups} {
 		if len(name) > 512 || strings.ContainsFunc(name, func(r rune) bool { return r < ' ' }) {
 			return errx.Validation("options.attributes must be attribute names of at most 512 characters")
 		}
@@ -250,6 +261,11 @@ func validSAML(o Options) error {
 	}
 	if len(o.MetadataXML) > MaxMetadata {
 		return errx.Validation("options.metadata_xml is at most 512 KiB")
+	}
+	if o.IdPInitiatedClientID != "" {
+		if _, err := identity.ParseClientID(o.IdPInitiatedClientID); err != nil {
+			return errx.Validation("options.idp_initiated_client_id must be an OAuth client ID")
+		}
 	}
 	switch o.NameIDFormat {
 	case "", NameIDUnspecified, NameIDPersistent, NameIDEmail:
@@ -284,13 +300,15 @@ func SAMLServiceProvider(issuer string, environment identity.EnvironmentID, conn
 // objects, such as "data.id") holding an OAuth 2.0 user's identity. Subject
 // is required and must be stable. The email counts as verified only when
 // EmailVerified names a member that is true: without it, the email never
-// signs anyone up or links an account.
+// signs anyone up or links an account. Groups names the member holding the
+// user's groups (an array of strings).
 type ClaimMapping struct {
 	Subject       string `json:"subject"`
 	Email         string `json:"email,omitempty"`
 	EmailVerified string `json:"email_verified,omitempty"`
 	Name          string `json:"name,omitempty"`
 	Picture       string `json:"picture,omitempty"`
+	Groups        string `json:"groups,omitempty"`
 }
 
 // validClaims checks the claim mapping of an OAuth 2.0 connection.
@@ -298,7 +316,7 @@ func validClaims(m *ClaimMapping) error {
 	if m == nil || m.Subject == "" {
 		return errx.Validation("options.claims.subject is required")
 	}
-	for _, p := range []string{m.Subject, m.Email, m.EmailVerified, m.Name, m.Picture} {
+	for _, p := range []string{m.Subject, m.Email, m.EmailVerified, m.Name, m.Picture, m.Groups} {
 		if p != "" && !claimPath.MatchString(p) {
 			return errx.Validation("options.claims must be member names or dotted paths such as data.id")
 		}
@@ -394,18 +412,20 @@ func (o Options) Normalized() Options {
 	if len(o.Scopes) == 0 {
 		o.Scopes = nil
 	}
+	o.GroupsClaim = strings.TrimSpace(o.GroupsClaim)
 	o.MetadataURL, o.MetadataXML = strings.TrimSpace(o.MetadataURL), strings.TrimSpace(o.MetadataXML)
 	o.NameIDFormat = strings.ToLower(strings.TrimSpace(o.NameIDFormat))
+	o.IdPInitiatedClientID = strings.ToLower(strings.TrimSpace(o.IdPInitiatedClientID))
 	o.URL, o.BindDN, o.UserBaseDN, o.UserFilter, o.CAPEM = strings.TrimRight(strings.TrimSpace(o.URL), "/"), strings.TrimSpace(o.BindDN), strings.TrimSpace(o.UserBaseDN), strings.TrimSpace(o.UserFilter), strings.TrimSpace(o.CAPEM)
 	if o.Attributes != nil {
-		a := AttributeMapping{Subject: strings.TrimSpace(o.Attributes.Subject), Email: strings.TrimSpace(o.Attributes.Email), Name: strings.TrimSpace(o.Attributes.Name)}
+		a := AttributeMapping{Subject: strings.TrimSpace(o.Attributes.Subject), Email: strings.TrimSpace(o.Attributes.Email), Name: strings.TrimSpace(o.Attributes.Name), Groups: strings.TrimSpace(o.Attributes.Groups)}
 		o.Attributes = &a
 		if a == (AttributeMapping{}) {
 			o.Attributes = nil
 		}
 	}
 	if o.Claims != nil {
-		m := ClaimMapping{Subject: strings.TrimSpace(o.Claims.Subject), Email: strings.TrimSpace(o.Claims.Email), EmailVerified: strings.TrimSpace(o.Claims.EmailVerified), Name: strings.TrimSpace(o.Claims.Name), Picture: strings.TrimSpace(o.Claims.Picture)}
+		m := ClaimMapping{Subject: strings.TrimSpace(o.Claims.Subject), Email: strings.TrimSpace(o.Claims.Email), EmailVerified: strings.TrimSpace(o.Claims.EmailVerified), Name: strings.TrimSpace(o.Claims.Name), Picture: strings.TrimSpace(o.Claims.Picture), Groups: strings.TrimSpace(o.Claims.Groups)}
 		o.Claims = &m
 	}
 	return o
@@ -422,6 +442,14 @@ func validOptions(provider string, o Options) error {
 	case ProviderOIDC, ProviderGoogle, ProviderMicrosoft, ProviderGitHub, ProviderApple, ProviderGitLab, ProviderGitHubEnterprise, ProviderOAuth2, ProviderSAML, ProviderLDAP:
 	default:
 		return errx.Validation("provider must be oidc, google, microsoft, github, apple, gitlab, github_enterprise, oauth2, saml or ldap")
+	}
+	if o.GroupsClaim != "" {
+		if provider != ProviderOIDC && provider != ProviderGoogle && provider != ProviderMicrosoft && provider != ProviderGitLab {
+			return errx.Validation("options.groups_claim applies to oidc, google, microsoft and gitlab connections")
+		}
+		if len(o.GroupsClaim) > 512 || strings.ContainsFunc(o.GroupsClaim, func(r rune) bool { return r < ' ' }) {
+			return errx.Validation("options.groups_claim must be a claim name of at most 512 characters")
+		}
 	}
 	switch {
 	case o.Prompt == "":

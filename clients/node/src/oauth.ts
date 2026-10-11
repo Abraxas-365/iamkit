@@ -140,6 +140,12 @@ export interface AuthorizeOptions {
   scopes?: string[];
   /** Organization hint: brands the hosted pages and limits the sign-in to it. */
   organizationId?: string;
+  /**
+   * Federation connection hint: the hosted login skips the identifier step
+   * and starts this connection (the `connection_id` an IdP-initiated login
+   * sends to your sign-in endpoint). Ignored when the client cannot use it.
+   */
+  connectionId?: string;
   /** Extra query parameters (e.g. `ui_locales`). */
   extra?: Record<string, string>;
 }
@@ -200,6 +206,9 @@ export class OAuthClient {
     });
     if (options.organizationId) {
       query.set("organization_id", options.organizationId);
+    }
+    if (options.connectionId) {
+      query.set("connection_id", options.connectionId);
     }
     return `${this.http.baseUrl}/oauth/authorize?${query}`;
   }

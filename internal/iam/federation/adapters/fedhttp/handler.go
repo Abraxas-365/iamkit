@@ -2,6 +2,7 @@ package fedhttp
 
 import (
 	"net/url"
+	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -263,6 +264,15 @@ func (h *Handler) ACS(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-store")
 	c.Set("Referrer-Policy", "no-referrer")
 	state := c.FormValue("RelayState")
+	if !strings.HasPrefix(state, "ik_state_") {
+		// No pending login: an IdP-initiated response, which only ever
+		// leads to the application's sign-in endpoint.
+		to, err := h.flows.IdPInitiated(c.UserContext(), c.FormValue("SAMLResponse"), state)
+		if err != nil {
+			return err
+		}
+		return c.Redirect(to, fiber.StatusSeeOther)
+	}
 	handle, err := h.flows.Assertion(c.UserContext(), state, c.FormValue("SAMLResponse"))
 	if err != nil {
 		return err

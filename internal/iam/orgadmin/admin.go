@@ -12,9 +12,12 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
+	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 // Principal is an organization administrator acting in their organization.
@@ -23,9 +26,12 @@ type Principal struct {
 	Environment  identity.EnvironmentID
 	Organization identity.OrganizationID
 	User         identity.UserID
-	Permissions  []string
-	Action       string
-	Target       string
+	// SetupLink is set (and User zero) for the bearer of a setup link: the
+	// customer's IT administrator, who has no account.
+	SetupLink   identity.SetupLinkID
+	Permissions []string
+	Action      string
+	Target      string
 }
 
 // Has reports whether the principal holds the permission.
@@ -39,8 +45,52 @@ func (p Principal) Require(permission string) error {
 	return nil
 }
 
-// Actor is the audit actor (the administrator's user ID).
-func (p Principal) Actor() string { return p.User.String() }
+// Actor is the audit actor: the administrator's user ID, or the setup
+// link's ID (actor kind setup_link).
+func (p Principal) Actor() string {
+	if !p.SetupLink.IsZero() {
+		return p.SetupLink.String()
+	}
+	return p.User.String()
+}
+
+// Setup reports whether the principal is a setup link's bearer. Such
+// principals reach only what their intents grant.
+func (p Principal) Setup() bool { return !p.SetupLink.IsZero() }
+
+// RequireAccount refuses setup-link bearers: reads every permission-holding
+// user may do but that are not part of any setup intent (branding, password
+// policy) stay out of a link's reach.
+func (p Principal) RequireAccount() error {
+	if p.Setup() {
+		return errx.Forbidden("not available through a setup link")
+	}
+	return nil
+}
+
+// Owner reports whether the principal holds every organization permission
+// (what the org_owner role grants). Setup links never do: their bearers
+// cannot mint further access.
+func (p Principal) Owner() bool {
+	if p.Setup() {
+		return false
+	}
+	for _, permission := range authorization.OrgPermissions {
+		if !p.Has(permission) {
+			return false
+		}
+	}
+	return true
+}
+
+// RequireOwner refuses principals that do not hold every organization
+// permission.
+func (p Principal) RequireOwner() error {
+	if !p.Owner() {
+		return errx.Forbidden("only organization owners manage setup links")
+	}
+	return nil
+}
 
 // Settings are the organization fields its administrators may change;
 // activation and metadata stay with operators.
@@ -214,4 +264,41 @@ func (f EventFilter) Validate() error {
 		return errx.Validation("action must be at most 100 characters without % _ or \\")
 	}
 	return nil
+}
+
+// NewDirectory issues a SCIM credential for the organization's directory.
+// The organization is always the principal's: the body cannot name another
+// one, nor reuse a connection.
+type NewDirectory struct {
+	Name                 string  `json:"name"`
+	ExpiresIn            *string `json:"expires_in,omitempty"`
+	AdoptExistingMembers *bool   `json:"adopt_existing_members,omitempty"`
+	AdoptScope           *string `json:"adopt_scope,omitempty"`
+	MapPhone             *bool   `json:"map_phone,omitempty"`
+}
+
+// Input is the provisioning credential the request asks for in organization.
+func (n NewDirectory) Input(organization identity.OrganizationID) provisioning.CredentialInput {
+	return provisioning.CredentialInput{Name: n.Name, Organization: organization, ExpiresIn: n.ExpiresIn,
+		AdoptExistingMembers: n.AdoptExistingMembers, AdoptScope: n.AdoptScope, MapPhone: n.MapPhone}
+}
+
+func (n NewDirectory) Validate() error { return n.Input(identity.NewOrganizationID()).Validate() }
+
+// IssuedDirectory is the new credential with its secret, shown once, and the
+// SCIM base URL to point the identity provider at.
+type IssuedDirectory struct {
+	ID         identity.CredentialID `json:"id"`
+	Secret     string                `json:"secret"`
+	Expires    time.Time             `json:"expires_at"`
+	Connection identity.ConnectionID `json:"connection_id"`
+	SCIMURL    string                `json:"scim_url"`
+}
+
+// Directories are the organization's SCIM credentials (never their
+// secrets) and the base URL its identity provider is pointed at.
+type Directories struct {
+	Items   []provisioning.CredentialView `json:"items"`
+	Page    query.Page                    `json:"page"`
+	SCIMURL string                        `json:"scim_url"`
 }

@@ -77,6 +77,7 @@ const (
 func ValidRole(role string) bool {
 	return role == RoleOwner || role == RoleAdmin || role == RoleViewer
 }
+
 type Operator struct {
 	ID     identity.OperatorID `json:"id"`
 	Email  string              `json:"email"`

@@ -34,6 +34,8 @@ var (
 	ownedGrant  = identity.MustParseResourceGrantID("4e7c7a4e-3b2c-4d55-9d0a-1c1f3b2e4a01")
 	otherGrant  = identity.MustParseResourceGrantID("4e7c7a4e-3b2c-4d55-9d0a-1c1f3b2e4a02")
 	ownersGroup = identity.MustParseGroupID("2e7c7a4e-3b2c-4d55-9d0a-1c1f3b2e4a01")
+	emptyGroup  = identity.MustParseGroupID("2e7c7a4e-3b2c-4d55-9d0a-1c1f3b2e4a02")
+	powerGroup  = identity.MustParseGroupID("2e7c7a4e-3b2c-4d55-9d0a-1c1f3b2e4a03")
 
 	userManager = []string{authorization.PermOrgRead, authorization.PermOrgMembersRead, authorization.PermOrgMembersWrite,
 		authorization.PermOrgUsersWrite, authorization.PermOrgRolesRead, authorization.PermOrgRolesAssign, authorization.PermOrgInvitationsWrite}
@@ -61,10 +63,16 @@ func (r *repo) Roles(_ context.Context, _ identity.EnvironmentID, _ identity.Org
 	return out, nil
 }
 func (r *repo) GroupRoles(_ context.Context, _ identity.EnvironmentID, _ identity.OrganizationID, groups []identity.GroupID) ([]orgadmin.Role, error) {
-	if len(groups) == 1 && groups[0] == ownersGroup {
-		return []orgadmin.Role{roles[ownerRole]}, nil
+	var out []orgadmin.Role
+	for _, group := range groups {
+		switch group {
+		case ownersGroup:
+			out = append(out, roles[ownerRole])
+		case powerGroup:
+			out = append(out, roles[powerRole])
+		}
 	}
-	return nil, nil
+	return out, nil
 }
 func (r *repo) OwnedResources(context.Context, identity.EnvironmentID, identity.OrganizationID, query.Pagination) (query.Paginated[authorization.Resource], error) {
 	return query.Paginated[authorization.Resource]{}, nil
@@ -149,6 +157,9 @@ type connections struct {
 func (c *connections) Create(_ context.Context, _ federation.Mutation, input federation.ConnectionInput) (identity.ConnectionID, error) {
 	c.created = append(c.created, input)
 	return identity.NewConnectionID(), nil
+}
+func (c *connections) Update(context.Context, federation.Mutation, identity.ConnectionID, federation.ConnectionUpdate) error {
+	return nil
 }
 func (c *connections) Connection(context.Context, identity.EnvironmentID, identity.ConnectionID) (federation.ConnectionDetail, error) {
 	return c.detail, nil
@@ -397,4 +408,49 @@ func TestResourceGrantsOnlyForOwnedResources(t *testing.T) {
 	}
 	_, err = f.GrantedResources(ctx, principal(manager, authorization.PermOrgRead), query.Pagination{})
 	kind(t, err, 403)
+}
+
+func TestConnectionGroupsFollowTheAssignmentRule(t *testing.T) {
+	f := newFixture(orgadmin.Owner{User: owner, Direct: true})
+	f.connections.detail.Organization = &org
+	// A connection controlled by the administrator signs people into its
+	// groups, so every group is checked like a role assignment.
+	setup := principal(manager, authorization.PermOrgRead, authorization.PermOrgSSOWrite)
+	setup.SetupLink = identity.NewSetupLinkID()
+	for name, p := range map[string]orgadmin.Principal{
+		"admin": principal(manager, authorization.PermOrgRead, authorization.PermOrgSSOWrite),
+		"setup": setup,
+	} {
+		t.Run(name, func(t *testing.T) {
+			mapped := []federation.GroupMapping{{Value: "staff", Group: emptyGroup}, {Value: "root", Group: ownersGroup}}
+			_, err := f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", JITGroup: ownersGroup})
+			kind(t, err, 403)
+			_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", SignupGroup: powerGroup})
+			kind(t, err, 403)
+			_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", GroupMappings: mapped})
+			kind(t, err, 403)
+			id := identity.NewConnectionID()
+			kind(t, f.UpdateConnection(ctx, p, id, federation.ConnectionUpdate{JITGroup: &ownersGroup}), 403)
+			kind(t, f.UpdateConnection(ctx, p, id, federation.ConnectionUpdate{SignupGroup: &powerGroup}), 403)
+			kind(t, f.UpdateConnection(ctx, p, id, federation.ConnectionUpdate{GroupMappings: mapped}), 403)
+
+			// Groups without roles, and unset ones, pass.
+			before := len(f.connections.created)
+			if _, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", JITGroup: emptyGroup, GroupMappings: mapped[:1]}); err != nil {
+				t.Fatal(err)
+			}
+			if err = f.UpdateConnection(ctx, p, id, federation.ConnectionUpdate{JITGroup: &emptyGroup}); err != nil {
+				t.Fatal(err)
+			}
+			if len(f.connections.created) != before+1 {
+				t.Fatalf("created: %d", len(f.connections.created))
+			}
+		})
+	}
+
+	// A fully privileged owner may point a connection at the owners group.
+	all := principal(owner, authorization.OrgPermissions...)
+	if _, err := f.CreateConnection(ctx, all, federation.ConnectionInput{Name: "x", JITGroup: ownersGroup}); err != nil {
+		t.Fatalf("owner: %v", err)
+	}
 }

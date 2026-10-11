@@ -32,6 +32,9 @@ type Client struct {
 	// GrantTypes are the grants the client may use (DefaultGrantTypes
 	// unless registered otherwise).
 	GrantTypes []string
+	// InitiateLoginURI is the client's sign-in endpoint for third-party
+	// initiated logins (empty: none).
+	InitiateLoginURI string
 }
 
 // Access token formats of an OAuth client. Opaque tokens are resolved only

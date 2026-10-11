@@ -32,6 +32,9 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	}
 	s.Applications.Register(e)
 	s.ServiceAccounts.Register(e)
+	if s.SetupLinks != nil {
+		s.SetupLinks.Register(e)
+	}
 	s.administrationRoutes(e)
 	s.Impersonation.Register(e)
 	s.OAuth.RegisterManagement(e)

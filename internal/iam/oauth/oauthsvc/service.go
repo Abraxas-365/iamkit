@@ -318,6 +318,9 @@ func ValidateAuthorization(issuer string, client *oauth.Client, query map[string
 	if !client.RedirectRegistered(get("redirect_uri")) || get("response_type") != "code" || get("code_challenge_method") != "S256" || get("code_challenge") == "" || get("state") == "" || get("nonce") == "" || (get("response_mode") != "" && get("response_mode") != "query") {
 		return errx.Validation("code, exact redirect, S256, state and nonce required")
 	}
+	if _, err := oauth.ConnectionHint(query); err != nil {
+		return err
+	}
 	_, err := oauth.OrganizationHint(query)
 	return err
 }

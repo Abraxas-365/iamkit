@@ -12,7 +12,7 @@ import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
 import { ConfirmDialog, DataTable, FormDialog, ID, PageHeader, Status, type Field } from '@/components/library/patterns'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { providerLabel, oauth2Options, samlOptions, ldapOptions } from './federation-connection-form'
+import { providerLabel, oauth2Options, samlOptions, ldapOptions, oidcGroupProviders, mappingRows, GroupMappingEditor, useOrganizationGroups, type GroupMappingRow } from './federation-connection-form'
 import { formatDateTime, t } from '@/lib/i18n'
 
 export interface ConnectionDetail {
@@ -20,9 +20,10 @@ export interface ConnectionDetail {
   provider?: string; options?: {
     tenant?: string; tenants?: string[]; domains?: string[]; team_id?: string; key_id?: string; base_url?: string; prompt?: string
     authorize_url?: string; token_url?: string; userinfo_url?: string; scopes?: string[]
-    claims?: { subject?: string; email?: string; email_verified?: string; name?: string }
-    metadata_url?: string; metadata_xml?: string; name_id_format?: string; sign_requests?: boolean
-    attributes?: { subject?: string; email?: string; name?: string }
+    groups_claim?: string
+    claims?: { subject?: string; email?: string; email_verified?: string; name?: string; groups?: string }
+    metadata_url?: string; metadata_xml?: string; name_id_format?: string; sign_requests?: boolean; idp_initiated_client_id?: string
+    attributes?: { subject?: string; email?: string; name?: string; groups?: string }
     url?: string; start_tls?: boolean; bind_dn?: string; user_base_dn?: string; user_filter?: string; ca_pem?: string
   }
   saml?: { entity_id: string; acs_url: string; metadata_url: string }
@@ -30,6 +31,7 @@ export interface ConnectionDetail {
   jit_provisioning: boolean; jit_group_id: string | null; enforcement: 'optional' | 'enforced'
   signup?: boolean; link_email?: boolean; signup_organization_id?: string | null; signup_group_id?: string | null
   update_profile?: boolean; callback_url?: string; created_at: string
+  group_mappings?: GroupMappingRow[]
 }
 interface ExternalIdentity {
   connection_id: string; subject: string
@@ -68,6 +70,7 @@ export default function FederationDetailPage() {
   const [editing, setEditing] = useState(false)
   const [version, setVersion] = useState(0)
   const [enabling, setEnabling] = useState(false)
+  const [mapping, setMapping] = useState(false)
 
   useEffect(() => {
     if (!environment || !connectionId) return
@@ -127,6 +130,7 @@ export default function FederationDetailPage() {
         <InfoCard label={t('SP metadata URL')} value={conn.saml.metadata_url} mono />
         <InfoCard label={t('IdP metadata')} value={conn.options?.metadata_url || t('Pasted XML')} mono={!!conn.options?.metadata_url} />
         <InfoCard label={t('NameID / attributes')} value={`${conn.options?.name_id_format || t('unspecified')}` + (conn.options?.attributes ? ' · ' + Object.entries(conn.options.attributes).map(([k, name]) => `${k} ← ${name}`).join(', ') : '') + (conn.options?.sign_requests ? t(' · signed requests') : '')} mono />
+        <InfoCard label={t('IdP-initiated client')} value={conn.options?.idp_initiated_client_id || t('None (IdP-initiated sign-in refused)')} mono={!!conn.options?.idp_initiated_client_id} />
       </> : <InfoCard label={conn.provider === 'apple' ? t('Services ID') : t('Client ID')} value={conn.client_id} mono />}
       {conn.provider === 'microsoft' && conn.options?.tenant && <InfoCard label={t('Accounts')} value={(tenants[conn.options.tenant] ?? t('Tenant {{tenant}}', { tenant: conn.options.tenant })) + (conn.options.tenants?.length ? ' · ' + t('only {{count}} allowed tenants', { count: conn.options.tenants.length }) : '')} />}
       {conn.provider === 'apple' && <InfoCard label={t('Apple team / key')} value={`${conn.options?.team_id ?? ''} / ${conn.options?.key_id ?? ''}`} mono />}
@@ -149,6 +153,19 @@ export default function FederationDetailPage() {
         <InfoCard label={t('Email linking')} value={conn.link_email ? t("On: members on the organization's verified domains are linked by email") : t('Off')} />
       </>}
     </div>
+
+    {conn.organization_id && <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-mono text-lg font-semibold">{t('Group mapping')}</h2>
+          <p className="text-sm text-muted-foreground">{t('Members join or leave these groups at every sign-in, from the groups the identity provider sends. Other groups are never touched.')}</p>
+        </div>
+        {canWrite && conn.active && <Button variant="outline" onClick={() => setMapping(true)}><Pencil className="size-4" /> {t('Edit mapping')}</Button>}
+      </div>
+      <DataTable columns={[t('Provider value'), t('Group')]} loading={false} error="" retry={() => {}}
+        empty={<p className="text-sm text-muted-foreground">{t('No mappings: sign-ins do not change group membership.')}</p>}
+        rows={(conn.group_mappings ?? []).map(m => [<span className="break-all font-mono text-xs">{m.value}</span>, <ID value={m.group_id} />])} />
+    </div>}
 
     {/* Linked identities */}
     <div className="space-y-4">
@@ -206,6 +223,8 @@ export default function FederationDetailPage() {
       }}
     />}
 
+    {mapping && conn.organization_id && <GroupMappingDialog base={base} conn={conn} onClose={() => setMapping(false)} onSaved={() => { setMapping(false); setVersion(v => v + 1) }} />}
+
     {/* Unlink confirm */}
     {unlinking && (
       <ConfirmDialog
@@ -236,7 +255,9 @@ export function editFields(conn: ConnectionDetail, base: string): Field[] {
       { name: 'attr_subject', label: t('User ID attribute'), optional: true, value: o.attributes?.subject ?? '', hint: t('Required with transient NameIDs.') },
       { name: 'attr_email', label: t('Email attribute'), optional: true, value: o.attributes?.email ?? '' },
       { name: 'attr_name', label: t('Name attribute'), optional: true, value: o.attributes?.name ?? '' },
+      { name: 'attr_groups', label: t('Groups attribute'), optional: true, value: o.attributes?.groups ?? '', hint: t('Multi-valued attribute with the user\'s groups. Empty tries groups, memberOf and the Microsoft groups claim.') },
       { name: 'sign_requests', label: t('Sign authentication requests'), type: 'checkbox', value: !!o.sign_requests },
+      { name: 'idp_initiated_client_id', label: t('IdP-initiated sign-in client'), optional: true, value: o.idp_initiated_client_id ?? '', hint: t('OAuth client ID with an initiate login URI. Empty refuses IdP-initiated responses.') },
     )
   } else if (conn.provider === 'ldap') {
     const o = conn.options ?? {}
@@ -251,6 +272,7 @@ export function editFields(conn: ConnectionDetail, base: string): Field[] {
       { name: 'attr_subject', label: t('User ID attribute'), optional: true, value: o.attributes?.subject ?? '', hint: t('Empty: objectGUID, entryUUID, else the DN.') },
       { name: 'attr_email', label: t('Email attribute'), optional: true, value: o.attributes?.email ?? '' },
       { name: 'attr_name', label: t('Name attribute'), optional: true, value: o.attributes?.name ?? '' },
+      { name: 'attr_groups', label: t('Groups attribute'), optional: true, value: o.attributes?.groups ?? '', hint: t('Empty: memberOf.') },
     )
   } else fields.push(
     { name: 'client_secret', label: apple ? t('New private key (.p8)') : conn.secret_source === 'sealed' ? t('New client secret') : t('Client secret (replaces env variable)'), type: 'password', optional: true, hint: apple ? t('Paste the whole key, including the BEGIN and END lines. Stored encrypted.') : t('Stored encrypted.') },
@@ -265,6 +287,9 @@ export function editFields(conn: ConnectionDetail, base: string): Field[] {
   if (conn.provider === 'microsoft' || conn.provider === 'google' || conn.provider === 'oidc') {
     fields.push({ name: 'prompt', label: t('Account choice'), type: 'dropdown', value: conn.options?.prompt || 'auto', options: prompts(), hint: t('What the provider shows at sign-in when the browser is already signed in to it.') })
   }
+  if (conn.organization_id && oidcGroupProviders.includes((conn.provider ?? 'oidc') as never)) {
+    fields.push({ name: 'groups_claim', label: t('Groups claim'), optional: true, value: conn.options?.groups_claim ?? '', hint: t('ID token claim with the user\'s groups (an array or a string). Empty uses "groups".') })
+  }
   if (conn.provider === 'oauth2') {
     const o = conn.options ?? {}
     fields.push(
@@ -276,6 +301,7 @@ export function editFields(conn: ConnectionDetail, base: string): Field[] {
       { name: 'claim_email', label: t('Email member'), optional: true, value: o.claims?.email ?? '' },
       { name: 'claim_email_verified', label: t('Email verified member'), optional: true, value: o.claims?.email_verified ?? '', hint: t('Empty: the email is never trusted.') },
       { name: 'claim_name', label: t('Name member'), optional: true, value: o.claims?.name ?? '' },
+      ...(conn.organization_id ? [{ name: 'claim_groups', label: t('Groups member'), optional: true, value: o.claims?.groups ?? '', hint: t('Dotted path to the user\'s groups in the user info JSON.') }] : []),
     )
   }
   fields.push({ name: 'update_profile', label: t('Keep profiles in sync'), type: 'checkbox', value: !!conn.update_profile, hint: t('Update the user\'s name, and the email of passwordless accounts, at every sign-in.') })
@@ -314,15 +340,15 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
     const str = (key: string) => typeof values[key] === 'string' ? (values[key] as string).trim() : ''
     const o = conn.options ?? {}
     const xml = str('metadata_xml'), url = str('metadata_url')
-    const next = samlOptions({ metadata_url: url, metadata_xml: xml || (url ? '' : o.metadata_xml ?? ''), name_id_format: str('name_id_format'), attr_subject: str('attr_subject'), attr_email: str('attr_email'), attr_name: str('attr_name'), sign_requests: values.sign_requests === true })
-    const was = samlOptions({ metadata_url: o.metadata_url ?? '', metadata_xml: o.metadata_url ? '' : o.metadata_xml ?? '', name_id_format: o.name_id_format || 'unspecified', attr_subject: o.attributes?.subject ?? '', attr_email: o.attributes?.email ?? '', attr_name: o.attributes?.name ?? '', sign_requests: !!o.sign_requests })
+    const next = samlOptions({ metadata_url: url, metadata_xml: xml || (url ? '' : o.metadata_xml ?? ''), name_id_format: str('name_id_format'), attr_subject: str('attr_subject'), attr_email: str('attr_email'), attr_name: str('attr_name'), attr_groups: str('attr_groups'), sign_requests: values.sign_requests === true, idp_initiated_client_id: str('idp_initiated_client_id') })
+    const was = samlOptions({ metadata_url: o.metadata_url ?? '', metadata_xml: o.metadata_url ? '' : o.metadata_xml ?? '', name_id_format: o.name_id_format || 'unspecified', attr_subject: o.attributes?.subject ?? '', attr_email: o.attributes?.email ?? '', attr_name: o.attributes?.name ?? '', attr_groups: o.attributes?.groups ?? '', sign_requests: !!o.sign_requests, idp_initiated_client_id: o.idp_initiated_client_id ?? '' })
     if (xml || url || JSON.stringify(next) !== JSON.stringify(was)) patch.options = next
   }
   if (conn.provider === 'ldap' && typeof values.ldap_url === 'string') {
     const str = (key: string) => typeof values[key] === 'string' ? values[key] as string : ''
     const o = conn.options ?? {}
-    const next = ldapOptions({ ldap_url: str('ldap_url'), start_tls: values.start_tls === true, bind_dn: str('bind_dn'), user_base_dn: str('user_base_dn'), user_filter: str('user_filter'), ca_pem: str('ca_pem'), attr_subject: str('attr_subject'), attr_email: str('attr_email'), attr_name: str('attr_name') })
-    const was = ldapOptions({ ldap_url: o.url ?? '', start_tls: !!o.start_tls, bind_dn: o.bind_dn ?? '', user_base_dn: o.user_base_dn ?? '', user_filter: o.user_filter ?? '', ca_pem: o.ca_pem ?? '', attr_subject: o.attributes?.subject ?? '', attr_email: o.attributes?.email ?? '', attr_name: o.attributes?.name ?? '' })
+    const next = ldapOptions({ ldap_url: str('ldap_url'), start_tls: values.start_tls === true, bind_dn: str('bind_dn'), user_base_dn: str('user_base_dn'), user_filter: str('user_filter'), ca_pem: str('ca_pem'), attr_subject: str('attr_subject'), attr_email: str('attr_email'), attr_name: str('attr_name'), attr_groups: str('attr_groups') })
+    const was = ldapOptions({ ldap_url: o.url ?? '', start_tls: !!o.start_tls, bind_dn: o.bind_dn ?? '', user_base_dn: o.user_base_dn ?? '', user_filter: o.user_filter ?? '', ca_pem: o.ca_pem ?? '', attr_subject: o.attributes?.subject ?? '', attr_email: o.attributes?.email ?? '', attr_name: o.attributes?.name ?? '', attr_groups: o.attributes?.groups ?? '' })
     if (JSON.stringify(next) !== JSON.stringify(was)) patch.options = next
     if (!next.bind_dn) delete patch.client_secret
   }
@@ -331,13 +357,17 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
     const next = oauth2Options({
       authorize_url: str('authorize_url'), token_url: str('token_url'), userinfo_url: str('userinfo_url'),
       scopes: str('scopes').split(',').map(part => part.trim()).filter(Boolean),
-      claim_subject: str('claim_subject'), claim_email: str('claim_email'), claim_email_verified: str('claim_email_verified'), claim_name: str('claim_name'),
+      claim_subject: str('claim_subject'), claim_email: str('claim_email'), claim_email_verified: str('claim_email_verified'), claim_name: str('claim_name'), claim_groups: str('claim_groups'),
     })
     const was = conn.options ?? {}
     if (JSON.stringify(next) !== JSON.stringify(oauth2Options({
       authorize_url: was.authorize_url ?? '', token_url: was.token_url ?? '', userinfo_url: was.userinfo_url ?? '', scopes: was.scopes ?? [],
-      claim_subject: was.claims?.subject ?? '', claim_email: was.claims?.email ?? '', claim_email_verified: was.claims?.email_verified ?? '', claim_name: was.claims?.name ?? '',
+      claim_subject: was.claims?.subject ?? '', claim_email: was.claims?.email ?? '', claim_email_verified: was.claims?.email_verified ?? '', claim_name: was.claims?.name ?? '', claim_groups: was.claims?.groups ?? '',
     }))) patch.options = next
+  }
+  if (typeof values.groups_claim === 'string' && values.groups_claim.trim() !== (conn.options?.groups_claim ?? '')) {
+    const { groups_claim: _, ...rest } = (patch.options ?? conn.options ?? {}) as Record<string, unknown>
+    patch.options = values.groups_claim.trim() ? { ...rest, groups_claim: values.groups_claim.trim() } : rest
   }
   if (values.update_profile !== undefined && values.update_profile !== !!conn.update_profile) patch.update_profile = values.update_profile
   if (typeof values.prompt === 'string') {
@@ -363,6 +393,40 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
     if (values.enforcement !== conn.enforcement) patch.enforcement = values.enforcement
   }
   return patch
+}
+
+// GroupMappingDialog edits the connection's group mappings; saving sends
+// the whole list (an empty one clears it).
+function GroupMappingDialog({ base, conn, onClose, onSaved }: { base: string; conn: ConnectionDetail; onClose: () => void; onSaved: () => void }) {
+  const [rows, setRows] = useState<GroupMappingRow[]>(conn.group_mappings ?? [])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const groups = useOrganizationGroups(base, conn.organization_id ?? '')
+  return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}>
+    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogTitle className="text-base font-semibold">{t('Group mapping')}</DialogTitle>
+      <DialogDescription className="text-muted-foreground">{t('Send a value of the identity provider\'s groups to an operator-managed group of the organization. Groups managed by a SCIM directory cannot be mapped.')}</DialogDescription>
+      <form className="space-y-4" onSubmit={async e => {
+        e.preventDefault()
+        if (busy) return
+        const filled = mappingRows(rows)
+        if (filled.length !== rows.length) { setError(t('Fill in the value and the group of every mapping, or remove it.')); return }
+        setBusy(true); setError('')
+        try {
+          await api.patch(`${base}/federation-connections/${conn.id}`, { group_mappings: filled })
+          toast.success(t('Group mapping saved'))
+          onSaved()
+        } catch (err) { setError(message(err)) } finally { setBusy(false) }
+      }}>
+        <GroupMappingEditor id="mapping" groups={groups} rows={rows} onChange={setRows} disabled={busy} />
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <div className="flex justify-end gap-2 border-t pt-4">
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('Cancel')}</Button>
+          <Button type="submit" disabled={busy}>{busy ? t('Saving…') : t('Save')}</Button>
+        </div>
+      </form>
+    </DialogContent>
+  </Dialog>
 }
 
 function InfoCard({ label, value, mono }: { label: string; value: string; mono?: boolean }) {

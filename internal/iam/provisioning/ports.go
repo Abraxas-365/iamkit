@@ -55,17 +55,24 @@ type GroupRepository interface {
 type ControlCommands interface {
 	Issue(ctx context.Context, m Mutation, input CredentialInput) (Credential, error)
 	Revoke(ctx context.Context, m Mutation, credential identity.CredentialID) error
+	// RevokeOrganization revokes a credential only when it belongs to the
+	// organization (404 otherwise).
+	RevokeOrganization(ctx context.Context, m Mutation, organization identity.OrganizationID, credential identity.CredentialID) error
 	Link(ctx context.Context, m Mutation, input Link) error
 }
 type ControlQueries interface {
 	Credentials(ctx context.Context, environment identity.EnvironmentID) ([]CredentialView, error)
+	// OrganizationCredentials lists one organization's credentials (revoked ones included).
+	OrganizationCredentials(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[CredentialView], error)
 }
 
 type ControlRepository interface {
 	IssueCredential(ctx context.Context, m Mutation, input CredentialInput, cred Credential, hash []byte, create bool) error
 	RevokeCredential(ctx context.Context, m Mutation, credential identity.CredentialID) error
+	RevokeOrganizationCredential(ctx context.Context, m Mutation, organization identity.OrganizationID, credential identity.CredentialID) error
 	Link(ctx context.Context, m Mutation, input Link) error
 	Credentials(ctx context.Context, environment identity.EnvironmentID) ([]CredentialView, error)
+	OrganizationCredentials(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[CredentialView], error)
 }
 type Generator interface {
 	Generate(prefix string) (string, []byte, error)

@@ -57,7 +57,9 @@ Options:
 | `attributes.subject` | Attribute with a stable user ID. Without it the NameID is the subject. Required with `transient` (transient NameIDs change at every login). |
 | `attributes.email` | Attribute with the email. Default: `email`, `mail`, `emailaddress`, `urn:oid:0.9.2342.19200300.100.1.3`, the WS-Federation email claim, then an `email`-format NameID. |
 | `attributes.name` | Attribute with the display name. Default: `displayName`, `cn`, the WS-Federation display name, or `givenName` + `sn`. |
+| `attributes.groups` | Multi-valued attribute with the user's groups, all values read, for [group mapping](federation.md#group-mapping). Default: `groups`, `memberOf`, then `http://schemas.microsoft.com/ws/2008/06/identity/claims/groups`. Okta: a group attribute statement; Entra ID: a groups claim (object IDs unless set to names). |
 | `sign_requests` | Sign AuthnRequests (RSA-SHA256) for IdPs that require it. |
+| `idp_initiated_client_id` | OAuth client (with an `initiate_login_uri`) that [IdP-initiated](#idp-initiated-login) responses are handed to. Unset: they are refused. |
 
 Attribute names match an attribute's `Name` or `FriendlyName`,
 case-insensitively. The connection's `issuer` is the IdP entity ID and
@@ -103,8 +105,9 @@ IAMKit accepts a response only if:
 
 - the response or the assertion is signed by a certificate in the IdP
   metadata (XML signature wrapping is refused);
-- it answers this login's AuthnRequest (`InResponseTo`) — IdP-initiated
-  logins are not accepted;
+- it answers this login's AuthnRequest (`InResponseTo`) — a response with no
+  RelayState state is handled as [IdP-initiated](#idp-initiated-login), which
+  never signs anybody in;
 - its audience is the SP entity ID, its destination/recipient the ACS URL,
   and it is within `NotBefore`/`NotOnOrAfter` (with a small clock skew);
 - its assertion ID was never used on this connection (replays are refused);
@@ -112,6 +115,89 @@ IAMKit accepts a response only if:
 
 Encrypted assertions are decrypted with the environment key. Every refusal is
 a 401 on the callback.
+
+## IdP-initiated login
+
+Users also start at the identity provider: they click the IAMKit app tile in
+Okta or Entra ID, which posts an *unsolicited* response (no `InResponseTo`) to
+the ACS. IAMKit handles this the way WorkOS does — **an unsolicited response
+never creates a session**. IAMKit verifies it completely, spends its assertion
+ID, and redirects the browser to your application's sign-in endpoint, which
+starts an ordinary SP-initiated login.
+
+Set it up:
+
+1. Give an OAuth client of your application a **sign-in endpoint**
+   (`initiate_login_uri`: HTTPS, or http on localhost; the console client
+   page → **IdP-initiated sign-in**, or
+   `iam oauth-clients update CLIENT --initiate-login-uri https://app.example/login`).
+2. Name that client on the connection (`options.idp_initiated_client_id`;
+   console connection form, org-admin portal, or
+   `iam federation update $CONN --idp-initiated-client CLIENT`). It must be an
+   active client of the environment with an `initiate_login_uri`, of an
+   application the connection's organization can use (its resource is not
+   grant-restricted, or the organization owns it or was granted it).
+   Without it, a correctly signed IdP-initiated response is refused with `400`
+   `IDP_INITIATED_DISABLED`.
+3. In the IdP, leave the SP-initiated settings as they are: the same ACS URL
+   and audience serve both. The connection is found from the response's
+   audience (the SP entity ID embeds environment and connection).
+
+The browser is then sent with `303` to
+
+```
+https://app.example/login?iss=<IAMKit issuer>&connection_id=<id>&organization_id=<id>[&target_link_uri=<uri>]
+```
+
+(parameters already on `initiate_login_uri` are kept). The endpoint starts a
+normal authorization for that connection by adding the hint to
+`/oauth/authorize`:
+
+```ts
+// GET https://app.example/login?iss=…&connection_id=…&organization_id=…
+app.get("/login", (req, res) => {
+  const { iss, connection_id, organization_id } = req.query;
+  if (iss !== process.env.IAMKIT_ISSUER) return res.status(400).send("unknown issuer");
+  const pkce = createPKCE();                       // keep the verifier + state in the session
+  res.redirect(client.authorizationUrl({
+    redirectUri: "https://app.example/callback",
+    state: randomToken(), nonce: randomToken(), codeChallenge: pkce.challenge,
+    organizationId: organization_id, connectionId: connection_id,
+  }));
+});
+```
+
+With `connection_id`, the hosted login skips the identifier step and sends the
+user straight to that connection's IdP (SP-initiated). The hint is used only
+when the connection is active, usable by the client (organization SSO
+offered; an environment connection must be one the client shows) and in the
+organization of the `organization_id` hint; otherwise the ordinary sign-in
+shows, so a stale link reveals nothing. A malformed `connection_id` is a `400`.
+The hint is followed once per sign-in: when the user comes back to the same
+sign-in page (the IdP's back button, a failed sign-in), the ordinary identifier
+page shows instead of another redirect to the IdP.
+
+Rules of the redirect:
+
+- The IdP's `RelayState` is optional and read as URL query parameters. Only
+  `client_id` (another active client of the connection's environment with an
+  `initiate_login_uri`, usable by the organization) and `redirect_uri`
+  (registered on the chosen client; sent as `target_link_uri`) are honoured;
+  everything else is ignored, and an unusable `client_id` falls back to the
+  connection's client.
+- Verification is the same as for SP-initiated responses except for
+  `InResponseTo`: signature of the connection's IdP, issuer, destination and
+  validity window. The assertion must name this service provider's entity ID in
+  an `AudienceRestriction`, the response must carry exactly one assertion, and
+  no `SubjectConfirmationData` may carry an `InResponseTo` (a response to one
+  of our requests is not unsolicited). A replayed or tampered response is `401`;
+  nothing is looked up, no user is created.
+- Nothing is revealed before the signature checks out: a response that is
+  forged, malformed, for an unknown or inactive connection, or for a
+  non-SAML one is the same `401`. Only a correctly signed response from the
+  connection's IdP gets `400` `IDP_INITIATED_DISABLED` when the option is off.
+- Each accepted response writes a `connection.idp_initiated` event and shares
+  the ACS rate limit.
 
 ## Updating
 
@@ -127,9 +213,15 @@ iam federation update $CONN --metadata-url https://acme.okta.com/app/exk…/sso/
 
 ## Limits
 
-- SP-initiated HTTP-Redirect → HTTP-POST only; no artifact binding, no
-  IdP-initiated login, no SAML single logout (end sessions with
+- SP-initiated HTTP-Redirect → HTTP-POST only; no artifact binding, no SAML
+  single logout (end sessions with
   [session revocation](../../concepts/sessions-and-tokens.md)).
+- IdP-initiated login only hands off to your application's sign-in endpoint
+  (see above); it never signs the user in by itself. IdP-initiated
+  responses with encrypted assertions are not supported and are refused (the
+  audience is not readable before decryption); configure the IdP to sign
+  plain assertions for IdP-initiated sign-in. Encrypted assertions work for
+  SP-initiated login.
 - One IdP per connection; create one connection per IdP.
 - Responses up to 64 KiB.
 

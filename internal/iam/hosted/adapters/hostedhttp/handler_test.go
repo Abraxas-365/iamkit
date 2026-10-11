@@ -2,8 +2,10 @@ package hostedhttp
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -456,5 +458,65 @@ func TestRetryRestarts(t *testing.T) {
 		if res.StatusCode != 401 || !strings.Contains(html, `name="email"`) || strings.Contains(html, `name="code"`) || strings.Contains(html, "6-digit") {
 			t.Fatalf("%v: got %d %s", err, res.StatusCode, html)
 		}
+	}
+}
+
+// hintFlow redirects Hinted to an identity provider and counts the calls.
+type hintFlow struct {
+	hosted.Flow
+	hinted int
+}
+
+func (f *hintFlow) Page(context.Context, hosted.Request, string) (hosted.Page, error) {
+	return hosted.Page{SignIn: hosted.SignIn{Password: true}}, nil
+}
+
+func (f *hintFlow) Hinted(context.Context, hosted.Request) (hosted.Route, error) {
+	f.hinted++
+	return hosted.Route{Method: federation.MethodSSO, Redirect: "https://idp.example/authorize", Binding: "binding"}, nil
+}
+
+// The authorize request's connection hint is followed once per ticket: the
+// back and start-over links come back to GET /hosted/login, which must then
+// show the ordinary sign-in instead of trapping the user at the provider.
+func TestConnectionHintIsFollowedOncePerTicket(t *testing.T) {
+	flow := &hintFlow{}
+	app := fiber.New()
+	app.Get("/hosted/login", New(flow, nil, nil, nil, nil, nil).login)
+	get := func(ticket, cookie string) *http.Response {
+		req := httptest.NewRequest("GET", "/hosted/login?ticket="+ticket, nil)
+		if cookie != "" {
+			req.Header.Set("Cookie", hintedCookie+"="+cookie)
+		}
+		res, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+
+	first := get("ticket-1", "")
+	if first.StatusCode != 303 || first.Header.Get("Location") != "https://idp.example/authorize" {
+		t.Fatalf("first visit: %d %q", first.StatusCode, first.Header.Get("Location"))
+	}
+	var mark string
+	for _, c := range first.Cookies() {
+		if c.Name == hintedCookie {
+			mark = c.Value
+		}
+	}
+	if mark == "" || strings.Contains(mark, "ticket-1") {
+		t.Fatalf("hinted cookie = %q", mark)
+	}
+
+	again := get("ticket-1", mark)
+	body, _ := io.ReadAll(again.Body)
+	if again.StatusCode != 200 || !strings.Contains(string(body), `name="email"`) || flow.hinted != 1 {
+		t.Fatalf("second visit: %d hinted=%d %s", again.StatusCode, flow.hinted, body)
+	}
+
+	// A new ticket (another authorize request) follows its own hint.
+	if other := get("ticket-2", mark); other.StatusCode != 303 || flow.hinted != 2 {
+		t.Fatalf("new ticket: %d hinted=%d", other.StatusCode, flow.hinted)
 	}
 }

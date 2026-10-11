@@ -2,6 +2,7 @@ package orgadmin
 
 import (
 	"context"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
@@ -48,6 +49,16 @@ type Commands interface {
 	// environment's password policy; DeletePasswordPolicy drops it.
 	SetPasswordPolicy(ctx context.Context, p Principal, input authentication.PasswordRequirements) (authentication.PasswordRequirements, error)
 	DeletePasswordPolicy(ctx context.Context, p Principal) error
+	// IssueDirectory creates a SCIM credential (and its provisioning
+	// connection) for the organization; the secret is returned once.
+	IssueDirectory(ctx context.Context, p Principal, input NewDirectory) (IssuedDirectory, error)
+	// RevokeDirectory revokes a credential of the organization (404 for any
+	// other).
+	RevokeDirectory(ctx context.Context, p Principal, credential identity.CredentialID) error
+	// CreateSetupLink and RevokeSetupLink manage the organization's setup
+	// links; only owners (Principal.Owner).
+	CreateSetupLink(ctx context.Context, p Principal, input SetupLinkInput) (IssuedSetupLink, error)
+	RevokeSetupLink(ctx context.Context, p Principal, link identity.SetupLinkID) error
 }
 
 // Queries are the organization administrator's reads.
@@ -71,6 +82,9 @@ type Queries interface {
 	RoleAssignments(ctx context.Context, p Principal, user identity.UserID, page query.Pagination) (query.Paginated[authorization.RoleAssignmentView], error)
 	Invitations(ctx context.Context, p Principal, filter invitation.Filter, page query.Pagination) (query.Paginated[invitation.Invitation], error)
 	Domains(ctx context.Context, p Principal, page query.Pagination) (query.Paginated[organization.Domain], error)
+	// Groups lists the organization's operator-managed (non-SCIM) groups:
+	// the targets of an SSO connection's group mappings.
+	Groups(ctx context.Context, p Principal, page query.Pagination) (query.Paginated[organization.Group], error)
 	Connections(ctx context.Context, p Principal, page query.Pagination) (query.Paginated[federation.ConnectionView], error)
 	Connection(ctx context.Context, p Principal, connection identity.ConnectionID) (federation.ConnectionDetail, error)
 	Events(ctx context.Context, p Principal, filter EventFilter, page query.Pagination) (query.Paginated[Event], error)
@@ -80,6 +94,10 @@ type Queries interface {
 	// PasswordPolicy is what the organization adds to the environment's
 	// password policy (custom false when nothing).
 	PasswordPolicy(ctx context.Context, p Principal) (authentication.PasswordRequirements, error)
+	// Directories lists the organization's SCIM credentials.
+	Directories(ctx context.Context, p Principal, page query.Pagination) (Directories, error)
+	// SetupLinks lists the organization's setup links (owners only).
+	SetupLinks(ctx context.Context, p Principal, page query.Pagination) (query.Paginated[SetupLink], error)
 }
 
 // Repository reads what the anti-escalation rules need and the
@@ -128,4 +146,48 @@ type PortalRepository interface {
 	// DisablePortal deactivates the application and client and revokes
 	// the client's sessions; audited. Not found when never enabled.
 	DisablePortal(ctx context.Context, m PortalMutation) error
+}
+
+// SetupLinkCommands issue and revoke an organization's setup links and
+// exchange them. Callers check who may issue (operators by permission,
+// owners through Commands.CreateSetupLink).
+type SetupLinkCommands interface {
+	// Create stores a link for the mutation's organization and returns its
+	// URL, shown once. The organization must exist (404).
+	Create(ctx context.Context, m SetupMutation, input SetupLinkInput) (IssuedSetupLink, error)
+	// Revoke ends the link and, with it, every bearer exchanged from it.
+	Revoke(ctx context.Context, m SetupMutation, link identity.SetupLinkID) error
+	// Exchange trades a link secret for a short-lived bearer. Unknown,
+	// expired and revoked links are one 401.
+	Exchange(ctx context.Context, token string) (SetupSession, error)
+}
+
+// SetupLinkQueries read links and resolve their bearers.
+type SetupLinkQueries interface {
+	List(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[SetupLink], error)
+	// Session resolves a bearer (ik_setupsess_…) while it and its link are
+	// live; anything else is a 401.
+	Session(ctx context.Context, bearer string) (SetupGrant, error)
+}
+
+// SetupSecrets generates and hashes setup secrets.
+type SetupSecrets interface {
+	Generate(prefix string) (string, []byte, error)
+	Hash(raw string) []byte
+}
+
+// SetupLinkRepository persists links and their bearers.
+type SetupLinkRepository interface {
+	// Create inserts the link (at most config.SetupLinkMaxPerOrg live ones
+	// per organization) and audits it.
+	Create(ctx context.Context, m SetupMutation, link SetupLink, hash []byte) error
+	List(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[SetupLink], error)
+	// Revoke sets revoked_at and audits it (404 when not live).
+	Revoke(ctx context.Context, m SetupMutation, link identity.SetupLinkID) error
+	// Exchange finds the live link by its secret hash, stamps last_used_at,
+	// stores the bearer hash (expiring at the earlier of now+ttl and the
+	// link) and audits org_setup_link.used.
+	Exchange(ctx context.Context, hash, bearer []byte, ttl time.Duration) (SetupExchanged, error)
+	// Session resolves a live bearer through its live link.
+	Session(ctx context.Context, bearer []byte) (SetupGrant, error)
 }

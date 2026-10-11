@@ -6,6 +6,7 @@ package hostedhttp
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"embed"
 	"encoding/base64"
 	"encoding/json"
@@ -53,6 +54,7 @@ type Finisher func(c *fiber.Ctx, ticket string, login oauth.Login) error
 const (
 	authorizationCookie = "__Host-iamkit-authorization"
 	federationCookie    = "__Host-iamkit-federation"
+	hintedCookie        = "__Host-iamkit-hinted"
 	defaultAccent       = "#2563eb"
 )
 
@@ -428,8 +430,31 @@ func (h *Handler) login(c *fiber.Ctx) error {
 	if !ok {
 		return err
 	}
+	// An authorize request that names a connection skips the identifier
+	// step, once: the back and start-over links return here, and a failed
+	// identity provider must not trap the user (a cookie remembers that the
+	// ticket's hint was applied). An unusable hint shows the normal sign-in.
+	r := h.request(c)
+	if !h.hintApplied(c, r.Ticket) {
+		if route, err := h.flow.Hinted(c.UserContext(), r); err == nil && route.Redirect != "" {
+			c.Cookie(&fiber.Cookie{Name: hintedCookie, Value: hintMark(r.Ticket), Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: int(config.OAuthAuthorizationTicketTTL.Seconds())})
+			return h.federate(c, route.Redirect, route.Binding)
+		}
+	}
 	v.Title = v.T("hosted.title.sign_in")
 	return render(c, fiber.StatusOK, "identify", v)
+}
+
+// hintMark identifies a ticket in the hinted cookie without carrying it.
+func hintMark(ticket string) string {
+	sum := sha256.Sum256([]byte(ticket))
+	return base64.RawURLEncoding.EncodeToString(sum[:16])
+}
+
+// hintApplied reports whether the browser already followed this ticket's
+// connection hint.
+func (h *Handler) hintApplied(c *fiber.Ctx, ticket string) bool {
+	return ticket != "" && c.Cookies(hintedCookie) == hintMark(ticket)
 }
 
 func (h *Handler) identify(c *fiber.Ctx) error {

@@ -99,7 +99,7 @@ func oauthClientsGetCmd() *cobra.Command {
 }
 
 func oauthClientsCreateCmd() *cobra.Command {
-	var app, resource, redirects, postLogout, origins, format, backchannel, grants string
+	var app, resource, redirects, postLogout, origins, format, backchannel, grants, initiate string
 	var public, hosted, sessionRequired bool
 	var auth clientAuthFlags
 	cmd := &cobra.Command{
@@ -117,6 +117,9 @@ func oauthClientsCreateCmd() *cobra.Command {
 			if backchannel != "" {
 				body["backchannel_logout_uri"] = backchannel
 				body["backchannel_logout_session_required"] = sessionRequired
+			}
+			if initiate != "" {
+				body["initiate_login_uri"] = initiate
 			}
 			if err := auth.apply(cmd, body); err != nil {
 				return err
@@ -140,6 +143,7 @@ func oauthClientsCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&backchannel, "backchannel-logout-uri", "", "HTTPS URL that receives a logout token when a session of this client ends")
 	cmd.Flags().BoolVar(&sessionRequired, "backchannel-logout-session-required", false, "Record that the client needs sid in logout tokens")
 	cmd.Flags().StringVar(&grants, "grant-types", "", grantTypesHelp+" (default authorization_code,refresh_token)")
+	cmd.Flags().StringVar(&initiate, "initiate-login-uri", "", initiateHelp)
 	auth.register(cmd)
 	cmd.MarkFlagRequired("app")
 	cmd.MarkFlagRequired("resource")
@@ -147,7 +151,7 @@ func oauthClientsCreateCmd() *cobra.Command {
 }
 
 func oauthClientsUpdateCmd() *cobra.Command {
-	var redirects, postLogout, origins, format, backchannel, grants string
+	var redirects, postLogout, origins, format, backchannel, grants, initiate string
 	var hosted, sessionRequired bool
 	var auth clientAuthFlags
 	cmd := &cobra.Command{
@@ -181,6 +185,9 @@ func oauthClientsUpdateCmd() *cobra.Command {
 			if cmd.Flags().Changed("backchannel-logout-session-required") {
 				body["backchannel_logout_session_required"] = sessionRequired
 			}
+			if cmd.Flags().Changed("initiate-login-uri") {
+				body["initiate_login_uri"] = initiate
+			}
 			if err := auth.apply(cmd, body); err != nil {
 				return err
 			}
@@ -199,6 +206,7 @@ func oauthClientsUpdateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&backchannel, "backchannel-logout-uri", "", "HTTPS URL that receives logout tokens (empty turns back-channel logout off)")
 	cmd.Flags().BoolVar(&sessionRequired, "backchannel-logout-session-required", false, "Record that the client needs sid in logout tokens")
 	cmd.Flags().StringVar(&grants, "grant-types", "", grantTypesHelp+" (replaces the list)")
+	cmd.Flags().StringVar(&initiate, "initiate-login-uri", "", initiateHelp+" (empty turns it off)")
 	auth.register(cmd)
 	return cmd
 }
@@ -210,6 +218,8 @@ const deviceCodeGrant = "urn:ietf:params:oauth:grant-type:device_code"
 // tokenExchangeGrant is the RFC 8693 grant type; --grant-types accepts
 // token_exchange for it.
 const tokenExchangeGrant = "urn:ietf:params:oauth:grant-type:token-exchange"
+
+const initiateHelp = "Sign-in endpoint of the application for IdP-initiated SAML logins (HTTPS, or http on loopback): IAMKit redirects there with iss, connection_id and organization_id"
 
 const grantTypesHelp = "Comma-separated grants: authorization_code, refresh_token, device_code (needs --hosted-login), token_exchange (confidential clients)"
 

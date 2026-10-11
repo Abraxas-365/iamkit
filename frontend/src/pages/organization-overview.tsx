@@ -15,6 +15,7 @@ import { useOrganization } from './organization-layout'
 import { OrganizationPasswordRequirements } from './organization-password'
 import { MetadataEditor } from '@/components/library/metadata-editor'
 import { HistorySection } from './history'
+import { SetupLinksPanel, type SetupTransport } from '@/components/library/setup-links'
 import { t } from '@/lib/i18n'
 
 const methods = [
@@ -36,6 +37,11 @@ export function OrganizationOverview() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState('')
   const [toggle, setToggle] = useState(false)
+  const setupLinks = useMemo<SetupTransport>(() => ({
+    list: signal => api.get(`${path}/setup-links?limit=100`, signal),
+    create: body => api.post(`${path}/setup-links`, body),
+    revoke: async id => { await api.delete(`${path}/setup-links/${id}`) },
+  }), [path])
 
   async function patch(field: string, body: Record<string, unknown>, done: string) {
     setSaving(field)
@@ -78,6 +84,10 @@ export function OrganizationOverview() {
     {canWrite && <DetailSection danger title={org.active ? t('Deactivate organization') : t('Reactivate organization')} description={org.active ? t('Members can no longer sign in to this organization and existing sessions stop refreshing. Nothing is deleted.') : t('Members can sign in to this organization again.')}>
       <Button variant={org.active ? 'destructive' : 'outline'} onClick={() => setToggle(true)}>{org.active ? <><Ban /> {t('Deactivate')}</> : <><RotateCcw /> {t('Reactivate')}</>}</Button>
     </DetailSection>}
+
+    <DetailSection title={t('Setup links')} description={t('Let the customer\'s IT administrator configure SSO, directory sync and domains without an account.')}>
+      <SetupLinksPanel transport={setupLinks} canWrite={canWrite} organization={org.name} />
+    </DetailSection>
 
     <HistorySection path={path} refresh={org} />
 

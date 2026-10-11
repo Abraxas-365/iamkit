@@ -95,6 +95,8 @@ type IdentityInput struct {
 	Subject    string                `json:"subject"`
 	Email      string                `json:"email,omitempty"`
 	Name       string                `json:"name,omitempty"`
+	// Groups are the group values the provider reported (read-only).
+	Groups []string `json:"groups,omitempty"`
 }
 
 // Response is what a call target answers (an empty body = allow).

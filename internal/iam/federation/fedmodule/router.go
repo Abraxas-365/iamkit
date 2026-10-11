@@ -34,6 +34,12 @@ func (r router) Metadata(ctx context.Context, c federation.Connection) ([]byte, 
 	return r.pick(c).Metadata(ctx, c)
 }
 
+// Hint and VerifyUnsolicited only exist for SAML.
+func (r router) Hint(response string) (federation.ResponseHint, error) { return r.saml.Hint(response) }
+func (r router) VerifyUnsolicited(ctx context.Context, c federation.Connection, response string) (federation.Claims, error) {
+	return r.saml.VerifyUnsolicited(ctx, c, response)
+}
+
 // Verifier is the PKCE verifier; SAML ignores it.
 func (r router) Verifier() string { return r.oidc.Verifier() }
 func (r router) Callback() string { return r.oidc.Callback() }

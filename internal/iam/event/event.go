@@ -24,6 +24,9 @@ const (
 	ActorServiceAccount = "service_account"
 	// ActorDirectory is a SCIM provisioning credential.
 	ActorDirectory = "directory"
+	// ActorSetupLink is an organization setup link (actor id = the link id):
+	// the customer's IT administrator working through it.
+	ActorSetupLink = "setup_link"
 	ActorSystem    = "system"
 )
 

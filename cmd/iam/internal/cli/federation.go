@@ -71,7 +71,8 @@ func fedGetCmd() *cobra.Command {
 
 func fedCreateCmd() *cobra.Command {
 	var name, provider, issuer, clientID, secretEnv, secretFile, tenant, team, key, org, signupOrg, signupGroup, baseURL string
-	var tenants, domains []string
+	var tenants, domains, mappingFlags []string
+	var groupsClaim string
 	var linkEmail, updateProfile bool
 	var o oauth2Flags
 	var sf samlFlags
@@ -118,6 +119,9 @@ func fedCreateCmd() *cobra.Command {
 				if updateProfile {
 					body["update_profile"] = true
 				}
+				if err := addMappings(body, mappingFlags); err != nil {
+					return err
+				}
 				data, err := mustClient(cmd).post(envPath()+"/federation-connections", body)
 				if err != nil {
 					return err
@@ -140,6 +144,9 @@ func fedCreateCmd() *cobra.Command {
 				}
 				if updateProfile {
 					body["update_profile"] = true
+				}
+				if err := addMappings(body, mappingFlags); err != nil {
+					return err
 				}
 				data, err := mustClient(cmd).post(envPath()+"/federation-connections", body)
 				if err != nil {
@@ -187,6 +194,9 @@ func fedCreateCmd() *cobra.Command {
 				options["base_url"] = baseURL
 			}
 			o.apply(options)
+			if groupsClaim != "" {
+				options["groups_claim"] = groupsClaim
+			}
 			if len(options) > 0 {
 				body["options"] = options
 			}
@@ -204,6 +214,9 @@ func fedCreateCmd() *cobra.Command {
 			}
 			if updateProfile {
 				body["update_profile"] = true
+			}
+			if err := addMappings(body, mappingFlags); err != nil {
+				return err
 			}
 			c := mustClient(cmd)
 			p := newPrinter()
@@ -232,6 +245,8 @@ func fedCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&linkEmail, "link-email", false, "Link existing users by verified email (organization connections: members on its verified domains)")
 	cmd.Flags().BoolVar(&updateProfile, "update-profile", false, "Refresh linked users' name and passwordless email from the provider at sign-in")
 	cmd.Flags().StringVar(&baseURL, "base-url", "", "GitLab self-managed or GitHub Enterprise Server URL")
+	cmd.Flags().StringArrayVar(&mappingFlags, "group-mapping", nil, "Organization connections: map an IdP group value to a group of the organization, VALUE=GROUP_UUID (repeatable)")
+	cmd.Flags().StringVar(&groupsClaim, "groups-claim", "", "OIDC (oidc, google, microsoft, gitlab): ID token claim with the user's groups (default groups)")
 	o.register(cmd)
 	sf.register(cmd)
 	lf.register(cmd)
@@ -239,10 +254,37 @@ func fedCreateCmd() *cobra.Command {
 	return cmd
 }
 
+// addMappings sets group_mappings on body when --group-mapping was given.
+func addMappings(body map[string]any, values []string) error {
+	if len(values) == 0 {
+		return nil
+	}
+	m, err := groupMappings(values)
+	if err != nil {
+		return err
+	}
+	body["group_mappings"] = m
+	return nil
+}
+
+// groupMappings parses repeated --group-mapping value=GROUP_UUID flags.
+func groupMappings(values []string) ([]map[string]string, error) {
+	out := make([]map[string]string, 0, len(values))
+	for _, v := range values {
+		i := strings.LastIndex(v, "=")
+		if i <= 0 || i == len(v)-1 {
+			return nil, fmt.Errorf("--group-mapping %q must be VALUE=GROUP_UUID", v)
+		}
+		out = append(out, map[string]string{"value": v[:i], "group_id": v[i+1:]})
+	}
+	return out, nil
+}
+
 // samlFlags are the options of a SAML connection.
 type samlFlags struct {
-	metadataURL, metadataFile, nameIDFormat, subject, email, name string
-	signRequests                                                  bool
+	metadataURL, metadataFile, nameIDFormat, subject, email, name, groups string
+	idpClient                                                             string
+	signRequests                                                          bool
 }
 
 func (f *samlFlags) register(cmd *cobra.Command) {
@@ -252,18 +294,20 @@ func (f *samlFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.subject, "attr-subject", "", "SAML/LDAP: attribute with the stable user ID (SAML default: the NameID; LDAP: objectGUID, entryUUID or the DN)")
 	cmd.Flags().StringVar(&f.email, "attr-email", "", "SAML/LDAP: attribute with the email")
 	cmd.Flags().StringVar(&f.name, "attr-name", "", "SAML/LDAP: attribute with the display name")
+	cmd.Flags().StringVar(&f.groups, "groups-attribute", "", "SAML/LDAP: multi-valued attribute with the user's groups (SAML default: groups, memberOf or the Microsoft groups claim; LDAP: memberOf)")
+	cmd.Flags().StringVar(&f.idpClient, "idp-initiated-client", "", "SAML: OAuth client (with an initiate_login_uri) that IdP-initiated logins are handed to; unset refuses IdP-initiated responses")
 	cmd.Flags().BoolVar(&f.signRequests, "sign-requests", false, "SAML: sign AuthnRequests with the environment signing key")
 }
 
 func (f samlFlags) set() bool {
-	return f.metadataURL != "" || f.metadataFile != "" || f.nameIDFormat != "" || f.attributes() != nil || f.signRequests
+	return f.metadataURL != "" || f.metadataFile != "" || f.nameIDFormat != "" || f.attributes() != nil || f.signRequests || f.idpClient != ""
 }
 
 // attributes is the attribute mapping shared by SAML and LDAP, nil when
 // no --attr-* flag is set.
 func (f samlFlags) attributes() map[string]string {
 	attributes := map[string]string{}
-	for k, v := range map[string]string{"subject": f.subject, "email": f.email, "name": f.name} {
+	for k, v := range map[string]string{"subject": f.subject, "email": f.email, "name": f.name, "groups": f.groups} {
 		if v != "" {
 			attributes[k] = v
 		}
@@ -343,14 +387,17 @@ func (f samlFlags) options() (map[string]any, error) {
 	if f.signRequests {
 		options["sign_requests"] = true
 	}
+	if f.idpClient != "" {
+		options["idp_initiated_client_id"] = f.idpClient
+	}
 	return options, nil
 }
 
 // oauth2Flags are the endpoint and claim-mapping flags of an oauth2
 // connection.
 type oauth2Flags struct {
-	authorize, token, userinfo, subject, email, verified, name string
-	scopes                                                     []string
+	authorize, token, userinfo, subject, email, verified, name, groups string
+	scopes                                                             []string
 }
 
 func (o *oauth2Flags) register(cmd *cobra.Command) {
@@ -362,6 +409,7 @@ func (o *oauth2Flags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&o.email, "claim-email", "", "OAuth 2.0: user info member with the email")
 	cmd.Flags().StringVar(&o.verified, "claim-email-verified", "", "OAuth 2.0: boolean member saying the email is verified (without it emails are never trusted)")
 	cmd.Flags().StringVar(&o.name, "claim-name", "", "OAuth 2.0: user info member with the display name")
+	cmd.Flags().StringVar(&o.groups, "claim-groups", "", "OAuth 2.0: user info member with the user's groups (an array of strings)")
 }
 
 func (o oauth2Flags) apply(options map[string]any) {
@@ -373,7 +421,7 @@ func (o oauth2Flags) apply(options map[string]any) {
 		options["scopes"] = o.scopes
 	}
 	claims := map[string]string{"subject": o.subject}
-	for k, v := range map[string]string{"email": o.email, "email_verified": o.verified, "name": o.name} {
+	for k, v := range map[string]string{"email": o.email, "email_verified": o.verified, "name": o.name, "groups": o.groups} {
 		if v != "" {
 			claims[k] = v
 		}
@@ -384,7 +432,9 @@ func (o oauth2Flags) apply(options map[string]any) {
 func fedUpdateCmd() *cobra.Command {
 	var name, secretFile string
 	var jit, linkEmail, updateProfile, signup bool
-	var enforcement string
+	var enforcement, groupsClaim string
+	var mappingFlags []string
+	var clearMappings bool
 	var sf samlFlags
 	var lf ldapFlags
 	cmd := &cobra.Command{
@@ -393,13 +443,17 @@ func fedUpdateCmd() *cobra.Command {
 		Example: `  iam federation update CONN_ID --update-profile
   iam federation update CONN_ID --link-email --jit=false
   iam federation update CONN_ID --client-secret-file new-secret.txt
+  iam federation update CONN_ID --group-mapping "Engineering=GROUP_UUID" --group-mapping "Admins=OTHER_GROUP_UUID"
+  iam federation update CONN_ID --clear-group-mappings
   iam federation update SAML_CONN_ID --metadata-url https://acme.okta.com/app/ID/sso/saml/metadata
   iam federation update LDAP_CONN_ID --ldap-url ldaps://dc1.acme.com --bind-dn "CN=iam,DC=acme,DC=com" \
     --user-base-dn "OU=People,DC=acme,DC=com" --user-filter "(sAMAccountName={username})"
 
 SAML and LDAP options replace the stored ones as a whole: pass the metadata
 source (SAML) or directory URL and base DN (LDAP) again with any change (a
-metadata URL is refetched; an LDAP host and base DN cannot change).`,
+metadata URL is refetched; an LDAP host and base DN cannot change). Likewise
+--groups-claim and --claim-groups replace an OIDC or OAuth 2.0 connection's
+options as a whole. --group-mapping replaces the whole list of group mappings.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body := map[string]any{}
@@ -423,6 +477,14 @@ metadata URL is refetched; an LDAP host and base DN cannot change).`,
 			if flags.Changed("enforcement") {
 				body["enforcement"] = enforcement
 			}
+			if clearMappings && len(mappingFlags) > 0 {
+				return fmt.Errorf("--group-mapping and --clear-group-mappings exclude each other")
+			}
+			if clearMappings {
+				body["group_mappings"] = []map[string]string{}
+			} else if err := addMappings(body, mappingFlags); err != nil {
+				return err
+			}
 			if lf.set() {
 				options, err := lf.options(sf)
 				if err != nil {
@@ -435,6 +497,12 @@ metadata URL is refetched; an LDAP host and base DN cannot change).`,
 					return err
 				}
 				body["options"] = options
+			}
+			if groupsClaim != "" {
+				if _, ok := body["options"]; ok {
+					return fmt.Errorf("--groups-claim applies to OIDC connections, not SAML or LDAP")
+				}
+				body["options"] = map[string]any{"groups_claim": groupsClaim}
 			}
 			if len(body) == 0 {
 				return fmt.Errorf("nothing to update")
@@ -454,6 +522,9 @@ metadata URL is refetched; an LDAP host and base DN cannot change).`,
 	cmd.Flags().BoolVar(&updateProfile, "update-profile", false, "Refresh linked users' profile at sign-in")
 	cmd.Flags().BoolVar(&signup, "signup", false, "Create accounts for new users (environment connections)")
 	cmd.Flags().StringVar(&enforcement, "enforcement", "", "optional or enforced (organization connections)")
+	cmd.Flags().StringArrayVar(&mappingFlags, "group-mapping", nil, "Replace the group mappings: VALUE=GROUP_UUID (repeatable)")
+	cmd.Flags().BoolVar(&clearMappings, "clear-group-mappings", false, "Remove every group mapping")
+	cmd.Flags().StringVar(&groupsClaim, "groups-claim", "", "OIDC: ID token claim with the user's groups; replaces the connection's options")
 	sf.register(cmd)
 	lf.register(cmd)
 	return cmd

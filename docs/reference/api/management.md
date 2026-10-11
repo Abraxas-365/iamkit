@@ -109,6 +109,13 @@ uses `GET|PUT|DELETE /org-admin-portal` (`enabled`, `client_id`,
 `org_admin_portal.enabled`/`.disabled`. Its OAuth client lists with
 `system: "org_admin"`; `PATCH`/`DELETE` on it answer 409.
 
+[Setup links](../../guides/organizations/organization-administration.md#setup-links)
+use `GET|POST /organizations/:organization/setup-links` (`POST`: `intents` of
+`sso`, `directory`, `domains` and optional `expires_in` such as `72h`, default
+7 days, at most 30; 201 `{id,url,expires_at,intents}` — the `url` carries the
+secret and is shown once) and `DELETE /organizations/:organization/setup-links/:link`
+(204; ends its sessions). Audited as `org_setup_link.created`/`.revoked`.
+
 The SMS provider for [email and SMS second factors](../../guides/sign-in/mfa.md#sms-provider)
 uses `GET|PUT|DELETE /sms` (`provider` `twilio` with `account_sid`,
 `auth_token`, `from_number` or `messaging_service_sid`; or `webhook` with
@@ -158,6 +165,12 @@ default 30: `days`, `totals`, `now`). Creates past a total limit answer 422
 `PUT`/`DELETE /action-executions/:condition` (`{"targets":[…]}` in call
 order) and `GET /action-calls` (7-day call log). Writes need owner/admin and
 are audited `action_target.*`/`action_execution.*`. Management API only.
+
+OAuth clients (`…/oauth-clients`, see [OAuth and OIDC](oauth-oidc.md)) take
+`initiate_login_uri` — the application's sign-in endpoint (HTTPS, or http on
+loopback; `""` = off) that SAML [IdP-initiated logins](../../guides/enterprise/saml.md#idp-initiated-login)
+are redirected to; SAML connections name the client in
+`options.idp_initiated_client_id`.
 
 Administrative inventories include `GET /sessions` (optional `user_id`, `organization_id` and `application_id` filters, combinable; newest first, each with
 `authenticated_at`), `DELETE /sessions/:id` and

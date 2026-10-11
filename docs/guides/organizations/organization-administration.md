@@ -23,7 +23,7 @@ limited to their organization, without operator access or an environment-wide
    | `iam:org:roles:assign` | Assign and remove roles (see the rules below) |
    | `iam:org:invitations:write` | Invite, resend and revoke invitations |
    | `iam:org:domains:write` | Add, verify and remove domains |
-   | `iam:org:sso:write` | Create, change and disable the organization's SSO connections |
+   | `iam:org:sso:write` | Create, change and disable the organization's SSO connections, and issue and revoke its SCIM directory tokens |
    | `iam:org:audit:read` | Read the organization's audit events |
    | `iam:org:resources:read` | List the resources the organization owns, their grants, and the grants it received |
    | `iam:org:resources:write` | Grant the organization's own resources to other organizations |
@@ -101,6 +101,54 @@ portal, err := iamclient.New(baseURL, managementKey).Environment(envID).EnableOr
 fmt.Println(portal.URL) // share with organization administrators
 ```
 
+## Setup links
+
+A customer's IT administrator often has no IAMKit account and should not need
+one just to connect their identity provider. A **setup link** is an expiring
+URL that opens the portal in *setup mode*: only the pieces the link was
+created for, no sign-in.
+
+- **Create.** An operator (console → organization → *Setup links* → *Create
+  setup link*; `POST …/organizations/:organization/setup-links` on the
+  management API, or on `/api/v1` with `iam:orgs:write`; `iam organizations
+  setup-link create ORG_ID --intent sso --intent domains --expires-in 72h`;
+  `iamclient.Environment.CreateSetupLink`) or an organization **owner** in the
+  portal (*Setup links*) picks the **intents**: `sso` (SAML, OIDC and LDAP
+  connections, with the service-provider details to give the identity
+  provider), `directory` (SCIM tokens) and `domains` (add and verify). The
+  default lifetime is 7 days, the maximum 30; an organization holds at most 50
+  live links.
+- **The URL** is `<issuer>/org-admin/<environment>/setup#ik_setup_…`. The
+  secret is in the fragment, so it never reaches a server log or `Referer`; the
+  page removes it from the address bar at once. It is returned **once**; only
+  its hash is stored. `GET` lists links (intents, expiry, revoked, last used)
+  and `DELETE …/setup-links/:link` revokes one.
+- **Exchange.** The page posts the secret to the public `POST
+  /identity/v1/org-admin/setup` (`{"token"}`), which answers `{access_token,
+  token_type, expires_in, environment_id, organization_id, intents,
+  organization_name}`: an opaque `ik_setupsess_…` bearer (one hour, never past
+  the link's expiry), kept in the tab's `sessionStorage`. Unknown, expired and
+  revoked links are one uniform 401; the endpoint is rate limited. Each
+  exchange is audited as `org_setup_link.used`.
+- **What the bearer can do.** It works only on this organization's `/admin`
+  routes and holds the permissions of its intents: `sso` and `directory` →
+  `iam:org:read` + `iam:org:sso:write`; `domains` → `iam:org:read` +
+  `iam:org:domains:write`. Everything else (members, users, roles,
+  invitations, resources, branding, password policy, events, setup links) is
+  403. Revoking or expiring the link ends its sessions at once, and so does
+  deactivating the organization (its links and bearers are then a uniform 401).
+- **SCIM tokens from a setup link.** The `directory` intent cannot adopt existing
+  members (`adopt_existing_members: true` is 400) nor issue a token without
+  expiry (`expires_in` is at most `8760h`; `never` is 400). Administrators with
+  the owner role keep both options.
+- **Who may create links in the portal.** Only accounts holding every
+  `iam:org:*` permission (the owner role). `GET`/`POST`/`DELETE /admin/setup-links`
+  answer 403 to anyone else, including setup bearers.
+- **Audit.** `org_setup_link.created`, `.used` and `.revoked` events; the
+  actor of `.used` and of everything done with the bearer has `actor_kind`
+  `setup_link` (`actor.id` = the link), shown as *Setup link* in the activity
+  pages.
+
 ## Rules that stop escalation
 
 - **Roles.** Administrators assign or remove roles of the IAM resource
@@ -109,6 +157,12 @@ fmt.Println(portal.URL) // share with organization administrators
   `granted`). Only an owner assigns, removes
   or acts on the owner role. Invitations follow the same check for their
   `role_ids` and the roles carried by their `group_ids`.
+- **Connection groups.** The groups a connection signs people into (`jit_group_id`,
+  `signup_group_id` and the `group_id` of every `group_mappings` entry) follow the
+  same check on create and update, for every administrator and for setup links:
+  a group carrying a role the caller could not assign is refused with 403. A
+  setup link holds only `iam:org:read` and `iam:org:sso:write`, so it can name
+  groups without roles but not groups carrying owner or IAM-resource roles.
 - **Owners.** An owner cannot be removed from the organization, suspended or
   edited by a non-owner, and the last owner (directly assigned) cannot lose the
   role, leave or be suspended (422).
@@ -173,7 +227,10 @@ request and response bodies are the management API's.
 | `POST /role-assignments` (`user_id`, `role_id`), `DELETE /role-assignments/:user/:role` | `iam:org:roles:assign` |
 | `GET /invitations`, `POST /invitations`, `POST /invitations/:invitation/resend`, `DELETE /invitations/:invitation` | `iam:org:members:read`, `iam:org:invitations:write` |
 | `GET /domains`, `POST /domains`, `POST /domains/:domain/verify`, `DELETE /domains/:domain` | `iam:org:read`, `iam:org:domains:write` |
-| `GET /connections`, `GET /connections/:connection`, `POST`, `PATCH /connections/:connection`, `DELETE /connections/:connection`, `POST /connections/:connection/enable` (re-enables a disabled connection as it was; 403 for operator `secret_env` connections) | `iam:org:read`, `iam:org:sso:write` |
+| `GET /groups` (the organization's operator-managed, non-SCIM groups: the targets of `group_mappings`) | `iam:org:read` |
+| `GET /connections`, `GET /connections/:connection`, `POST`, `PATCH /connections/:connection` (`group_mappings` may only name groups of the caller's organization), `DELETE /connections/:connection`, `POST /connections/:connection/enable` (re-enables a disabled connection as it was; 403 for operator `secret_env` connections) | `iam:org:read`, `iam:org:sso:write` |
+| `GET /directories` (the organization's [SCIM](../enterprise/scim-provisioning.md#self-service-for-organization-admins) tokens, never their secrets, plus `scim_url`), `POST /directories` (`name`, optional `expires_in`, `adopt_existing_members`, `adopt_scope`, `map_phone`; 201 with the `secret` once), `DELETE /directories/:credential` (204; another organization's credential is 404) | `iam:org:read`, `iam:org:sso:write` |
+| `GET /setup-links`, `POST /setup-links` (`intents`, optional `expires_in`; 201 with the `url` once), `DELETE /setup-links/:link` ([setup links](#setup-links); owners only) | every `iam:org:*` permission |
 | `GET /events` (`?action=` prefix) | `iam:org:audit:read` |
 | `GET /branding`, `PUT /branding`, `DELETE /branding` ([organization branding](../applications/hosted-login.md#organization-branding): sign-in pages, invitation pages and emails) | `iam:org:read`, `iam:org:settings:write` |
 | `GET /password-policy`, `PUT /password-policy`, `DELETE /password-policy` ([requirements](../sign-in/password-policy.md) that only tighten the environment's) | `iam:org:read`, `iam:org:settings:write` |
@@ -183,7 +240,7 @@ request and response bodies are the management API's.
 ## Audit
 
 Every audit event records `actor_kind` (`operator`, `user`,
-`service_account` or `system`) and the `organization_id` its target lies in.
+`service_account`, `directory`, `setup_link` or `system`) and the `organization_id` its target lies in.
 `GET /events` returns the organization's events, newest first; operator
 actors appear without their email. Operators see both fields in
 `GET /audit-events`, and the console marks end-user actors.
@@ -205,4 +262,4 @@ Source: `internal/iam/orgadmin`, `internal/server/api.go`,
 `frontend/src/org-admin`, `migrations/001_initial.up.sql`,
 `tests/e2e/org_admin_test.go`,
 `tests/e2e/org_admin_portal_test.go`,
-`tests/e2e/resource_grants_test.go`, `tests/e2e/organization_branding_test.go`.
+`tests/e2e/resource_grants_test.go`, `tests/e2e/setup_links_test.go`, `tests/e2e/organization_branding_test.go`.

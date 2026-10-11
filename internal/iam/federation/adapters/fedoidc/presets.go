@@ -172,6 +172,14 @@ func oauth2Claims(ctx context.Context, client *http.Client, c federation.Connect
 	if m.Picture != "" {
 		out.Picture, _ = member(raw, m.Picture).(string)
 	}
+	if m.Groups != "" {
+		switch v := member(raw, m.Groups).(type) {
+		case []any:
+			out.Groups = federation.CleanGroups(stringValues(v))
+		case string:
+			out.Groups = federation.CleanGroups([]string{v})
+		}
+	}
 	return out, nil
 }
 

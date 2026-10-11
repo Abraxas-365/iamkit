@@ -24,6 +24,8 @@ code + refresh token) takes `GrantAuthorizationCode`, `GrantRefreshToken`,
 `GrantDeviceCode` (needs `HostedLogin`; device-only clients need no
 `RedirectURIs`) and `GrantTokenExchange` (confidential clients only). Opaque tokens are not accepted by
 `authclient.Validator` or the IAMKit APIs — resolve them with `Introspect`.
+IdP-initiated SAML: `OAuthClient.InitiateLoginURI` (`OAuthClientPatch.InitiateLoginURI`,
+`""` turns it off) and `FederationOptions.IdPInitiatedClientID` on the connection.
 Back-channel logout: `OAuthClient.BackchannelLogoutURI` /
 `BackchannelLogoutSessionRequired` (and the same `OAuthClientPatch` pointers;
 `""` turns it off); `LogoutDeliveries(ctx, status)` and
@@ -108,6 +110,8 @@ per organization, `SetOrganizationMethods` (see
 Organization admin portal: `OrgAdminPortal`, `EnableOrgAdminPortal` (returns
 the link in `URL`) and `DisableOrgAdminPortal` (see
 [hosted portal](../../guides/organizations/organization-administration.md#hosted-portal)).
+Setup links: `CreateSetupLink(ctx, org, SetupLinkInput{Intents, ExpiresIn})` (the `URL` is returned once), `SetupLinks` and `RevokeSetupLink` (see
+[setup links](../../guides/organizations/organization-administration.md#setup-links)).
 Resource grants: `SetResourceAccess(ctx, resource, ResourceAccess{OwnerOrganizationID, RequireGrant})`,
 `ResourceGrants`, `ResourceGrant`, `PutResourceGrant` (`RoleIDs` nil = every
 role) and `DeleteResourceGrant`; `Resource.OwnerOrganizationID`/`RequireGrant`

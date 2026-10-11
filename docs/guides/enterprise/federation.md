@@ -81,6 +81,61 @@ directory groups) can be the default group. With `jit_provisioning: false`,
 users must be linked explicitly as for environment connections, unless
 `link_email` is on.
 
+### Group mapping
+
+An organization connection can keep group membership in step with the identity
+provider. `group_mappings` is a list of `{value, group_id}`: the IdP group
+`value` (a group name, DN or object ID, exactly as the provider sends it,
+case-sensitive) and the organization group it stands for.
+
+```bash
+iam federation update $CONN \
+  --group-mapping "Engineering=$ENG_GROUP" --group-mapping "cn=ops,ou=groups,dc=acme,dc=com=$OPS_GROUP"
+```
+
+At **every** sign-in through the connection (after the account is found,
+linked or provisioned), in the same transaction as the sign-in, IAMKit
+reads the groups the provider sent and, for the **mapped** groups only:
+
+- adds the user to the group when its value is among the provider's groups;
+- removes the user from the group when it is not.
+
+Groups the connection does not map are never touched, so manual or SCIM
+membership, and groups mapped by another connection, stay as they are. The
+user must be an active member of the organization (a just-in-time
+provisioned user is one); otherwise nothing changes. Because
+`group_members` feeds the effective roles, the next token reflects the new
+membership. A user left without any access by the sync gets the usual 403 and
+no token; sessions already open keep the permissions they were issued with
+until they refresh or end. Each change emits `group.members_changed`
+(subject = the group, `data.source` `sso`, `data.change` `added` or
+`removed`, `data.connection_id`). Without mappings sign-in behaves as before,
+and the [default group](#just-in-time-provisioning) of JIT keeps working.
+
+Where the groups come from depends on the provider:
+
+| Provider | Setting | Default |
+| --- | --- | --- |
+| OpenID Connect (`oidc`, `google`, `microsoft`, `gitlab`) | `options.groups_claim`: an ID token claim holding an array of strings or one string | `groups` |
+| SAML | `options.attributes.groups`, an attribute matched by `Name` or `FriendlyName` with **all** its values ([SAML](saml.md)) | `groups`, `memberOf`, then the Microsoft groups claim |
+| LDAP | `options.attributes.groups`, usually `memberOf` ([LDAP](ldap.md)) | `memberOf` |
+| OAuth 2.0 (`oauth2`) | `options.claims.groups`: a dotted path in the user info JSON | none |
+
+The values are trimmed, empty ones dropped, each is at most 512 characters,
+duplicates are removed and at most 200 are read. Providers that send many
+groups (Entra ID overage) must be configured to send them in the token or
+assertion; IAMKit does not call Microsoft Graph.
+
+Rules for `group_mappings`: only organization connections have them (400
+otherwise), at most 100 per connection, each `value` 1–512 characters, and
+each `group_id` must be an operator-managed group of the connection's
+organization: unknown groups and groups owned by a SCIM directory are
+refused (400). On update, omitting `group_mappings` keeps them and `[]`
+clears them; changes are audited in the `connection.updated` event
+(`data.group_mappings`). Actions of type `post_federation` receive the
+provider's groups in `identity.groups` (read-only). Organization
+administrators manage the same list from the [portal](../organizations/organization-administration.md).
+
 ### Linking members by email
 
 `"link_email": true` on an organization connection links, without JIT, an

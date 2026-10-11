@@ -106,8 +106,10 @@ target = the service provider). Registrations are audited
 
 ## Not supported (yet)
 
-IdP-initiated sign-in, single logout (SLO), encrypted assertions and the
-HTTP-Artifact binding. Deleting a SAML application does not end sessions
+IdP-initiated sign-in (IAMKit as the identity provider; the opposite
+direction, SAML login *to* IAMKit, supports it — see
+[SAML single sign-on](../enterprise/saml.md#idp-initiated-login)), single
+logout (SLO), encrypted assertions and the HTTP-Artifact binding. Deleting a SAML application does not end sessions
 already open in it.
 
 ## Manage

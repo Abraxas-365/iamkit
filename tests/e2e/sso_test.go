@@ -336,3 +336,63 @@ func TestSealedConnectionBlocksPrivateProviders(t *testing.T) {
 		t.Fatalf("loopback provider reached: %d %v", r.Status, r.JSON)
 	}
 }
+
+// TestOIDCGroupMapping: the groups claim of the ID token (default "groups",
+// or options.groups_claim) feeds the connection's group mappings at every
+// sign-in, and (the groups of post_federation actions are covered in actions_test.go).
+func TestOIDCGroupMapping(t *testing.T) {
+	e := newEnv(t)
+	idp := newFakeIdP(t, e.Key, "acme-client")
+	e.IdP.Set(idp.Client().Transport)
+	connections := e.Base + "/federation-connections"
+	e.Grant(e.Org, e.Alice, e.Res)
+	groups := e.Base + "/organizations/" + e.Org + "/groups"
+	eng := e.ID("POST", groups, fiber.Map{"name": "Engineering"})
+	ops := e.ID("POST", groups, fiber.Map{"name": "Operations"})
+	writer := e.ID("POST", e.Base+"/roles", fiber.Map{"name": "writer", "resource_id": e.Res, "permissions": []string{"invoices:write"}})
+	reader := e.ID("POST", e.Base+"/roles", fiber.Map{"name": "reader", "resource_id": e.Res, "permissions": []string{"invoices:read"}})
+	e.Must("POST", e.Base+"/group-role-assignments", e.Owner, fiber.Map{"role_id": writer, "organization_id": e.Org, "group_id": eng}, 204)
+	e.Must("POST", e.Base+"/group-role-assignments", e.Owner, fiber.Map{"role_id": reader, "organization_id": e.Org, "group_id": ops}, 204)
+	domain := e.ID("POST", e.Base+"/organizations/"+e.Org+"/domains", fiber.Map{"domain": "example.com"})
+	e.Must("POST", e.Base+"/organizations/"+e.Org+"/domains/"+domain+"/force-verify", e.Owner, nil, 200)
+
+	// groups_claim belongs to OIDC-style providers only.
+	e.Must("POST", connections, e.Owner, fiber.Map{"organization_id": e.Org, "name": "Bad", "provider": "github", "client_id": "x", "client_secret": "x", "options": fiber.Map{"groups_claim": "roles"}}, 400)
+	conn := e.ID("POST", connections, fiber.Map{"organization_id": e.Org, "name": "Acme", "issuer": idp.URL, "client_id": "acme-client", "client_secret": "sealed-secret",
+		"group_mappings": []fiber.Map{{"value": "eng", "group_id": eng}, {"value": "ops", "group_id": ops}}})
+	if m, _ := e.Must("GET", connections+"/"+conn, e.Owner, nil, 200).JSON["group_mappings"].([]any); len(m) != 2 {
+		t.Fatalf("mappings = %v", m)
+	}
+	member := func(group string) bool {
+		return count(t, e.DB, `SELECT count(*) FROM group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=$1 AND u.email='fay@example.com'`, group) == 1
+	}
+	login := func(extra map[string]any) []string {
+		claims := map[string]any{"sub": "fay-sub", "email": "fay@example.com", "email_verified": true, "name": "Fay"}
+		for k, v := range extra {
+			claims[k] = v
+		}
+		r := e.sso(idp, conn, e.Org, claims)
+		if r.Status == 403 {
+			return nil
+		}
+		if r.Status != 200 {
+			t.Fatalf("login: %d %v", r.Status, r.JSON)
+		}
+		return e.permissions(r.JSON["access_token"].(string))
+	}
+	if got := login(map[string]any{"groups": []string{"eng", "other"}}); !equal(got, []string{"invoices:write"}) {
+		t.Fatalf("first login = %v", got)
+	}
+	// A single string is accepted too; the other mapped group leaves.
+	if got := login(map[string]any{"groups": "ops"}); !equal(got, []string{"invoices:read"}) || member(eng) || !member(ops) {
+		t.Fatalf("second login = %v", got)
+	}
+	// A custom claim name replaces the default.
+	e.Must("PATCH", connections+"/"+conn, e.Owner, fiber.Map{"options": fiber.Map{"groups_claim": "roles"}}, 204)
+	if got := login(map[string]any{"groups": []string{"eng"}, "roles": []string{"ops", "eng"}}); !equal(got, []string{"invoices:read", "invoices:write"}) {
+		t.Fatalf("custom claim = %v", got)
+	}
+	if got := login(map[string]any{"groups": []string{"eng"}}); len(got) != 0 || member(eng) || member(ops) {
+		t.Fatalf("claim missing = %v", got)
+	}
+}

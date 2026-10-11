@@ -43,6 +43,7 @@ export default function OAuthClientDetailPage() {
   const [auth, setAuth] = useState(false)
   const [opaque, setOpaque] = useState(false)
   const [editingBackchannel, setEditingBackchannel] = useState(false)
+  const [editingInitiate, setEditingInitiate] = useState(false)
 
   const load = useCallback(() => {
     setError('')
@@ -197,6 +198,26 @@ export default function OAuthClientDetailPage() {
           [t('Deliveries'), <Link className="inline-flex items-center gap-1 text-primary hover:underline" to={`${console}/logout-deliveries?client_id=${client.id}`}><Radio className="size-3.5" /> {t('View delivery log')}</Link>],
         ]} />
         : <p className="text-sm text-muted-foreground">{t('Off — the application is not told when sessions end.')}</p>}
+    </DetailSection>
+
+    <DetailSection title={t('IdP-initiated sign-in')} description={t('Where IAMKit sends users who start at their identity provider (IdP-initiated SAML): this URL receives iss, connection_id and organization_id, then starts a normal sign-in with /oauth/authorize?connection_id=…. Connections choose the client in their IdP-initiated setting.')}
+      actions={editable && !editingInitiate && <Button variant="outline" size="sm" aria-label={t('Edit sign-in endpoint')} onClick={() => setEditingInitiate(true)}><Pencil /> {t('Edit')}</Button>}>
+      {editingInitiate ? <form className="space-y-3" onSubmit={async e => {
+        e.preventDefault()
+        const data = new FormData(e.currentTarget)
+        const body = { initiate_login_uri: String(data.get('initiate_login_uri') ?? '').trim() }
+        if (await save(body, body.initiate_login_uri ? t('Sign-in endpoint saved') : t('Sign-in endpoint removed'))) setEditingInitiate(false)
+      }}>
+        <label className="block space-y-1.5 text-sm font-medium" htmlFor="initiate_login_uri">{t('Sign-in endpoint')}
+          <Input id="initiate_login_uri" name="initiate_login_uri" type="url" defaultValue={client.initiate_login_uri ?? ''} disabled={busy} placeholder="https://app.example.com/login — empty turns it off" />
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" disabled={busy} onClick={() => setEditingInitiate(false)}>{t('Cancel')}</Button>
+          <Button type="submit" disabled={busy}>{busy ? t('Saving…') : t('Save')}</Button>
+        </div>
+      </form> : client.initiate_login_uri
+        ? <Properties items={[[t('Sign-in endpoint'), <code className="text-xs break-all">{client.initiate_login_uri}</code>]]} />
+        : <p className="text-sm text-muted-foreground">{t('Off — IdP-initiated logins cannot be handed to this client.')}</p>}
     </DetailSection>
 
     <HistorySection path={path} refresh={client} />

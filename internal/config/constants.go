@@ -38,6 +38,17 @@ const (
 	ChallengeTTL = 5 * time.Minute
 )
 
+// Organization setup links (WorkOS-style admin portal links): the default
+// and bounds of a link's lifetime, and how long the bearer it is exchanged
+// for lasts (never beyond the link itself).
+const (
+	SetupLinkTTL       = 7 * 24 * time.Hour
+	SetupLinkMinTTL    = 5 * time.Minute
+	SetupLinkMaxTTL    = 30 * 24 * time.Hour
+	SetupSessionTTL    = 1 * time.Hour
+	SetupLinkMaxPerOrg = 50 // live (unrevoked, unexpired) links per organization
+)
+
 // Signing keys. A key an environment stops signing with keeps verifying
 // for SigningKeyRetireDelay: the longest token lifetime plus clock skew.
 // Instances reread published keys every SigningKeyCacheTTL (and on an

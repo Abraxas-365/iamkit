@@ -41,6 +41,16 @@ type Flows interface {
 	// service for its pending state (the RelayState) and returns the
 	// one-time handle the callback takes as its code.
 	Assertion(ctx context.Context, state, response string) (string, error)
+	// IdPInitiated handles a SAML response posted to the assertion consumer
+	// service without a pending state (the RelayState is not a state
+	// handle): it finds the connection the response is addressed to,
+	// verifies it completely, spends its assertion and answers where to
+	// redirect the browser — the sign-in endpoint (initiate_login_uri) of
+	// the connection's OAuth client. It never signs anybody in.
+	IdPInitiated(ctx context.Context, response, relayState string) (string, error)
+	// Lookup describes an active connection as a sign-in route (organization,
+	// provider, enforcement); not found when it is not active.
+	Lookup(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) (Discovery, error)
 	// SAMLMetadata is the service provider metadata of an active SAML
 	// connection, to give its identity provider.
 	SAMLMetadata(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) ([]byte, error)
@@ -91,6 +101,15 @@ type Repository interface {
 	ParkAssertion(ctx context.Context, stateHash, handleHash []byte, response string) error
 	// TakeAssertion returns and deletes the response parked for the state.
 	TakeAssertion(ctx context.Context, stateHash, handleHash []byte) (string, error)
+	// LoginClient returns the active OAuth client of the environment that
+	// has an initiate_login_uri and belongs to an application the
+	// organization can use (its resource is not grant-restricted, is owned
+	// by the organization or granted to it); not found otherwise.
+	LoginClient(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, client identity.ClientID) (LoginClient, error)
+	// AcceptInitiated spends the assertion of an IdP-initiated response
+	// (401 on a replay) and records the connection.idp_initiated event for
+	// the client, in one transaction.
+	AcceptInitiated(ctx context.Context, c Connection, client identity.ClientID, assertion string, expires time.Time) error
 	// UseAssertion records a SAML assertion ID until it expires; it fails
 	// with 401 when the connection already accepted it (a replay).
 	UseAssertion(ctx context.Context, connection identity.ConnectionID, assertion string, expires time.Time) error
@@ -99,8 +118,17 @@ type Repository interface {
 	// federation.profile_updated.
 	Refresh(ctx context.Context, p Profile) error
 	// LinkedUser returns an open transaction and the linked active user, or
-	// (nil, zero, nil) when the subject is not linked.
-	LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string) (authentication.Transaction, Account, error)
+	// (nil, zero, nil) when the subject is not linked. In that transaction
+	// it first reconciles the user's membership of the groups the
+	// connection maps (GroupMapping) with the provider's group values:
+	// added to the mapped groups whose value is in groups, removed from the
+	// other mapped ones, never touching other groups. Only an active member
+	// of the connection's organization is reconciled. The changes are
+	// committed with the transaction.
+	LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string, groups []string) (authentication.Transaction, Account, error)
+	// MissingOperatorGroups returns those of groups that are not
+	// operator-managed groups of the organization.
+	MissingOperatorGroups(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, groups []identity.GroupID) ([]identity.GroupID, error)
 	// Provision links the subject on first login, adopting the active user
 	// with the email or creating one, and commits. It fails unless the email's
 	// domain is verified by the organization.
@@ -143,6 +171,14 @@ type Provider interface {
 	Verify(ctx context.Context, c Connection, code, nonce, verifier string) (Claims, error)
 	// Metadata is the SAML service provider metadata of a SAML connection.
 	Metadata(ctx context.Context, c Connection) ([]byte, error)
+	// Hint reads, without verifying anything, who a base64 SAML response
+	// says it is for (SAML only; others fail).
+	Hint(response string) (ResponseHint, error)
+	// VerifyUnsolicited checks a SAML response nobody asked for: signed by
+	// the connection's identity provider, for this service provider,
+	// within its validity window and without InResponseTo. Only the
+	// assertion ID and expiry are returned.
+	VerifyUnsolicited(ctx context.Context, c Connection, response string) (Claims, error)
 	Verifier() string
 	// Callback is the redirect URI operators register with providers.
 	Callback() string

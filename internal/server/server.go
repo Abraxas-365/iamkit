@@ -63,6 +63,8 @@ type APIHandlerSet struct {
 	SMS             *authhttp.SMSHandler
 	// OrgAdmin serves organization administrators (.../organizations/:organization/admin).
 	OrgAdmin *orgadminhttp.Handler
+	// SetupLinks serves an organization's setup links (iam:orgs:read/write).
+	SetupLinks *orgadminhttp.SetupLinks
 	// Events serves the event log (iam:events:read).
 	Events *eventhttp.Handler
 	// Webhooks serves event webhook subscriptions (iam:webhooks:*).
@@ -114,6 +116,9 @@ type Server struct {
 	// OrgAdminPortal turns the hosted organization admin portal (/org-admin)
 	// on and off and tells the portal its client.
 	OrgAdminPortal *orgadminhttp.Portal
+	// SetupLinks serves organization setup links to operators and the
+	// public exchange of a link for a setup bearer.
+	SetupLinks *orgadminhttp.SetupLinks
 	// Events serves the environment's event log.
 	Events *eventhttp.Handler
 	// Webhooks serves event webhook subscriptions; WebhookDispatcher sends
@@ -359,6 +364,10 @@ func (s *Server) App() *fiber.App {
 	auth := app.Group("/identity/v1")
 	if s.OrgAdminPortal != nil {
 		auth.Get("/org-admin/:environment", s.limit(limiter.Config{Max: 60}), s.OrgAdminPortal.Discover)
+	}
+	if s.SetupLinks != nil {
+		// The link secret is the credential: a tight budget per address.
+		auth.Post("/org-admin/setup", s.limit(limiter.Config{Max: 20, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.SetupLinks.Exchange)
 	}
 	auth.Post("/login", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Auth.Login)
 	auth.Post("/machine-token", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Tokens.Machine)

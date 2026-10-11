@@ -21,6 +21,9 @@ type Caller struct {
 	User         identity.UserID
 	Organization identity.OrganizationID
 	Permissions  []string
+	// Setup is the setup link whose bearer this is (User is then zero and
+	// Permissions come from its intents).
+	Setup identity.SetupLinkID
 }
 
 type Handler struct {
@@ -61,12 +64,19 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Post("/domains", h.addDomain)
 	r.Post("/domains/:domain/verify", h.verifyDomain)
 	r.Delete("/domains/:domain", h.deleteDomain)
+	r.Get("/groups", h.groups)
 	r.Get("/connections", h.connections)
 	r.Post("/connections", h.createConnection)
 	r.Get("/connections/:connection", h.connection)
 	r.Patch("/connections/:connection", h.updateConnection)
 	r.Delete("/connections/:connection", h.disableConnection)
 	r.Post("/connections/:connection/enable", h.enableConnection)
+	r.Get("/directories", h.directories)
+	r.Post("/directories", h.createDirectory)
+	r.Delete("/directories/:credential", h.revokeDirectory)
+	r.Get("/setup-links", h.setupLinks)
+	r.Post("/setup-links", h.createSetupLink)
+	r.Delete("/setup-links/:link", h.revokeSetupLink)
 	r.Get("/events", h.events)
 	r.Get("/resources", h.resources)
 	r.Get("/resource-grants", h.resourceGrants)
@@ -88,11 +98,12 @@ type principalKey struct{}
 func (h *Handler) Principal(c *fiber.Ctx) error {
 	caller := h.caller(c)
 	org, err := identity.ParseOrganizationID(c.Params("organization"))
-	if err != nil || caller.User.IsZero() || caller.Organization != org {
+	// Setup bearers have no user: they are the link (caller.Setup).
+	if err != nil || (caller.User.IsZero() && caller.Setup.IsZero()) || caller.Organization != org {
 		return errx.Forbidden("token not issued in this organization")
 	}
 	environment, _ := identity.ParseEnvironmentID(c.Params("environment"))
-	c.Locals(principalKey{}, orgadmin.Principal{Environment: environment, Organization: org, User: caller.User, Permissions: caller.Permissions})
+	c.Locals(principalKey{}, orgadmin.Principal{Environment: environment, Organization: org, User: caller.User, SetupLink: caller.Setup, Permissions: caller.Permissions})
 	return c.Next()
 }
 
@@ -325,6 +336,14 @@ func (h *Handler) revoke(c *fiber.Ctx) error {
 
 func (h *Handler) domains(c *fiber.Ctx) error {
 	out, err := h.queries.Domains(c.UserContext(), principal(c), httpx.PaginationFromCtx(c))
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+
+func (h *Handler) groups(c *fiber.Ctx) error {
+	out, err := h.queries.Groups(c.UserContext(), principal(c), httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

@@ -80,6 +80,10 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	orgs.Put("/organizations/:id/metadata/:key", s.APIHandlers.Organizations.SetMetadata)
 	orgs.Delete("/organizations/:id/metadata/:key", s.APIHandlers.Organizations.DeleteMetadata)
 
+	if h := s.APIHandlers.SetupLinks; h != nil {
+		h.Guarded(e, apiauth.RequirePermission(authorization.PermOrgsRead), apiauth.RequirePermission(authorization.PermOrgsWrite))
+	}
+
 	// Organization administration: end users administering their own
 	// organization with iam:org:* permissions. Registered before the
 	// structure prefix group so its iam:members:* check never runs here.

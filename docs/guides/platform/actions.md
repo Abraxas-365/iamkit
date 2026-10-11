@@ -87,7 +87,7 @@ webhook-signature: v1,K5p4…
 | `client_id`, `scopes` | Token and UserInfo conditions |
 | `user` (`id`, `email`, `name`, `username`) | When a user is known; no `id` before registration |
 | `amr` | Sign-in and token conditions: how the user signed in |
-| `identity` (`connection_id`, `provider`, `subject`, `email`, `name`) | `post_federation` and federated `pre_registration` |
+| `identity` (`connection_id`, `provider`, `subject`, `email`, `name`, `groups`) | `post_federation` and federated `pre_registration`; `groups` are the provider's groups (read-only, omitted when none) |
 | `request` | `request:*`: the request body (never a password) |
 
 No secrets, password hashes or tokens are ever sent. Requests are signed

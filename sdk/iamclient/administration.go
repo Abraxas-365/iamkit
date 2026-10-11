@@ -162,6 +162,9 @@ type OAuthClient struct {
 	// in ends. See authclient.ValidateLogoutToken.
 	BackchannelLogoutURI             string `json:"backchannel_logout_uri,omitempty"`
 	BackchannelLogoutSessionRequired bool   `json:"backchannel_logout_session_required,omitempty"`
+	// InitiateLoginURI is the application's sign-in endpoint for
+	// IdP-initiated SAML logins (https, or http on loopback).
+	InitiateLoginURI string `json:"initiate_login_uri,omitempty"`
 	// ClientAuthentication of confidential clients (client_secret_basic
 	// when empty; public clients always use none).
 	ClientAuthentication
@@ -195,6 +198,8 @@ type OAuthClientPatch struct {
 	// BackchannelLogoutURI "" turns back-channel logout off.
 	BackchannelLogoutURI             *string `json:"backchannel_logout_uri,omitempty"`
 	BackchannelLogoutSessionRequired *bool   `json:"backchannel_logout_session_required,omitempty"`
+	// InitiateLoginURI "" turns IdP-initiated sign-in off.
+	InitiateLoginURI *string `json:"initiate_login_uri,omitempty"`
 	// Authentication, when set, replaces the token endpoint
 	// authentication (switching away from private_key_jwt drops the keys).
 	TokenEndpointAuthMethod *string          `json:"token_endpoint_auth_method,omitempty"`
@@ -238,6 +243,7 @@ type OAuthClientView struct {
 
 	BackchannelLogoutURI             string `json:"backchannel_logout_uri"`
 	BackchannelLogoutSessionRequired bool   `json:"backchannel_logout_session_required"`
+	InitiateLoginURI                 string `json:"initiate_login_uri"`
 	// System names a client IAMKit registers itself ("org_admin"); it
 	// cannot be changed.
 	System   string          `json:"system,omitempty"`
@@ -305,22 +311,33 @@ type FederationOptions struct {
 	NameIDFormat string              `json:"name_id_format,omitempty"`
 	Attributes   *SAMLAttributes     `json:"attributes,omitempty"`
 	SignRequests bool                `json:"sign_requests,omitempty"`
-	URL          string              `json:"url,omitempty"`
-	StartTLS     bool                `json:"start_tls,omitempty"`
-	BindDN       string              `json:"bind_dn,omitempty"`
-	UserBaseDN   string              `json:"user_base_dn,omitempty"`
-	UserFilter   string              `json:"user_filter,omitempty"`
-	CAPEM        string              `json:"ca_pem,omitempty"`
+	// IdPInitiatedClientID is the OAuth client (with an InitiateLoginURI)
+	// that a SAML connection hands IdP-initiated responses to; empty
+	// refuses them.
+	IdPInitiatedClientID string `json:"idp_initiated_client_id,omitempty"`
+	URL                  string `json:"url,omitempty"`
+	StartTLS             bool   `json:"start_tls,omitempty"`
+	BindDN               string `json:"bind_dn,omitempty"`
+	UserBaseDN           string `json:"user_base_dn,omitempty"`
+	UserFilter           string `json:"user_filter,omitempty"`
+	CAPEM                string `json:"ca_pem,omitempty"`
+	// GroupsClaim is the ID token claim with the user's groups on an OpenID
+	// Connect connection (default "groups"); see Federation.GroupMappings.
+	GroupsClaim string `json:"groups_claim,omitempty"`
 }
 
 // SAMLAttributes names the assertion (SAML) or entry (LDAP) attributes
 // holding the identity.
 // Empty Subject uses the NameID; empty Email and Name use the usual
 // attributes (mail, email, displayName, givenName + sn, their OIDs…).
+// Groups names the multi-valued attribute with the user's groups (SAML
+// default: groups, memberOf, then the Microsoft groups claim; LDAP:
+// memberOf).
 type SAMLAttributes struct {
 	Subject string `json:"subject,omitempty"`
 	Email   string `json:"email,omitempty"`
 	Name    string `json:"name,omitempty"`
+	Groups  string `json:"groups,omitempty"`
 }
 
 // SAMLServiceProvider is what a SAML identity provider is configured with:
@@ -340,6 +357,15 @@ type FederationClaimMap struct {
 	Email         string `json:"email,omitempty"`
 	EmailVerified string `json:"email_verified,omitempty"`
 	Name          string `json:"name,omitempty"`
+	// Groups is the member holding the user's groups (an array of strings).
+	Groups string `json:"groups,omitempty"`
+}
+
+// FederationGroupMapping sends one value of the identity provider's groups
+// to a group of the connection's organization.
+type FederationGroupMapping struct {
+	Value   string `json:"value"`
+	GroupID string `json:"group_id"`
 }
 
 // Federation is an identity provider connection. Set OrganizationID for an
@@ -375,6 +401,11 @@ type Federation struct {
 	JITGroupID      string `json:"jit_group_id,omitempty"`
 	// Enforcement is "optional" (default) or "enforced".
 	Enforcement string `json:"enforcement,omitempty"`
+	// GroupMappings (organization connections, at most 100) put the user
+	// in the organization's operator-managed (non-SCIM) groups whose IdP
+	// value the sign-in carries, and take them out of the mapped groups it
+	// does not, at every sign-in. Unmapped groups are never touched.
+	GroupMappings []FederationGroupMapping `json:"group_mappings,omitempty"`
 	// Read-only. SecretSource is "env", "sealed" or "none" (SAML); SAML
 	// is set on SAML connections.
 	CallbackURL      string               `json:"callback_url,omitempty"`
@@ -405,6 +436,9 @@ type FederationPatch struct {
 	UpdateProfile        *bool              `json:"update_profile,omitempty"`
 	SignupOrganizationID *string            `json:"signup_organization_id,omitempty"`
 	SignupGroupID        *string            `json:"signup_group_id,omitempty"`
+	// GroupMappings replace the connection's mappings: nil keeps them, a
+	// non-nil empty slice clears them.
+	GroupMappings *[]FederationGroupMapping `json:"group_mappings,omitempty"`
 }
 
 type ExternalIdentity struct {

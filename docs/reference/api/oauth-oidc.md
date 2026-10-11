@@ -30,6 +30,13 @@ one is `invalid_request`) — brands the hosted pages with the
 [organization's overrides](../../guides/applications/hosted-login.md#organization-branding)
 and limits the sign-in to that organization (another organization's session
 is refused, 403).
+An optional `connection_id=<id>` hint (a malformed one is `invalid_request`) is
+stored like the organization hint: the hosted login skips the identifier step
+and starts that federation connection when it is active and usable by the
+client (organization SSO offered, `connection_ids` allowlist, the organization
+hint); an unusable hint shows the ordinary sign-in. Clients reached through
+[IdP-initiated SAML](../../guides/enterprise/saml.md#idp-initiated-login) use
+it from their `initiate_login_uri`.
 No implicit or password grant is advertised. `prompt`/`max_age` are unsupported.
 
 Discovery advertises `userinfo_endpoint`, `introspection_endpoint`,
@@ -181,7 +188,7 @@ license to retry old rotating credentials indiscriminately. Token endpoint error
 use OAuth fields (`error`, etc.), not the management JSON envelope.
 
 Client administration: POST/GET `/management/v1/environments/:environment/oauth-clients`,
-GET/PATCH `.../oauth-clients/:id` (`{hosted_login,redirect_uris,post_logout_redirect_uris,grant_types,access_token_format,backchannel_logout_uri,backchannel_logout_session_required,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri}`, any of them; a changed method drops keys not given again), DELETE `.../oauth-clients/:id`.
+GET/PATCH `.../oauth-clients/:id` (`{hosted_login,redirect_uris,post_logout_redirect_uris,grant_types,access_token_format,backchannel_logout_uri,backchannel_logout_session_required,initiate_login_uri,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri}`, any of them; a changed method drops keys not given again), DELETE `.../oauth-clients/:id`.
 Create also takes the four authentication fields (confidential clients only; public clients are always `none`).
 Create also takes optional `grant_types` (default `["authorization_code","refresh_token"]`;
 any of those two, `urn:ietf:params:oauth:grant-type:device_code` and
@@ -198,6 +205,13 @@ revocation, logout and session end deactivate opaque tokens immediately.
 Create also takes optional `backchannel_logout_uri` (HTTPS, no credentials or
 fragment; `""` = off) and `backchannel_logout_session_required` (informational:
 logout tokens always carry `sid`).
+Create and update also take `initiate_login_uri` (`""` = off): the application's
+sign-in endpoint for IdP-initiated SAML logins (HTTPS, or http on loopback, no
+credentials or fragment, ≤ 2048 characters; its query is kept). It is returned
+by the client views. A SAML connection names such a client in
+`options.idp_initiated_client_id`; IAMKit then redirects verified IdP-initiated
+responses to it with `iss`, `connection_id`, `organization_id` (and
+`target_link_uri`).
 
 **Back-channel logout** (OpenID Connect Back-Channel Logout 1.0). When a session
 bound to a client with a `backchannel_logout_uri` ends (`revoked_at` set by

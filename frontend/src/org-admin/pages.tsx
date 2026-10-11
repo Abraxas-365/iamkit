@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { Ban, CheckCircle2, Globe, KeyRound, Mail, Plus, RotateCcw, Share2, Trash2, Unlock, UserPlus, Users } from 'lucide-react'
+import { Ban, CheckCircle2, Globe, KeyRound, Mail, Plus, RotateCcw, Server, Share2, Trash2, Unlock, UserPlus, Users } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { RowActions } from '@/components/ui/menu'
 import { PaginationBar } from '@/components/ui/pagination-bar'
@@ -13,7 +14,8 @@ import { describeAction } from '@/pages/activity'
 import { CreateConnectionDialog, providerLabel, type ConnectionTransport } from '@/pages/federation-connection-form'
 import { OrganizationPasswordRequirements, type PasswordRequirements, type RequirementsStore } from '@/pages/organization-password'
 import { message } from '@/lib/utils'
-import { useAdmin } from './context'
+import { SetupLinksPanel, type SetupLink, type IssuedSetupLink, type SetupTransport } from '@/components/library/setup-links'
+import { OWNER, useAdmin } from './context'
 import type { Page } from './session'
 import { rich, t } from '@/lib/i18n'
 
@@ -28,6 +30,9 @@ interface Invitation { id: string; email: string; inviter: string; status: strin
 interface Issued extends Invitation { link?: string; delivery: string }
 interface Domain { id: string; domain: string; verified: boolean; verification: { name: string; value: string } }
 interface Connection { id: string; name: string; provider: string; enforcement: string; active: boolean; linked: number }
+interface Directory { id: string; name: string; connection_id: string; expires_at: string; revoked_at: string | null; adopt_existing_members: boolean; adopt_scope: string; map_phone: boolean }
+interface Directories { items: Directory[]; scim_url: string }
+interface IssuedDirectory { id: string; secret: string; expires_at: string; scim_url: string }
 interface Resource { id: string; name: string; prefix: string; require_grant: boolean }
 interface ResourceGrant { id: string; resource_id: string; resource_name: string; organization_id: string; organization_name: string; role_ids: string[] | null; created_at: string }
 interface Event { id: string; actor_id: string; actor_kind: string; actor_label: string; action: string; target_id: string; created_at: string }
@@ -263,7 +268,7 @@ export function DomainsPage() {
 }
 
 export function ConnectionsPage() {
-  const { client, can, claims } = useAdmin()
+  const { client, can, claims, setup } = useAdmin()
   const list = usePortalList<Connection>('/connections')
   const [adding, setAdding] = useState(false)
   const [disabling, setDisabling] = useState<Connection | null>(null)
@@ -271,6 +276,7 @@ export function ConnectionsPage() {
   const transport = useMemo<ConnectionTransport>(() => ({
     domains: signal => client.get<Page<{ domain: string; verified: boolean }>>('/domains?limit=100', signal).then(r => r.items),
     create: body => client.post('/connections', body),
+    groups: signal => client.get<Page<{ id: string; name: string }>>('/groups?limit=100', signal).then(r => r.items),
   }), [client])
   return <>
     <PageHeader title={t('Single sign-on')} description={t('Let your employees sign in with your company\'s identity provider.')} actions={write && <Button onClick={() => setAdding(true)}><KeyRound /> {t('Add SSO')}</Button>} />
@@ -288,9 +294,105 @@ export function ConnectionsPage() {
           { label: t('Enable'), icon: <RotateCcw />, onSelect: async () => { try { await client.post(`/connections/${c.id}/enable`); toast.success(t('Connection enabled')); list.reload() } catch (e) { toast.error(message(e)) } } },
         ]} /> : null,
       ])} />
-    {adding && <CreateConnectionDialog base="" kind="sso" organization={{ id: claims.organization_id ?? '', name: 'your organization' }} transport={transport} onClose={() => setAdding(false)} onCreated={list.reload} />}
+    {setup && list.data.length > 0 && <div className="mt-4 space-y-3">{list.data.map(c => <ConnectionSetupInfo key={c.id} connection={c} />)}</div>}
+    {adding && <CreateConnectionDialog base="" kind="sso" organization={{ id: claims.organization_id ?? '', name: setup?.organization_name || 'your organization' }} transport={transport} onClose={() => setAdding(false)} onCreated={list.reload} />}
     {disabling && <ConfirmDialog title={t('Disable {{name}}?', { name: disabling.name })} description={t('Its users can no longer sign in with it.')} confirmLabel={t('Disable')} onClose={() => setDisabling(null)}
       confirm={async () => { await client.delete(`/connections/${disabling.id}`); toast.success(t('Connection disabled')); list.reload() }} />}
+  </>
+}
+
+interface ConnectionInfo { name: string; provider: string; callback_url?: string; saml?: { entity_id: string; acs_url: string; metadata_url: string } }
+
+/** ConnectionSetupInfo shows what the customer's identity provider needs
+ * from IAMKit (SAML service provider details, or the OIDC redirect URI). */
+function ConnectionSetupInfo({ connection }: { connection: Connection }) {
+  const { client } = useAdmin()
+  const [info, setInfo] = useState<ConnectionInfo | null>(null)
+  useEffect(() => {
+    const ctrl = new AbortController()
+    client.get<ConnectionInfo>(`/connections/${connection.id}`, ctrl.signal).then(setInfo).catch(() => {})
+    return () => ctrl.abort()
+  }, [client, connection.id])
+  if (!info || (!info.saml && !info.callback_url)) return null
+  return <DetailSection title={t('Give this to your identity provider: {{name}}', { name: connection.name })} description={info.saml ? t('Paste these values into your identity provider\'s SAML application.') : t('Register this redirect URI at your identity provider.')}>
+    <div className="space-y-3">
+      {info.saml ? <>
+        <CopyField label={t('ACS URL (HTTP-POST)')} value={info.saml.acs_url} />
+        <CopyField label={t('SP entity ID (audience)')} value={info.saml.entity_id} />
+        <CopyField label={t('SP metadata URL')} value={info.saml.metadata_url} />
+      </> : <CopyField label={t('Redirect URI')} value={info.callback_url ?? ''} />}
+    </div>
+  </DetailSection>
+}
+
+const lifetimes = [
+  { label: t('30 days'), value: '720h' }, { label: t('90 days'), value: '2160h' }, { label: t('1 year'), value: '8760h' }, { label: t('No expiry'), value: 'never' },
+]
+const directoryState = (d: Directory) => d.revoked_at ? 'revoked' : Date.parse(d.expires_at) <= Date.now() ? 'expired' : 'active'
+
+export function DirectoryPage() {
+  const { client, can, setup } = useAdmin()
+  const list = useResource<Directories>('/directories?limit=100')
+  const [adding, setAdding] = useState(false)
+  const [revoking, setRevoking] = useState<Directory | null>(null)
+  const [issued, setIssued] = useState<IssuedDirectory | null>(null)
+  const write = can('iam:org:sso:write')
+  const create = write && <Button onClick={() => setAdding(true)}><Plus /> {t('Add token')}</Button>
+  const items = list.data?.items ?? []
+  return <>
+    <PageHeader title={t('Directory (SCIM)')} description={t('Let your directory (Microsoft Entra ID, Okta, …) create, update and remove your users automatically.')} actions={create} />
+    {list.data?.scim_url && <div className="mb-4 rounded-lg border bg-muted/30 p-3"><CopyField label={t('SCIM base URL')} value={list.data.scim_url} hint={t('Paste this into your directory\'s provisioning settings together with a token issued below.')} /></div>}
+    <DataTable columns={[t('Token'), { header: t('Existing members'), hideBelow: 'lg' }, { header: t('Expires'), nowrap: true, hideBelow: 'md' }, t('Status'), ...(write ? [t('Actions')] : [])]} loading={!list.data && !list.error} error={list.error} retry={list.reload}
+      empty={<EmptyState icon={<Server />} title={t('No directory connected')} description={t('Issue a token, then paste it and the SCIM base URL into your directory.')} action={create || undefined} />}
+      rows={items.map(d => {
+        const state = directoryState(d)
+        const cells: ReactNode[] = [
+          <span className="font-medium">{d.name}</span>,
+          <span className="text-sm">{d.adopt_existing_members ? (d.adopt_scope === 'verified_domains' ? t('Adopted (verified domains)') : t('Adopted by email')) : t('Not adopted')}</span>,
+          <Time value={d.expires_at} />,
+          state === 'active' ? <Status active /> : <Status active={false} label={state === 'revoked' ? t('Revoked') : t('Expired')} />,
+        ]
+        if (write) cells.push(state === 'revoked' ? null : <RowActions label={t('Actions for {{name}}', { name: d.name })} actions={[{ label: t('Revoke token'), icon: <Ban />, destructive: true, onSelect: () => setRevoking(d) }]} />)
+        return cells
+      })} />
+    {adding && <FormDialog title={t('Add a directory token')} description={t('The token lets your directory provision users in your organization with SCIM.')} submitLabel={t('Issue token')} success={t('Token issued')} onClose={() => setAdding(false)}
+      fields={[
+        { name: 'name', label: t('Name'), hint: t('e.g. Acme Entra ID') },
+        // A setup link cannot adopt existing members nor issue a token that never expires.
+        { name: 'expires_in', label: t('Token expires in'), type: 'dropdown', options: setup ? lifetimes.filter(l => l.value !== 'never') : lifetimes, value: '8760h' },
+        ...(setup ? [] : [
+          { name: 'adopt_existing_members', label: t('Adopt existing members'), type: 'checkbox' as const, hint: t('When the directory sends a user whose email already belongs to a member, link to that member instead of rejecting the user.') },
+          { name: 'adopt_scope', label: t('Which emails can be adopted'), type: 'dropdown' as const, value: 'verified_domains', options: [{ value: 'verified_domains', label: t('Verified domains only') }, { value: 'any', label: t('Any email') }] },
+        ]),
+        { name: 'map_phone', label: t('Sync mobile phone numbers'), type: 'checkbox', hint: t('Take each user\'s phone number from the directory\'s mobile number. Off: phone numbers set here are left alone.') },
+      ]}
+      submit={async d => { setIssued(await client.post<IssuedDirectory>('/directories', { name: d.name, expires_in: d.expires_in, adopt_existing_members: !setup && d.adopt_existing_members === true, adopt_scope: !setup && d.adopt_existing_members ? d.adopt_scope : 'any', map_phone: d.map_phone })); list.reload() }} />}
+    {revoking && <ConfirmDialog title={t('Revoke {{name}}?', { name: revoking.name })} description={t('The directory using this token can no longer provision users. Users already provisioned are kept.')} confirmLabel={t('Revoke token')} onClose={() => setRevoking(null)}
+      confirm={async () => { await client.delete(`/directories/${revoking.id}`); toast.success(t('Token revoked')); list.reload() }} />}
+    {issued && <Dialog open onOpenChange={open => { if (!open) setIssued(null) }}><DialogContent>
+      <DialogTitle className="pr-6 text-base font-semibold">{t('Token issued')}</DialogTitle>
+      <DialogDescription className="text-muted-foreground">{t('Copy the token now — it is shown only once. Paste both values into the directory\'s provisioning settings.')}</DialogDescription>
+      <div className="space-y-4">
+        <CopyField label={t('SCIM base URL (Tenant URL)')} value={issued.scim_url} />
+        <CopyField label={t('Bearer token (Secret token)')} value={issued.secret} secret hint={rich('Expires {{time}}.', { time: <Time value={issued.expires_at} /> })} />
+      </div>
+      <div className="flex justify-end border-t pt-4"><Button onClick={() => setIssued(null)}>{t('I have saved the token')}</Button></div>
+    </DialogContent></Dialog>}
+  </>
+}
+
+/** SetupLinksPage lets the organization's owners hand a time-limited setup
+ * link to their IT administrator. */
+export function SetupLinksPage() {
+  const { client, can } = useAdmin()
+  const transport = useMemo<SetupTransport>(() => ({
+    list: signal => client.get<Page<SetupLink>>('/setup-links?limit=100', signal),
+    create: body => client.post<IssuedSetupLink>('/setup-links', body),
+    revoke: id => client.delete(`/setup-links/${id}`),
+  }), [client])
+  return <>
+    <PageHeader title={t('Setup links')} description={t('Let someone without an account configure single sign-on, your directory and domains.')} />
+    <SetupLinksPanel transport={transport} canWrite={can(OWNER)} />
   </>
 }
 
@@ -389,7 +491,7 @@ export function ActivityPage() {
 
 // Who acted. Operators of the platform have no label here (their emails
 // are not the customer's), so they show by kind, never as a bare ID.
-const actorKinds: Record<string, string> = { operator: t('Platform administrator'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)'), user: t('User') }
+const actorKinds: Record<string, string> = { operator: t('Platform administrator'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)'), setup_link: t('Setup link'), user: t('User') }
 function Actor({ event: e }: { event: Event }) {
   const kind = actorKinds[e.actor_kind]
   if (e.actor_label) return <span title={kind}>{e.actor_label}</span>

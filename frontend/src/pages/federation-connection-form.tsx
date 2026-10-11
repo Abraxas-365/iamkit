@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { message } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { SearchSelect } from '@/components/ui/search-select'
 import { TagInput } from '@/components/ui/tag-input'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog'
-import { ErrorState } from '@/components/library/patterns'
+import { ErrorState, selectClass } from '@/components/library/patterns'
 import { rich, t } from '@/lib/i18n'
 
 export type Provider = 'oidc' | 'google' | 'microsoft' | 'github' | 'apple' | 'gitlab' | 'github_enterprise' | 'oauth2' | 'saml' | 'ldap'
@@ -48,13 +48,28 @@ export interface ConnectionValues {
   signup: boolean; signup_organization_id: string; signup_group_id: string; link_email: boolean
   base_url: string; authorize_url: string; token_url: string; userinfo_url: string; scopes: string[]
   claim_subject: string; claim_email: string; claim_email_verified: string; claim_name: string; update_profile: boolean
-  metadata_url: string; metadata_xml: string; name_id_format: string; attr_subject: string; attr_email: string; attr_name: string; sign_requests: boolean
+  metadata_url: string; metadata_xml: string; name_id_format: string; attr_subject: string; attr_email: string; attr_name: string; sign_requests: boolean; idp_initiated_client_id: string
   ldap_url: string; start_tls: boolean; bind_dn: string; user_base_dn: string; user_filter: string; ca_pem: string
+  // Where the identity provider keeps the user's groups: a SAML/LDAP attribute
+  // (attr_groups), an OIDC ID token claim (groups_claim) or an OAuth 2.0
+  // userinfo path (claim_groups), and the mapping of its values to groups.
+  attr_groups: string; groups_claim: string; claim_groups: string; group_mappings: GroupMappingRow[]
 }
+
+export interface GroupMappingRow { value: string; group_id: string }
+
+// maxGroupMappings is the API's limit per connection.
+export const maxGroupMappings = 100
+
+// oidcGroupProviders read groups from the ID token (options.groups_claim).
+export const oidcGroupProviders: Provider[] = ['oidc', 'google', 'microsoft', 'gitlab']
+
+// mappingRows keeps the rows that are filled in.
+export const mappingRows = (rows: GroupMappingRow[]) => rows.map(r => ({ value: r.value.trim(), group_id: r.group_id })).filter(r => r.value && r.group_id)
 
 // ldapOptions are the options of an LDAP connection: the directory, its
 // service account, where users live and how to find them.
-export function ldapOptions(v: Pick<ConnectionValues, 'ldap_url' | 'start_tls' | 'bind_dn' | 'user_base_dn' | 'user_filter' | 'ca_pem' | 'attr_subject' | 'attr_email' | 'attr_name'>) {
+export function ldapOptions(v: Pick<ConnectionValues, 'ldap_url' | 'start_tls' | 'bind_dn' | 'user_base_dn' | 'user_filter' | 'ca_pem' | 'attr_subject' | 'attr_email' | 'attr_name' | 'attr_groups'>) {
   const options: Record<string, unknown> = { url: v.ldap_url.trim(), user_base_dn: v.user_base_dn.trim() }
   if (v.start_tls && v.ldap_url.trim().toLowerCase().startsWith('ldap://')) options.start_tls = true
   if (v.bind_dn.trim()) options.bind_dn = v.bind_dn.trim()
@@ -64,31 +79,35 @@ export function ldapOptions(v: Pick<ConnectionValues, 'ldap_url' | 'start_tls' |
   if (v.attr_subject.trim()) attributes.subject = v.attr_subject.trim()
   if (v.attr_email.trim()) attributes.email = v.attr_email.trim()
   if (v.attr_name.trim()) attributes.name = v.attr_name.trim()
+  if (v.attr_groups.trim()) attributes.groups = v.attr_groups.trim()
   if (Object.keys(attributes).length) options.attributes = attributes
   return options
 }
 
 // samlOptions are the options of a SAML connection: the identity
 // provider's metadata (URL or XML), NameID format and attribute names.
-export function samlOptions(v: Pick<ConnectionValues, 'metadata_url' | 'metadata_xml' | 'name_id_format' | 'attr_subject' | 'attr_email' | 'attr_name' | 'sign_requests'>) {
+export function samlOptions(v: Pick<ConnectionValues, 'metadata_url' | 'metadata_xml' | 'name_id_format' | 'attr_subject' | 'attr_email' | 'attr_name' | 'attr_groups' | 'sign_requests'> & { idp_initiated_client_id?: string }) {
   const options: Record<string, unknown> = v.metadata_xml.trim() ? { metadata_xml: v.metadata_xml.trim() } : { metadata_url: v.metadata_url.trim() }
   if (v.name_id_format && v.name_id_format !== 'unspecified') options.name_id_format = v.name_id_format
   const attributes: Record<string, string> = {}
   if (v.attr_subject.trim()) attributes.subject = v.attr_subject.trim()
   if (v.attr_email.trim()) attributes.email = v.attr_email.trim()
   if (v.attr_name.trim()) attributes.name = v.attr_name.trim()
+  if (v.attr_groups.trim()) attributes.groups = v.attr_groups.trim()
   if (Object.keys(attributes).length) options.attributes = attributes
   if (v.sign_requests) options.sign_requests = true
+  if (v.idp_initiated_client_id?.trim()) options.idp_initiated_client_id = v.idp_initiated_client_id.trim()
   return options
 }
 
 // oauth2Options are the options of an OAuth 2.0 connection: endpoints,
 // scopes and where the userinfo response keeps the identity.
-export function oauth2Options(v: Pick<ConnectionValues, 'authorize_url' | 'token_url' | 'userinfo_url' | 'scopes' | 'claim_subject' | 'claim_email' | 'claim_email_verified' | 'claim_name'>) {
+export function oauth2Options(v: Pick<ConnectionValues, 'authorize_url' | 'token_url' | 'userinfo_url' | 'scopes' | 'claim_subject' | 'claim_email' | 'claim_email_verified' | 'claim_name' | 'claim_groups'>) {
   const claims: Record<string, string> = { subject: v.claim_subject.trim() }
   if (v.claim_email.trim()) claims.email = v.claim_email.trim()
   if (v.claim_email_verified.trim()) claims.email_verified = v.claim_email_verified.trim()
   if (v.claim_name.trim()) claims.name = v.claim_name.trim()
+  if (v.claim_groups.trim()) claims.groups = v.claim_groups.trim()
   return { authorize_url: v.authorize_url.trim(), token_url: v.token_url.trim(), userinfo_url: v.userinfo_url.trim(), ...(v.scopes.length ? { scopes: v.scopes } : {}), claims }
 }
 
@@ -99,11 +118,13 @@ export function connectionBody(v: ConnectionValues): Record<string, unknown> {
     const body: Record<string, unknown> = { provider: 'ldap', name: v.name.trim(), organization_id: v.organization_id, options: ldapOptions(v) }
     if (v.bind_dn.trim() && v.client_secret) body.client_secret = v.client_secret
     if (v.update_profile) body.update_profile = true
+    if (mappingRows(v.group_mappings).length) body.group_mappings = mappingRows(v.group_mappings)
     return body
   }
   if (v.provider === 'saml') {
     const body: Record<string, unknown> = { provider: 'saml', name: v.name.trim(), organization_id: v.organization_id, options: samlOptions(v) }
     if (v.update_profile) body.update_profile = true
+    if (mappingRows(v.group_mappings).length) body.group_mappings = mappingRows(v.group_mappings)
     return body
   }
   const body: Record<string, unknown> = { provider: v.provider, name: v.name.trim(), client_id: v.client_id.trim() }
@@ -121,6 +142,8 @@ export function connectionBody(v: ConnectionValues): Record<string, unknown> {
   if (v.update_profile) body.update_profile = true
   if (v.scope === 'organization') {
     body.organization_id = v.organization_id
+    if (oidcGroupProviders.includes(v.provider) && v.groups_claim.trim()) body.options = { ...(body.options as Record<string, unknown> | undefined), groups_claim: v.groups_claim.trim() }
+    if (mappingRows(v.group_mappings).length) body.group_mappings = mappingRows(v.group_mappings)
   } else {
     if (v.signup) {
       body.signup = true
@@ -136,8 +159,9 @@ const initial: ConnectionValues = {
   provider: 'google', scope: 'environment', organization_id: '', name: 'Google', issuer: '', client_id: '', client_secret: '', secret_env: '',
   tenant: 'common', tenant_id: '', tenants: [], domains: [], team_id: '', key_id: '', signup: false, signup_organization_id: '', signup_group_id: '', link_email: true,
   base_url: '', authorize_url: '', token_url: '', userinfo_url: '', scopes: [], claim_subject: 'id', claim_email: 'email', claim_email_verified: '', claim_name: 'name', update_profile: false,
-  metadata_url: '', metadata_xml: '', name_id_format: 'unspecified', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false,
+  metadata_url: '', metadata_xml: '', name_id_format: 'unspecified', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false, idp_initiated_client_id: '',
   ldap_url: '', start_tls: false, bind_dn: '', user_base_dn: '', user_filter: '', ca_pem: '',
+  attr_groups: '', groups_claim: '', claim_groups: '', group_mappings: [],
 }
 
 // useCallbackURL is the federation redirect URI: under IAMKit's issuer,
@@ -159,6 +183,42 @@ export type ConnectionKind = 'social' | 'sso'
 export interface ConnectionTransport {
   domains: (signal: AbortSignal) => Promise<{ domain: string; verified: boolean }[]>
   create: (body: Record<string, unknown>) => Promise<unknown>
+  /** The organization's operator-managed groups (targets of group mappings). */
+  groups?: (signal: AbortSignal) => Promise<{ id: string; name: string }[]>
+}
+
+/** useOrganizationGroups loads the groups a connection of the organization
+ * may map to: operator-managed ones, never a SCIM directory's. */
+export function useOrganizationGroups(base: string, organization: string, transport?: ConnectionTransport) {
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([])
+  useEffect(() => {
+    if (!organization) { setGroups([]); return }
+    const ctrl = new AbortController()
+    const load = transport?.groups ? transport.groups(ctrl.signal)
+      : transport ? Promise.resolve([])
+      : api.list<{ id: string; name: string }>(`${base}/organizations/${organization}/groups?source=manual&limit=100`, ctrl.signal).then(r => r.data)
+    load.then(setGroups).catch(() => {})
+    return () => ctrl.abort()
+  }, [base, organization, transport])
+  return groups
+}
+
+/** GroupMappingEditor edits the rows that send a value of the identity
+ * provider's groups to a group of the organization. */
+export function GroupMappingEditor({ id, groups, rows, onChange, disabled }: { id: string; groups: { id: string; name: string }[]; rows: GroupMappingRow[]; onChange: (rows: GroupMappingRow[]) => void; disabled?: boolean }) {
+  const update = (i: number, patch: Partial<GroupMappingRow>) => onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
+  return <div className="space-y-2">
+    {rows.map((r, i) => <div key={i} className="flex items-center gap-2">
+      <Input id={`${id}-value-${i}`} aria-label={t('Group value from the identity provider')} value={r.value} disabled={disabled} maxLength={512} placeholder={t('Value, e.g. engineering')} onChange={e => update(i, { value: e.target.value })} />
+      <select id={`${id}-group-${i}`} aria-label={t('Group to join')} className={selectClass} value={r.group_id} disabled={disabled} onChange={e => update(i, { group_id: e.target.value })}>
+        <option value="">{t('Choose a group…')}</option>
+        {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+        {r.group_id && !groups.some(g => g.id === r.group_id) && <option value={r.group_id}>{r.group_id}</option>}
+      </select>
+      <Button type="button" variant="ghost" size="icon" disabled={disabled} aria-label={t('Remove mapping')} onClick={() => onChange(rows.filter((_, j) => j !== i))}><Trash2 className="size-4" /></Button>
+    </div>)}
+    <Button type="button" variant="outline" size="sm" disabled={disabled || rows.length >= maxGroupMappings} onClick={() => onChange([...rows, { value: '', group_id: '' }])}><Plus className="size-4" /> {t('Add mapping')}</Button>
+  </div>
 }
 
 export function CreateConnectionDialog({ base, kind, organization, onClose, onCreated, transport }: { base: string; kind: ConnectionKind; organization?: { id: string; name: string }; onClose: () => void; onCreated: () => void; transport?: ConnectionTransport }) {
@@ -193,6 +253,7 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
     }).catch(() => {})
     return () => ctrl.abort()
   }, [base, v.scope, v.organization_id, transport])
+  const groups = useOrganizationGroups(base, v.scope === 'organization' ? v.organization_id : '', transport)
   const field = (name: string, label: string, control: React.ReactNode, hint?: string) => <div className="space-y-1.5">
     <label className="text-sm font-medium" htmlFor={`${id}-${name}`}>{label}</label>
     {control}
@@ -227,7 +288,7 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
           {sso && <p className="text-xs text-muted-foreground">{organization ? t('Company SSO needs a provider that can be limited to the accounts of {{organization}}. GitHub and Apple accounts are personal, so they are only offered as social login.', { organization: organization.name }) : t('Company SSO needs a provider that can be limited to the organization’s accounts. GitHub and Apple accounts are personal, so they are only offered as social login.')}</p>}
         </fieldset>
 
-        {sso && !organization && field('organization_id', t('Organization'), <SearchSelect id={`${id}-organization_id`} name="organization_id" path={`${base}/organizations`} mapItem={named} required disabled={busy} placeholder={t('Search organizations…')} onChange={value => setV(prev => ({ ...prev, organization_id: value, domains: [] }))} />,
+        {sso && !organization && field('organization_id', t('Organization'), <SearchSelect id={`${id}-organization_id`} name="organization_id" path={`${base}/organizations`} mapItem={named} required disabled={busy} placeholder={t('Search organizations…')} onChange={value => setV(prev => ({ ...prev, organization_id: value, domains: [], group_mappings: [] }))} />,
           t('The company whose employees sign in with this provider. You can turn on automatic account creation and make SSO mandatory after creating it.'))}
 
         {field('name', t('Name'), <Input id={`${id}-name`} value={v.name} required disabled={busy} placeholder={sso ? t('e.g. Globex Entra ID') : undefined} onChange={e => set('name', e.target.value)} />, social ? t('Shown on the button: "Continue with …".') : t('Helps you recognize it in this console.'))}
@@ -249,6 +310,7 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
             {field('claim_name', t('Name'), <Input id={`${id}-claim_name`} value={v.claim_name} onChange={e => set('claim_name', e.target.value)} />)}
             {field('claim_email', t('Email'), <Input id={`${id}-claim_email`} value={v.claim_email} onChange={e => set('claim_email', e.target.value)} />)}
             {field('claim_email_verified', t('Email verified'), <Input id={`${id}-claim_email_verified`} value={v.claim_email_verified} placeholder={t('e.g. verified')} onChange={e => set('claim_email_verified', e.target.value)} />)}
+            {sso && field('claim_groups', t('Groups (optional)'), <Input id={`${id}-claim_groups`} value={v.claim_groups} placeholder={t('e.g. data.groups')} onChange={e => set('claim_groups', e.target.value)} />)}
           </div>
           <p className="text-xs text-muted-foreground">{t('Without an “email verified” member the email is never trusted: it cannot create or link accounts.')}</p>
         </fieldset>}
@@ -287,12 +349,15 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
             <option value="transient">{t('Transient (map a user ID attribute below)')}</option>
           </select>, t('The NameID identifies the user unless a user ID attribute is mapped.'))}
           <p className="text-xs text-muted-foreground">{t('Attribute names (optional). Leave empty to use the NameID and the usual email and name attributes.')}</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {field('attr_subject', t('User ID'), <Input id={`${id}-attr_subject`} value={v.attr_subject} required={v.name_id_format === 'transient'} placeholder={t('NameID')} onChange={e => set('attr_subject', e.target.value)} />)}
             {field('attr_email', t('Email'), <Input id={`${id}-attr_email`} value={v.attr_email} placeholder="email" onChange={e => set('attr_email', e.target.value)} />)}
             {field('attr_name', t('Name'), <Input id={`${id}-attr_name`} value={v.attr_name} placeholder="displayName" onChange={e => set('attr_name', e.target.value)} />)}
+            {field('attr_groups', t('Groups'), <Input id={`${id}-attr_groups`} value={v.attr_groups} placeholder="groups" onChange={e => set('attr_groups', e.target.value)} />)}
           </div>
           {check('sign_requests', t('Sign authentication requests'), t('For identity providers that require signed AuthnRequests. IAMKit signs with the environment signing key.'))}
+          {field('idp_initiated_client_id', t('IdP-initiated sign-in client'), <Input id={`${id}-idp_initiated_client_id`} value={v.idp_initiated_client_id} placeholder={t('OAuth client ID (optional)')} onChange={e => set('idp_initiated_client_id', e.target.value)} />,
+            t('Optional. An OAuth client with a sign-in endpoint (initiate login URI) that users land on when they start from the identity provider. Empty refuses IdP-initiated responses.'))}
         </fieldset>}
 
         {v.provider === 'ldap' && <fieldset className="space-y-3 rounded-md border p-3" disabled={busy}>
@@ -310,10 +375,11 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
           {field('user_filter', t('User filter (optional)'), <Input id={`${id}-user_filter`} value={v.user_filter} disabled={busy} placeholder="(|(mail={email})(userPrincipalName={email}))" onChange={e => set('user_filter', e.target.value)} />,
             t('{email} is the typed email, {username} its part before @ (e.g. (sAMAccountName={username})). It must match exactly one entry.'))}
           <p className="text-xs text-muted-foreground">{t('Attribute names (optional). Leave empty for objectGUID / entryUUID, mail or userPrincipalName, and displayName.')}</p>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {field('attr_subject', t('User ID'), <Input id={`${id}-attr_subject`} value={v.attr_subject} placeholder="objectGUID" onChange={e => set('attr_subject', e.target.value)} />)}
             {field('attr_email', t('Email'), <Input id={`${id}-attr_email`} value={v.attr_email} placeholder="mail" onChange={e => set('attr_email', e.target.value)} />)}
             {field('attr_name', t('Name'), <Input id={`${id}-attr_name`} value={v.attr_name} placeholder="displayName" onChange={e => set('attr_name', e.target.value)} />)}
+            {field('attr_groups', t('Groups'), <Input id={`${id}-attr_groups`} value={v.attr_groups} placeholder="memberOf" onChange={e => set('attr_groups', e.target.value)} />)}
           </div>
         </fieldset>}
 
@@ -346,6 +412,15 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
             {field('signup_organization_id', t('Sign-up organization'), <SearchSelect id={`${id}-signup_organization_id`} name="signup_organization_id" path={`${base}/organizations`} mapItem={named} required disabled={busy} placeholder={t('Search organizations…')} onChange={value => setV(prev => ({ ...prev, signup_organization_id: value, signup_group_id: '' }))} />)}
             {v.signup_organization_id && field('signup_group_id', t('Default group (optional)'), <SearchSelect key={v.signup_organization_id} id={`${id}-signup_group_id`} name="signup_group_id" path={`${base}/organizations/${v.signup_organization_id}/groups`} mapItem={named} disabled={busy} placeholder={t('Search groups…')} onChange={value => set('signup_group_id', value)} />, t('New users join this group and get its roles.'))}
           </>}
+        </fieldset>}
+
+        {sso && <fieldset className="space-y-3 rounded-md border p-3" disabled={busy}>
+          <legend className="px-1 text-sm font-medium">{t('Group mapping (optional)')}</legend>
+          <p className="text-xs text-muted-foreground">{t('At every sign-in the user joins the mapped groups whose value the identity provider sends, and leaves the mapped groups it does not send. Other groups are never touched.')}</p>
+          {oidcGroupProviders.includes(v.provider) && field('groups_claim', t('Groups claim'), <Input id={`${id}-groups_claim`} value={v.groups_claim} placeholder="groups" onChange={e => set('groups_claim', e.target.value)} />,
+            t('The ID token claim with the user\'s groups (an array or a string). Empty uses "groups".'))}
+          {v.organization_id ? <GroupMappingEditor id={`${id}-mapping`} groups={groups} rows={v.group_mappings} disabled={busy} onChange={rows => set('group_mappings', rows)} />
+            : <p className="text-xs text-muted-foreground">{t('Choose the organization first.')}</p>}
         </fieldset>}
 
         {check('update_profile', t('Keep profiles in sync'), t("At every sign-in, update the user's name, and the email of accounts that sign in only through providers, from the provider."))}

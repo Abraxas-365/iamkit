@@ -123,7 +123,8 @@ func (d Directory) Authenticate(ctx context.Context, c federation.Connection, em
 	}
 	filter = strings.NewReplacer("{email}", ldap.EscapeFilter(email), "{username}", ldap.EscapeFilter(local)).Replace(filter)
 	subject, mail, name := attributes(o.Attributes)
-	request := ldap.NewSearchRequest(o.UserBaseDN, ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 2, int(Timeout.Seconds()), false, filter, slices.Concat(subject, mail, name), nil)
+	groups := groupAttribute(o.Attributes)
+	request := ldap.NewSearchRequest(o.UserBaseDN, ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 2, int(Timeout.Seconds()), false, filter, slices.Concat(subject, mail, name, []string{groups}), nil)
 	result, err := conn.Search(request)
 	if ldap.IsErrorWithCode(err, ldap.LDAPResultSizeLimitExceeded) || ldap.IsErrorWithCode(err, ldap.LDAPResultNoSuchObject) {
 		// Ambiguous (several entries) or no base: nobody to bind as.
@@ -142,7 +143,9 @@ func (d Directory) Authenticate(ctx context.Context, c federation.Connection, em
 		}
 		return out, errx.External("the LDAP directory bind failed")
 	}
-	return claims(entry, subject, mail, name, email), nil
+	out = claims(entry, subject, mail, name, email)
+	out.Groups = federation.CleanGroups(entry.GetEqualFoldAttributeValues(groups))
+	return out, nil
 }
 
 func (d Directory) dial(ctx context.Context, address string) (net.Conn, error) {
@@ -173,6 +176,15 @@ func attributes(m *federation.AttributeMapping) (subject, email, name []string) 
 		name = []string{m.Name}
 	}
 	return
+}
+
+// groupAttribute is the directory attribute holding the user's groups
+// (their DNs for memberOf).
+func groupAttribute(m *federation.AttributeMapping) string {
+	if m != nil && m.Groups != "" {
+		return m.Groups
+	}
+	return "memberOf"
 }
 
 // claims maps a directory entry. The subject is the first stable

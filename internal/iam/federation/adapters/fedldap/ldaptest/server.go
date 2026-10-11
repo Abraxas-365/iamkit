@@ -102,6 +102,30 @@ func (s *Server) Add(e Entry) {
 	s.entries = append(s.entries, e)
 }
 
+// SetAttribute replaces an attribute of the entry with dn (memberOf changes
+// between sign-ins); it reports whether the entry exists.
+func (s *Server) SetAttribute(dn, name string, values ...string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, e := range s.entries {
+		if !strings.EqualFold(e.DN, dn) {
+			continue
+		}
+		attributes := make(map[string][]string, len(e.Attributes)+1)
+		for k, v := range e.Attributes {
+			if !strings.EqualFold(k, name) {
+				attributes[k] = v
+			}
+		}
+		if len(values) > 0 {
+			attributes[name] = values
+		}
+		s.entries[i].Attributes = attributes
+		return true
+	}
+	return false
+}
+
 // Binds returns the DNs of every bind attempted so far.
 func (s *Server) Binds() []string {
 	s.mu.Lock()

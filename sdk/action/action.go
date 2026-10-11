@@ -88,6 +88,9 @@ type Identity struct {
 	Subject      string `json:"subject"`
 	Email        string `json:"email,omitempty"`
 	Name         string `json:"name,omitempty"`
+	// Groups are the group values the provider reported (read-only; changes
+	// in the response are ignored).
+	Groups []string `json:"groups,omitempty"`
 }
 
 // Response is a call target's answer. Deny refuses the flow (where the

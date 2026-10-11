@@ -16,7 +16,7 @@ describe("OAuthClient", () => {
     const client = new OAuthClient({ baseUrl: `${issuer}/`, clientId: "client-1" });
     const pkce = createPKCE();
     expect(pkce.challenge).toBe(createHash("sha256").update(pkce.verifier).digest("base64url"));
-    const url = new URL(client.authorizationUrl({ redirectUri: "https://app.example.com/cb", state: "state-123", nonce: "n", codeChallenge: pkce.challenge, scopes: ["email", "openid"], organizationId: "org-1" }));
+    const url = new URL(client.authorizationUrl({ redirectUri: "https://app.example.com/cb", state: "state-123", nonce: "n", codeChallenge: pkce.challenge, scopes: ["email", "openid"], organizationId: "org-1", connectionId: "conn-1" }));
     expect(url.origin + url.pathname).toBe(`${issuer}/oauth/authorize`);
     expect(Object.fromEntries(url.searchParams)).toEqual({
       client_id: "client-1",
@@ -28,6 +28,7 @@ describe("OAuthClient", () => {
       code_challenge: pkce.challenge,
       code_challenge_method: "S256",
       organization_id: "org-1",
+      connection_id: "conn-1",
     });
     expect(() => client.authorizationUrl({ redirectUri: "x", state: "short", nonce: "n", codeChallenge: "c" })).toThrow();
     expect(randomToken()).toMatch(/^[A-Za-z0-9_-]{32}$/);

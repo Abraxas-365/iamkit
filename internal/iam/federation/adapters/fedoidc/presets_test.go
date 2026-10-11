@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -509,5 +510,71 @@ func TestDiscoveryCache(t *testing.T) {
 	}
 	if idp.discoveries != 2 {
 		t.Fatalf("discovery fetched %d times, want 2", idp.discoveries)
+	}
+}
+
+func TestOIDCGroupsClaim(t *testing.T) {
+	idp := newIdP(t)
+	c := connection(federation.ProviderGoogle, federation.Options{}, "secret")
+	idp.issuer = "https://accounts.google.com"
+	verify := func(c federation.Connection) []string {
+		t.Helper()
+		claims, err := idp.provider().Verify(context.Background(), c, "code", "nonce-1", "v")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return claims.Groups
+	}
+	base := jwt.MapClaims{"sub": "g-1", "nonce": "nonce-1", "email": "ann@acme.com", "email_verified": true}
+	with := func(extra jwt.MapClaims) {
+		idp.claims = jwt.MapClaims{}
+		for k, v := range base {
+			idp.claims[k] = v
+		}
+		for k, v := range extra {
+			idp.claims[k] = v
+		}
+	}
+	with(jwt.MapClaims{"groups": []string{" eng ", "ops", "eng", "", "ops"}})
+	if got := verify(c); !slices.Equal(got, []string{"eng", "ops"}) {
+		t.Fatalf("default claim: %q", got)
+	}
+	with(jwt.MapClaims{"groups": "solo"})
+	if got := verify(c); !slices.Equal(got, []string{"solo"}) {
+		t.Fatalf("single string: %q", got)
+	}
+	with(jwt.MapClaims{"roles": []string{"admins"}, "groups": []string{"ignored"}})
+	c.Options.GroupsClaim = "roles"
+	if got := verify(c); !slices.Equal(got, []string{"admins"}) {
+		t.Fatalf("custom claim: %q", got)
+	}
+	with(jwt.MapClaims{"groups": 7})
+	c.Options.GroupsClaim = ""
+	if got := verify(c); len(got) != 0 {
+		t.Fatalf("non-string claim: %q", got)
+	}
+	with(nil)
+	if got := verify(c); len(got) != 0 {
+		t.Fatalf("absent claim: %q", got)
+	}
+}
+
+func TestOAuth2GroupsPath(t *testing.T) {
+	idp := newIdP(t)
+	o := federation.Options{AuthorizeURL: "https://oauth.example.com/authorize", TokenURL: "https://oauth.example.com/token", UserinfoURL: "https://oauth.example.com/me",
+		Claims: &federation.ClaimMapping{Subject: "data.id", Email: "data.email", Groups: "data.teams"}}
+	c := connection(federation.ProviderOAuth2, o, "secret")
+	idp.userinfo = `{"data":{"id":"1","email":"ann@example.com","teams":["a","b"," a ",7,null]}}`
+	claims, err := idp.provider().Verify(context.Background(), c, "code", "", "v")
+	if err != nil || !slices.Equal(claims.Groups, []string{"a", "b"}) {
+		t.Fatalf("path groups: %+v %v", claims.Groups, err)
+	}
+	idp.userinfo = `{"data":{"id":"1","teams":"solo"}}`
+	if claims, err = idp.provider().Verify(context.Background(), c, "code", "", "v"); err != nil || !slices.Equal(claims.Groups, []string{"solo"}) {
+		t.Fatalf("single string: %+v %v", claims.Groups, err)
+	}
+	idp.userinfo = `{"data":{"id":"1"}}`
+	if claims, err = idp.provider().Verify(context.Background(), c, "code", "", "v"); err != nil || len(claims.Groups) != 0 {
+		t.Fatalf("absent: %+v %v", claims.Groups, err)
 	}
 }

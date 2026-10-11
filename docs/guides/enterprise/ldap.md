@@ -61,6 +61,7 @@ Options:
 | `attributes.subject` | Attribute with a stable user ID. Default: `objectGUID`, then `entryUUID`, else the entry DN. Binary values are hex-encoded. |
 | `attributes.email` | Attribute with the email. Default: `mail`, then `userPrincipalName`, else the typed email. |
 | `attributes.name` | Attribute with the display name. Default: `displayName`, then `cn`. |
+| `attributes.groups` | Multi-valued attribute with the user's groups (values are group DNs with `memberOf`), for [group mapping](federation.md#group-mapping). Default: `memberOf`. Directories without `memberOf` need the overlay enabled; nested groups are not expanded. |
 
 The connection's `issuer` is the normalized server (`ldaps://dc1.acme.com:636`)
 and its `client_id` the lowercased base DN.

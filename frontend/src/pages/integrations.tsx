@@ -257,7 +257,7 @@ function ProviderMark({ provider }: { provider: string }) {
 // --- OAuth Clients ---
 /** ClientWarning is an accepted setting to review (code loopback_redirect). */
 export interface ClientWarning { code: string; field: string; value: string }
-export interface OAuthClient extends ClientAuth { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; post_logout_redirect_uris?: string[] | null; allowed_origins?: string[] | null; public: boolean; hosted_login: boolean; active: boolean; access_token_format?: 'jwt' | 'opaque'; backchannel_logout_uri?: string; backchannel_logout_session_required?: boolean; grant_types?: string[]; warnings?: ClientWarning[] | null }
+export interface OAuthClient extends ClientAuth { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; post_logout_redirect_uris?: string[] | null; allowed_origins?: string[] | null; public: boolean; hosted_login: boolean; active: boolean; access_token_format?: 'jwt' | 'opaque'; backchannel_logout_uri?: string; backchannel_logout_session_required?: boolean; initiate_login_uri?: string; grant_types?: string[]; warnings?: ClientWarning[] | null }
 export const redirectHint = t('Where users return after signing in. HTTPS; http only for localhost, 127.0.0.1 or [::1] (development and native apps).')
 
 /** loopbackWarnings mirrors the server's warnings for URIs being edited. */
@@ -323,6 +323,7 @@ export function OAuthClientsPage() {
     { name: 'redirect_uris', label: t('Redirect URIs'), type: 'tags', hint: redirectHint },
     { name: 'type', label: t('Client type'), type: 'radio', value: 'public', options: clientTypes },
     { name: 'sign_in', label: t('Sign-in experience'), type: 'radio', value: 'hosted', options: signInModes },
+    { name: 'initiate_login_uri', label: t('Sign-in endpoint'), optional: true, hint: t('Optional. Your app\'s sign-in URL for logins started at the identity provider (IdP-initiated SAML). HTTPS, or http://localhost.') },
   ]
   const toggleHosted = async (c: OAuthClient) => {
     try { await api.patch(`${path}/${c.id}`, { hosted_login: !c.hosted_login }); toast.success(c.hosted_login ? t('Now using your own sign-in UI') : t('Now using the hosted sign-in page')); list.reload() } catch (e) { toast.error(message(e)) }
@@ -352,7 +353,7 @@ export function OAuthClientsPage() {
         return cells
       })} />
     {add && <FormDialog title={t('Create OAuth client')} description={t('Connect an application to sign-in.')} fields={createFields} submitLabel={t('Create client')} success={t('OAuth client created')} onClose={() => { setAdd(false); if (preset) setParams({}, { replace: true }) }} submit={async values => {
-      const data = { application_id: values.application_id, resource_id: values.resource_id, redirect_uris: splitList(values.redirect_uris), public: values.type === 'public', hosted_login: values.sign_in === 'hosted' }
+      const data = { application_id: values.application_id, resource_id: values.resource_id, redirect_uris: splitList(values.redirect_uris), public: values.type === 'public', hosted_login: values.sign_in === 'hosted', ...(typeof values.initiate_login_uri === 'string' && values.initiate_login_uri.trim() ? { initiate_login_uri: values.initiate_login_uri.trim() } : {}) }
       const result = await api.post<{ id: string; client_id: string; client_secret: string; warnings?: ClientWarning[] | null }>(path, data)
       setSecret(result)
       list.reload()

@@ -14,6 +14,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
 	"github.com/Abraxas-365/iamkit/internal/iam/orgadmin"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
+	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
@@ -28,6 +29,7 @@ type Deps struct {
 	OrganizationViews   organization.Queries
 	Domains             organization.DomainCommands
 	DomainViews         organization.DomainQueries
+	GroupViews          organization.GroupQueries
 	Grants              authorization.GrantCommands
 	GrantViews          authorization.GrantQueries
 	ResourceViews       authorization.ResourceQueries
@@ -41,6 +43,12 @@ type Deps struct {
 	BrandingViews       hosted.Queries
 	PasswordPolicies    authentication.PasswordPolicyCommands
 	PasswordPolicyViews authentication.PasswordPolicyQueries
+	Directories         provisioning.ControlCommands
+	DirectoryViews      provisioning.ControlQueries
+	SetupLinks          orgadmin.SetupLinkCommands
+	SetupLinkViews      orgadmin.SetupLinkQueries
+	// Issuer is IAMKit's public URL; the SCIM base URL derives from it.
+	Issuer string
 }
 
 type Service struct{ d Deps }
@@ -481,6 +489,15 @@ func (s *Service) invitationMutation(p orgadmin.Principal) invitation.Mutation {
 	return invitation.Mutation{Environment: p.Environment, Actor: p.Actor(), Action: p.Action, Target: p.Target}
 }
 
+// Groups
+
+func (s *Service) Groups(ctx context.Context, p orgadmin.Principal, page query.Pagination) (query.Paginated[organization.Group], error) {
+	if err := p.Require(authorization.PermOrgRead); err != nil {
+		return query.Paginated[organization.Group]{}, err
+	}
+	return s.d.GroupViews.ListGroups(ctx, boundary(p), organization.GroupFilter{Source: organization.GroupSourceManual}, page)
+}
+
 // Domains
 
 func (s *Service) Domains(ctx context.Context, p orgadmin.Principal, page query.Pagination) (query.Paginated[organization.Domain], error) {
@@ -560,7 +577,28 @@ func (s *Service) CreateConnection(ctx context.Context, p orgadmin.Principal, in
 	if !input.SignupOrganization.IsZero() && input.SignupOrganization != p.Organization {
 		return identity.ConnectionID{}, errx.Validation("signup_organization_id must be your organization")
 	}
+	groups := []identity.GroupID{input.JITGroup, input.SignupGroup}
+	for _, m := range input.GroupMappings {
+		groups = append(groups, m.Group)
+	}
+	if err := s.groupsAssignable(ctx, p, groups); err != nil {
+		return identity.ConnectionID{}, err
+	}
 	return s.d.Connections.Create(ctx, s.federationMutation(p), input)
+}
+
+// groupsAssignable applies the anti-escalation rule to the groups a
+// connection sends people into (JIT, sign-up and group-mapping groups): users
+// signing in through an identity provider the administrator controls receive
+// the roles those groups carry. Zero IDs (unset fields) are skipped.
+func (s *Service) groupsAssignable(ctx context.Context, p orgadmin.Principal, groups []identity.GroupID) error {
+	set := make([]identity.GroupID, 0, len(groups))
+	for _, group := range groups {
+		if !group.IsZero() {
+			set = append(set, group)
+		}
+	}
+	return s.rolesAssignable(ctx, p, nil, set)
 }
 
 func (s *Service) UpdateConnection(ctx context.Context, p orgadmin.Principal, id identity.ConnectionID, input federation.ConnectionUpdate) error {
@@ -572,6 +610,19 @@ func (s *Service) UpdateConnection(ctx context.Context, p orgadmin.Principal, id
 	}
 	if input.SignupOrganization != nil && !input.SignupOrganization.IsZero() && *input.SignupOrganization != p.Organization {
 		return errx.Validation("signup_organization_id must be your organization")
+	}
+	var groups []identity.GroupID
+	if input.JITGroup != nil {
+		groups = append(groups, *input.JITGroup)
+	}
+	if input.SignupGroup != nil {
+		groups = append(groups, *input.SignupGroup)
+	}
+	for _, m := range input.GroupMappings {
+		groups = append(groups, m.Group)
+	}
+	if err := s.groupsAssignable(ctx, p, groups); err != nil {
+		return err
 	}
 	return s.d.Connections.Update(ctx, s.federationMutation(p), id, input)
 }

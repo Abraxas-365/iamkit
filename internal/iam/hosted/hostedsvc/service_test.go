@@ -233,6 +233,7 @@ type fakeFederation struct {
 	started     []authentication.Target
 	connections []federation.ConnectionSummary
 	directory   []string
+	lookup      *federation.Discovery
 }
 
 func (f *fakeFederation) DirectoryHosted(_ context.Context, _ identity.EnvironmentID, _ identity.ConnectionID, email, password string) (authentication.Verified, error) {
@@ -245,6 +246,12 @@ func (f *fakeFederation) DirectoryHosted(_ context.Context, _ identity.Environme
 
 func (f *fakeFederation) Discover(context.Context, identity.EnvironmentID, string) (federation.Discovery, error) {
 	return f.discovery, nil
+}
+func (f *fakeFederation) Lookup(context.Context, identity.EnvironmentID, identity.ConnectionID) (federation.Discovery, error) {
+	if f.lookup == nil {
+		return federation.Discovery{}, errx.NotFound("federation connection not found")
+	}
+	return *f.lookup, nil
 }
 func (f *fakeFederation) EnvironmentConnections(context.Context, identity.EnvironmentID) ([]federation.ConnectionSummary, error) {
 	return f.connections, nil

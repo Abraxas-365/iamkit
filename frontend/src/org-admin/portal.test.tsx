@@ -32,7 +32,9 @@ beforeEach(() => {
     if (url === '/identity/v1/org-admin/env1') return enabled ? Response.json({ client_id: 'client1', environment_id: 'env1', url: 'https://iam.example/org-admin/env1' }) : Response.json({ error: { message: 'not found' } }, { status: 404 })
     if (url === '/oauth/userinfo') return Response.json({ sub: 'u9', email: 'owner@acme.test', name: 'Olivia Owner' })
     const path = url.replace('/api/v1/environments/env1/organizations/org1/admin', '').split('?')[0]
+    if (method === 'POST' && path === '/directories') return Response.json({ id: 'c2', secret: 'ik_scim_topsecret', expires_at: '2027-01-01T00:00:00Z', connection_id: 'k1', scim_url: 'https://iam.example/scim/v2' }, { status: 201 })
     if (method === 'PATCH' || method === 'DELETE') return new Response(null, { status: 204 })
+    if (path === '/directories') return Response.json({ ...page([{ id: 'c1', name: 'Okta', connection_id: 'k1', expires_at: '2099-01-01T00:00:00Z', revoked_at: null, adopt_existing_members: false, adopt_scope: 'any', map_phone: false }]), scim_url: 'https://iam.example/scim/v2' })
     if (path === '') return Response.json({ id: 'org1', name: 'Acme', mfa_required: false, mfa_for_federated: false, allow_password: true, allow_email_code: true, allow_social: true, allow_passkey: true })
     if (path === '/members') return Response.json(page([{ user_id: 'u1', user_name: 'Bob', user_email: 'bob@acme.test', active: true, sso_bypass: false }]))
     if (path === '/events') return Response.json(page([
@@ -112,4 +114,48 @@ it('shows platform operators by kind in the activity, never by ID', async () => 
   expect(await screen.findByText('alice@acme.test')).toBeTruthy()
   expect(screen.getByText('Platform administrator')).toBeTruthy()
   expect(screen.queryByText('op-0000-uuid')).toBeNull()
+})
+
+it('lists directory tokens with the SCIM URL, and creates and revokes them with iam:org:sso:write', async () => {
+  const user = userEvent.setup()
+  signedIn(['iam:org:read', 'iam:org:sso:write'])
+  open('/org-admin/env1/directory')
+  expect(await screen.findByText('Okta')).toBeTruthy()
+  expect(screen.getByText('https://iam.example/scim/v2')).toBeTruthy()
+
+  await user.click(screen.getByRole('button', { name: 'Add token' }))
+  await user.type(await screen.findByLabelText('Name'), 'Entra')
+  await user.click(screen.getByRole('button', { name: 'Issue token' }))
+  // The secret is shown once, with the SCIM URL.
+  expect(await screen.findByText('ik_scim_topsecret')).toBeTruthy()
+  const post = calls.find(c => c.method === 'POST' && c.url.endsWith('/admin/directories'))!
+  expect(post.body).toMatchObject({ name: 'Entra', expires_in: '8760h', adopt_existing_members: false, map_phone: false })
+  await user.click(screen.getByRole('button', { name: 'I have saved the token' }))
+  expect(screen.queryByText('ik_scim_topsecret')).toBeNull()
+
+  await user.click(await screen.findByRole('button', { name: 'Actions for Okta' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Revoke token' }))
+  await user.click(await screen.findByRole('button', { name: 'Revoke token' }))
+  await waitFor(() => expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith('/admin/directories/c1'))).toBe(true))
+})
+
+it('hides directory writes without iam:org:sso:write', async () => {
+  signedIn(['iam:org:read'])
+  open('/org-admin/env1/directory')
+  expect(await screen.findByText('Okta')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Add token' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Actions for Okta' })).toBeNull()
+})
+
+it('shows the Setup links page only to accounts holding every organization permission', async () => {
+  const all = ['iam:org:read', 'iam:org:settings:write', 'iam:org:members:read', 'iam:org:members:write', 'iam:org:users:write', 'iam:org:roles:read', 'iam:org:roles:assign', 'iam:org:invitations:write', 'iam:org:domains:write', 'iam:org:sso:write', 'iam:org:audit:read', 'iam:org:resources:read', 'iam:org:resources:write']
+  signedIn(all)
+  open('/org-admin/env1/setup-links')
+  expect(await screen.findByRole('button', { name: 'Create setup link' })).toBeTruthy()
+  expect(within(screen.getByRole('navigation', { name: 'Organization administration' })).getByRole('link', { name: 'Setup links' })).toBeTruthy()
+  cleanup()
+  signedIn(['iam:org:read', 'iam:org:sso:write'])
+  open('/org-admin/env1')
+  const nav = await screen.findByRole('navigation', { name: 'Organization administration' })
+  expect(within(nav).queryByRole('link', { name: 'Setup links' })).toBeNull()
 })

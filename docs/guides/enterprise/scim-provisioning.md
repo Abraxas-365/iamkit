@@ -67,6 +67,26 @@ so assign users to the application before, or together with, their groups.
 Deleting a group in the directory removes its role bindings as well. See
 [SCIM Groups](../../reference/api/scim.md#group-resource).
 
+## Self-service for organization admins
+
+An organization admin does not need an operator to connect a directory. With
+`iam:org:read` and `iam:org:sso:write`, the hosted
+[organization admin portal](../organizations/organization-administration.md#hosted-portal)
+(**Directory (SCIM)**) or the `/admin` routes manage the tokens of their own
+organization only:
+
+- `GET …/organizations/ORG_UUID/admin/directories` lists the organization's
+  tokens (never the secrets) and returns `scim_url`, the base URL for the
+  directory (`https://YOUR_IAMKIT_HOST/scim/v2`).
+- `POST …/admin/directories` with `{"name","expires_in","adopt_existing_members",
+  "adopt_scope","map_phone"}` returns 201 with the `secret`, shown once. The
+  token always belongs to the caller's organization, whatever the body says.
+- `DELETE …/admin/directories/CREDENTIAL_UUID` revokes it (204); the directory
+  then gets 401. A credential of another organization is 404.
+
+These calls are audited like the operator's (`provisioning_credential.created` /
+`.revoked`) with the admin as actor.
+
 ## Rotation
 
 Issue a new provisioning credential with the **same connection_id** and

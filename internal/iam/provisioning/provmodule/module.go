@@ -23,6 +23,7 @@ type Module struct {
 	GroupCommands   provisioning.GroupCommands
 	GroupQueries    provisioning.GroupQueries
 	ControlCommands provisioning.ControlCommands
+	ControlQueries  provisioning.ControlQueries
 	HTTP            *provhttp.Handler
 	Control         *provhttp.Control
 }
@@ -39,6 +40,7 @@ func New(deps Deps) Module {
 		Commands: service, Queries: service,
 		GroupCommands: groups, GroupQueries: groups,
 		ControlCommands: control,
+		ControlQueries:  control,
 		HTTP:            provhttp.New(service, service, provhttp.NewGroups(groups, groups)),
 		Control:         provhttp.NewControl(control, control, deps.ActorID),
 	}

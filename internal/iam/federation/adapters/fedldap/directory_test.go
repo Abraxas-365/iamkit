@@ -3,6 +3,7 @@ package fedldap
 import (
 	"context"
 	"net"
+	"slices"
 	"strings"
 	"testing"
 
@@ -21,7 +22,7 @@ const base = "ou=people,dc=acme,dc=com"
 func users() []ldaptest.Entry {
 	return []ldaptest.Entry{
 		{DN: "cn=svc,dc=acme,dc=com", Password: "svc-secret"},
-		{DN: "uid=jane," + base, Password: "jane-pass", Attributes: map[string][]string{"mail": {"Jane@Acme.com"}, "uid": {"jane"}, "displayName": {"Jane Doe"}, "entryUUID": {"2f1c-uuid"}}},
+		{DN: "uid=jane," + base, Password: "jane-pass", Attributes: map[string][]string{"mail": {"Jane@Acme.com"}, "uid": {"jane"}, "displayName": {"Jane Doe"}, "entryUUID": {"2f1c-uuid"}, "memberOf": {"cn=eng,ou=groups,dc=acme,dc=com", "cn=ops,ou=groups,dc=acme,dc=com"}, "teams": {"red", "blue"}}},
 		{DN: "uid=twin1," + base, Password: "x", Attributes: map[string][]string{"mail": {"twin@acme.com"}}},
 		{DN: "uid=twin2," + base, Password: "x", Attributes: map[string][]string{"mail": {"twin@acme.com"}}},
 		{DN: "uid=guid," + base, Password: "guid-pass", Attributes: map[string][]string{"userPrincipalName": {"guid@acme.com"}, "objectGUID": {"\x01\x02\xff"}, "cn": {"Guid"}}},
@@ -151,5 +152,23 @@ func TestGuardedDialRefusesPrivateHosts(t *testing.T) {
 func TestText(t *testing.T) {
 	if text([]byte{0x01, 0xff}) != "01ff" || text([]byte("abc")) != "abc" {
 		t.Fatal("binary values are hex, printable ones stay")
+	}
+}
+
+func TestGroups(t *testing.T) {
+	s := ldaptest.Start(t, true, users()...)
+	d := New(plain{}, nil, loopback())
+	c := connection(s)
+	claims, err := d.Authenticate(context.Background(), c, "jane@acme.com", "jane-pass")
+	if err != nil || !slices.Equal(claims.Groups, []string{"cn=eng,ou=groups,dc=acme,dc=com", "cn=ops,ou=groups,dc=acme,dc=com"}) {
+		t.Fatalf("memberOf: %+v %v", claims.Groups, err)
+	}
+	c.Options.Attributes = &federation.AttributeMapping{Groups: "teams"}
+	if claims, err = d.Authenticate(context.Background(), c, "jane@acme.com", "jane-pass"); err != nil || !slices.Equal(claims.Groups, []string{"red", "blue"}) {
+		t.Fatalf("configured: %+v %v", claims.Groups, err)
+	}
+	c.Options.Attributes = nil
+	if claims, err = d.Authenticate(context.Background(), c, "guid@acme.com", "guid-pass"); err != nil || len(claims.Groups) != 0 {
+		t.Fatalf("no groups: %+v %v", claims.Groups, err)
 	}
 }

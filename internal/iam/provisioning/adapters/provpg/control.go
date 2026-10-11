@@ -9,6 +9,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 // IssueCredential creates the credential (and its connection when create) and
@@ -79,6 +80,12 @@ func (r *Repository) RevokeCredential(ctx context.Context, m provisioning.Mutati
 	return r.controlMutation(ctx, m, `UPDATE provisioning_credentials SET revoked_at=now() WHERE environment_id=$1 AND id=$2`, m.Environment, id)
 }
 
+// RevokeOrganizationCredential revokes a credential of the organization; a
+// credential of another organization (or environment) is not found.
+func (r *Repository) RevokeOrganizationCredential(ctx context.Context, m provisioning.Mutation, organization identity.OrganizationID, id identity.CredentialID) error {
+	return r.controlMutation(ctx, m, `UPDATE provisioning_credentials SET revoked_at=now() WHERE environment_id=$1 AND organization_id=$2 AND id=$3`, m.Environment, organization, id)
+}
+
 // Link attaches an existing member to a connection under a directory anchor.
 // It also re-anchors an identity deprovisioned by SCIM DELETE or one anchored
 // internally by IAMKit (e.g. an email-valued externalId re-keyed by migration
@@ -130,6 +137,35 @@ func (r *Repository) Credentials(ctx context.Context, environment identity.Envir
 	out := make([]provisioning.CredentialView, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, provisioning.CredentialView{ID: row.ID, Name: row.Name, Organization: row.Organization, OrganizationName: row.OrgName, Connection: row.Connection, ConnectionName: row.ConnName, Expires: row.Expires, Revoked: row.Revoked, Adopt: row.Adopt, AdoptScope: row.AdoptScope, MapPhone: row.MapPhone})
+	}
+	return out, nil
+}
+
+// OrganizationCredentials pages one organization's credentials in the
+// database; hashes never leave it.
+func (r *Repository) OrganizationCredentials(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, page query.Pagination) (query.Paginated[provisioning.CredentialView], error) {
+	out := query.Paginated[provisioning.CredentialView]{Items: []provisioning.CredentialView{}, Page: query.Page{Limit: page.Limit, Offset: page.Offset}}
+	if err := r.db.GetContext(ctx, &out.Page.Total, `SELECT count(*) FROM provisioning_credentials WHERE environment_id=$1 AND organization_id=$2`, environment, organization); err != nil {
+		return out, failure(err)
+	}
+	var rows []struct {
+		ID           identity.CredentialID   `db:"id"`
+		Name         string                  `db:"name"`
+		Organization identity.OrganizationID `db:"organization_id"`
+		OrgName      string                  `db:"organization_name"`
+		Connection   identity.ConnectionID   `db:"connection_id"`
+		ConnName     string                  `db:"connection_name"`
+		Expires      time.Time               `db:"expires_at"`
+		Revoked      *time.Time              `db:"revoked_at"`
+		Adopt        bool                    `db:"adopt_existing_members"`
+		AdoptScope   string                  `db:"adopt_scope"`
+		MapPhone     bool                    `db:"map_phone"`
+	}
+	if err := r.db.SelectContext(ctx, &rows, `SELECT k.id,k.name,k.organization_id,o.name AS organization_name,k.connection_id,c.name AS connection_name,k.expires_at,k.revoked_at,c.adopt_existing_members,c.adopt_scope,c.map_phone FROM provisioning_credentials k JOIN provisioning_connections c ON c.id=k.connection_id AND c.environment_id=k.environment_id JOIN organizations o ON o.id=k.organization_id AND o.environment_id=k.environment_id WHERE k.environment_id=$1 AND k.organization_id=$2 ORDER BY k.id LIMIT $3 OFFSET $4`, environment, organization, page.Limit, page.Offset); err != nil {
+		return out, failure(err)
+	}
+	for _, row := range rows {
+		out.Items = append(out.Items, provisioning.CredentialView{ID: row.ID, Name: row.Name, Organization: row.Organization, OrganizationName: row.OrgName, Connection: row.Connection, ConnectionName: row.ConnName, Expires: row.Expires, Revoked: row.Revoked, Adopt: row.Adopt, AdoptScope: row.AdoptScope, MapPhone: row.MapPhone})
 	}
 	return out, nil
 }

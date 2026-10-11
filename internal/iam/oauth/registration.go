@@ -29,6 +29,10 @@ type ClientView struct {
 	// BackchannelLogoutURI receives logout tokens (empty: none).
 	BackchannelLogoutURI             string `json:"backchannel_logout_uri"`
 	BackchannelLogoutSessionRequired bool   `json:"backchannel_logout_session_required"`
+	// InitiateLoginURI is the client's sign-in endpoint for third-party
+	// initiated logins (IdP-initiated SAML): IAMKit redirects there with
+	// iss, connection_id and organization_id (empty: none).
+	InitiateLoginURI string `json:"initiate_login_uri"`
 	// GrantTypes are the grants the client may use at the token endpoint.
 	GrantTypes []string `json:"grant_types"`
 	// AllowedOrigins may call the browser-facing endpoints with CORS
@@ -63,6 +67,9 @@ type Registration struct {
 	// session this client was authorized for ends.
 	BackchannelLogoutURI             string `json:"backchannel_logout_uri"`
 	BackchannelLogoutSessionRequired bool   `json:"backchannel_logout_session_required"`
+	// InitiateLoginURI is the sign-in endpoint IdP-initiated SAML logins
+	// are sent to (https, or http on loopback; empty: none).
+	InitiateLoginURI string `json:"initiate_login_uri"`
 	// GrantTypes default to authorization_code and refresh_token; the
 	// device grant needs hosted_login. A client without authorization_code
 	// needs no redirect URIs.
@@ -84,6 +91,8 @@ type ClientUpdate struct {
 	// BackchannelLogoutURI "" turns back-channel logout off.
 	BackchannelLogoutURI             *string `json:"backchannel_logout_uri"`
 	BackchannelLogoutSessionRequired *bool   `json:"backchannel_logout_session_required"`
+	// InitiateLoginURI "" turns third-party initiated login off.
+	InitiateLoginURI *string `json:"initiate_login_uri"`
 	// GrantTypes replaces the client's grants (checked with its hosted
 	// login setting and redirect URIs by the service).
 	GrantTypes *[]string `json:"grant_types"`
@@ -130,11 +139,16 @@ func (u ClientUpdate) Apply(current identity.ClientAuth) identity.ClientAuth {
 }
 
 func (u ClientUpdate) Validate() error {
-	if u.HostedLogin == nil && u.Redirects == nil && u.PostLogoutRedirects == nil && u.AccessTokenFormat == nil && u.BackchannelLogoutURI == nil && u.BackchannelLogoutSessionRequired == nil && u.GrantTypes == nil && u.AllowedOrigins == nil && !u.Authentication() {
-		return errx.Validation("hosted_login, redirect_uris, post_logout_redirect_uris, access_token_format, backchannel_logout_uri, grant_types, allowed_origins or token_endpoint_auth_method is required")
+	if u.HostedLogin == nil && u.Redirects == nil && u.PostLogoutRedirects == nil && u.AccessTokenFormat == nil && u.BackchannelLogoutURI == nil && u.BackchannelLogoutSessionRequired == nil && u.InitiateLoginURI == nil && u.GrantTypes == nil && u.AllowedOrigins == nil && !u.Authentication() {
+		return errx.Validation("hosted_login, redirect_uris, post_logout_redirect_uris, access_token_format, backchannel_logout_uri, initiate_login_uri, grant_types, allowed_origins or token_endpoint_auth_method is required")
 	}
 	if u.BackchannelLogoutURI != nil {
 		if err := ValidateBackchannelURI(*u.BackchannelLogoutURI); err != nil {
+			return err
+		}
+	}
+	if u.InitiateLoginURI != nil {
+		if err := ValidateInitiateLoginURI(*u.InitiateLoginURI); err != nil {
 			return err
 		}
 	}
@@ -196,6 +210,9 @@ func (r Registration) Validate() error {
 		}
 	}
 	if err := ValidateBackchannelURI(r.BackchannelLogoutURI); err != nil {
+		return err
+	}
+	if err := ValidateInitiateLoginURI(r.InitiateLoginURI); err != nil {
 		return err
 	}
 	if _, err := Origins(r.AllowedOrigins); err != nil {

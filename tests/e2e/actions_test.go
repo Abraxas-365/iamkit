@@ -304,10 +304,10 @@ func TestRegistrationActions(t *testing.T) {
 	e.IdP.Set(idp.Client().Transport)
 	conn := e.ID("POST", e.Base+"/federation-connections", fiber.Map{"name": "Social", "issuer": idp.URL, "client_id": "social-client", "client_secret": "sealed-secret",
 		"signup": true, "signup_organization_id": e.Org, "link_email": true})
-	if r := e.sso(idp, conn, e.Org, map[string]any{"sub": "dave-sub", "email": "dave@example.net", "email_verified": true, "name": "Dave"}); r.Status != 403 || r.JSON["error"].(map[string]any)["code"] != "ACTION_DENIED" {
+	if r := e.sso(idp, conn, e.Org, map[string]any{"sub": "dave-sub", "email": "dave@example.net", "email_verified": true, "name": "Dave", "groups": []string{"eng", "ops"}}); r.Status != 403 || r.JSON["error"].(map[string]any)["code"] != "ACTION_DENIED" {
 		t.Fatalf("federated sign-up not refused: %d %v", r.Status, r.JSON)
 	}
-	if in := receiver.last("function:post_federation"); in["identity"].(map[string]any)["subject"] != "dave-sub" || in["identity"].(map[string]any)["connection_id"] != conn {
+	if in := receiver.last("function:post_federation"); in["identity"].(map[string]any)["subject"] != "dave-sub" || in["identity"].(map[string]any)["connection_id"] != conn || fmt.Sprint(in["identity"].(map[string]any)["groups"]) != "[eng ops]" {
 		t.Fatalf("federation input = %v", in)
 	}
 	if n := count(t, e.DB, `SELECT count(*) FROM users WHERE email='dave@example.net'`); n != 0 {

@@ -52,8 +52,9 @@ const values: ConnectionValues = {
   provider: 'google', scope: 'environment', organization_id: '', name: 'Google', issuer: 'ignored', client_id: ' gid ', client_secret: 's', secret_env: '',
   tenant: 'common', tenant_id: '', tenants: [], domains: [], team_id: '', key_id: '', signup: false, signup_organization_id: '', signup_group_id: '', link_email: true,
   base_url: '', authorize_url: '', token_url: '', userinfo_url: '', scopes: [], claim_subject: 'id', claim_email: 'email', claim_email_verified: '', claim_name: 'name', update_profile: false,
-  metadata_url: '', metadata_xml: '', name_id_format: 'unspecified', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false,
+  metadata_url: '', metadata_xml: '', name_id_format: 'unspecified', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false, idp_initiated_client_id: '',
   ldap_url: '', start_tls: false, bind_dn: '', user_base_dn: '', user_filter: '', ca_pem: '',
+  attr_groups: '', groups_claim: '', claim_groups: '', group_mappings: [],
 }
 
 it('builds and patches an LDAP connection', () => {
@@ -71,15 +72,36 @@ it('builds and patches an LDAP connection', () => {
   expect(connectionPatch(conn, { ...same, bind_dn: '', client_secret: 'stale' })).toEqual({ options: { url: 'ldaps://dc1', user_base_dn: 'ou=people' } })
 })
 
+it('sends group attributes, claims and mappings', () => {
+  const mapping = [{ value: ' eng ', group_id: 'g1' }, { value: '', group_id: 'g2' }, { value: 'ops', group_id: '' }]
+  const ldap = { ...values, provider: 'ldap' as const, scope: 'organization' as const, organization_id: 'o1', name: 'AD', ldap_url: 'ldaps://dc1', user_base_dn: 'ou=people', attr_groups: ' memberOf ', group_mappings: mapping }
+  expect(connectionBody(ldap)).toEqual({ provider: 'ldap', name: 'AD', organization_id: 'o1', options: { url: 'ldaps://dc1', user_base_dn: 'ou=people', attributes: { groups: 'memberOf' } }, group_mappings: [{ value: 'eng', group_id: 'g1' }] })
+  const saml = { ...values, provider: 'saml' as const, scope: 'organization' as const, organization_id: 'o1', name: 'Okta', metadata_url: 'https://idp/m', attr_groups: 'roles' }
+  expect(connectionBody(saml)).toEqual({ provider: 'saml', name: 'Okta', organization_id: 'o1', options: { metadata_url: 'https://idp/m', attributes: { groups: 'roles' } } })
+  const oidc = { ...values, provider: 'oidc' as const, scope: 'organization' as const, organization_id: 'o1', name: 'Okta', issuer: 'https://idp', client_id: 'c', groups_claim: ' roles ', group_mappings: mapping }
+  expect(connectionBody(oidc)).toMatchObject({ options: { groups_claim: 'roles' }, group_mappings: [{ value: 'eng', group_id: 'g1' }] })
+  const oauth2 = { ...values, provider: 'oauth2' as const, scope: 'organization' as const, organization_id: 'o1', name: 'X', authorize_url: 'https://p/a', token_url: 'https://p/t', userinfo_url: 'https://p/me', claim_groups: 'data.groups' }
+  expect((connectionBody(oauth2).options as { claims: unknown }).claims).toEqual({ subject: 'id', email: 'email', name: 'name', groups: 'data.groups' })
+  // Environment-wide connections have no mappings.
+  expect(connectionBody({ ...values, group_mappings: mapping })).not.toHaveProperty('group_mappings')
+  const conn: ConnectionDetail = { ...google, provider: 'oidc', organization_id: 'o1', secret_env: '', secret_source: 'sealed', jit_group_id: null, jit_provisioning: true, enforcement: 'optional', created_at: '', options: { groups_claim: 'groups' } }
+  const same = { name: 'Google', groups_claim: 'groups', jit_provisioning: true, jit_group_id: '', enforcement: 'optional' }
+  expect(connectionPatch(conn, same)).toEqual({})
+  expect(connectionPatch(conn, { ...same, groups_claim: 'roles' })).toEqual({ options: { groups_claim: 'roles' } })
+  expect(connectionPatch(conn, { ...same, groups_claim: '' })).toEqual({ options: {} })
+})
+
 it('builds and patches a SAML connection', () => {
   const saml = { ...values, provider: 'saml' as const, scope: 'organization' as const, organization_id: 'o1', name: 'Okta', metadata_url: ' https://idp.example/metadata ' }
   expect(connectionBody(saml)).toEqual({ provider: 'saml', name: 'Okta', organization_id: 'o1', options: { metadata_url: 'https://idp.example/metadata' } })
   expect(connectionBody({ ...saml, metadata_xml: '<EntityDescriptor/>', name_id_format: 'transient', attr_subject: 'uid', attr_email: 'mail', sign_requests: true }).options).toEqual({
     metadata_xml: '<EntityDescriptor/>', name_id_format: 'transient', attributes: { subject: 'uid', email: 'mail' }, sign_requests: true,
   })
+  expect(connectionBody({ ...saml, idp_initiated_client_id: ' c1 ' }).options).toEqual({ metadata_url: 'https://idp.example/metadata', idp_initiated_client_id: 'c1' })
   const conn: ConnectionDetail = { ...google, provider: 'saml', organization_id: 'o1', secret_env: '', secret_source: 'none', jit_group_id: null, jit_provisioning: true, enforcement: 'optional', created_at: '', options: { metadata_xml: '<x/>', name_id_format: 'persistent' } }
   const same = { name: 'Google', metadata_url: '', metadata_xml: '', name_id_format: 'persistent', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false, jit_provisioning: true, jit_group_id: '', enforcement: 'optional' }
   expect(connectionPatch(conn, same)).toEqual({})
+  expect(connectionPatch(conn, { ...same, idp_initiated_client_id: 'c1' })).toEqual({ options: { metadata_xml: '<x/>', name_id_format: 'persistent', idp_initiated_client_id: 'c1' } })
   // The stored XML is kept when only a mapping changes.
   expect(connectionPatch(conn, { ...same, attr_email: 'mail' })).toEqual({ options: { metadata_xml: '<x/>', name_id_format: 'persistent', attributes: { email: 'mail' } } })
   expect(connectionPatch(conn, { ...same, metadata_url: 'https://idp/m' })).toEqual({ options: { metadata_url: 'https://idp/m', name_id_format: 'persistent' } })

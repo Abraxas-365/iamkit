@@ -44,6 +44,7 @@ GET/HEAD select the read permission; mutations select write.
 | --- | --- |
 | `/users`, `/users/:id`, `/users/:id/permanent`, `/users/:id/factors`, `/users/:id/unlock`, `/users/:id/deactivate`, `/users/:id/reactivate`, `/users/:id/access-tokens`, `/users/:id/access-tokens/:token`, `/users/:id/keys`, `/users/:id/keys/:key`, `/users/:id/metadata/:key`, `/users/:id/profile`, `/user-schema` (create/list/get/patch/suspend/delete, factor list/reset, password unlock, deactivate/reactivate, metadata, profile, user schema) | `iam:users:read`, `iam:users:write` |
 | `/organizations`, `/organizations/:id`, `/organizations/:id/metadata/:key` (create/list/get/patch, metadata) | `iam:orgs:read`, `iam:orgs:write` |
+| `/organizations/:id/setup-links` (`GET`, `POST`, `DELETE /:link`; see [setup links](../../guides/organizations/organization-administration.md#setup-links)) | `iam:orgs:read` (`GET`), `iam:orgs:write` |
 | `/memberships`, `/organizations/:organization/members`, member removal, structure and group routes | `iam:members:read`, `iam:members:write` |
 | `/applications`, `/applications/:id` (create/list/get/patch) | `iam:apps:read`, `iam:apps:write` |
 | Resources, `PUT /resources/:id/access`, application-resource bindings, application resource lists | `iam:resources:read`, `iam:resources:write` |
@@ -57,7 +58,16 @@ GET/HEAD select the read permission; mutations select write.
 | Delivery configuration (`GET`, `PUT`, `DELETE /delivery`; `GET /delivery/status`; `POST /delivery/test`; `GET`, `POST /delivery/preview`; `GET /delivery/templates`; `GET`, `PUT`, `DELETE /delivery/templates/:purpose/:locale`) | `iam:delivery:read` (`GET`), `iam:delivery:write` (others, including draft `POST /delivery/preview`) |
 
 There are no workspace/operator, federation, OAuth-client or SCIM-credential
-administration routes in this API family. Application DELETE is not registered
+administration routes in this API family.
+Organization admins manage their own organization's SCIM tokens through
+`/api/v1/environments/:environment/organizations/:organization/admin/directories`
+(`GET` with `iam:org:read` returns the tokens and `scim_url`; `POST` and
+`DELETE /directories/:credential` need `iam:org:sso:write`). Those routes belong
+to the `iam:org:*` family, not to the environment-wide permissions above; see
+[SCIM provisioning](../../guides/enterprise/scim-provisioning.md#self-service-for-organization-admins). Owners also manage setup links at `…/admin/setup-links` (every `iam:org:*`
+permission), and a setup bearer (`ik_setupsess_…`) is accepted only on
+`…/admin` routes of its own organization, limited to its intents; see
+[setup links](../../guides/organizations/organization-administration.md#setup-links). Application DELETE is not registered
 here; use PATCH `active:false` with the appropriate authority.
 
 The middleware validates JWTs online (revoked sessions and removed permissions stop

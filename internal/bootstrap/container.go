@@ -289,7 +289,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		DB: db, Caller: orgAdminCaller, Issuer: issuer, ActorID: server.OperatorID,
 		Users: userModule.Commands, UserQueries: userModule.Queries,
 		Organizations: organizationModule.Commands, OrganizationViews: organizationModule.Queries,
-		Domains: organizationModule.DomainCommands, DomainViews: organizationModule.DomainQueries,
+		Domains: organizationModule.DomainCommands, DomainViews: organizationModule.DomainQueries, GroupViews: organizationModule.GroupQueries,
 		Grants: authorizationModule.GrantCommands, GrantViews: authorizationModule.GrantQueries,
 		ResourceViews: authorizationModule.ResourceQueries, ResourceGrants: authorizationModule.ResourceGrantCommands,
 		ResourceGrantViews: authorizationModule.ResourceGrantQueries,
@@ -297,7 +297,10 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Connections: federationModule.Commands, ConnectionViews: federationModule.Queries,
 		Branding: hostedModule.Commands, BrandingViews: hostedModule.Queries,
 		PasswordPolicies: authenticationModule.PasswordPolicyCommands, PasswordPolicyViews: authenticationModule.PasswordPolicies,
+		Directories: provisioningModule.ControlCommands, DirectoryViews: provisioningModule.ControlQueries,
+		SetupSecrets: mgmtsecret.Generator{},
 	})
+	s.API.WithSetup(orgAdmin.SetupLinkQueries)
 	s.APIHandlers = server.APIHandlerSet{
 		Users:           userhttp.New(userModule.Commands, userModule.Queries, actor),
 		AccessTokens:    userhttp.NewAccessTokens(userModule.AccessTokenCommands, userModule.AccessTokenQueries, actor),
@@ -316,18 +319,23 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Delivery: authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, actor).
 			Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService),
 		SMS:      authhttp.NewSMSHandler(authenticationModule.SMS, authenticationModule.SMSQueries, actor),
-		OrgAdmin: orgAdmin.HTTP,
+		OrgAdmin: orgAdmin.HTTP, SetupLinks: orgadminhttp.NewSetupLinks(orgAdmin.SetupLinkCommands, orgAdmin.SetupLinkQueries, actor),
 		Events:   eventModule.HTTP,
 		Webhooks: eventModule.Webhooks.WithActor(actor),
 		Usage:    usageModule.HTTP,
 	}
 	s.OrgAdminPortal = orgAdmin.PortalHTTP
+	s.SetupLinks = orgAdmin.SetupLinkHTTP
 	return s
 }
 
 // orgAdminCaller is the end user behind an /api/v1 token. Impersonated
 // tokens administer nothing: the audit trail would name the user.
 func orgAdminCaller(c *fiber.Ctx) orgadminhttp.Caller {
+	// A setup link's bearer is no user: its permissions are its intents'.
+	if g, ok := apiauth.Setup(c); ok {
+		return orgadminhttp.Caller{Organization: g.Organization, Permissions: g.Permissions(), Setup: g.Link}
+	}
 	t := apiauth.Token(c)
 	if t.Impersonated() {
 		return orgadminhttp.Caller{}

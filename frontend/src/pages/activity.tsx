@@ -21,7 +21,7 @@ interface EventPage { items: IAMEvent[]; next: number }
 interface AuditEvent { id: string; actor_id: string; actor_label: string; actor_kind?: string; action: string; target_id: string; target_label?: string; created_at: string }
 
 // actorKinds labels who acted when it was not an operator.
-const actorKinds: Record<string, string> = { user: t('End user'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)') }
+const actorKinds: Record<string, string> = { user: t('End user'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)'), setup_link: t('Setup link') }
 
 // Each verb is a whole sentence with the item as a placeholder, so a
 // translation can reorder it and agree with the noun.
@@ -32,10 +32,10 @@ const verbs: Record<string, (thing: string) => string> = {
 const nouns: Record<string, string> = {
   users: t('user'), organizations: t('organization'), applications: t('application'), resources: t('resource'), roles: t('role'), grants: t('grant'),
   'role-assignments': t('role assignment'), 'group-role-assignments': t('group role assignment'), 'service-accounts': t('service account'), 'federation-connections': t('federation connection'),
-  'oauth-clients': t('OAuth client'), 'provisioning-credentials': t('SCIM credential'), memberships: t('membership'), members: t('member'),
+  'oauth-clients': t('OAuth client'), 'provisioning-credentials': t('SCIM credential'), directories: t('SCIM credential'), memberships: t('membership'), members: t('member'),
   groups: t('group'), domains: t('domain'), invitations: t('invitation'), sessions: t('session'), 'login-settings': t('hosted login settings'),
   clients: t('client style'), 'sign-in': t('sign-in methods'), factors: t('second factors'), identities: t('linked identity'), 'mfa-policy': t('MFA policy'),
-  verify: t('domain verification'), resend: t('invitation'), revoke: t('credential'), 'logout-deliveries': t('logout delivery'), links: t('application link'), 'delivery-settings': t('notification settings'),
+  verify: t('domain verification'), 'setup-links': t('setup link'), resend: t('invitation'), revoke: t('credential'), 'logout-deliveries': t('logout delivery'), links: t('application link'), 'delivery-settings': t('notification settings'),
 }
 const named: Record<string, string> = {
   'federation.jit': t('User signed up through federation'), 'federation.email': t('User linked by verified email through federation'),
@@ -49,7 +49,7 @@ const named: Record<string, string> = {
   'signing_key.create': t('Created a signing key'), 'signing_key.activate': t('Activated a signing key'), 'signing_key.retire': t('Retired a signing key'),
   'saml_service_provider.create': t('Added a SAML application'), 'saml_service_provider.update': t('Updated a SAML application'), 'saml_service_provider.delete': t('Deleted a SAML application'), 'saml.assertion_issued': t('Signed in to a SAML application'),
   'sms.update': t('Updated SMS delivery'), 'sms.delete': t('Removed SMS delivery'), 'sms.test': t('Sent a test SMS'),
-  impersonate: t('Impersonated a user'),
+  impersonate: t('Impersonated a user'), 'org_setup_link.used': t('Setup link opened'),
   'user.signup': t('User signed up'), 'user.deactivated': t('Deactivated a user'), 'user.reactivated': t('Reactivated user'),
   'user.locked': t('User locked after failed sign-ins'), 'user.unlocked': t('Unlocked a user'),
   'user.sessions_revoked': t('Signed a user out everywhere'), 'user.password_change_required': t('Required a password change'),
@@ -108,7 +108,7 @@ const eventWords: Record<string, string> = {
   connection: t('federation connection'), delivery: t('email delivery'), device: t('device sign-in'), domain: t('domain'), email_template: t('email template'),
   feature: t('feature'), grant: t('grant'), group: t('group'), group_role: t('group role'), identity: t('linked identity'), impersonation: t('impersonation'),
   invitation: t('invitation'), login: t('sign-in'), logout_delivery: t('logout delivery'), membership: t('membership'), mfa: t('second factor'),
-  oauth_client: t('OAuth client'), org_admin_portal: t('organization admin portal'), org_unit: t('org unit'), organization: t('organization'),
+  oauth_client: t('OAuth client'), org_admin_portal: t('organization admin portal'), org_setup_link: t('setup link'), org_unit: t('org unit'), organization: t('organization'),
   password_policy: t('password policy'), position: t('position'), provisioning_credential: t('SCIM credential'), provisioning_identity: t('SCIM identity'),
   resource: t('resource'), resource_grant: t('resource grant'), role: t('role'), saml: t('SAML'), saml_service_provider: t('SAML application'),
   service_account: t('service account'), session: t('session'), sign_in_options: t('sign-in options'), sign_in_policy: t('sign-in methods'),
@@ -145,7 +145,7 @@ const eventNamed: Record<string, string> = {
   'user.sessions_revoked': t('Signed out everywhere'), 'user.password_change_required': t('Password change required'), 'user.password_changed': t('Password changed'),
   'user.signed_up': t('User signed up'), 'user.provisioned': t('User provisioned by the directory'), 'user.deprovisioned': t('User deprovisioned by the directory'),
   'application.resource_linked': t('Linked a resource to an application'), 'application.resource_unlinked': t('Unlinked a resource from an application'),
-  'group.members_changed': t('Changed group members'), 'grant.updated': t('Set a grant'), 'grant.deleted': t('Removed a grant'),
+  'org_setup_link.used': t('Setup link opened'), 'group.members_changed': t('Changed group members'), 'grant.updated': t('Set a grant'), 'grant.deleted': t('Removed a grant'),
 }
 
 /** describeEvent turns a semantic event type (user.created) into a sentence. */

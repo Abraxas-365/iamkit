@@ -15,6 +15,7 @@ func organizationsCmd() *cobra.Command {
 	cmd.AddCommand(orgsUpdateCmd())
 	cmd.AddCommand(orgsMembersCmd())
 	cmd.AddCommand(orgsBrandingCmd())
+	cmd.AddCommand(orgsSetupLinkCmd())
 	return cmd
 }
 

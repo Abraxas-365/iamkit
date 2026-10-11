@@ -209,6 +209,9 @@ func (s *Service) Authorization(ctx context.Context, r hosted.Request, acceptLan
 	if !hint.IsZero() {
 		out.Organization = &hint
 	}
+	if id := s.hintedConnection(ctx, p, options); !id.IsZero() {
+		out.Connection = &id
+	}
 	texts, err := s.Wording(ctx, client.Environment, hosted.TextScope{Client: client.ID, Organization: hint}, out.Locale)
 	if err != nil {
 		return hosted.Authorization{}, err
@@ -309,6 +312,56 @@ func (s *Service) CompleteSignup(ctx context.Context, r hosted.Request, challeng
 		return hosted.Result{}, hosted.ErrSignedUpNoAccess()
 	}
 	return result, err
+}
+
+// hintedConnection is the connection the authorize request named when this
+// client may start it for the pending authorization, else zero: unknown or
+// inactive connections, password directories (LDAP needs the credentials
+// form), environment connections the client does not show, organization
+// connections when the client offers no organization SSO, and organization
+// connections of another organization than the organization hint are all
+// ignored — the user then sees the ordinary sign-in rather than an error, so
+// a stale or foreign link never reveals which connections exist.
+func (s *Service) hintedConnection(ctx context.Context, p oauth.Pending, options hosted.SignIn) identity.ConnectionID {
+	id := oauth.FormConnection(p.Form)
+	if id.IsZero() {
+		return id
+	}
+	d, err := s.federation.Lookup(ctx, p.Client.Environment, id)
+	if err != nil || d.Provider == federation.ProviderLDAP {
+		return identity.ConnectionID{}
+	}
+	if d.Organization == nil {
+		if !options.Shows(id) {
+			return identity.ConnectionID{}
+		}
+		return id
+	}
+	if !options.OrganizationSSO {
+		return identity.ConnectionID{}
+	}
+	if hint := oauth.FormOrganization(p.Form); !hint.IsZero() && hint != *d.Organization {
+		return identity.ConnectionID{}
+	}
+	return id
+}
+
+// Hinted starts the authorize request's connection hint, if usable.
+func (s *Service) Hinted(ctx context.Context, r hosted.Request) (hosted.Route, error) {
+	target, options, p, err := s.offering(ctx, r, func(hosted.SignIn) bool { return true })
+	if err != nil {
+		return hosted.Route{}, err
+	}
+	id := s.hintedConnection(ctx, p, options)
+	if id.IsZero() {
+		return hosted.Route{}, nil
+	}
+	start, err := s.federation.StartHosted(ctx, target, id, r.Ticket)
+	if err != nil {
+		// The hint is only a shortcut: fall back to the normal sign-in.
+		return hosted.Route{}, nil
+	}
+	return hosted.Route{Method: federation.MethodSSO, Redirect: start.URL, Binding: start.Binding, Connection: &id}, nil
 }
 
 // Identify routes the email: enforced organization SSO starts at once;

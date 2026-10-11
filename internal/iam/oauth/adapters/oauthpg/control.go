@@ -55,7 +55,7 @@ func (r *Repository) AccessTokenClient(ctx context.Context, key string) (identit
 func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID, input oauth.Registration, hash []byte) error {
 	auth := input.ClientAuth
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash,hosted_login,post_logout_redirect_uris,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri,access_token_format,backchannel_logout_uri,backchannel_logout_session_required,grant_types,allowed_origins) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`, id, environment, input.Application, input.Resource, pq.StringArray(nonNil(input.Redirects)), input.Public, hash, input.HostedLogin, pq.StringArray(nonNil(input.PostLogoutRedirects)), auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, pq.StringArray(input.Grants()), pq.StringArray(nonNil(input.AllowedOrigins))); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash,hosted_login,post_logout_redirect_uris,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri,access_token_format,backchannel_logout_uri,backchannel_logout_session_required,grant_types,allowed_origins,initiate_login_uri) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`, id, environment, input.Application, input.Resource, pq.StringArray(nonNil(input.Redirects)), input.Public, hash, input.HostedLogin, pq.StringArray(nonNil(input.PostLogoutRedirects)), auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, pq.StringArray(input.Grants()), pq.StringArray(nonNil(input.AllowedOrigins)), input.InitiateLoginURI); err != nil {
 			return conflict(err)
 		}
 		return eventpg.Record(ctx, tx, environment, event.OAuthClientCreated, event.Subject{Kind: "oauth_client", ID: id.String()},
@@ -80,9 +80,9 @@ func (r *Repository) Update(ctx context.Context, m oauth.Mutation, id identity.C
 		origins = pq.StringArray(nonNil(*input.AllowedOrigins))
 	}
 	if auth != nil {
-		return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($11,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($12,backchannel_logout_session_required), grant_types=COALESCE($13,grant_types), allowed_origins=COALESCE($14,allowed_origins), token_endpoint_auth_method=$7, token_endpoint_auth_signing_alg=$8, jwks=$9, jwks_uri=$10 WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins)
+		return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($11,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($12,backchannel_logout_session_required), grant_types=COALESCE($13,grant_types), allowed_origins=COALESCE($14,allowed_origins), initiate_login_uri=COALESCE($15,initiate_login_uri), token_endpoint_auth_method=$7, token_endpoint_auth_signing_alg=$8, jwks=$9, jwks_uri=$10 WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI)
 	}
-	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($7,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($8,backchannel_logout_session_required), grant_types=COALESCE($9,grant_types), allowed_origins=COALESCE($10,allowed_origins) WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins)
+	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($7,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($8,backchannel_logout_session_required), grant_types=COALESCE($9,grant_types), allowed_origins=COALESCE($10,allowed_origins), initiate_login_uri=COALESCE($11,initiate_login_uri) WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI)
 }
 func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
 	return r.audited(ctx, m, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
@@ -158,7 +158,7 @@ func (r *Repository) OriginAllowed(ctx context.Context, origin string) (bool, er
 	return ok, failure(err)
 }
 
-const clientColumns = "oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.post_logout_redirect_uris, oc.public, oc.hosted_login, oc.active, oc.token_endpoint_auth_method, oc.token_endpoint_auth_signing_alg, oc.jwks, oc.jwks_uri, oc.access_token_format, oc.backchannel_logout_uri, oc.backchannel_logout_session_required, oc.grant_types, oc.allowed_origins, coalesce(oc.system,'') AS system"
+const clientColumns = "oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.post_logout_redirect_uris, oc.public, oc.hosted_login, oc.active, oc.token_endpoint_auth_method, oc.token_endpoint_auth_signing_alg, oc.jwks, oc.jwks_uri, oc.access_token_format, oc.backchannel_logout_uri, oc.backchannel_logout_session_required, oc.initiate_login_uri, oc.grant_types, oc.allowed_origins, coalesce(oc.system,'') AS system"
 
 type clientViewRow struct {
 	ID              identity.ClientID      `db:"id"`
@@ -174,6 +174,7 @@ type clientViewRow struct {
 	TokenFormat     string                 `db:"access_token_format"`
 	Backchannel     string                 `db:"backchannel_logout_uri"`
 	SessionRequired bool                   `db:"backchannel_logout_session_required"`
+	Initiate        string                 `db:"initiate_login_uri"`
 	Grants          pq.StringArray         `db:"grant_types"`
 	Origins         pq.StringArray         `db:"allowed_origins"`
 	System          string                 `db:"system"`
@@ -181,7 +182,7 @@ type clientViewRow struct {
 }
 
 func (row clientViewRow) view() oauth.ClientView {
-	return oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), PostLogoutRedirects: nonNil([]string(row.PostLogout)), Public: row.Public, HostedLogin: row.HostedLogin, Active: row.Active, AccessTokenFormat: row.TokenFormat, BackchannelLogoutURI: row.Backchannel, BackchannelLogoutSessionRequired: row.SessionRequired, GrantTypes: nonNil([]string(row.Grants)), AllowedOrigins: nonNil([]string(row.Origins)), System: row.System, ClientAuth: row.auth()}
+	return oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), PostLogoutRedirects: nonNil([]string(row.PostLogout)), Public: row.Public, HostedLogin: row.HostedLogin, Active: row.Active, AccessTokenFormat: row.TokenFormat, BackchannelLogoutURI: row.Backchannel, BackchannelLogoutSessionRequired: row.SessionRequired, InitiateLoginURI: row.Initiate, GrantTypes: nonNil([]string(row.Grants)), AllowedOrigins: nonNil([]string(row.Origins)), System: row.System, ClientAuth: row.auth()}
 }
 
 // authRow scans the token endpoint authentication columns.

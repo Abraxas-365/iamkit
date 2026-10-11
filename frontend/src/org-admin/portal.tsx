@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Activity, Building2, Globe, KeyRound, Lock, LogOut, Mail, Palette, Share2, Tags, UserCog, Users } from 'lucide-react'
+import { Activity, Building2, CheckCircle2, Globe, KeyRound, Link2, Lock, LogOut, Mail, Palette, Server, Share2, Tags, UserCog, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/library/patterns'
 import { LogoMark } from '@/components/brand/logo'
 import { Toaster } from '@/components/ui/sonner'
 import { cn, message } from '@/lib/utils'
-import { Client, complete, decode, discover, readTokens, signIn, signOut, userInfo, type Portal } from './session'
-import { AdminContext, useAdmin, type Admin } from './context'
-import { ActivityPage, BrandingPage, ConnectionsPage, DomainsPage, InvitationsPage, MembersPage, OverviewPage, PasswordPage, ResourcesPage, RolesPage, UsersPage } from './pages'
+import { Client, clearSetup, complete, decode, discover, exchangeSetup, readSetup, readTokens, signIn, signOut, userInfo, type Portal, type Setup } from './session'
+import { AdminContext, ORG_PERMISSIONS, OWNER, useAdmin, type Admin } from './context'
+import { ActivityPage, BrandingPage, ConnectionsPage, DirectoryPage, DomainsPage, InvitationsPage, MembersPage, OverviewPage, PasswordPage, ResourcesPage, RolesPage, SetupLinksPage, UsersPage } from './pages'
 import { t } from '@/lib/i18n'
 
 type NavItem = [path: string, label: string, icon: typeof Users, permission: string]
@@ -20,9 +20,11 @@ const nav: NavItem[] = [
   ['roles', t('Roles'), Tags, 'iam:org:roles:read'],
   ['domains', t('Domains'), Globe, 'iam:org:read'],
   ['sso', t('Single sign-on'), KeyRound, 'iam:org:read'],
+  ['directory', t('Directory (SCIM)'), Server, 'iam:org:read'],
   ['resources', t('Resources'), Share2, 'iam:org:resources:read'],
   ['branding', t('Branding'), Palette, 'iam:org:read'],
   ['password-policy', t('Password policy'), Lock, 'iam:org:read'],
+  ['setup-links', t('Setup links'), Link2, OWNER],
   ['activity', t('Activity'), Activity, 'iam:org:audit:read'],
 ]
 
@@ -34,6 +36,7 @@ export default function OrgAdminPortal() {
   return <>
     <Routes>
       <Route path=":environment/callback" element={<Callback />} />
+      <Route path=":environment/setup" element={<SetupLink />} />
       <Route path=":environment/*" element={<Environment />} />
       <Route path="*" element={<Centered><ErrorState error={t('Open the portal link your administrator gave you: it names the environment.')} /></Centered>} />
     </Routes>
@@ -112,7 +115,7 @@ function Signed({ environment, portal, access, idToken, expired }: { environment
   const organization = claims.organization_id ?? ''
   const client = useMemo(() => new Client(environment, portal, organization, expired), [environment, portal, organization, expired])
   const permissions = useMemo(() => new Set(claims.permissions ?? []), [claims])
-  const can = useCallback((p: string) => permissions.has(p), [permissions])
+  const can = useCallback((p: string) => p === OWNER ? ORG_PERMISSIONS.every(x => permissions.has(x)) : permissions.has(p), [permissions])
   const admin = useMemo<Admin>(() => ({ environment, portal, client, claims, can }), [environment, portal, client, claims, can])
   if (!organization || ![...permissions].some(p => p.startsWith('iam:org:'))) return <Centered>
     <ErrorState error={t('Your account does not administer this organization. Ask one of its owners for an administrator role, or sign in with another account.')} />
@@ -166,9 +169,11 @@ function Shell() {
           <Route path="roles" element={<Guard permission="iam:org:roles:read"><RolesPage /></Guard>} />
           <Route path="domains" element={<Guard permission="iam:org:read"><DomainsPage /></Guard>} />
           <Route path="sso" element={<Guard permission="iam:org:read"><ConnectionsPage /></Guard>} />
+          <Route path="directory" element={<Guard permission="iam:org:read"><DirectoryPage /></Guard>} />
           <Route path="resources" element={<Guard permission="iam:org:resources:read"><ResourcesPage /></Guard>} />
           <Route path="branding" element={<Guard permission="iam:org:read"><BrandingPage /></Guard>} />
           <Route path="password-policy" element={<Guard permission="iam:org:read"><PasswordPage /></Guard>} />
+          <Route path="setup-links" element={<Guard permission={OWNER}><SetupLinksPage /></Guard>} />
           <Route path="activity" element={<Guard permission="iam:org:audit:read"><ActivityPage /></Guard>} />
           <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
@@ -181,4 +186,108 @@ function Guard({ permission, children }: { permission: string; children: ReactNo
   const { can, environment } = useAdmin()
   if (!can(permission)) return <div className="space-y-3"><ErrorState error={t('You do not have access to this page.')} /><Link className="text-sm underline" to={`/org-admin/${environment}`}>{t('Back')}</Link></div>
   return <>{children}</>
+}
+
+// Setup links ----------------------------------------------------------
+
+const inflight = new Map<string, Promise<Setup>>()
+
+// What each intent lets the bearer do (mirrors orgadmin.IntentPermissions;
+// the server checks again).
+const intentPermissions: Record<string, string[]> = {
+  sso: ['iam:org:read', 'iam:org:sso:write'],
+  directory: ['iam:org:read', 'iam:org:sso:write'],
+  domains: ['iam:org:read', 'iam:org:domains:write'],
+}
+
+interface Step { intent: string; title: string; description: string; icon: typeof Users; page: () => ReactNode }
+// Domains first: SSO routes employees by verified domain.
+const steps: Step[] = [
+  { intent: 'domains', title: t('Domains'), description: t('Add your company\'s email domains and verify them with a DNS record.'), icon: Globe, page: () => <DomainsPage /> },
+  { intent: 'sso', title: t('Single sign-on'), description: t('Connect your identity provider so employees sign in with their work account.'), icon: KeyRound, page: () => <ConnectionsPage /> },
+  { intent: 'directory', title: t('Directory (SCIM)'), description: t('Create a SCIM credential so your directory provisions users and groups.'), icon: Server, page: () => <DirectoryPage /> },
+]
+
+/** SetupLink is the setup-link portal: the link's secret travels in the URL
+ * fragment, is removed from the address bar at once, and is exchanged for a
+ * bearer limited to the link's intents. */
+function SetupLink() {
+  const { environment = '' } = useParams()
+  const [state, setState] = useState<{ setup?: Setup; error?: string }>({})
+  useEffect(() => {
+    let live = true
+    const secret = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : ''
+    if (secret) {
+      // Never leave the secret in the address bar or the history entry.
+      window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
+      inflight.set(environment, exchangeSetup(environment, secret).finally(() => inflight.delete(environment)))
+    }
+    const pending = inflight.get(environment)
+    const current = readSetup(environment)
+    const opened = pending ?? (current ? Promise.resolve(current) : null)
+    if (!opened) { setState({ error: t('Open the setup link you were given: it has the address of the setup page.') }); return }
+    opened.then(setup => { if (live) setState({ setup }) }).catch(e => { inflight.delete(environment); clearSetup(environment); if (live) setState({ error: message(e) }) })
+    return () => { live = false }
+  }, [environment])
+  if (state.error) return <Centered>
+    <div className="space-y-4 rounded-xl border bg-card p-8 text-center shadow-sm">
+      <LogoMark className="mx-auto size-10" />
+      <h1 className="text-lg font-semibold">{t('This setup link cannot be used')}</h1>
+      <ErrorState error={state.error} />
+      <p className="text-sm text-muted-foreground">{t('Ask the person who sent it to create a new setup link.')}</p>
+    </div>
+  </Centered>
+  if (!state.setup) return <Centered><p role="status" className="text-center text-sm text-muted-foreground">{t('Opening your setup link…')}</p></Centered>
+  return <SetupPortal environment={environment} setup={state.setup} expired={() => { inflight.delete(environment); clearSetup(environment); setState({ error: t('This setup link is invalid, has expired or was revoked.') }) }} close={() => { inflight.delete(environment); clearSetup(environment); setState({ error: t('The setup session is closed.') }) }} />
+}
+
+function SetupPortal({ environment, setup, expired, close }: { environment: string; setup: Setup; expired: () => void; close: () => void }) {
+  const portal = useMemo<Portal>(() => ({ client_id: '', environment_id: environment, url: `/org-admin/${environment}` }), [environment])
+  const client = useMemo(() => new Client(environment, portal, setup.organization_id, expired, true), [environment, portal, setup.organization_id, expired])
+  const permissions = useMemo(() => new Set(setup.intents.flatMap(i => intentPermissions[i] ?? [])), [setup.intents])
+  const can = useCallback((p: string) => p !== OWNER && permissions.has(p), [permissions])
+  const claims = useMemo(() => ({ organization_id: setup.organization_id, permissions: [...permissions] }), [setup.organization_id, permissions])
+  const admin = useMemo<Admin>(() => ({ environment, portal, client, claims, can, setup: { intents: setup.intents, organization_name: setup.organization_name } }), [environment, portal, client, claims, can, setup])
+  const available = steps.filter(s => setup.intents.includes(s.intent))
+  const [index, setIndex] = useState(0)
+  const [finished, setFinished] = useState(false)
+  const step = available[index]
+  if (finished || !step) return <Centered>
+    <div className="space-y-4 rounded-xl border bg-card p-8 text-center shadow-sm">
+      <CheckCircle2 className="mx-auto size-10 text-success" />
+      <h1 className="text-lg font-semibold">{t('All done')}</h1>
+      <p className="text-sm text-muted-foreground">{t('{{name}} is set up. You can close this page; ask for a new setup link if you need to change something later.', { name: setup.organization_name || t('Your organization') })}</p>
+      <div className="flex justify-center gap-2">
+        <Button variant="outline" onClick={() => { setFinished(false); setIndex(0) }}>{t('Review')}</Button>
+        <Button onClick={close}>{t('Close setup')}</Button>
+      </div>
+    </div>
+  </Centered>
+  const last = index === available.length - 1
+  return <AdminContext.Provider value={admin}>
+    <div className="min-h-svh bg-background">
+      <header className="border-b px-6 py-4">
+        <div className="mx-auto flex max-w-4xl items-center gap-3">
+          <LogoMark className="size-6" />
+          <div className="min-w-0"><p className="truncate text-sm font-semibold">{setup.organization_name || t('Your organization')}</p><p className="text-xs text-muted-foreground">{t('Setup')}</p></div>
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-4xl space-y-6 p-6">
+        <ol aria-label={t('Setup steps')} className="flex flex-wrap gap-2">
+          {available.map((s, i) => <li key={s.intent}>
+            <button type="button" aria-current={i === index ? 'step' : undefined} onClick={() => setIndex(i)}
+              className={cn('flex items-center gap-2 rounded-full border px-3 py-1 text-sm', i === index ? 'border-primary bg-primary/5 font-medium' : 'text-muted-foreground hover:bg-muted')}>
+              <span className="flex size-5 items-center justify-center rounded-full bg-muted text-xs">{i + 1}</span>{s.title}
+            </button>
+          </li>)}
+        </ol>
+        <p className="text-sm text-muted-foreground">{step.description}</p>
+        <div className="space-y-6" key={step.intent}>{step.page()}</div>
+        <div className="flex justify-between border-t pt-4">
+          <Button variant="outline" disabled={index === 0} onClick={() => setIndex(index - 1)}>{t('Back')}</Button>
+          <Button onClick={() => last ? setFinished(true) : setIndex(index + 1)}>{last ? t('Done') : t('Next')}</Button>
+        </div>
+      </main>
+    </div>
+  </AdminContext.Provider>
 }
