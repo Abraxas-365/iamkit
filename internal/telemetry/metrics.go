@@ -26,6 +26,7 @@ type instrumentSet struct {
 	workerRuns  metric.Float64Histogram
 	workerLag   metric.Float64Gauge
 	cache       metric.Int64Counter
+	rehashes    metric.Int64Counter
 }
 
 var current atomic.Pointer[instrumentSet]
@@ -62,6 +63,8 @@ func instruments() *instrumentSet {
 		metric.WithDescription("How long the oldest due item of a background job has waited."))
 	s.cache, _ = m.Int64Counter("iamkit.cache.lookups", metric.WithUnit("{lookup}"),
 		metric.WithDescription("Shared cache (REDIS_URL) lookups by key family and result."))
+	s.rehashes, _ = m.Int64Counter("iamkit.password.rehashes", metric.WithUnit("{rehash}"),
+		metric.WithDescription("Stale password hashes (imported formats, old bcrypt cost) replaced at sign-in."))
 	current.Store(s)
 	return s
 }
@@ -193,4 +196,9 @@ const (
 // oidc).
 func CacheLookup(ctx context.Context, family, result string) {
 	instruments().cache.Add(ctx, 1, metric.WithAttributes(attribute.String("family", family), attribute.String("result", result)))
+}
+
+// PasswordRehash records one stale password hash replaced at sign-in.
+func PasswordRehash(ctx context.Context) {
+	instruments().rehashes.Add(ctx, 1)
 }

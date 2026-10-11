@@ -144,8 +144,8 @@ func TestLoginReplacesExpiredPassword(t *testing.T) {
 // newPasswords matches only the current password ("password").
 type newPasswords struct{}
 
-func (newPasswords) Hash(p string) (string, error)   { return "hash:" + p, nil }
-func (newPasswords) Compare(_, password string) bool { return password == "password" }
+func (newPasswords) Hash(p string) (string, error)           { return "hash:" + p, nil }
+func (newPasswords) Compare(_, password string) (bool, bool) { return password == "password", false }
 
 func TestBreachCheck(t *testing.T) {
 	policy := authentication.DefaultPasswordPolicy()

@@ -18,6 +18,7 @@ func usersCmd() *cobra.Command {
 	cmd.AddCommand(usersListCmd())
 	cmd.AddCommand(usersGetCmd())
 	cmd.AddCommand(usersCreateCmd())
+	cmd.AddCommand(usersImportCmd())
 	cmd.AddCommand(usersUpdateCmd())
 	cmd.AddCommand(usersSuspendCmd())
 	cmd.AddCommand(usersUnlockCmd())

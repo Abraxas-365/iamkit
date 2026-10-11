@@ -85,6 +85,17 @@ func (e Environment) CreateUser(ctx context.Context, input CreateUser) (Created,
 	return out, e.client.Do(ctx, "POST", e.path("users"), input, &out)
 }
 
+// ImportUsers creates up to 100 users in one call, each independently; rows
+// that fail are reported in the result, not as an error. Requires
+// iam:users:write and iam:users:import.
+func (e Environment) ImportUsers(ctx context.Context, users []CreateUser) (ImportResult, error) {
+	var out ImportResult
+	err := e.client.Do(ctx, "POST", e.path("users", "import"), struct {
+		Users []CreateUser `json:"users"`
+	}{users}, &out)
+	return out, err
+}
+
 func (e Environment) Users(ctx context.Context) ([]User, error) {
 	return list[User](ctx, e.client, e.path("users"), nil)
 }

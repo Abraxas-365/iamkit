@@ -40,3 +40,59 @@ Normal shutdown handles SIGINT/SIGTERM and allows 10 seconds for HTTP shutdown.
 Do not use process restarts as migration rollback. See
 [database operations](../operations/database-and-migrations.md) and
 [incident response](../operations/incident-response.md).
+
+## `iam users import`
+
+`iam` is the management CLI (separate from the `iamkit` server entrypoint above;
+configure it with `iam configure`, `IAMKIT_URL`/`IAMKIT_KEY`/`IAMKIT_ENVIRONMENT`
+or `--url`/`--key`/`--environment`). `iam users import FILE` moves users from
+another system into the environment through `POST …/users/import` without
+asking anyone to reset a password. `FILE` can be `-` for stdin. See the
+migration guide [Importing users](../guides/migration/importing-users.md) for end-to-end walkthroughs.
+
+Password hashes in a supported format (bcrypt, argon2i/argon2id, pbkdf2 in PHC,
+passlib or Django form, Firebase scrypt) are stored as they are and verified at
+sign-in; IAMKit replaces them with its own bcrypt at the user's next successful
+password sign-in. Users without a hash are created without a password.
+
+| Flag | Effect |
+| --- | --- |
+| `--from SOURCE` | `iamkit` (default), `auth0`, `firebase`, `clerk`, `cognito` |
+| `--home-organization ID` | Set `home_organization_id` on every user |
+| `--dry-run` | Convert and validate locally (email, name, recognised hash prefix), print the counts, make no API calls |
+| `--skip-existing` | Rows the server answers with `CONFLICT` (email, username or external ID already taken) count as skipped, not failed |
+| `--errors FILE` | Write failed and skipped rows as JSON Lines `{row, external_id, email, code, message}` |
+| `--metadata` | `auth0`: keep `user_metadata`/`app_metadata` as metadata keys `auth0_user_metadata`/`auth0_app_metadata` |
+| `--passwordless-unsupported` | `auth0`/`clerk`: import users whose hash format is not supported without a password instead of skipping them |
+| `--hash-key`, `--salt-separator`, `--rounds`, `--mem-cost` | `firebase`: the project's scrypt parameters (Firebase console › Authentication › Users › Password hash parameters); required when any user has a password. The signer key can come from `IAMKIT_FIREBASE_HASH_KEY` instead, keeping it out of argv |
+
+Sources:
+
+| `--from` | Input | Mapping |
+| --- | --- | --- |
+| `iamkit` | JSON array or JSON Lines of the create shape: `email`, `name`, `username`, `external_id`, `password_hash`, `email_verified`, `metadata`, `home_organization_id`, `otp_enabled`, `avatar_url` | Passed through; unknown fields are refused |
+| `auth0` | Bulk export, JSON Lines | `user_id` → `external_id`; name from `name`, else `given_name` + `family_name`, else `nickname`, else the email local part; `passwordHash` or `custom_password_hash.hash.value` when already in a supported format; users without an email are skipped |
+| `firebase` | `firebase auth:export users.json --format=json` | `localId` → `external_id`, `displayName` → name; `passwordHash` and `salt` become `$firebase-scrypt$m=<mem-cost>,r=<rounds>$<salt>$<hash>$<salt-separator>$<hash-key>` (URL-safe or unpadded base64 is normalised); users without `passwordHash` import without a password |
+| `clerk` | CSV export; headers are matched case-insensitively, extra columns ignored | `id`, `first_name` + `last_name`, `username`, `primary_email_address`; `password_digest` for `password_hasher` `bcrypt`, `argon2id`, `argon2i` and `pbkdf2_sha256` (Django format); other hashers are skipped |
+| `cognito` | `aws cognito-idp list-users` JSON (several pages may be concatenated) | `sub` (else `Username`) → `external_id`, `email`, `email_verified`, `name` or `given_name` + `family_name`; no passwords |
+
+```sh
+iam users import users.jsonl
+iam users import auth0-export.jsonl --from auth0 --metadata --skip-existing --errors failed.jsonl
+IAMKIT_FIREBASE_HASH_KEY="$FB_SIGNER_KEY" iam users import users.json --from firebase \
+  --salt-separator "$FB_SALT_SEPARATOR" --rounds 8 --mem-cost 14
+iam users import clerk.csv --from clerk --home-organization ORG_ID --dry-run
+aws cognito-idp list-users --user-pool-id POOL > cognito.json
+iam users import cognito.json --from cognito
+```
+
+Users are sent in requests of at most 100 rows and 60 KiB. `429` and `503`
+answers are retried up to 5 times, waiting `Retry-After` seconds or else 1, 2,
+4 and 8 seconds. Rows are independent: one failing never stops the others. The
+`row` in `--errors` is the position in the input: the line number for JSON
+Lines and CSV (the header is line 1), and the 1-based index for JSON arrays
+and the Firebase and Cognito lists. The last line printed is
+`created N, skipped N, failed N`; the exit code is 1 when any row failed.
+Skipped rows (no email, unsupported hash, existing with `--skip-existing`) do
+not change the exit code. Password hashes are never printed or written to the
+errors file.

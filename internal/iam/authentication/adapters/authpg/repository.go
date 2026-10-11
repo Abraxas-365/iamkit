@@ -26,6 +26,7 @@ type Transaction struct {
 	// Outcomes recorded as metrics once the transaction commits.
 	signIns  [][]string // amr of created sessions
 	failures int        // wrong passwords counted
+	rehashes int        // stale password hashes replaced
 }
 
 func Wrap(tx *sqlx.Tx) *Transaction { return &Transaction{tx: tx} }
@@ -61,6 +62,9 @@ func (t *Transaction) Commit() error {
 	}
 	for range t.failures {
 		telemetry.SignIn(ctx, []string{"pwd"}, telemetry.Failure)
+	}
+	for range t.rehashes {
+		telemetry.PasswordRehash(ctx)
 	}
 	return nil
 }
@@ -101,6 +105,37 @@ func (t *Transaction) SetPassword(ctx context.Context, environment identity.Envi
 		return failure(err)
 	}
 	return passwordChanged(ctx, t.tx, environment, user, "sign_in")
+}
+
+// RehashPassword swaps a stale hash for a fresh one of the same password.
+// Migration 009's triggers skip a password_hash-only change while
+// iamkit.password_rehash is on, so sessions and challenges survive; the flag
+// is set for this one statement only. password_changed_at, the lockout and
+// the event log are not touched. It runs in a savepoint: a failure here must
+// not abort the sign-in's transaction.
+func (t *Transaction) RehashPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, old, hash string) (err error) {
+	if _, err = t.tx.ExecContext(ctx, `SAVEPOINT password_rehash`); err != nil {
+		return failure(err)
+	}
+	defer func() {
+		if err != nil {
+			t.tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT password_rehash`)
+		}
+		t.tx.ExecContext(ctx, `RELEASE SAVEPOINT password_rehash`)
+	}()
+	if _, err = t.tx.ExecContext(ctx, `SELECT set_config('iamkit.password_rehash','on',true)`); err != nil {
+		return failure(err)
+	}
+	res, err := t.tx.ExecContext(ctx, `UPDATE users SET password_hash=$4 WHERE environment_id=$1 AND id=$2 AND password_hash=$3`, environment, user, old, hash)
+	if err == nil {
+		if n, _ := res.RowsAffected(); n > 0 {
+			t.rehashes++
+		}
+	}
+	if _, resetErr := t.tx.ExecContext(ctx, `SELECT set_config('iamkit.password_rehash','off',true)`); err == nil {
+		err = resetErr
+	}
+	return failure(err)
 }
 
 // passwordChanged records that the user set a new password (never the

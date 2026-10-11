@@ -1719,7 +1719,25 @@ export interface paths {
         };
         get: operations["getApiEnvironmentsbyEnvironmentUsers"];
         put?: never;
+        /** Create creates a user. */
         post: operations["postApiEnvironmentsbyEnvironmentUsers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/users/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import creates up to 100 users in one call, each row on its own: password_hash keeps a password from another system, email_verified and metadata are stored as sent. */
+        post: operations["postApiEnvironmentsbyEnvironmentUsersImport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5015,7 +5033,25 @@ export interface paths {
         };
         get: operations["getManagementEnvironmentsbyEnvironmentUsers"];
         put?: never;
+        /** Create creates a user. */
         post: operations["postManagementEnvironmentsbyEnvironmentUsers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/users/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import creates up to 100 users in one call, each row on its own: password_hash keeps a password from another system, email_verified and metadata are stored as sent. */
+        post: operations["postManagementEnvironmentsbyEnvironmentUsersImport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6773,6 +6809,24 @@ export interface components {
             metadata_url: string;
             sso_url: string;
         };
+        ImportRequestInput: {
+            users?: components["schemas"]["UserCreateInput"][] | null;
+        };
+        ImportResult: {
+            created: number;
+            failed: number;
+            results: components["schemas"]["ImportRowResult"][] | null;
+        };
+        ImportRowError: {
+            code: string;
+            message: string;
+        };
+        ImportRowResult: {
+            error?: components["schemas"]["ImportRowError"] | null;
+            /** @description UUID (empty when unset) */
+            id?: string | null;
+            index: number;
+        };
         InputInput: {
             email?: string;
             group_ids?: string[] | null;
@@ -8230,13 +8284,16 @@ export interface components {
         UserCreateInput: {
             avatar_url?: string;
             email?: string;
+            email_verified?: boolean;
             external_id?: string;
             /** @description UUID (empty when unset) */
             home_organization_id?: string;
             kind?: string;
+            metadata?: unknown | null;
             name?: string;
             otp_enabled?: boolean;
             password?: string;
+            password_hash?: string;
             username?: string;
         };
         UserInfo: {
@@ -15645,6 +15702,51 @@ export interface operations {
                         /** @description UUID (empty when unset) */
                         id: string;
                     };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentUsersImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ImportRequestInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportResult"];
                 };
             };
             /** @description Client error */
@@ -29277,6 +29379,51 @@ export interface operations {
                         /** @description UUID (empty when unset) */
                         id: string;
                     };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentUsersImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ImportRequestInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportResult"];
                 };
             };
             /** @description Client error */

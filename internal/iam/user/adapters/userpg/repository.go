@@ -59,14 +59,18 @@ func phoneUnverifiable(err error) bool {
 
 // Create inserts the user and, with a home organization, the membership
 // in it, in one transaction.
-func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, input user.Create, hash string) (identity.UserID, error) {
+func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, input user.Create, hash string, origin string) (identity.UserID, error) {
 	id := identity.NewUserID()
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return id, failure(err, "create user")
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,otp_enabled,avatar_url,username,home_organization_id,kind,external_id) VALUES($1,$2,nullif($3,''),$4,$5,$6,$7,nullif($8,''),$9,$10,nullif($11,''))`, id, environment, input.Email, input.Name, hash, input.OTPEnabled, input.AvatarURL, input.Username, input.HomeOrganization, kind(input.Kind), input.ExternalID)
+	metadata := "{}"
+	if !input.NoMetadata() {
+		metadata = string(input.Metadata)
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,otp_enabled,avatar_url,username,home_organization_id,kind,external_id,email_verified,metadata) VALUES($1,$2,nullif($3,''),$4,$5,$6,$7,nullif($8,''),$9,$10,nullif($11,''),$12,$13::jsonb)`, id, environment, input.Email, input.Name, hash, input.OTPEnabled, input.AvatarURL, input.Username, input.HomeOrganization, kind(input.Kind), input.ExternalID, input.EmailVerified, metadata)
 	if usernameTaken(err) {
 		return id, errx.Conflict("username is taken")
 	}
@@ -87,7 +91,7 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 			return id, failure(err, "create membership")
 		}
 	}
-	if err = eventpg.UserCreated(ctx, tx, environment, event.ActorFrom(ctx), id, input.HomeOrganization, "api"); err != nil {
+	if err = eventpg.UserCreated(ctx, tx, environment, event.ActorFrom(ctx), id, input.HomeOrganization, origin); err != nil {
 		return id, err
 	}
 	return id, failure(tx.Commit(), "commit user")

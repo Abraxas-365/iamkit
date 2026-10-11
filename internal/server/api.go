@@ -37,6 +37,7 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	// Users
 	users := e.Group("/users", apiauth.ReadWrite(authorization.PermUsersRead, authorization.PermUsersWrite))
 	users.Post("/", s.APIHandlers.Users.Create)
+	users.Post("/import", s.APIHandlers.Users.Import)
 	users.Get("/", s.APIHandlers.Users.List)
 	users.Get("/:id", s.APIHandlers.Users.Find)
 	users.Patch("/:id", s.APIHandlers.Users.Update)

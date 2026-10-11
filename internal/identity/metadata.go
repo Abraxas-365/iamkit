@@ -57,6 +57,9 @@ func SetMetadata(raw json.RawMessage, key string, value json.RawMessage) (json.R
 	if len(value) > MetadataMaxValue {
 		return nil, errx.Validation("metadata value must be at most 4 KiB")
 	}
+	if escapedNUL(value) {
+		return nil, errx.Validation("metadata must not contain the NUL character")
+	}
 	object, err := metadataObject(raw)
 	if err != nil {
 		return nil, err
@@ -101,7 +104,26 @@ func metadataObject(raw json.RawMessage) (map[string]json.RawMessage, error) {
 	if err := json.Unmarshal(raw, &object); err != nil || object == nil {
 		return nil, errx.Validation("metadata must be a JSON object")
 	}
+	if escapedNUL(raw) {
+		return nil, errx.Validation("metadata must not contain the NUL character")
+	}
 	return object, nil
+}
+
+// escapedNUL reports whether JSON text holds the escape \u0000, which
+// PostgreSQL jsonb cannot store (an escaped backslash followed by "u0000"
+// is not one).
+func escapedNUL(raw []byte) bool {
+	for i := 0; i+1 < len(raw); i++ {
+		if raw[i] != '\\' {
+			continue
+		}
+		if raw[i+1] == 'u' && bytes.HasPrefix(raw[i+2:], []byte("0000")) {
+			return true
+		}
+		i++ // skip the escaped character
+	}
+	return false
 }
 
 func metadataSize(object map[string]json.RawMessage, size int) error {

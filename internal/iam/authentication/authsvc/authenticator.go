@@ -41,7 +41,7 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 	}
 	account, lookup := tx.PasswordUser(ctx, authentication.Context{EnvironmentID: environment}, email+username)
 	// Compare always runs (dummy hash when unknown) so timing is uniform.
-	matches := s.passwords.Compare(account.Hash, password)
+	matches, stale := s.passwords.Compare(account.Hash, password)
 	if lookup != nil {
 		return authentication.Verified{}, credentialFailure(lookup)
 	}
@@ -50,6 +50,9 @@ func (s *Service) VerifyPassword(ctx context.Context, environment identity.Envir
 	}
 	if err = requireNoSSOAfter(ctx, tx, authentication.Context{EnvironmentID: environment}, username, account.Email); err != nil {
 		return authentication.Verified{}, err
+	}
+	if stale {
+		s.rehash(ctx, tx, environment, account, password)
 	}
 	if err = tx.Commit(); err != nil {
 		return authentication.Verified{}, err

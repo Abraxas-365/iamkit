@@ -4,8 +4,13 @@ package authorization
 // accounts when the resource is the built-in IAM resource. They control access
 // to the /api/v1/* route group.
 const (
-	PermUsersRead            = "iam:users:read"
-	PermUsersWrite           = "iam:users:write"
+	PermUsersRead  = "iam:users:read"
+	PermUsersWrite = "iam:users:write"
+	// PermUsersImport, on top of iam:users:write, allows POST /users/import
+	// and password_hash or email_verified on POST /users: values the caller
+	// asserts instead of IAMKit checking them (a verified email feeds
+	// domain join).
+	PermUsersImport          = "iam:users:import"
 	PermOrgsRead             = "iam:orgs:read"
 	PermOrgsWrite            = "iam:orgs:write"
 	PermMembersRead          = "iam:members:read"
@@ -68,7 +73,7 @@ var OrgPermissions = []string{
 // permissions. Used when provisioning the system IAM resource for new
 // environments and kept in sync with the constants above.
 var IAMResourcePermissions = append([]string{
-	PermUsersRead, PermUsersWrite,
+	PermUsersRead, PermUsersWrite, PermUsersImport,
 	PermOrgsRead, PermOrgsWrite,
 	PermMembersRead, PermMembersWrite,
 	PermAppsRead, PermAppsWrite,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -16,6 +17,7 @@ import (
 type Service struct {
 	repository user.Repository
 	passwords  user.PasswordHasher
+	hashes     user.PasswordHashes // nil: password_hash is refused
 	policy     user.PasswordPolicy // nil checks only the length
 	schemas    user.SchemaValidator
 	actions    user.Actions
@@ -32,9 +34,64 @@ func New(repository user.Repository, passwords user.PasswordHasher, schemas user
 // SetPasswordPolicy makes new passwords follow the environment's policy.
 func (s *Service) SetPasswordPolicy(p user.PasswordPolicy) { s.policy = p }
 
+// SetPasswordHashes enables Create.PasswordHash: the hash must pass the
+// checker (supported format, cost caps).
+func (s *Service) SetPasswordHashes(h user.PasswordHashes) { s.hashes = h }
+
+// Event origins of user.created.
+const (
+	originAPI    = "api"
+	originImport = "import"
+)
+
 func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input user.Create) (identity.UserID, error) {
+	return s.create(ctx, environment, input, originAPI)
+}
+
+// Import creates every row on its own: a failure never stops the others.
+func (s *Service) Import(ctx context.Context, environment identity.EnvironmentID, rows []user.Create) (user.ImportResult, error) {
+	if len(rows) == 0 {
+		return user.ImportResult{}, errx.Validation("users must have at least one row")
+	}
+	if len(rows) > user.MaxImportRows {
+		return user.ImportResult{}, errx.Validation("users must have at most 100 rows")
+	}
+	out := user.ImportResult{Results: make([]user.ImportRowResult, 0, len(rows))}
+	for i, row := range rows {
+		id, err := s.create(ctx, environment, row, originImport)
+		if err != nil {
+			out.Failed++
+			out.Results = append(out.Results, user.ImportRowResult{Index: i, Error: rowError(err)})
+			continue
+		}
+		out.Created++
+		out.Results = append(out.Results, user.ImportRowResult{Index: i, ID: &id})
+	}
+	return out, nil
+}
+
+// rowError is the public form of a row's failure: errx errors keep their
+// code and message; anything else is a generic internal error.
+func rowError(err error) *user.ImportRowError {
+	var e *errx.Error
+	if errx.As(err, &e) && e.HTTPStatus < 500 {
+		return &user.ImportRowError{Code: e.Code, Message: e.Message}
+	}
+	return &user.ImportRowError{Code: "INTERNAL", Message: "internal server error"}
+}
+
+func (s *Service) create(ctx context.Context, environment identity.EnvironmentID, input user.Create, origin string) (identity.UserID, error) {
 	if err := input.Validate(); err != nil {
 		return identity.UserID{}, err
+	}
+	input.PasswordHash = strings.TrimSpace(input.PasswordHash)
+	if input.PasswordHash != "" {
+		if s.hashes == nil {
+			return identity.UserID{}, errx.Business("password hash import is not available")
+		}
+		if err := s.hashes.CheckHash(input.PasswordHash); err != nil {
+			return identity.UserID{}, err
+		}
 	}
 	if s.quota != nil {
 		if err := s.quota.Admit(ctx, environment, usage.LimitUsers); err != nil {
@@ -48,7 +105,7 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	input.ExternalID, _ = identity.ExternalID(input.ExternalID) // validated
 	if input.Kind == user.KindMachine {
 		input.AvatarURL, _ = identity.AvatarURL(input.AvatarURL) // validated
-		return s.repository.Create(ctx, environment, input, "")
+		return s.repository.Create(ctx, environment, input, "", origin)
 	}
 	input.Kind = user.KindHuman
 	email, err := identity.Email(input.Email)
@@ -58,7 +115,7 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	input.Email = email
 	input.AvatarURL, _ = identity.AvatarURL(input.AvatarURL) // validated
 	input.Username, _ = identity.Username(input.Username)
-	var hash string
+	hash := input.PasswordHash
 	if input.Password != "" {
 		if err = s.checkPassword(ctx, environment, input.HomeOrganization, input.Password); err != nil {
 			return identity.UserID{}, err
@@ -68,8 +125,8 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 			return identity.UserID{}, err
 		}
 	}
-	input.Password = ""
-	return s.repository.Create(ctx, environment, input, hash)
+	input.Password, input.PasswordHash = "", ""
+	return s.repository.Create(ctx, environment, input, hash, origin)
 }
 
 // checkPassword applies the environment's policy, tightened by the home

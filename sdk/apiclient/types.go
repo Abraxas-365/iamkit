@@ -12,6 +12,9 @@ type (
 	ClientAuthentication    = iamclient.ClientAuthentication
 	CreateAccessToken       = iamclient.CreateAccessToken
 	CreateUser              = iamclient.CreateUser
+	ImportResult            = iamclient.ImportResult
+	ImportRowError          = iamclient.ImportRowError
+	ImportRowResult         = iamclient.ImportRowResult
 	Created                 = iamclient.Created
 	DNSRecord               = iamclient.DNSRecord
 	DeliveryAttempt         = iamclient.DeliveryAttempt

@@ -17,10 +17,25 @@ type Handler struct {
 	actor    func(*fiber.Ctx) string
 	validate Validate // nil: no self-service routes
 	phones   user.PhoneCommands
+	// imports admits imports and asserted fields (password_hash,
+	// email_verified) on create; nil admits them (operator routes).
+	imports func(*fiber.Ctx) error
 }
 
 func New(commands user.Commands, queries user.Queries, actor func(*fiber.Ctx) string) *Handler {
 	return &Handler{commands: commands, queries: queries, actor: actor}
+}
+
+// GuardImports makes POST /users/import, and POST /users with
+// password_hash or email_verified, pass check first (/api/v1:
+// iam:users:import).
+func (h *Handler) GuardImports(check func(*fiber.Ctx) error) { h.imports = check }
+
+func (h *Handler) admitImport(c *fiber.Ctx) error {
+	if h.imports == nil {
+		return nil
+	}
+	return h.imports(c)
 }
 func env(c *fiber.Ctx) identity.EnvironmentID {
 	id, _ := identity.ParseEnvironmentID(c.Params("environment"))
@@ -28,6 +43,7 @@ func env(c *fiber.Ctx) identity.EnvironmentID {
 }
 func (h *Handler) Register(r fiber.Router) {
 	r.Post("/users", h.Create)
+	r.Post("/users/import", h.Import)
 	r.Get("/users", h.List)
 	r.Get("/users/:id", h.Find)
 	r.Patch("/users/:id", h.Update)
@@ -51,16 +67,46 @@ func (h *Handler) RegisterSchema(r fiber.Router) {
 	r.Put("/user-schema", h.SaveSchema)
 	r.Delete("/user-schema", h.DeleteSchema)
 }
+
+// Create creates a user. Operators may also send password_hash (an existing
+// hash to keep, exclusive with password, no password policy), email_verified
+// and metadata, for migrations; on /api/v1 password_hash and email_verified
+// also need iam:users:import.
 func (h *Handler) Create(c *fiber.Ctx) error {
 	var input user.Create
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request body")
+	}
+	if input.PasswordHash != "" || input.EmailVerified {
+		if err := h.admitImport(c); err != nil {
+			return err
+		}
 	}
 	id, err := h.commands.Create(c.UserContext(), env(c), input)
 	if err != nil {
 		return err
 	}
 	return c.Status(201).JSON(fiber.Map{"id": id})
+}
+
+// Import creates up to 100 users in one call, each row on its own:
+// password_hash keeps a password from another system, email_verified and
+// metadata are stored as sent. Answers 200 with a result per row (id or
+// error) even when some rows fail; 400 for no rows, more than 100 rows or
+// a malformed body. On /api/v1 it also needs iam:users:import.
+func (h *Handler) Import(c *fiber.Ctx) error {
+	if err := h.admitImport(c); err != nil {
+		return err
+	}
+	var input user.ImportRequest
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request body")
+	}
+	result, err := h.commands.Import(c.UserContext(), env(c), input.Users)
+	if err != nil {
+		return err
+	}
+	return c.JSON(result)
 }
 func (h *Handler) List(c *fiber.Ctx) error {
 	filter := user.Filter{State: user.State(c.Query("state")), Kind: user.Kind(c.Query("kind")), ExternalID: c.Query("external_id")}

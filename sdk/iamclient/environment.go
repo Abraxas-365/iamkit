@@ -173,6 +173,38 @@ type CreateUser struct {
 	// HomeOrganizationID makes the user a member of that organization
 	// whose administrators may then edit the record (optional).
 	HomeOrganizationID string `json:"home_organization_id,omitempty"`
+	// PasswordHash keeps a password from another system (bcrypt, argon2,
+	// pbkdf2, Firebase scrypt; see the import guide). Exclusive with
+	// Password; no password policy applies. Replaced by IAMKit's own hash
+	// at the user's next password sign-in.
+	PasswordHash string `json:"password_hash,omitempty"`
+	// EmailVerified stores the email as verified (migrations).
+	EmailVerified bool `json:"email_verified,omitempty"`
+	// Metadata is stored with the user (at most 64 keys).
+	Metadata map[string]any `json:"metadata,omitempty"`
+	// Kind is "human" (default) or "machine".
+	Kind string `json:"kind,omitempty"`
+}
+
+// ImportResult answers ImportUsers: one result per row, in request order.
+type ImportResult struct {
+	Results []ImportRowResult `json:"results"`
+	Created int               `json:"created"`
+	Failed  int               `json:"failed"`
+}
+
+// ImportRowResult is one row's outcome: ID when created, Error when not.
+type ImportRowResult struct {
+	Index int             `json:"index"`
+	ID    string          `json:"id,omitempty"`
+	Error *ImportRowError `json:"error,omitempty"`
+}
+
+// ImportRowError says why a row was refused (Code such as CONFLICT,
+// VALIDATION, QUOTA_EXCEEDED).
+type ImportRowError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 type Organization struct {
@@ -380,6 +412,16 @@ type Position struct {
 func (e Environment) CreateUser(ctx context.Context, input CreateUser) (Created, error) {
 	var out Created
 	err := e.client.Do(ctx, "POST", e.path("users"), input, &out)
+	return out, err
+}
+
+// ImportUsers creates up to 100 users in one call, each independently; rows
+// that fail are reported in the result, not as an error.
+func (e Environment) ImportUsers(ctx context.Context, users []CreateUser) (ImportResult, error) {
+	var out ImportResult
+	err := e.client.Do(ctx, "POST", e.path("users/import"), struct {
+		Users []CreateUser `json:"users"`
+	}{users}, &out)
 	return out, err
 }
 

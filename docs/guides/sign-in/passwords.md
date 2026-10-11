@@ -3,7 +3,9 @@
 The password journeys your application drives through the identity API: sign in,
 recover a forgotten password and verify an email address. Rules for what a
 password must contain, lockout and expiry are in [password policy](password-policy.md);
-which methods are offered is set in [sign-in methods](sign-in-methods.md).
+which methods are offered is set in [sign-in methods](sign-in-methods.md). Moving
+users from another provider with their existing passwords is covered in
+[importing users](../migration/importing-users.md).
 
 ## Password login
 

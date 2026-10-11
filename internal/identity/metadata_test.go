@@ -24,6 +24,16 @@ func TestMetadataLimits(t *testing.T) {
 	if ValidateMetadata(json.RawMessage(`[1]`)) == nil || ValidateMetadata(json.RawMessage(`{"a b":1}`)) == nil {
 		t.Fatal("bad metadata accepted")
 	}
+	// jsonb cannot store U+0000; an escaped backslash before "u0000" is fine.
+	if ValidateMetadata(json.RawMessage(`{"a":"x\u0000"}`)) == nil {
+		t.Fatal("NUL accepted")
+	}
+	if _, err := SetMetadata(nil, "a", json.RawMessage(`"\u0000"`)); err == nil {
+		t.Fatal("NUL value accepted")
+	}
+	if err := ValidateMetadata(json.RawMessage(`{"a":"\\u0000"}`)); err != nil {
+		t.Fatalf("escaped backslash: %v", err)
+	}
 	big := `{"a":"` + strings.Repeat("x", MetadataMaxValue) + `"}`
 	if ValidateMetadata(json.RawMessage(big)) == nil {
 		t.Fatal("oversized value accepted")

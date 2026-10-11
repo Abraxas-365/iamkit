@@ -119,13 +119,22 @@ func Environment(c *fiber.Ctx) identity.EnvironmentID {
 
 func RequirePermission(perm string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		for _, p := range Token(c).Permissions {
-			if p == perm {
-				return c.Next()
-			}
+		if err := Require(c, perm); err != nil {
+			return err
 		}
-		return errx.Forbidden("missing permission: " + perm)
+		return c.Next()
 	}
+}
+
+// Require is RequirePermission inside a handler: nil when the token holds
+// perm, else 403.
+func Require(c *fiber.Ctx, perm string) error {
+	for _, p := range Token(c).Permissions {
+		if p == perm {
+			return nil
+		}
+	}
+	return errx.Forbidden("missing permission: " + perm)
 }
 
 func ReadWrite(read, write string) fiber.Handler {

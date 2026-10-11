@@ -10,7 +10,8 @@ Lists of users, organizations and members use the
 
 | Method/path | Input | Success |
 | --- | --- | --- |
-| `POST /users` | `name`, `email`; optional `password`, `otp_enabled`, `avatar_url`, `username`, `external_id`, `home_organization_id` (also adds the membership). `kind: "machine"` creates a [machine user](../../guides/machines/machine-users.md): `name` and optional `avatar_url`/`external_id`/`home_organization_id` only | 201 `{id}`; 409 `email is taken`, `username is taken` or `external_id is taken` |
+| `POST /users` | `name`, `email`; optional `password` or `password_hash` (exclusive), `email_verified`, `metadata`, `otp_enabled`, `avatar_url`, `username`, `external_id`, `home_organization_id` (also adds the membership). `kind: "machine"` creates a [machine user](../../guides/machines/machine-users.md): `name` and optional `avatar_url`/`external_id`/`home_organization_id` only | 201 `{id}`; 409 `email is taken`, `username is taken` or `external_id is taken` |
+| `POST /users/import` | `{"users":[…]}`, 1–100 rows of the `POST /users` input; at most 64 KiB per request | 200 `{results:[{index,id}\|{index,error:{code,message}}],created,failed}`; rows are independent ([importing users](../../guides/migration/importing-users.md#import-api)) |
 | `GET /users` | List parameters (`search` matches name, email and username); optional `state`, `home_organization_id`, `kind` (`human`\|`machine`), `external_id` (exact match) | 200 page of users (each with `kind`) |
 | `GET /users/:id` | User ID | 200 user |
 | `PATCH /users/:id` | Optional `name`, `active`, `otp_enabled`, `metadata`, `phone` (E.164, `""` clears; a changed number is unverified), `phone_verified` (explicit, audited `user.phone_verified_set`; `true` needs a number, else 400), `avatar_url` (`""` removes), `username` (`""` removes), `external_id` (`""` or `null` removes; absent keeps), `home_organization_id` (an organization the user belongs to; `""` clears) | 204; 409 `username is taken` or `external_id is taken` |
@@ -40,6 +41,17 @@ List items contain only `id,email,name,username,external_id,home_organization_id
 (`failed_logins`, `locked_until` — null when not locked) and `terms_accepted_at` (when a
 [sign-up](../../guides/sign-in/signup-and-onboarding.md#terms-acceptance) accepted the terms) as well; missing list fields are not evidence
 that those settings are false. Neither response exposes password hashes.
+`password_hash` is an existing hash of a supported format
+([formats](../../guides/migration/importing-users.md#password-hash-formats); else 400
+`password_hash format is not supported`), verified as it is and replaced with bcrypt at the
+user's next password sign-in; it skips the password policy and breach check, is stored as
+given and never returned. `email_verified` (default false) records an already verified
+email, which [domain join](../../guides/organizations/domain-join.md) trusts; `metadata` is
+set at creation. Machine users accept none of `password_hash` and `email_verified`; organization
+administrators cannot set them. On `/api/v1` both also need `iam:users:import`.
+`POST /users/import` is also served on `/api/v1` with
+`iam:users:write` and `iam:users:import`; each row has its own quota check and action, a duplicate is the row's
+`CONFLICT`, and created users record `user.created` with `data.origin` `import`.
 Non-empty passwords must follow the environment's
 [password policy](../../guides/sign-in/password-policy.md) (default 12–72 bytes; 400
 `PASSWORD_POLICY` with `details.rule`). Name cannot be

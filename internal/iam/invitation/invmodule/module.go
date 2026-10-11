@@ -2,7 +2,7 @@
 package invmodule
 
 import (
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authbcrypt"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpassword"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invmail"
@@ -37,7 +37,7 @@ func New(deps Deps) Module {
 	if deps.Delivery != nil {
 		mailer = invmail.Mailer{Sender: deps.Delivery}
 	}
-	service := invsvc.New(invpg.New(deps.DB), mgmtsecret.Generator{}, authbcrypt.Hasher{}, mailer, nil)
+	service := invsvc.New(invpg.New(deps.DB), mgmtsecret.Generator{}, authpassword.Hasher{}, mailer, nil)
 	if deps.PasswordPolicy != nil {
 		service.SetPasswordPolicy(deps.PasswordPolicy)
 	}

@@ -10,10 +10,10 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authjwt"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authmail"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpassword"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authsms"
@@ -137,7 +137,7 @@ func New(deps Deps) Module {
 		globalProvider = g.Provider
 	}
 	repo := authpg.New(deps.DB)
-	service := authsvc.New(repo, authbcrypt.Hasher{}, authsecret.Generator{}, global)
+	service := authsvc.New(repo, authpassword.Hasher{}, authsecret.Generator{}, global)
 	if deps.SecondFactor != nil {
 		service.SetSecondFactor(deps.SecondFactor)
 	}

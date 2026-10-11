@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpassword"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
@@ -51,7 +51,7 @@ type Module struct {
 
 func New(deps Deps) Module {
 	clients := oauthpg.New(deps.DB)
-	service := oauthsvc.New(clients, mgmtsecret.Generator{}, authbcrypt.Hasher{}, oauthfosite.Hints{Keys: deps.Keys, Issuer: deps.Issuer})
+	service := oauthsvc.New(clients, mgmtsecret.Generator{}, authpassword.Hasher{}, oauthfosite.Hints{Keys: deps.Keys, Issuer: deps.Issuer})
 	fetcher := oauthfosite.NewKeyFetcher(deps.Transport)
 	provider := func(client *oauth.Client) (fosite.OAuth2Provider, *oauthfosite.Store, error) {
 		store := &oauthfosite.Store{DB: deps.DB, Environment: client.Environment, Clients: clients}

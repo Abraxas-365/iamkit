@@ -133,7 +133,7 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, lo
 	}
 	account, lookup := tx.PasswordUser(ctx, boundary, email+username)
 	// Compare always runs (dummy hash when unknown) so timing is uniform.
-	matches := s.passwords.Compare(account.Hash, password)
+	matches, stale := s.passwords.Compare(account.Hash, password)
 	if lookup != nil {
 		return out, credentialFailure(lookup)
 	}
@@ -149,7 +149,11 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, lo
 		return out, err
 	}
 	var hash string
-	if account.MustChange(policy, time.Now()) {
+	mustChange := account.MustChange(policy, time.Now())
+	if matches && stale && !mustChange {
+		s.rehash(ctx, tx, boundary.EnvironmentID, account, password)
+	}
+	if mustChange {
 		if newPassword == "" {
 			return out, commitThen(tx, authentication.ErrPasswordChangeRequired())
 		}

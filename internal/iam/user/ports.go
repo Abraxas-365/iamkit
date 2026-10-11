@@ -11,6 +11,11 @@ import (
 
 type Commands interface {
 	Create(ctx context.Context, environment identity.EnvironmentID, input Create) (identity.UserID, error)
+	// Import creates up to MaxImportRows users, each independently (own
+	// validation, quota admission, request hook and transaction; event
+	// origin "import"). The error is only for a bad batch (no rows, too
+	// many); per-row failures are in the result.
+	Import(ctx context.Context, environment identity.EnvironmentID, rows []Create) (ImportResult, error)
 	Update(ctx context.Context, m Mutation, user identity.UserID, input Update) error
 	// Deactivate suspends the user (active=false, audited
 	// user.deactivated): sessions end and nothing signs in.
@@ -170,7 +175,9 @@ type Queries interface {
 }
 
 type Repository interface {
-	Create(ctx context.Context, environment identity.EnvironmentID, input Create, passwordHash string) (identity.UserID, error)
+	// Create inserts the user; origin is the user.created event's
+	// data.origin ("api", "import").
+	Create(ctx context.Context, environment identity.EnvironmentID, input Create, passwordHash string, origin string) (identity.UserID, error)
 	List(ctx context.Context, environment identity.EnvironmentID, filter Filter, page query.Pagination) (query.Paginated[User], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (User, error)
 	Update(ctx context.Context, m Mutation, user identity.UserID, input Update) error
@@ -206,6 +213,13 @@ type SchemaValidator interface {
 }
 type PasswordHasher interface {
 	Hash(password string) (string, error)
+}
+
+// PasswordHashes validates imported password hashes (Create.PasswordHash):
+// a supported format within the cost caps. Implemented by the
+// authentication module's hasher.
+type PasswordHashes interface {
+	CheckHash(hash string) error
 }
 
 // PasswordPolicy checks a new password against the environment's policy

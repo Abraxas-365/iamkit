@@ -2,7 +2,7 @@
 package usermodule
 
 import (
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authbcrypt"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpassword"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/adapters/userhttp"
@@ -46,7 +46,11 @@ type Module struct {
 
 func New(deps Deps) Module {
 	repository := userpg.New(deps.DB)
-	service := usersvc.New(repository, authbcrypt.Hasher{}, userschema.Validator{})
+	// One hasher writes new passwords and checks imported hashes against
+	// the formats sign-in verifies (and rehashes).
+	passwords := authpassword.Hasher{}
+	service := usersvc.New(repository, passwords, userschema.Validator{})
+	service.SetPasswordHashes(passwords)
 	if deps.PasswordPolicy != nil {
 		service.SetPasswordPolicy(deps.PasswordPolicy)
 	}

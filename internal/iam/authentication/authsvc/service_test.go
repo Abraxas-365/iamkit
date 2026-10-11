@@ -27,6 +27,8 @@ type testTransaction struct {
 	lockedUntil *time.Time
 	changed     time.Time
 	newHash     string
+	rehashed    []string
+	rehashErr   error
 	audited     []string
 	// methods the boundary organization allows (nil: all)
 	methods *authentication.Methods
@@ -65,6 +67,10 @@ func (t *testTransaction) SetPassword(_ context.Context, _ identity.EnvironmentI
 	t.newHash, t.changed, t.failures, t.lockedUntil = hash, time.Now(), 0, nil
 	return nil
 }
+func (t *testTransaction) RehashPassword(_ context.Context, _ identity.EnvironmentID, _ identity.UserID, old, hash string) error {
+	t.rehashed = append(t.rehashed, old+"→"+hash)
+	return t.rehashErr
+}
 func (t *testTransaction) Audit(_ context.Context, m authentication.Mutation) error {
 	t.audited = append(t.audited, m.Action)
 	return nil
@@ -102,10 +108,12 @@ func (t *testTransaction) CompleteChallenge(context.Context, identity.ChallengeI
 	return nil
 }
 
-type testPasswords struct{ mismatch bool }
+type testPasswords struct{ mismatch, stale bool }
 
-func (testPasswords) Hash(string) (string, error)   { return "hash", nil }
-func (p testPasswords) Compare(string, string) bool { return !p.mismatch }
+func (testPasswords) Hash(string) (string, error) { return "hash", nil }
+func (p testPasswords) Compare(string, string) (bool, bool) {
+	return !p.mismatch, !p.mismatch && p.stale
+}
 
 type testSecrets struct{}
 

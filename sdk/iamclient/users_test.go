@@ -2,6 +2,7 @@ package iamclient
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -62,5 +63,35 @@ func TestUserByExternalID(t *testing.T) {
 	}
 	if _, ok, err = env.UserByExternalID(context.Background(), "nope"); err != nil || ok {
 		t.Fatalf("unknown = %v %v", ok, err)
+	}
+}
+
+func TestImportUsers(t *testing.T) {
+	var path, body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.Path
+		raw, _ := io.ReadAll(r.Body)
+		body = string(raw)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"results":[{"index":0,"id":"u1"},{"index":1,"error":{"code":"CONFLICT","message":"email is taken"}}],"created":1,"failed":1}`))
+	}))
+	defer srv.Close()
+	out, err := New(srv.URL, "ik_mgmt_test").Environment("env-1").ImportUsers(context.Background(), []CreateUser{
+		{Email: "a@example.com", Name: "A", PasswordHash: "$2a$10$x", EmailVerified: true, Metadata: map[string]any{"plan": "pro"}},
+		{Email: "b@example.com", Name: "B"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != "/management/v1/environments/env-1/users/import" {
+		t.Fatalf("path = %s", path)
+	}
+	for _, want := range []string{`"users":[`, `"password_hash":"$2a$10$x"`, `"email_verified":true`, `"metadata":{"plan":"pro"}`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body %s lacks %s", body, want)
+		}
+	}
+	if out.Created != 1 || out.Failed != 1 || out.Results[0].ID != "u1" || out.Results[1].Error.Code != "CONFLICT" {
+		t.Fatalf("out = %+v", out)
 	}
 }

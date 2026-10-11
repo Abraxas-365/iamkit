@@ -31,6 +31,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhibp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/authzmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/event/eventmodule"
@@ -301,8 +302,10 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		SetupSecrets: mgmtsecret.Generator{},
 	})
 	s.API.WithSetup(orgAdmin.SetupLinkQueries)
+	apiUsers := userhttp.New(userModule.Commands, userModule.Queries, actor)
+	apiUsers.GuardImports(func(c *fiber.Ctx) error { return apiauth.Require(c, authorization.PermUsersImport) })
 	s.APIHandlers = server.APIHandlerSet{
-		Users:           userhttp.New(userModule.Commands, userModule.Queries, actor),
+		Users:           apiUsers,
 		AccessTokens:    userhttp.NewAccessTokens(userModule.AccessTokenCommands, userModule.AccessTokenQueries, actor),
 		UserKeys:        userhttp.NewKeys(userModule.KeyCommands, userModule.KeyQueries, actor),
 		Organizations:   orghttp.New(organizationModule.Commands, organizationModule.Queries, actor),

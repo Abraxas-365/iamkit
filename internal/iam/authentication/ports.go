@@ -248,7 +248,11 @@ type TemplateRepository interface {
 }
 type Passwords interface {
 	Hash(password string) (string, error)
-	Compare(hash, password string) bool
+	// Compare reports whether password matches hash. stale (only with a
+	// match) means the hash is an imported format or an outdated bcrypt and
+	// should be replaced by Hash(password). An empty or unknown hash never
+	// matches but costs the same.
+	Compare(hash, password string) (matches, stale bool)
 }
 
 // PasswordPolicyCommands manage an environment's password policy and the
@@ -468,6 +472,11 @@ type Transaction interface {
 	// SetPassword stores a new password hash, restarts its age and clears
 	// the lockout.
 	SetPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, hash string) error
+	// RehashPassword replaces the user's stale hash old by hash for the same
+	// password, only while the stored hash is still old. It is not a password
+	// change: sessions and challenges stay, password_changed_at and the
+	// lockout are untouched, and no event is emitted.
+	RehashPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, old, hash string) error
 	Audit(ctx context.Context, m Mutation) error
 	// SSORequired reports whether the boundary organization requires SSO for
 	// the email: it has an active enforced connection, has verified the

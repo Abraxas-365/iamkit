@@ -193,10 +193,26 @@ func (s *Service) newPassword(ctx context.Context, policy authentication.Passwor
 	if err != nil {
 		return "", err
 	}
-	if currentHash != "" && s.passwords.Compare(currentHash, password) {
-		return "", authentication.PasswordRejected(authentication.RuleReused, policy.MinLength)
+	if currentHash != "" {
+		if same, _ := s.passwords.Compare(currentHash, password); same {
+			return "", authentication.PasswordRejected(authentication.RuleReused, policy.MinLength)
+		}
 	}
 	return s.passwords.Hash(password)
+}
+
+// rehash replaces account's stale hash (an imported format, or bcrypt below
+// the current cost) by a fresh one for the password that just matched, in
+// tx. It is best effort: a failure is logged and the sign-in goes on with
+// the old hash, which still works.
+func (s *Service) rehash(ctx context.Context, tx authentication.Transaction, environment identity.EnvironmentID, account authentication.PasswordAccount, password string) {
+	hash, err := s.passwords.Hash(password)
+	if err == nil {
+		err = tx.RehashPassword(ctx, environment, account.ID, account.Hash, hash)
+	}
+	if err != nil {
+		slog.WarnContext(ctx, "password rehash failed; sign-in continues", "user", account.ID, "err", err)
+	}
 }
 
 // checkPassword settles a password sign-in attempt on a locked account row.

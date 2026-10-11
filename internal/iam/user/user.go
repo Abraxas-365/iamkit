@@ -138,7 +138,23 @@ type Create struct {
 	// (optional): its administrators may edit the user. Creating a user
 	// with one also makes the user a member of it.
 	HomeOrganization identity.OrganizationID `json:"home_organization_id"`
+	// PasswordHash is an existing password hash to keep (migrations from
+	// another system; formats the PasswordHashes port accepts). It is
+	// stored as is and checked at sign-in; the password policy and breach
+	// check do not apply. Exclusive with Password, human users only, at
+	// most MaxPasswordHash characters. Operator routes only: organization
+	// administrators cannot set it.
+	PasswordHash string `json:"password_hash"`
+	// EmailVerified stores the email as already verified (migrations).
+	// Human users only; operator routes only. Domain join trusts it.
+	EmailVerified bool `json:"email_verified"`
+	// Metadata is the user's metadata object, stored at creation (see
+	// identity.ValidateMetadata); null or absent leaves it empty.
+	Metadata json.RawMessage `json:"metadata"`
 }
+
+// MaxPasswordHash is the longest accepted Create.PasswordHash.
+const MaxPasswordHash = 1024
 
 func (c Create) Validate() error {
 	if strings.TrimSpace(c.Name) == "" {
@@ -157,6 +173,21 @@ func (c Create) Validate() error {
 			return errx.Validation("machine users have no username")
 		case c.OTPEnabled:
 			return errx.Validation("machine users have no second factor")
+		case strings.TrimSpace(c.PasswordHash) != "":
+			return errx.Validation("machine users have no password_hash")
+		case c.EmailVerified:
+			return errx.Validation("machine users have no email")
+		}
+	}
+	if c.Password != "" && strings.TrimSpace(c.PasswordHash) != "" {
+		return errx.Validation("password and password_hash are mutually exclusive")
+	}
+	if len(strings.TrimSpace(c.PasswordHash)) > MaxPasswordHash {
+		return errx.Validation("password_hash must be at most 1024 characters long")
+	}
+	if !c.NoMetadata() {
+		if err := identity.ValidateMetadata(c.Metadata); err != nil {
+			return err
 		}
 	}
 	// The environment's password policy sets the minimum (service); 72
@@ -172,6 +203,13 @@ func (c Create) Validate() error {
 	}
 	_, err := identity.AvatarURL(c.AvatarURL)
 	return err
+}
+
+// NoMetadata reports whether the create carries no metadata (absent, empty
+// or JSON null).
+func (c Create) NoMetadata() bool {
+	trimmed := strings.TrimSpace(string(c.Metadata))
+	return trimmed == "" || trimmed == "null"
 }
 
 type Update struct {
