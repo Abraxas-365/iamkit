@@ -2,6 +2,7 @@ package e2e_test
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -20,7 +21,9 @@ func TestWorkers(t *testing.T) {
 	e := newEnv(t)
 
 	w := e.Server.Workers
-	if got := w.Jobs(); len(got) != 8 || got[0] != "logout_delivery" || got[1] != "logout_prune" || got[2] != "event_prune" || got[3] != "event_webhook" || got[4] != "event_webhook_maintenance" || got[5] != "action_call_prune" || got[6] != "usage_rollup" || got[7] != "usage_prune" {
+	want := []string{"logout_delivery", "logout_prune", "event_prune", "event_webhook", "event_webhook_maintenance",
+		"log_stream_delivery", "log_stream_maintenance", "action_call_prune", "usage_rollup", "usage_prune", "audit_log_prune"}
+	if got := w.Jobs(); !slices.Equal(got, want) {
 		t.Fatalf("jobs = %v", got)
 	}
 	if health := e.Must("GET", "/health", "", nil, 200).JSON; health["workers"] != "idle" {

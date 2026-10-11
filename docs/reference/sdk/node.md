@@ -19,6 +19,7 @@ webhook and action verification, plus typed REST clients generated from the
 | Act for a user | `OAuthClient.exchangeToken` (another resource), `OAuthClient.impersonate` (service account with `can_impersonate`) |
 | Devices without a browser | `OAuthClient.authorizeDevice` + `waitForDevice` |
 | Receive events and actions | `verifyWebhook`, `verifyAction`, `deny` |
+| Emit and read [app audit logs](../../guides/audit-logs.md) | `AuditLogsClient` (`createEvent` with `idempotencyKey`, `listEvents`, `getEvent`, `exportEvents` + `decodeAuditLogEvents`) |
 | Administer an environment | `createManagementClient` (`X-API-Key`), `createApiClient` (bearer, `/api/v1` and SCIM) |
 
 ## Verification rules
@@ -36,6 +37,19 @@ JWTs: exchange or introspect them.
 organization from the request; the token's `organization_id` must match, so a
 route parameter is never trusted on its own. See [token claims](../token-claims.md)
 and the Go [middleware](middleware.md) rules, which these mirror.
+
+## Audit logs
+
+`AuditLogsClient({baseUrl, token})` (`token` is a string or a function) wraps
+`/api/v1/environments/:env/audit-logs/events`: `createEvent(env, event, {idempotencyKey})`
+(`iam:audit-logs:write`; a retry with the same key answers the first receipt, a
+different event under it is 409 `IDEMPOTENCY_KEY_REUSED`), `listEvents(env, filter)`
+→ `{items, next}`, `getEvent(env, id)` and `exportEvents(env, filter, {format, signal})`
+→ a `ReadableStream` of NDJSON (default) or CSV that `decodeAuditLogEvents`
+turns into events. Organization administrators call `listOrganizationEvents` and
+`exportOrganizationEvents` (`iam:org:audit:read`, own organization only). The
+raw typed client (`createApiClient`) also covers actions and
+[log streams](../../guides/platform/log-streams.md).
 
 ## Errors
 

@@ -22,15 +22,18 @@ const (
 	IntentSSO       = "sso"
 	IntentDirectory = "directory"
 	IntentDomains   = "domains"
+	// IntentLogStreams configures the organization's log streams (its app
+	// audit log events to the customer's SIEM / bucket).
+	IntentLogStreams = "log_streams"
 )
 
 // Intents lists every setup intent.
-var Intents = []string{IntentSSO, IntentDirectory, IntentDomains}
+var Intents = []string{IntentSSO, IntentDirectory, IntentDomains, IntentLogStreams}
 
 // IntentPermissions maps intents to the organization permissions their
 // bearer holds (sorted, without duplicates): sso and directory both need
-// the connection and directory writes, domains the domain writes. Unknown
-// intents grant nothing.
+// the connection and directory writes, domains the domain writes,
+// log_streams the log stream writes. Unknown intents grant nothing.
 func IntentPermissions(intents []string) []string {
 	var out []string
 	for _, intent := range intents {
@@ -39,6 +42,8 @@ func IntentPermissions(intents []string) []string {
 			out = append(out, authorization.PermOrgRead, authorization.PermOrgSSOWrite)
 		case IntentDomains:
 			out = append(out, authorization.PermOrgRead, authorization.PermOrgDomainsWrite)
+		case IntentLogStreams:
+			out = append(out, authorization.PermOrgRead, authorization.PermOrgLogStreamsWrite)
 		}
 	}
 	slices.Sort(out)

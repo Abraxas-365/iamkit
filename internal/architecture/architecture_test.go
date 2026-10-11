@@ -155,3 +155,44 @@ func TestCacheAdapters(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The blob port stays free of cloud SDKs: only its adapters may import
+// gocloud.dev or aws-sdk-go-v2, and only the log stream module and the
+// composition root may import the gocloudblob adapter.
+func TestBlobPortIsSDKFree(t *testing.T) {
+	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		normalized := filepath.ToSlash(path)
+		inBlob := strings.Contains(normalized, "/blob/") && !strings.Contains(normalized, "/blob/adapters/")
+		allowedAdapter := strings.Contains(normalized, "/logstreammodule/") || strings.Contains(normalized, "/bootstrap/") || strings.Contains(normalized, "/blob/adapters/")
+		for _, spec := range file.Imports {
+			name, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				return err
+			}
+			sdk := strings.HasPrefix(name, "gocloud.dev") || strings.HasPrefix(name, "github.com/aws/")
+			if sdk && !strings.Contains(normalized, "/blob/adapters/") {
+				t.Errorf("%s imports cloud SDK %s outside a blob adapter", path, name)
+			}
+			if inBlob && strings.Contains(name, "/adapters/") {
+				t.Errorf("%s imports an adapter %s", path, name)
+			}
+			if strings.HasSuffix(name, "/blob/adapters/gocloudblob") && !allowedAdapter {
+				t.Errorf("%s imports the blob adapter %s outside the module assembly", path, name)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

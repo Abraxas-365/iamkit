@@ -23,6 +23,7 @@ export const setupIntents: { value: string; label: string; hint: string }[] = [
   { value: 'sso', label: t('Single sign-on'), hint: t('Connect an identity provider over SAML, OIDC or LDAP.') },
   { value: 'directory', label: t('Directory (SCIM)'), hint: t('Provision users and groups from the directory.') },
   { value: 'domains', label: t('Domains'), hint: t('Add and verify the company\'s email domains.') },
+  { value: 'log_streams', label: t('Log streams'), hint: t('Send the organization\'s audit logs to its SIEM or storage.') },
 ]
 const intentLabel = (value: string) => setupIntents.find(i => i.value === value)?.label ?? value
 

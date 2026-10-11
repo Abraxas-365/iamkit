@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Activity, Building2, CheckCircle2, Globe, KeyRound, Link2, Lock, LogOut, Mail, Palette, Server, Share2, Tags, UserCog, Users } from 'lucide-react'
+import { Activity, Building2, ScrollText, Waypoints, CheckCircle2, Globe, KeyRound, Link2, Lock, LogOut, Mail, Palette, Server, Share2, Tags, UserCog, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/library/patterns'
 import { LogoMark } from '@/components/brand/logo'
@@ -8,10 +8,13 @@ import { Toaster } from '@/components/ui/sonner'
 import { cn, message } from '@/lib/utils'
 import { Client, clearSetup, complete, decode, discover, exchangeSetup, readSetup, readTokens, signIn, signOut, userInfo, type Portal, type Setup } from './session'
 import { AdminContext, ORG_PERMISSIONS, OWNER, useAdmin, type Admin } from './context'
+import { AuditLogsPage, LogStreamsPage, AUDIT_READ, STREAMS_WRITE } from './audit'
 import { ActivityPage, BrandingPage, ConnectionsPage, DirectoryPage, DomainsPage, InvitationsPage, MembersPage, OverviewPage, PasswordPage, ResourcesPage, RolesPage, SetupLinksPage, UsersPage } from './pages'
 import { t } from '@/lib/i18n'
 
-type NavItem = [path: string, label: string, icon: typeof Users, permission: string]
+/** A page shows with any of its permissions. */
+type NavItem = [path: string, label: string, icon: typeof Users, permission: string | string[]]
+const allowed = (can: (p: string) => boolean, permission: string | string[]) => [permission].flat().some(can)
 const nav: NavItem[] = [
   ['', t('Overview'), Building2, 'iam:org:read'],
   ['members', t('Members'), Users, 'iam:org:members:read'],
@@ -26,6 +29,8 @@ const nav: NavItem[] = [
   ['password-policy', t('Password policy'), Lock, 'iam:org:read'],
   ['setup-links', t('Setup links'), Link2, OWNER],
   ['activity', t('Activity'), Activity, 'iam:org:audit:read'],
+  ['audit-logs', t('Audit logs'), ScrollText, AUDIT_READ],
+  ['log-streams', t('Log streams'), Waypoints, [AUDIT_READ, STREAMS_WRITE]],
 ]
 
 /** OrgAdminPortal is the hosted organization admin portal: served by
@@ -140,7 +145,7 @@ function Shell() {
     return () => ctrl.abort()
   }, [environment])
   const base = `/org-admin/${environment}`
-  const items = nav.filter(([, , , permission]) => can(permission))
+  const items = nav.filter(([, , , permission]) => allowed(can, permission))
   const home = items[0] ? `${base}/${items[0][0]}` : base
   return <div className="flex min-h-svh flex-col bg-background md:flex-row">
     <aside className="border-b bg-sidebar md:w-60 md:shrink-0 md:border-r md:border-b-0">
@@ -175,6 +180,8 @@ function Shell() {
           <Route path="password-policy" element={<Guard permission="iam:org:read"><PasswordPage /></Guard>} />
           <Route path="setup-links" element={<Guard permission={OWNER}><SetupLinksPage /></Guard>} />
           <Route path="activity" element={<Guard permission="iam:org:audit:read"><ActivityPage /></Guard>} />
+          <Route path="audit-logs" element={<Guard permission={AUDIT_READ}><AuditLogsPage /></Guard>} />
+          <Route path="log-streams" element={<Guard permission={[AUDIT_READ, STREAMS_WRITE]}><LogStreamsPage /></Guard>} />
           <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
       </main>
@@ -182,9 +189,9 @@ function Shell() {
   </div>
 }
 
-function Guard({ permission, children }: { permission: string; children: ReactNode }) {
+function Guard({ permission, children }: { permission: string | string[]; children: ReactNode }) {
   const { can, environment } = useAdmin()
-  if (!can(permission)) return <div className="space-y-3"><ErrorState error={t('You do not have access to this page.')} /><Link className="text-sm underline" to={`/org-admin/${environment}`}>{t('Back')}</Link></div>
+  if (!allowed(can, permission)) return <div className="space-y-3"><ErrorState error={t('You do not have access to this page.')} /><Link className="text-sm underline" to={`/org-admin/${environment}`}>{t('Back')}</Link></div>
   return <>{children}</>
 }
 
@@ -198,6 +205,7 @@ const intentPermissions: Record<string, string[]> = {
   sso: ['iam:org:read', 'iam:org:sso:write'],
   directory: ['iam:org:read', 'iam:org:sso:write'],
   domains: ['iam:org:read', 'iam:org:domains:write'],
+  log_streams: ['iam:org:read', 'iam:org:log-streams:write'],
 }
 
 interface Step { intent: string; title: string; description: string; icon: typeof Users; page: () => ReactNode }
@@ -206,6 +214,7 @@ const steps: Step[] = [
   { intent: 'domains', title: t('Domains'), description: t('Add your company\'s email domains and verify them with a DNS record.'), icon: Globe, page: () => <DomainsPage /> },
   { intent: 'sso', title: t('Single sign-on'), description: t('Connect your identity provider so employees sign in with their work account.'), icon: KeyRound, page: () => <ConnectionsPage /> },
   { intent: 'directory', title: t('Directory (SCIM)'), description: t('Create a SCIM credential so your directory provisions users and groups.'), icon: Server, page: () => <DirectoryPage /> },
+  { intent: 'log_streams', title: t('Log streams'), description: t('Send your organization\'s audit log events to your SIEM or storage.'), icon: Waypoints, page: () => <LogStreamsPage /> },
 ]
 
 /** SetupLink is the setup-link portal: the link's secret travels in the URL

@@ -85,3 +85,15 @@ export {
   type operations,
   type paths,
 } from "./clients.js";
+export {
+  AuditLogsClient,
+  decodeAuditLogEvents,
+  type AuditLogEvent,
+  type AuditLogFilter,
+  type AuditLogFormat,
+  type AuditLogInput,
+  type AuditLogPage,
+  type AuditLogParty,
+  type AuditLogReceipt,
+  type AuditLogsClientOptions,
+} from "./auditlogs.js";

@@ -33,6 +33,8 @@ import SigningKeysPage from '@/pages/signing-keys'
 import FeaturesPage from '@/pages/features'
 import UsagePage from '@/pages/usage'
 import ActionsPage, { ActionTargetPage } from '@/pages/actions'
+import AuditLogsPage from '@/pages/audit-logs'
+import LogStreamsPage from '@/pages/log-streams'
 import SAMLAppsPage from '@/pages/saml-apps'
 import ResourceDetailPage from '@/pages/resource-detail'
 import { OrganizationResourcesPage } from '@/pages/organization-resources'
@@ -87,6 +89,8 @@ export default function App() {
         <Route path="logout-deliveries" element={<LogoutDeliveriesPage />} />
         <Route path="webhooks" element={<WebhooksPage />} />
         <Route path="webhooks/:webhook" element={<WebhookDetailPage />} />
+        <Route path="audit-logs" element={<AuditLogsPage />} />
+        <Route path="log-streams" element={<LogStreamsPage />} />
         <Route path="actions" element={<ActionsPage />} />
         <Route path="actions/:target" element={<ActionTargetPage />} />
       </Route>

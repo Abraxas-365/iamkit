@@ -95,6 +95,6 @@ it('the command palette and row menus have no serious accessibility violations',
   await u.keyboard('{Escape}')
   await u.keyboard('{Control>}k{/Control}')
   await u.type(await screen.findByRole('combobox'), 'aud')
-  await screen.findByRole('option', { name: /audit/i })
+  await screen.findAllByRole('option', { name: /audit/i })
   expect(await violations()).toEqual([])
 })

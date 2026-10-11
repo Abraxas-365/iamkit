@@ -125,6 +125,26 @@ To follow the log, start with `After` pointing at `0` and pass `Next` back as
 entity's [change history](../events.md#change-history) and
 `ExportEvents(ctx, filter, func(Event) error)` streams the
 [export](../events.md#export) oldest first.
+### Audit logs and log streams
+
+[App audit logs](../../guides/audit-logs.md) and [log streams](../../guides/platform/log-streams.md)
+(on `iamclient.Environment` and `apiclient.Environment`):
+`CreateAuditLogEvent(ctx, AuditLogInput, idempotencyKey)` → `AuditLogReceipt`
+(the key is sent as `Idempotency-Key`; `""` sends none), `AuditLogEvents(ctx,
+AuditLogFilter{Actions, ActorID, ActorType, TargetID, TargetType,
+OrganizationID, OccurredAfter, OccurredBefore, After, Before, Limit})` →
+`AuditLogPage{Items, Next}`, `AuditLogEvent(ctx, id)`,
+`ExportAuditLogEvents(ctx, filter, format)` → `io.ReadCloser` (NDJSON or CSV;
+close it; `DecodeAuditLogEvents` reads NDJSON), `AuditLogActions`,
+`AuditLogAction`, `CreateAuditLogAction`, `UpdateAuditLogAction` and
+`DeleteAuditLogAction`; `LogStreams`, `LogStream`, `CreateLogStream(ctx,
+LogStreamInput)` → `LogStreamSecret` (secret shown once), `UpdateLogStream`,
+`DeleteLogStream`, `TestLogStream`, `EnableLogStream`, `RotateLogStreamSecret`,
+`LogStreamDeliveries(ctx, id, status)` and `RetryLogStreamDelivery(ctx, id,
+delivery)`. Organization administrators use the same names on
+`apiclient` `OrgAdmin` (`AuditLogEvents`, `ExportAuditLogEvents`, and the log
+stream methods); their filter never carries `OrganizationID`.
+
 Event webhooks (also on `apiclient`, with `iam:webhooks:read`/`write`; see
 [event webhooks](../event-webhooks.md)): `Webhooks`, `Webhook`,
 `CreateWebhook(ctx, WebhookInput{Name, URL, Types})` → `WebhookSecret` (shown

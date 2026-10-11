@@ -23,7 +23,7 @@ export const OWNER = 'owner'
 export const ORG_PERMISSIONS = [
   'iam:org:read', 'iam:org:settings:write', 'iam:org:members:read', 'iam:org:members:write', 'iam:org:users:write',
   'iam:org:roles:read', 'iam:org:roles:assign', 'iam:org:invitations:write', 'iam:org:domains:write', 'iam:org:sso:write',
-  'iam:org:audit:read', 'iam:org:resources:read', 'iam:org:resources:write',
+  'iam:org:audit:read', 'iam:org:resources:read', 'iam:org:resources:write', 'iam:org:log-streams:write',
 ]
 
 export const AdminContext = createContext<Admin | null>(null)

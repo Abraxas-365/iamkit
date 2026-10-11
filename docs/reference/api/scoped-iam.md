@@ -55,6 +55,7 @@ GET/HEAD select the read permission; mutations select write.
 | Event log (`GET /events`, `GET /events/export`, see [event log](../events.md)) | `iam:events:read` |
 | Entity history (`GET /users/:id/history`, also `organizations`, `applications`, `roles`, `resources`; see [change history](../events.md#change-history)) | `iam:events:read` and the collection's read permission |
 | Event webhooks (`/webhooks…`, see [event webhooks](../event-webhooks.md)) | `iam:webhooks:read` / `iam:webhooks:write` |
+| Log streams (`/log-streams…`, see [log streams](../../guides/platform/log-streams.md)) | `iam:audit-logs:read` / `iam:audit-logs:manage` |
 | Daily usage (`GET /usage`, see [usage and limits](../../guides/platform/usage-limits.md)) | `iam:usage:read` |
 | Delivery configuration (`GET`, `PUT`, `DELETE /delivery`; `GET /delivery/status`; `POST /delivery/test`; `GET`, `POST /delivery/preview`; `GET /delivery/templates`; `GET`, `PUT`, `DELETE /delivery/templates/:purpose/:locale`) | `iam:delivery:read` (`GET`), `iam:delivery:write` (others, including draft `POST /delivery/preview`) |
 

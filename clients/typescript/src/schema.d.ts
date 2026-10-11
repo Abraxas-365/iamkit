@@ -133,6 +133,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/audit-logs/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentAuditLogsActions"];
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentAuditLogsActions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/audit-logs/actions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentAuditLogsActionsbyId"];
+        put?: never;
+        post?: never;
+        /** Delete removes the action; events already emitted keep its name. */
+        delete: operations["deleteApiEnvironmentsbyEnvironmentAuditLogsActionsbyId"];
+        options?: never;
+        head?: never;
+        /** Update changes the description, target types or schema; a change of the target types or schemas bumps the version. */
+        patch: operations["patchApiEnvironmentsbyEnvironmentAuditLogsActionsbyId"];
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/audit-logs/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List reads the log. */
+        get: operations["getApiEnvironmentsbyEnvironmentAuditLogsEvents"];
+        put?: never;
+        /** Emit stores one event. */
+        post: operations["postApiEnvironmentsbyEnvironmentAuditLogsEvents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/audit-logs/events/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export streams the matching events oldest first (from after, default the beginning, to the newest) as NDJSON (one event per line) or CSV. */
+        get: operations["getApiEnvironmentsbyEnvironmentAuditLogsEventsExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/audit-logs/events/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentAuditLogsEventsbyId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/delivery": {
         parameters: {
             query?: never;
@@ -351,6 +436,122 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/log-streams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentLogStreams"];
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentLogStreams"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/log-streams/{stream}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentLogStreamsbyStream"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentLogStreamsbyStream"];
+        options?: never;
+        head?: never;
+        patch: operations["patchApiEnvironmentsbyEnvironmentLogStreamsbyStream"];
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/log-streams/{stream}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Deliveries reads the delivery log. */
+        get: operations["getApiEnvironmentsbyEnvironmentLogStreamsbyStreamDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/log-streams/{stream}/deliveries/{delivery}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry queues a failed delivery's batch again. */
+        post: operations["postApiEnvironmentsbyEnvironmentLogStreamsbyStreamDeliveriesbyDeliveryRetry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/log-streams/{stream}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enable resumes a stream (clearing its failure): PATCH active=true. */
+        post: operations["postApiEnvironmentsbyEnvironmentLogStreamsbyStreamEnable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/log-streams/{stream}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentLogStreamsbyStreamRotateSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/log-streams/{stream}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test sends one synthetic record now and answers with the outcome. */
+        post: operations["postApiEnvironmentsbyEnvironmentLogStreamsbyStreamTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/memberships": {
         parameters: {
             query?: never;
@@ -447,6 +648,40 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["patchApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdmin"];
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** auditLogs lists the organization's app audit log events. */
+        get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/audit-logs/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** exportAuditLogs streams the organization's events oldest first as NDJSON or CSV (query format, default ndjson; the filters of the list, without before). */
+        get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminAuditLogsExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/environments/{environment}/organizations/{organization}/admin/branding": {
@@ -686,6 +921,122 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminInvitationsbyInvitationResend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/log-streams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreams"];
+        put?: never;
+        /** createLogStream answers 201; an https stream's signing secret is shown once. */
+        post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreams"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/log-streams/{stream}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStream"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStream"];
+        options?: never;
+        head?: never;
+        patch: operations["patchApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStream"];
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/log-streams/{stream}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** logStreamDeliveries reads the delivery log. */
+        get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/log-streams/{stream}/deliveries/{delivery}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** retryLogStreamDelivery queues a failed delivery's batch again. */
+        post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamDeliveriesbyDeliveryRetry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/log-streams/{stream}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamEnable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/log-streams/{stream}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamRotateSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/log-streams/{stream}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** testLogStream sends one synthetic record now and answers with the outcome. */
+        post: operations["postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamTest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3220,6 +3571,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/management/v1/environments/{environment}/audit-logs/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentAuditLogsActions"];
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentAuditLogsActions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/audit-logs/actions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentAuditLogsActionsbyId"];
+        put?: never;
+        post?: never;
+        /** Delete removes the action; events already emitted keep its name. */
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentAuditLogsActionsbyId"];
+        options?: never;
+        head?: never;
+        /** Update changes the description, target types or schema; a change of the target types or schemas bumps the version. */
+        patch: operations["patchManagementEnvironmentsbyEnvironmentAuditLogsActionsbyId"];
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/audit-logs/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List reads the log. */
+        get: operations["getManagementEnvironmentsbyEnvironmentAuditLogsEvents"];
+        put?: never;
+        /** Emit stores one event. */
+        post: operations["postManagementEnvironmentsbyEnvironmentAuditLogsEvents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/audit-logs/events/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export streams the matching events oldest first (from after, default the beginning, to the newest) as NDJSON (one event per line) or CSV. */
+        get: operations["getManagementEnvironmentsbyEnvironmentAuditLogsEventsExport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/audit-logs/events/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentAuditLogsEventsbyId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/management/v1/environments/{environment}/delivery": {
         parameters: {
             query?: never;
@@ -3593,6 +4029,122 @@ export interface paths {
         get: operations["getManagementEnvironmentsbyEnvironmentLimits"];
         put: operations["putManagementEnvironmentsbyEnvironmentLimits"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/log-streams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentLogStreams"];
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentLogStreams"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/log-streams/{stream}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentLogStreamsbyStream"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentLogStreamsbyStream"];
+        options?: never;
+        head?: never;
+        patch: operations["patchManagementEnvironmentsbyEnvironmentLogStreamsbyStream"];
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/log-streams/{stream}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Deliveries reads the delivery log. */
+        get: operations["getManagementEnvironmentsbyEnvironmentLogStreamsbyStreamDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/log-streams/{stream}/deliveries/{delivery}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry queues a failed delivery's batch again. */
+        post: operations["postManagementEnvironmentsbyEnvironmentLogStreamsbyStreamDeliveriesbyDeliveryRetry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/log-streams/{stream}/enable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enable resumes a stream (clearing its failure): PATCH active=true. */
+        post: operations["postManagementEnvironmentsbyEnvironmentLogStreamsbyStreamEnable"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/log-streams/{stream}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentLogStreamsbyStreamRotateSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/log-streams/{stream}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test sends one synthetic record now and answers with the outcome. */
+        post: operations["postManagementEnvironmentsbyEnvironmentLogStreamsbyStreamTest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6055,7 +6607,22 @@ export interface components {
             token_endpoint_auth_method: string;
             token_endpoint_auth_signing_alg: string;
         };
-        ActionInputInput: {
+        Action: {
+            /** Format: date-time */
+            created_at: string;
+            description: string;
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            name: string;
+            schema: components["schemas"]["Schema"];
+            target_types: string[] | null;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        ActionInput2: {
             amr?: string[] | null;
             /** @description UUID (empty when unset) */
             application_id?: string | null;
@@ -6070,12 +6637,23 @@ export interface components {
             scopes?: string[] | null;
             user?: components["schemas"]["UserInputInput"] | null;
         };
+        ActionInputInput: {
+            description?: string;
+            name?: string;
+            schema?: components["schemas"]["SchemaInput"];
+            target_types?: string[] | null;
+        };
         ActionTestResult: {
             duration_ms: number;
             error?: string;
             outcome: string;
             response: components["schemas"]["Response"];
             status?: number | null;
+        };
+        ActionUpdateInput: {
+            description?: string | null;
+            schema?: components["schemas"]["SchemaInput"] | null;
+            target_types?: string[] | null;
         };
         Actor: {
             id?: string;
@@ -6130,6 +6708,29 @@ export interface components {
             organization_id: string | null;
             target_id: string;
             target_label: string;
+        };
+        AuditlogEvent: {
+            action: string;
+            actor: components["schemas"]["Party"];
+            context: components["schemas"]["Context"];
+            /** Format: date-time */
+            created_at: string;
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            metadata: unknown | null;
+            /** Format: date-time */
+            occurred_at: string;
+            /** @description UUID (empty when unset) */
+            organization_id: string;
+            seq: number;
+            targets: components["schemas"]["Party"][] | null;
+            version: number;
+        };
+        AuditlogPage: {
+            items: components["schemas"]["AuditlogEvent"][] | null;
+            next: number;
         };
         AuthenticationEnrollment: {
             otpauth_uri: string;
@@ -6284,6 +6885,36 @@ export interface components {
             name: string;
             patch?: string[] | null;
         };
+        Config: {
+            access_key_id?: string;
+            bucket?: string;
+            endpoint?: string;
+            index?: string;
+            path_style?: boolean;
+            prefix?: string;
+            region?: string;
+            service?: string;
+            site?: string;
+            source?: string;
+            sourcetype?: string;
+            tags?: string[] | null;
+            url?: string;
+        };
+        ConfigInput: {
+            access_key_id?: string;
+            bucket?: string;
+            endpoint?: string;
+            index?: string;
+            path_style?: boolean;
+            prefix?: string;
+            region?: string;
+            service?: string;
+            site?: string;
+            source?: string;
+            sourcetype?: string;
+            tags?: string[] | null;
+            url?: string;
+        };
         ConnectionDetail: {
             active: boolean;
             callback_url: string;
@@ -6380,6 +7011,14 @@ export interface components {
             signup: boolean;
             update_profile: boolean;
         };
+        Context: {
+            location?: string;
+            user_agent?: string;
+        };
+        ContextInput: {
+            location?: string;
+            user_agent?: string;
+        };
         Copy: {
             action: string;
             body: string;
@@ -6397,6 +7036,11 @@ export interface components {
         CreateInput: {
             name?: string;
             redirect_uris?: string[] | null;
+        };
+        Created: {
+            /** @description UUID (empty when unset) */
+            id: string;
+            secret?: string;
         };
         Credential: {
             /** Format: date-time */
@@ -6452,8 +7096,7 @@ export interface components {
         };
         Delivery: {
             attempts: number;
-            event_id: number;
-            event_type: string;
+            batch?: number | null;
             /** Format: date-time */
             finished_at?: string | null;
             id: number;
@@ -6463,9 +7106,11 @@ export interface components {
             /** Format: date-time */
             queued_at: string;
             response_status?: number | null;
+            seq: number;
+            source: string;
             status: string;
             /** @description UUID (empty when unset) */
-            subscription_id: string;
+            stream_id: string;
         };
         DeliveryConfig: {
             /** Format: date-time */
@@ -6618,9 +7263,31 @@ export interface components {
             subject: components["schemas"]["Subject"];
             type: string;
         };
+        EventDelivery: {
+            attempts: number;
+            event_id: number;
+            event_type: string;
+            /** Format: date-time */
+            finished_at?: string | null;
+            id: number;
+            last_error?: string;
+            /** Format: date-time */
+            next_attempt_at?: string | null;
+            /** Format: date-time */
+            queued_at: string;
+            response_status?: number | null;
+            status: string;
+            /** @description UUID (empty when unset) */
+            subscription_id: string;
+        };
         EventPage: {
             items: components["schemas"]["Event"][] | null;
             next: number;
+        };
+        EventTestResult: {
+            delivered: boolean;
+            error?: string;
+            status: number;
         };
         Execution: {
             condition: string;
@@ -6828,9 +7495,16 @@ export interface components {
             index: number;
         };
         InputInput: {
-            email?: string;
-            group_ids?: string[] | null;
-            role_ids?: string[] | null;
+            action?: string;
+            actor?: components["schemas"]["PartyInput"];
+            context?: components["schemas"]["ContextInput"];
+            metadata?: unknown | null;
+            /** Format: date-time */
+            occurred_at?: string;
+            /** @description UUID (empty when unset) */
+            organization_id?: string;
+            targets?: components["schemas"]["PartyInput"][] | null;
+            version?: number | null;
         };
         Invitation: {
             /** Format: date-time */
@@ -6852,6 +7526,11 @@ export interface components {
             revoked_at: string | null;
             role_ids: string[] | null;
             status: string;
+        };
+        InvitationInputInput: {
+            email?: string;
+            group_ids?: string[] | null;
+            role_ids?: string[] | null;
         };
         InvitationPreview: {
             email: string;
@@ -7031,6 +7710,22 @@ export interface components {
             user_email: string;
             /** @description UUID (empty when unset) */
             user_id: string;
+        };
+        LogstreamCreateInput: {
+            config?: components["schemas"]["ConfigInput"];
+            destination?: string;
+            name?: string;
+            /** @description UUID (empty when unset) */
+            organization_id?: string;
+            secret?: string;
+            sources?: string[] | null;
+        };
+        LogstreamUpdateInput: {
+            active?: boolean | null;
+            config?: components["schemas"]["ConfigInput"] | null;
+            name?: string | null;
+            secret?: string | null;
+            sources?: string[] | null;
         };
         ManagementCredential: {
             /** Format: date-time */
@@ -7397,6 +8092,18 @@ export interface components {
             primary?: string;
             text?: string;
         };
+        Party: {
+            id: string;
+            metadata?: unknown | null;
+            name?: string;
+            type: string;
+        };
+        PartyInput: {
+            id?: string;
+            metadata?: unknown | null;
+            name?: string;
+            type?: string;
+        };
         PasswordPolicy: {
             breach_check: boolean;
             custom: boolean;
@@ -7545,6 +8252,10 @@ export interface components {
             /** @description UUID (empty when unset) */
             user_id?: string;
         };
+        QueryPaginatedDelivery: {
+            items: components["schemas"]["EventDelivery"][] | null;
+            page: components["schemas"]["Page"];
+        };
         QueryPaginatedKey: {
             items: components["schemas"]["SigningKey"][] | null;
             page: components["schemas"]["Page"];
@@ -7552,6 +8263,12 @@ export interface components {
         QueryPaginatedSummary: {
             items: components["schemas"]["UserSummary"][] | null;
             page: components["schemas"]["Page"];
+        };
+        Receipt: {
+            /** Format: date-time */
+            created_at: string;
+            /** @description UUID (empty when unset) */
+            id: string;
         };
         Registration: {
             factor: components["schemas"]["Factor"];
@@ -7789,10 +8506,18 @@ export interface components {
             name_id_format?: string | null;
         };
         Schema: {
-            schema: unknown | null;
-            /** Format: date-time */
-            updated_at?: string | null;
-            version: number;
+            actor?: unknown | null;
+            metadata?: unknown | null;
+            targets?: {
+                [key: string]: unknown | null;
+            } | null;
+        };
+        SchemaInput: {
+            actor?: unknown | null;
+            metadata?: unknown | null;
+            targets?: {
+                [key: string]: unknown | null;
+            } | null;
         };
         SchemaSaved: {
             non_conforming: number;
@@ -8042,6 +8767,30 @@ export interface components {
             name?: string;
             password?: string;
         };
+        Stream: {
+            active: boolean;
+            config: components["schemas"]["Config"];
+            /** Format: date-time */
+            created_at: string;
+            destination: string;
+            disabled_reason?: string;
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            /** Format: date-time */
+            failing_since?: string | null;
+            /** @description UUID (empty when unset) */
+            id: string;
+            name: string;
+            /** @description UUID (empty when unset) */
+            organization_id?: string | null;
+            pending: number;
+            /** Format: date-time */
+            previous_secret_expires_at?: string | null;
+            secret_set: boolean;
+            sources: string[] | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
         Subject: {
             id?: string;
             kind?: string;
@@ -8142,7 +8891,7 @@ export interface components {
         };
         TestInput: {
             condition?: string;
-            input?: components["schemas"]["ActionInputInput"];
+            input?: components["schemas"]["ActionInput2"];
         };
         TestInputInput: {
             email?: string;
@@ -8310,6 +9059,12 @@ export interface components {
             id?: string | null;
             name?: string;
             username?: string;
+        };
+        UserSchema: {
+            schema: unknown | null;
+            /** Format: date-time */
+            updated_at?: string | null;
+            version: number;
         };
         UserSession: {
             amr: string[] | null;
@@ -8754,6 +9509,413 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EventPage"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentAuditLogsActions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Action"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentAuditLogsActions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ActionInputInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentAuditLogsActionsbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentAuditLogsActionsbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchApiEnvironmentsbyEnvironmentAuditLogsActionsbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ActionUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentAuditLogsEvents: {
+        parameters: {
+            query?: {
+                action?: string;
+                actor_id?: string;
+                actor_type?: string;
+                after?: string;
+                before?: string;
+                limit?: number;
+                occurred_after?: string;
+                occurred_before?: string;
+                organization_id?: string;
+                target_id?: string;
+                target_type?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditlogPage"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentAuditLogsEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["InputInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Receipt"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentAuditLogsEventsExport: {
+        parameters: {
+            query?: {
+                action?: string;
+                actor_id?: string;
+                actor_type?: string;
+                after?: string;
+                before?: string;
+                format?: string;
+                occurred_after?: string;
+                occurred_before?: string;
+                organization_id?: string;
+                target_id?: string;
+                target_type?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentAuditLogsEventsbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditlogEvent"];
                 };
             };
             /** @description Client error */
@@ -9710,6 +10872,436 @@ export interface operations {
             };
         };
     };
+    getApiEnvironmentsbyEnvironmentLogStreams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Stream"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentLogStreams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LogstreamCreateInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Created"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentLogStreamsbyStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stream"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentLogStreamsbyStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchApiEnvironmentsbyEnvironmentLogStreamsbyStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LogstreamUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stream"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentLogStreamsbyStreamDeliveries: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+                status?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDelivery"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentLogStreamsbyStreamDeliveriesbyDeliveryRetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentLogStreamsbyStreamEnable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stream"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentLogStreamsbyStreamRotateSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Created"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentLogStreamsbyStreamTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestResult"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     postApiEnvironmentsbyEnvironmentMemberships: {
         parameters: {
             query?: never;
@@ -10165,6 +11757,110 @@ export interface operations {
         responses: {
             /** @description No content */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminAuditLogs: {
+        parameters: {
+            query?: {
+                action?: string;
+                actor_id?: string;
+                actor_type?: string;
+                after?: string;
+                before?: string;
+                limit?: number;
+                occurred_after?: string;
+                occurred_before?: string;
+                target_id?: string;
+                target_type?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditlogPage"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminAuditLogsExport: {
+        parameters: {
+            query?: {
+                action?: string;
+                actor_id?: string;
+                actor_type?: string;
+                after?: string;
+                before?: string;
+                format?: string;
+                occurred_after?: string;
+                occurred_before?: string;
+                target_id?: string;
+                target_type?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11162,6 +12858,438 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Issued"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Stream"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Created"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stream"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stream"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamDeliveries: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+                status?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDelivery"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamDeliveriesbyDeliveryRetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                stream: string;
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamEnable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stream"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamRotateSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Created"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminLogStreamsbyStreamTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                organization: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestResult"];
                 };
             };
             /** @description Client error */
@@ -12858,7 +14986,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["InputInput"];
+                "application/json": components["schemas"]["InvitationInputInput"];
             };
         };
         responses: {
@@ -15518,7 +17646,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Schema"];
+                    "application/json": components["schemas"]["UserSchema"];
                 };
             };
             /** @description Client error */
@@ -16943,7 +19071,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedDelivery"];
+                    "application/json": components["schemas"]["QueryPaginatedDelivery"];
                 };
             };
             /** @description Client error */
@@ -17116,7 +19244,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TestResult"];
+                    "application/json": components["schemas"]["EventTestResult"];
                 };
             };
             /** @description Client error */
@@ -20956,6 +23084,413 @@ export interface operations {
             };
         };
     };
+    getManagementEnvironmentsbyEnvironmentAuditLogsActions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Action"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentAuditLogsActions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ActionInputInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentAuditLogsActionsbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentAuditLogsActionsbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchManagementEnvironmentsbyEnvironmentAuditLogsActionsbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ActionUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentAuditLogsEvents: {
+        parameters: {
+            query?: {
+                action?: string;
+                actor_id?: string;
+                actor_type?: string;
+                after?: string;
+                before?: string;
+                limit?: number;
+                occurred_after?: string;
+                occurred_before?: string;
+                organization_id?: string;
+                target_id?: string;
+                target_type?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditlogPage"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentAuditLogsEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["InputInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Receipt"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentAuditLogsEventsExport: {
+        parameters: {
+            query?: {
+                action?: string;
+                actor_id?: string;
+                actor_type?: string;
+                after?: string;
+                before?: string;
+                format?: string;
+                occurred_after?: string;
+                occurred_before?: string;
+                organization_id?: string;
+                target_id?: string;
+                target_type?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentAuditLogsEventsbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditlogEvent"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getManagementEnvironmentsbyEnvironmentDelivery: {
         parameters: {
             query?: never;
@@ -22575,6 +25110,436 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Limits"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentLogStreams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Stream"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentLogStreams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LogstreamCreateInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Created"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentLogStreamsbyStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stream"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentLogStreamsbyStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchManagementEnvironmentsbyEnvironmentLogStreamsbyStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LogstreamUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stream"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentLogStreamsbyStreamDeliveries: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+                status?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDelivery"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentLogStreamsbyStreamDeliveriesbyDeliveryRetry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+                delivery: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentLogStreamsbyStreamEnable: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Stream"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentLogStreamsbyStreamRotateSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Created"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentLogStreamsbyStreamTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                stream: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestResult"];
                 };
             };
             /** @description Client error */
@@ -25376,7 +28341,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["InputInput"];
+                "application/json": components["schemas"]["InvitationInputInput"];
             };
         };
         responses: {
@@ -29195,7 +32160,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Schema"];
+                    "application/json": components["schemas"]["UserSchema"];
                 };
             };
             /** @description Client error */
@@ -30620,7 +33585,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedDelivery"];
+                    "application/json": components["schemas"]["QueryPaginatedDelivery"];
                 };
             };
             /** @description Client error */
@@ -30793,7 +33758,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TestResult"];
+                    "application/json": components["schemas"]["EventTestResult"];
                 };
             };
             /** @description Client error */

@@ -85,6 +85,7 @@ Types are `<subject>.<verb>`. The catalog lives in
 | `org_setup_link.*` | `created` (`data.intents`, `expires_at`), `used` (the link was exchanged; actor `setup_link`), `revoked`; subject = the link |
 | `webhook.*` | `created`, `updated`, `deleted`, `secret_rotated`, `replayed`, `delivery_retried`, `disabled` (by IAMKit after three days of failures; actor `system`) |
 | `action.*`, `action_target.*`, `action_execution.*` | [Actions](../guides/platform/actions.md): `action.failed` (a target failed or was skipped; subject = the target, `data.condition`, `outcome`, `error`, `interrupted`; actor `system`), `action_target.created`/`updated`/`deleted`/`secret_rotated`, `action_execution.updated`/`deleted` (subject = the condition) |
+| `audit_log_action.*` | [App audit log](../guides/audit-logs.md) actions: `audit_log_action.created`/`updated`/`deleted` (subject = the action; the app events themselves are not in this log) |
 | Settings | `branding.*`, `sign_in_options.*`, `password_policy.*`, `sign_in_policy.*`, `delivery.*`, `email_template.*`, `sign_in_texts.*`, `sms.*`, `signing_key.*`, `saml_service_provider.*`, `feature.*` (`updated`: `data.enabled`; `reset`; subject = the feature name), `limits.updated` (`data.limits`: the environment's limits) |
 
 `data` never contains secrets, password hashes or codes. Unknown fields may be

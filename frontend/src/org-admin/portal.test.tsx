@@ -33,10 +33,14 @@ beforeEach(() => {
     if (url === '/oauth/userinfo') return Response.json({ sub: 'u9', email: 'owner@acme.test', name: 'Olivia Owner' })
     const path = url.replace('/api/v1/environments/env1/organizations/org1/admin', '').split('?')[0]
     if (method === 'POST' && path === '/directories') return Response.json({ id: 'c2', secret: 'ik_scim_topsecret', expires_at: '2027-01-01T00:00:00Z', connection_id: 'k1', scim_url: 'https://iam.example/scim/v2' }, { status: 201 })
+    if (method === 'POST' && path === '/log-streams') return Response.json({ id: 'ls2' }, { status: 201 })
     if (method === 'PATCH' || method === 'DELETE') return new Response(null, { status: 204 })
     if (path === '/directories') return Response.json({ ...page([{ id: 'c1', name: 'Okta', connection_id: 'k1', expires_at: '2099-01-01T00:00:00Z', revoked_at: null, adopt_existing_members: false, adopt_scope: 'any', map_phone: false }]), scim_url: 'https://iam.example/scim/v2' })
     if (path === '') return Response.json({ id: 'org1', name: 'Acme', mfa_required: false, mfa_for_federated: false, allow_password: true, allow_email_code: true, allow_social: true, allow_passkey: true })
     if (path === '/members') return Response.json(page([{ user_id: 'u1', user_name: 'Bob', user_email: 'bob@acme.test', active: true, sso_bypass: false }]))
+    if (path === '/audit-logs/export') return new Response('{"id":"e1"}\n', { status: 200 })
+    if (path === '/audit-logs') return Response.json({ items: [{ seq: 2, id: 'e2', action: 'invoice.created', version: 1, occurred_at: '2026-09-29T10:00:00Z', created_at: '2026-09-29T10:00:00Z', actor: { type: 'user', id: 'u1', name: 'Alice' }, targets: [{ type: 'invoice', id: 'i1' }] }], next: 0 })
+    if (path === '/log-streams') return Response.json({ items: [{ id: 'ls1', name: 'Org SIEM', destination: 'https', config: { url: 'https://logs.example/in' }, sources: ['audit_logs'], secret_set: true, active: true, pending: 0, created_at: '2026-09-29T10:00:00Z', updated_at: '2026-09-29T10:00:00Z' }] })
     if (path === '/events') return Response.json(page([
       { id: '2', actor_id: 'u9', actor_kind: 'user', actor_label: 'alice@acme.test', action: 'user.deactivated', target_id: 'u2', created_at: '2026-09-29T10:00:00Z' },
       { id: '1', actor_id: 'op-0000-uuid', actor_kind: 'operator', actor_label: '', action: 'POST', target_id: '/management/v1/environments/env1/organizations/org1/domains', created_at: '2026-09-29T09:00:00Z' },
@@ -148,7 +152,7 @@ it('hides directory writes without iam:org:sso:write', async () => {
 })
 
 it('shows the Setup links page only to accounts holding every organization permission', async () => {
-  const all = ['iam:org:read', 'iam:org:settings:write', 'iam:org:members:read', 'iam:org:members:write', 'iam:org:users:write', 'iam:org:roles:read', 'iam:org:roles:assign', 'iam:org:invitations:write', 'iam:org:domains:write', 'iam:org:sso:write', 'iam:org:audit:read', 'iam:org:resources:read', 'iam:org:resources:write']
+  const all = ['iam:org:read', 'iam:org:settings:write', 'iam:org:members:read', 'iam:org:members:write', 'iam:org:users:write', 'iam:org:roles:read', 'iam:org:roles:assign', 'iam:org:invitations:write', 'iam:org:domains:write', 'iam:org:sso:write', 'iam:org:audit:read', 'iam:org:resources:read', 'iam:org:resources:write', 'iam:org:log-streams:write']
   signedIn(all)
   open('/org-admin/env1/setup-links')
   expect(await screen.findByRole('button', { name: 'Create setup link' })).toBeTruthy()
@@ -158,4 +162,49 @@ it('shows the Setup links page only to accounts holding every organization permi
   open('/org-admin/env1')
   const nav = await screen.findByRole('navigation', { name: 'Organization administration' })
   expect(within(nav).queryByRole('link', { name: 'Setup links' })).toBeNull()
+})
+
+it('lists audit logs and exports them with the bearer token to those holding iam:org:audit:read', async () => {
+  const user = userEvent.setup()
+  const url = vi.fn(() => 'blob:x')
+  vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: url, revokeObjectURL: vi.fn() }))
+  signedIn(['iam:org:read', 'iam:org:audit:read'])
+  open('/org-admin/env1/audit-logs')
+  expect(await screen.findByText('invoice.created')).toBeTruthy()
+  expect(screen.queryByLabelText('Organization')).toBeNull()
+  await user.click(screen.getByRole('button', { name: /Export CSV/ }))
+  await waitFor(() => expect(calls.some(c => c.url.includes('/admin/audit-logs/export?') && c.url.includes('format=csv') && c.auth?.startsWith('Bearer '))).toBe(true))
+  const nav = within(screen.getByRole('navigation', { name: 'Organization administration' }))
+  expect(nav.getByRole('link', { name: 'Audit logs' })).toBeTruthy()
+  expect(nav.getByRole('link', { name: 'Log streams' })).toBeTruthy()
+})
+
+it('hides Audit logs without iam:org:audit:read, and lets log-stream writers manage streams only', async () => {
+  signedIn(['iam:org:read', 'iam:org:log-streams:write'])
+  open('/org-admin/env1')
+  const nav = within(await screen.findByRole('navigation', { name: 'Organization administration' }))
+  expect(nav.queryByRole('link', { name: 'Audit logs' })).toBeNull()
+  expect(nav.getByRole('link', { name: 'Log streams' })).toBeTruthy()
+  cleanup()
+  signedIn(['iam:org:read', 'iam:org:audit:read'])
+  const user = userEvent.setup()
+  open('/org-admin/env1/log-streams')
+  expect(await screen.findByText('Org SIEM')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Add log stream' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Actions for Org SIEM' })).not.toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Actions for Org SIEM' }))
+  expect(screen.queryByRole('menuitem', { name: 'Delete' })).toBeNull()
+})
+
+it('creates organization log streams without a sources choice', async () => {
+  const user = userEvent.setup()
+  signedIn(['iam:org:read', 'iam:org:log-streams:write'])
+  open('/org-admin/env1/log-streams')
+  await screen.findByText('Org SIEM')
+  await user.click(screen.getAllByRole('button', { name: 'Add log stream' })[0])
+  expect(screen.queryByText('Sources')).toBeNull()
+  await user.type(screen.getByLabelText('Name'), 'Mine')
+  await user.type(screen.getByLabelText('API key'), 'dd-key')
+  await user.click(screen.getByRole('button', { name: 'Create log stream' }))
+  await waitFor(() => expect(calls.find(c => c.method === 'POST' && c.url.endsWith('/admin/log-streams'))?.body).toEqual({ name: 'Mine', destination: 'datadog', config: { site: 'datadoghq.com' }, secret: 'dd-key' }))
 })

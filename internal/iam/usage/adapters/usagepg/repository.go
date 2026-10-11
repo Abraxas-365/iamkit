@@ -37,6 +37,7 @@ type limitsRow struct {
 	Emails        sql.NullInt64 `db:"emails_per_day"`
 	SMS           sql.NullInt64 `db:"sms_per_day"`
 	ActionCalls   sql.NullInt64 `db:"action_calls_per_minute"`
+	AuditEvents   sql.NullInt64 `db:"audit_events_per_minute"`
 	UpdatedAt     time.Time     `db:"updated_at"`
 }
 
@@ -45,6 +46,7 @@ func (r limitsRow) values() usage.Values {
 	for name, v := range map[string]sql.NullInt64{
 		usage.LimitUsers: r.Users, usage.LimitOrganizations: r.Organizations, usage.LimitApplications: r.Applications,
 		usage.LimitRequests: r.Requests, usage.LimitEmails: r.Emails, usage.LimitSMS: r.SMS, usage.LimitActionCalls: r.ActionCalls,
+		usage.LimitAuditEvents: r.AuditEvents,
 	} {
 		if v.Valid {
 			out[name] = v.Int64
@@ -56,7 +58,7 @@ func (r limitsRow) values() usage.Values {
 func (r *Repository) Limits(ctx context.Context, environment identity.EnvironmentID) (usage.Stored, error) {
 	var row limitsRow
 	err := r.db.GetContext(ctx, &row, `SELECT users_max, organizations_max, applications_max, requests_per_minute,
-		emails_per_day, sms_per_day, action_calls_per_minute, updated_at FROM environment_limits WHERE environment_id=$1`, environment)
+		emails_per_day, sms_per_day, action_calls_per_minute, audit_events_per_minute, updated_at FROM environment_limits WHERE environment_id=$1`, environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		return usage.Stored{Values: usage.Values{}}, nil
 	}
@@ -75,14 +77,15 @@ func nullable(values usage.Values, name string) sql.NullInt64 {
 func (r *Repository) SaveLimits(ctx context.Context, m usage.Mutation, values usage.Values) error {
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
 		if _, err := tx.ExecContext(ctx, `INSERT INTO environment_limits(environment_id, users_max, organizations_max, applications_max,
-			requests_per_minute, emails_per_day, sms_per_day, action_calls_per_minute) VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+			requests_per_minute, emails_per_day, sms_per_day, action_calls_per_minute, audit_events_per_minute) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
 			ON CONFLICT (environment_id) DO UPDATE SET users_max=EXCLUDED.users_max, organizations_max=EXCLUDED.organizations_max,
 			applications_max=EXCLUDED.applications_max, requests_per_minute=EXCLUDED.requests_per_minute,
 			emails_per_day=EXCLUDED.emails_per_day, sms_per_day=EXCLUDED.sms_per_day,
-			action_calls_per_minute=EXCLUDED.action_calls_per_minute, updated_at=now()`, m.Environment,
+			action_calls_per_minute=EXCLUDED.action_calls_per_minute, audit_events_per_minute=EXCLUDED.audit_events_per_minute,
+			updated_at=now()`, m.Environment,
 			nullable(values, usage.LimitUsers), nullable(values, usage.LimitOrganizations), nullable(values, usage.LimitApplications),
 			nullable(values, usage.LimitRequests), nullable(values, usage.LimitEmails), nullable(values, usage.LimitSMS),
-			nullable(values, usage.LimitActionCalls)); err != nil {
+			nullable(values, usage.LimitActionCalls), nullable(values, usage.LimitAuditEvents)); err != nil {
 			return failure(err)
 		}
 		return failure(eventpg.AuditWith(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, map[string]any{"limits": map[string]int64(values)}))

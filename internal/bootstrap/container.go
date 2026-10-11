@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"github.com/Abraxas-365/iamkit/internal/iam/logstream/logstreammodule"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -27,6 +28,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/action/actionmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/adapters/apphttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/appmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/auditlog/auditlogmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhibp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
@@ -87,21 +89,23 @@ type invitations struct {
 }
 
 type options struct {
-	resolver  organization.Resolver
-	sealer    *cryptox.Sealer
-	transport http.RoundTripper
-	mail      authmodule.Mail
-	sso       *OperatorSSO
-	breaches  authentication.Breaches
-	noBreach  bool
-	origins   []string
-	ldapDial  fedldap.Dialer
-	retention time.Duration
-	webhooks  http.RoundTripper
-	actions   http.RoundTripper
-	features  feature.Deployment
-	limits    usage.Values
-	redis     *cacheredis.Client
+	resolver       organization.Resolver
+	sealer         *cryptox.Sealer
+	transport      http.RoundTripper
+	mail           authmodule.Mail
+	sso            *OperatorSSO
+	breaches       authentication.Breaches
+	noBreach       bool
+	origins        []string
+	ldapDial       fedldap.Dialer
+	retention      time.Duration
+	auditRetention time.Duration
+	webhooks       http.RoundTripper
+	logStreams     http.RoundTripper
+	actions        http.RoundTripper
+	features       feature.Deployment
+	limits         usage.Values
+	redis          *cacheredis.Client
 }
 
 // WithRedis shares rate limits, per-minute limits and hot-read caches
@@ -127,9 +131,22 @@ func WithWebhookTransport(t http.RoundTripper) Option {
 	return func(o *options) { o.webhooks = t }
 }
 
+// WithLogStreamTransport replaces the guarded transport log streams (and
+// their S3 client) are sent through (tests with a loopback receiver;
+// IAMKIT_ALLOW_PRIVATE_DELIVERY).
+func WithLogStreamTransport(t http.RoundTripper) Option {
+	return func(o *options) { o.logStreams = t }
+}
+
 // WithEventRetention sets how long the event log keeps events
 // (IAMKIT_EVENT_RETENTION, default config.EventRetention).
 func WithEventRetention(d time.Duration) Option { return func(o *options) { o.retention = d } }
+
+// WithAuditLogRetention sets how long the app audit log keeps events
+// (IAMKIT_AUDIT_LOG_RETENTION, default config.AuditLogRetention).
+func WithAuditLogRetention(d time.Duration) Option {
+	return func(o *options) { o.auditRetention = d }
+}
 
 // WithLDAPDialer replaces how LDAP directories are dialed (tests with a
 // loopback directory); production dials through the guarded dialer or
@@ -165,6 +182,9 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	var o options
 	for _, opt := range opts {
 		opt(&o)
+	}
+	if o.auditRetention <= 0 {
+		o.auditRetention = config.AuditLogRetention
 	}
 	if o.retention <= 0 {
 		o.retention = config.EventRetention
@@ -254,11 +274,19 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Events = eventModule.HTTP
 	s.Webhooks = eventModule.Webhooks
 	s.WebhookDispatcher = eventModule.Dispatcher
+	logStreamModule := logstreammodule.New(logstreammodule.Deps{DB: db, Cipher: o.sealer, Transport: o.logStreams, ActorID: server.OperatorID})
+	s.LogStreams = logStreamModule.HTTP
+	s.LogStreamDispatcher = logStreamModule.Dispatcher
+	auditLogModule := auditlogmodule.New(auditlogmodule.Deps{DB: db, Retention: o.auditRetention, Usage: usageModule.Commands, ActorID: server.OperatorID})
+	s.AuditLogEvents = auditLogModule.Events
+	s.AuditLogActions = auditLogModule.Actions
 	s.Workers = &worker.Runner{}
 	s.Workers.Add(oauthModule.Jobs...)
 	s.Workers.Add(eventModule.Jobs...)
+	s.Workers.Add(logStreamModule.Jobs...)
 	s.Workers.Add(actionModule.Jobs...)
 	s.Workers.Add(usageModule.Jobs...)
+	s.Workers.Add(auditLogModule.Jobs...)
 	samlModule := samlmodule.New(samlmodule.Deps{DB: db, Keys: signingModule.Keyring, Issuer: issuer, ActorID: server.OperatorID})
 	if on, ok := o.features[config.FeatureSAMLIdP]; !ok || on {
 		s.SAML = samlModule.HTTP
@@ -299,6 +327,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Branding: hostedModule.Commands, BrandingViews: hostedModule.Queries,
 		PasswordPolicies: authenticationModule.PasswordPolicyCommands, PasswordPolicyViews: authenticationModule.PasswordPolicies,
 		Directories: provisioningModule.ControlCommands, DirectoryViews: provisioningModule.ControlQueries,
+		AuditLogs: auditLogModule.EventQueries, LogStreams: logStreamModule.Commands, LogStreamViews: logStreamModule.Queries,
 		SetupSecrets: mgmtsecret.Generator{},
 	})
 	s.API.WithSetup(orgAdmin.SetupLinkQueries)
@@ -323,9 +352,12 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 			Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService),
 		SMS:      authhttp.NewSMSHandler(authenticationModule.SMS, authenticationModule.SMSQueries, actor),
 		OrgAdmin: orgAdmin.HTTP, SetupLinks: orgadminhttp.NewSetupLinks(orgAdmin.SetupLinkCommands, orgAdmin.SetupLinkQueries, actor),
-		Events:   eventModule.HTTP,
-		Webhooks: eventModule.Webhooks.WithActor(actor),
-		Usage:    usageModule.HTTP,
+		Events:          eventModule.HTTP,
+		AuditLogEvents:  auditLogModule.Events,
+		AuditLogActions: auditLogModule.Actions.WithActor(actor),
+		Webhooks:        eventModule.Webhooks.WithActor(actor),
+		LogStreams:      logStreamModule.HTTP.WithActor(actor),
+		Usage:           usageModule.HTTP,
 	}
 	s.OrgAdminPortal = orgAdmin.PortalHTTP
 	s.SetupLinks = orgAdmin.SetupLinkHTTP
@@ -436,6 +468,14 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		}
 		retention = d
 	}
+	auditRetention := config.AuditLogRetention
+	if v := os.Getenv("IAMKIT_AUDIT_LOG_RETENTION"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < 24*time.Hour {
+			return nil, errx.Validation("IAMKIT_AUDIT_LOG_RETENTION must be a duration of at least 24h (e.g. 8760h)")
+		}
+		auditRetention = d
+	}
 	features, unknown, err := feature.ParseDeployment(os.Getenv("IAMKIT_FEATURES"))
 	if err != nil {
 		return nil, err
@@ -451,7 +491,7 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	opts := []Option{WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso), WithWebAuthnOrigins(list(os.Getenv("IAMKIT_WEBAUTHN_ORIGINS"))), WithEventRetention(retention), WithFeatures(features), WithLimits(limits)}
+	opts := []Option{WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso), WithWebAuthnOrigins(list(os.Getenv("IAMKIT_WEBAUTHN_ORIGINS"))), WithEventRetention(retention), WithAuditLogRetention(auditRetention), WithFeatures(features), WithLimits(limits)}
 	var redis *cacheredis.Client
 	if v := os.Getenv("REDIS_URL"); v != "" {
 		if redis, err = cacheredis.Open(context.Background(), v); err != nil {

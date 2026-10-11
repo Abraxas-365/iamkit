@@ -25,6 +25,8 @@ const (
 	LimitEmails        = "emails_per_day"
 	LimitSMS           = "sms_per_day"
 	LimitActionCalls   = "action_calls_per_minute"
+	// LimitAuditEvents bounds app audit log events emitted per minute.
+	LimitAuditEvents = "audit_events_per_minute"
 )
 
 // Metric names (usage_daily.metric).
@@ -36,10 +38,11 @@ const (
 	MetricSMS          = "sms"
 	MetricActionCalls  = "action_calls"
 	MetricRequests     = "api_requests"
+	MetricAuditEvents  = "audit_events"
 )
 
 // Metrics lists every metric, in display order.
-var Metrics = []string{MetricLogins, MetricUsersCreated, MetricTokens, MetricEmails, MetricSMS, MetricActionCalls, MetricRequests}
+var Metrics = []string{MetricLogins, MetricUsersCreated, MetricTokens, MetricEmails, MetricSMS, MetricActionCalls, MetricRequests, MetricAuditEvents}
 
 // Kind says what a limit bounds.
 type Kind string
@@ -70,6 +73,7 @@ var Catalog = []Limit{
 	{LimitEmails, KindDaily, MetricEmails},
 	{LimitSMS, KindDaily, MetricSMS},
 	{LimitActionCalls, KindPerMinute, MetricActionCalls},
+	{LimitAuditEvents, KindPerMinute, MetricAuditEvents},
 }
 
 // MaxValue bounds a limit (any larger value is a typo).

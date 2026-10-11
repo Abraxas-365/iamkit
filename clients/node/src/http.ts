@@ -41,6 +41,22 @@ export class Transport {
     return body as T;
   }
 
+  /**
+   * GETs a streamed body (exports): the status is checked, the body is not
+   * buffered, and no timeout applies unless init.signal is given.
+   */
+  async stream(path: string, init: { headers?: Record<string, string>; signal?: AbortSignal } = {}): Promise<ReadableStream<Uint8Array>> {
+    const response = await this.fetcher(this.baseUrl + path, { method: "GET", headers: init.headers, redirect: "manual", signal: init.signal });
+    if (response.status < 200 || response.status >= 300) {
+      const text = await readText(response);
+      throw toError(response.status, text ? parse(text) : undefined);
+    }
+    if (!response.body) {
+      throw toError(502, undefined);
+    }
+    return response.body;
+  }
+
   /** POSTs a JSON body. */
   json<T>(path: string, body: unknown, token?: string): Promise<T> {
     const headers: Record<string, string> = { Accept: "application/json" };

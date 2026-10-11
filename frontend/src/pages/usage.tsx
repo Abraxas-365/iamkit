@@ -35,6 +35,7 @@ const LIMITS: [string, string][] = [
   ['emails_per_day', t('Emails per day')],
   ['sms_per_day', t('SMS per day')],
   ['action_calls_per_minute', t('Action calls per minute')],
+  ['audit_events_per_minute', t('Audit log events per minute')],
 ]
 
 /** The metrics (usage.Metrics), in display order. */
@@ -46,6 +47,7 @@ const METRICS: [string, string][] = [
   ['sms', t('SMS sent')],
   ['action_calls', t('Action calls')],
   ['api_requests', t('API requests')],
+  ['audit_events', t('Audit log events')],
 ]
 
 const RANGES = [7, 30, 90]

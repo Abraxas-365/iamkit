@@ -35,6 +35,11 @@ const (
 	PermWebhooksWrite = "iam:webhooks:write"
 	// PermUsageRead reads the environment's usage and limits.
 	PermUsageRead = "iam:usage:read"
+	// App audit logs: read events and actions, emit events, manage the
+	// actions (schemas) and the environment's log streams.
+	PermAuditLogsRead   = "iam:audit-logs:read"
+	PermAuditLogsWrite  = "iam:audit-logs:write"
+	PermAuditLogsManage = "iam:audit-logs:manage"
 )
 
 // Organization-bound permissions. They only open the
@@ -52,7 +57,11 @@ const (
 	PermOrgInvitationsWrite = "iam:org:invitations:write"
 	PermOrgDomainsWrite     = "iam:org:domains:write"
 	PermOrgSSOWrite         = "iam:org:sso:write"
-	PermOrgAuditRead        = "iam:org:audit:read"
+	// PermOrgAuditRead reads the organization's activity, its app audit
+	// log events and its log streams.
+	PermOrgAuditRead = "iam:org:audit:read"
+	// PermOrgLogStreamsWrite manages the organization's log streams.
+	PermOrgLogStreamsWrite = "iam:org:log-streams:write"
 	// Resources the organization owns (resources.owner_organization_id)
 	// and their grants to other organizations.
 	PermOrgResourcesRead  = "iam:org:resources:read"
@@ -65,7 +74,7 @@ var OrgPermissions = []string{
 	PermOrgMembersRead, PermOrgMembersWrite, PermOrgUsersWrite,
 	PermOrgRolesRead, PermOrgRolesAssign,
 	PermOrgInvitationsWrite, PermOrgDomainsWrite,
-	PermOrgSSOWrite, PermOrgAuditRead,
+	PermOrgSSOWrite, PermOrgAuditRead, PermOrgLogStreamsWrite,
 	PermOrgResourcesRead, PermOrgResourcesWrite,
 }
 
@@ -85,6 +94,7 @@ var IAMResourcePermissions = append([]string{
 	PermEventsRead,
 	PermWebhooksRead, PermWebhooksWrite,
 	PermUsageRead,
+	PermAuditLogsRead, PermAuditLogsWrite, PermAuditLogsManage,
 }, OrgPermissions...)
 
 // Built-in roles of the IAM resource (roles.system_role). Every environment

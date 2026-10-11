@@ -5,10 +5,12 @@ package userschema
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
@@ -60,10 +62,42 @@ func (Validator) Check(schema json.RawMessage) error {
 	return err
 }
 
+// maxCached bounds the compiled schemas kept between validations (audit
+// log events validate every emit against their action's schemas).
+const maxCached = 512
+
+var (
+	cacheMu  sync.Mutex
+	compiled = map[[sha256.Size]byte]*jsonschema.Schema{}
+)
+
+// cached compiles a schema once per distinct text. A full cache starts
+// over rather than tracking recency.
+func cached(schema json.RawMessage) (*jsonschema.Schema, error) {
+	key := sha256.Sum256(schema)
+	cacheMu.Lock()
+	s, ok := compiled[key]
+	cacheMu.Unlock()
+	if ok {
+		return s, nil
+	}
+	s, err := compile(schema)
+	if err != nil {
+		return nil, err
+	}
+	cacheMu.Lock()
+	if len(compiled) >= maxCached {
+		clear(compiled)
+	}
+	compiled[key] = s
+	cacheMu.Unlock()
+	return s, nil
+}
+
 // Validate checks a profile against a schema; the error names the first
 // failing locations.
 func (Validator) Validate(schema, profile json.RawMessage) error {
-	compiled, err := compile(schema)
+	compiled, err := cached(schema)
 	if err != nil {
 		return err
 	}

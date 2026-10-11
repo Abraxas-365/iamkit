@@ -128,6 +128,9 @@ type (
 	subscriptionTag  struct{} // event webhook subscription
 	targetTag        struct{} // action target (hook endpoint)
 	setupLinkTag     struct{} // organization setup link
+	auditActionTag   struct{} // registered app audit log action
+	auditEventTag    struct{} // app audit log event
+	logStreamTag     struct{} // log stream (SIEM / object storage)
 )
 
 // tagName returns a human-readable name for error messages.
@@ -196,6 +199,12 @@ func tagName[T any]() string {
 		return "target_id"
 	case setupLinkTag:
 		return "link_id"
+	case auditActionTag:
+		return "action_id"
+	case auditEventTag:
+		return "event_id"
+	case logStreamTag:
+		return "stream_id"
 	default:
 		return "id"
 	}
@@ -242,6 +251,12 @@ type (
 	TargetID = ID[targetTag]
 	// SetupLinkID names an organization setup link.
 	SetupLinkID = ID[setupLinkTag]
+	// AuditActionID names a registered app audit log action.
+	AuditActionID = ID[auditActionTag]
+	// AuditEventID names an app audit log event.
+	AuditEventID = ID[auditEventTag]
+	// LogStreamID names a log stream.
+	LogStreamID = ID[logStreamTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -279,6 +294,9 @@ func NewUserKeyID() UserKeyID             { return NewID[userKeyTag]() }
 func NewSubscriptionID() SubscriptionID   { return NewID[subscriptionTag]() }
 func NewTargetID() TargetID               { return NewID[targetTag]() }
 func NewSetupLinkID() SetupLinkID         { return NewID[setupLinkTag]() }
+func NewAuditActionID() AuditActionID     { return NewID[auditActionTag]() }
+func NewAuditEventID() AuditEventID       { return NewID[auditEventTag]() }
+func NewLogStreamID() LogStreamID         { return NewID[logStreamTag]() }
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -317,6 +335,9 @@ func ParseUserKeyID(raw string) (UserKeyID, error)           { return ParseID[us
 func ParseSubscriptionID(raw string) (SubscriptionID, error) { return ParseID[subscriptionTag](raw) }
 func ParseTargetID(raw string) (TargetID, error)             { return ParseID[targetTag](raw) }
 func ParseSetupLinkID(raw string) (SetupLinkID, error)       { return ParseID[setupLinkTag](raw) }
+func ParseAuditActionID(raw string) (AuditActionID, error)   { return ParseID[auditActionTag](raw) }
+func ParseAuditEventID(raw string) (AuditEventID, error)     { return ParseID[auditEventTag](raw) }
+func ParseLogStreamID(raw string) (LogStreamID, error)       { return ParseID[logStreamTag](raw) }
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.
 func MustParseEnvironmentID(raw string) EnvironmentID   { return MustParseID[environmentTag](raw) }

@@ -6,6 +6,24 @@ import "github.com/Abraxas-365/iamkit/sdk/iamclient"
 // the same shapes on every route they share, so they are iamclient's types.
 type (
 	AccessToken             = iamclient.AccessToken
+	AuditLogAction          = iamclient.AuditLogAction
+	AuditLogActionInput     = iamclient.AuditLogActionInput
+	AuditLogActionPatch     = iamclient.AuditLogActionPatch
+	AuditLogContext         = iamclient.AuditLogContext
+	AuditLogEvent           = iamclient.AuditLogEvent
+	AuditLogFilter          = iamclient.AuditLogFilter
+	AuditLogInput           = iamclient.AuditLogInput
+	AuditLogPage            = iamclient.AuditLogPage
+	AuditLogParty           = iamclient.AuditLogParty
+	AuditLogReceipt         = iamclient.AuditLogReceipt
+	AuditLogSchema          = iamclient.AuditLogSchema
+	LogStream               = iamclient.LogStream
+	LogStreamConfig         = iamclient.LogStreamConfig
+	LogStreamDelivery       = iamclient.LogStreamDelivery
+	LogStreamInput          = iamclient.LogStreamInput
+	LogStreamPatch          = iamclient.LogStreamPatch
+	LogStreamSecret         = iamclient.LogStreamSecret
+	LogStreamTest           = iamclient.LogStreamTest
 	AddUserKey              = iamclient.AddUserKey
 	Application             = iamclient.Application
 	ApplicationPatch        = iamclient.ApplicationPatch
@@ -84,4 +102,10 @@ type (
 	WebhookInput            = iamclient.WebhookInput
 	WebhookSecret           = iamclient.WebhookSecret
 	WebhookTest             = iamclient.WebhookTest
+)
+
+// Export formats of ExportAuditLogEvents.
+const (
+	AuditLogFormatNDJSON = iamclient.AuditLogFormatNDJSON
+	AuditLogFormatCSV    = iamclient.AuditLogFormatCSV
 )

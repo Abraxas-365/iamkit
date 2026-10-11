@@ -4,11 +4,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/iam/auditlog"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
+	"github.com/Abraxas-365/iamkit/internal/iam/logstream"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/Abraxas-365/iamkit/internal/iam/user"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -59,6 +61,18 @@ type Commands interface {
 	// links; only owners (Principal.Owner).
 	CreateSetupLink(ctx context.Context, p Principal, input SetupLinkInput) (IssuedSetupLink, error)
 	RevokeSetupLink(ctx context.Context, p Principal, link identity.SetupLinkID) error
+	// CreateLogStream creates a log stream of the organization (sources
+	// audit_logs only); the https signing secret is returned once.
+	// Needs iam:org:log-streams:write, as every method below.
+	CreateLogStream(ctx context.Context, p Principal, input logstream.Create) (logstream.Created, error)
+	UpdateLogStream(ctx context.Context, p Principal, stream identity.LogStreamID, input logstream.Update) (logstream.Stream, error)
+	// EnableLogStream resumes a paused or failing stream.
+	EnableLogStream(ctx context.Context, p Principal, stream identity.LogStreamID) (logstream.Stream, error)
+	DeleteLogStream(ctx context.Context, p Principal, stream identity.LogStreamID) error
+	RotateLogStreamSecret(ctx context.Context, p Principal, stream identity.LogStreamID) (logstream.Created, error)
+	// TestLogStream sends one synthetic record to the destination now.
+	TestLogStream(ctx context.Context, p Principal, stream identity.LogStreamID) (logstream.TestResult, error)
+	RetryLogStreamDelivery(ctx context.Context, p Principal, stream identity.LogStreamID, delivery int64) error
 }
 
 // Queries are the organization administrator's reads.
@@ -98,6 +112,24 @@ type Queries interface {
 	Directories(ctx context.Context, p Principal, page query.Pagination) (Directories, error)
 	// SetupLinks lists the organization's setup links (owners only).
 	SetupLinks(ctx context.Context, p Principal, page query.Pagination) (query.Paginated[SetupLink], error)
+	// AuditLogs lists the app audit log events of the organization
+	// (iam:org:audit:read); filter.Organization is always the principal's.
+	AuditLogs(ctx context.Context, p Principal, filter auditlog.Filter, limit int) (auditlog.Page, error)
+	// ExportAuditLogs streams the matching events oldest first to write.
+	ExportAuditLogs(ctx context.Context, p Principal, filter auditlog.Filter, write func(auditlog.Event) error) error
+	// LogStreams, LogStream and LogStreamDeliveries read the
+	// organization's own streams (not the environment's): they need
+	// iam:org:audit:read or iam:org:log-streams:write.
+	LogStreams(ctx context.Context, p Principal) ([]logstream.Stream, error)
+	LogStream(ctx context.Context, p Principal, stream identity.LogStreamID) (logstream.Stream, error)
+	LogStreamDeliveries(ctx context.Context, p Principal, stream identity.LogStreamID, filter logstream.DeliveryFilter, page query.Pagination) (query.Paginated[logstream.Delivery], error)
+}
+
+// AuditLogs is what the organization administration reads of the app audit
+// log (auditlog.EventQueries, narrowed).
+type AuditLogs interface {
+	List(ctx context.Context, environment identity.EnvironmentID, filter auditlog.Filter, limit int) (auditlog.Page, error)
+	Export(ctx context.Context, environment identity.EnvironmentID, filter auditlog.Filter, write func(auditlog.Event) error) error
 }
 
 // Repository reads what the anti-escalation rules need and the

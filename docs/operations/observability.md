@@ -14,7 +14,8 @@ The server binary also runs background jobs (back-channel logout delivery and
 pruning; `event_prune`, which deletes [events](../reference/events.md) past
 `IAMKIT_EVENT_RETENTION`; `event_webhook` and `event_webhook_maintenance`,
 which send [event webhooks](../reference/event-webhooks.md) and disable
-failing subscriptions; `action_call_prune`; `usage_rollup` and `usage_prune`,
+failing subscriptions; `action_call_prune`; `audit_log_prune`, which deletes
+[app audit log](../guides/audit-logs.md#retention) events past `IAMKIT_AUDIT_LOG_RETENTION`; `usage_rollup` and `usage_prune`,
 which add sign-ins and created users to the [daily usage](../guides/platform/usage-limits.md#usage)
 and prune it). Each replica also writes its in-memory usage counters every
 30 seconds and at shutdown, whether or not it runs workers. Every replica runs them by default; they claim database rows with

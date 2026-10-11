@@ -188,6 +188,22 @@ const (
 	// config.EventWebhookDisableAfter and was turned off.
 	WebhookDisabled = "webhook.disabled"
 
+	// App audit log actions (the registered action catalog) and log
+	// streams. App audit log events themselves never enter this log.
+	AuditLogActionCreated = "audit_log_action.created"
+	AuditLogActionUpdated = "audit_log_action.updated"
+	AuditLogActionDeleted = "audit_log_action.deleted"
+	LogStreamCreated      = "log_stream.created"
+	LogStreamUpdated      = "log_stream.updated"
+	LogStreamDeleted      = "log_stream.deleted"
+	// LogStreamSecretRotated: an https stream's signing secret was
+	// rotated (the previous one signs for config.EventWebhookSecretOverlap).
+	LogStreamSecretRotated   = "log_stream.secret_rotated"
+	LogStreamDeliveryRetried = "log_stream.delivery_retried"
+	// LogStreamDisabled: the stream failed for
+	// config.EventWebhookDisableAfter and was turned off.
+	LogStreamDisabled = "log_stream.disabled"
+
 	ActionTargetCreated       = "action_target.created"
 	ActionTargetUpdated       = "action_target.updated"
 	ActionTargetDeleted       = "action_target.deleted"

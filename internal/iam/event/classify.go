@@ -194,6 +194,18 @@ var actions = map[string]named{
 	ActionWebhookReplay:                   {WebhookReplayed, "webhook"},
 	ActionWebhookRetry:                    {WebhookDeliveryRetried, "webhook"},
 	ActionWebhookDisable:                  {WebhookDisabled, "webhook"},
+	// App audit log actions and log streams (auditlog.Action*,
+	// logstream.Action*; target = the entity id, or
+	// organizations/<org>/log-streams/<id> for organization streams).
+	"audit_log_action.create":   {AuditLogActionCreated, "audit_log_action"},
+	"audit_log_action.update":   {AuditLogActionUpdated, "audit_log_action"},
+	"audit_log_action.delete":   {AuditLogActionDeleted, "audit_log_action"},
+	"log_stream.create":         {LogStreamCreated, "log_stream"},
+	"log_stream.update":         {LogStreamUpdated, "log_stream"},
+	"log_stream.delete":         {LogStreamDeleted, "log_stream"},
+	"log_stream.rotate_secret":  {LogStreamSecretRotated, "log_stream"},
+	"log_stream.retry_delivery": {LogStreamDeliveryRetried, "log_stream"},
+	"log_stream.disable":        {LogStreamDisabled, "log_stream"},
 	// Ends a session: the trigger writes session.revoked.
 	"oauth.logout": {},
 }

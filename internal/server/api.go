@@ -204,6 +204,16 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	if h := s.APIHandlers.Webhooks; h != nil {
 		h.Routes(e.Group("/webhooks", apiauth.ReadWrite(authorization.PermWebhooksRead, authorization.PermWebhooksWrite)))
 	}
+	if h := s.APIHandlers.LogStreams; h != nil {
+		h.Routes(e.Group("/log-streams", apiauth.ReadWrite(authorization.PermAuditLogsRead, authorization.PermAuditLogsManage)))
+	}
+	if h := s.APIHandlers.AuditLogEvents; h != nil {
+		h.Routes(e.Group("/audit-logs/events", apiauth.ReadWrite(authorization.PermAuditLogsRead, authorization.PermAuditLogsWrite)))
+	}
+	if h := s.APIHandlers.AuditLogActions; h != nil {
+		// Reading the catalog is plain read; changing it is manage.
+		h.Routes(e.Group("/audit-logs/actions", apiauth.ReadWrite(authorization.PermAuditLogsRead, authorization.PermAuditLogsManage)))
+	}
 	if h := s.APIHandlers.Usage; h != nil {
 		e.Get("/usage", apiauth.RequirePermission(authorization.PermUsageRead), h.Usage)
 	}

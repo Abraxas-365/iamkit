@@ -94,6 +94,32 @@ const SAMLResponseMax = 64 << 10
 // IAMKIT_EVENT_RETENTION says otherwise.
 const EventRetention = 90 * 24 * time.Hour
 
+// App audit logs (auditlog module).
+const (
+	// AuditLogRetention is how long app audit log events are kept unless
+	// IAMKIT_AUDIT_LOG_RETENTION says otherwise.
+	AuditLogRetention = 365 * 24 * time.Hour
+	// AuditLogMaxBody caps a POST …/audit-logs/events body.
+	AuditLogMaxBody = 64 << 10
+	// AuditLogFutureSkew is how far in the future occurred_at may be.
+	AuditLogFutureSkew = 5 * time.Minute
+)
+
+// Log streams (logstream module): batches of events and app audit log
+// events delivered to a SIEM or object storage. Retries, backoff and
+// disabling reuse the EventWebhook* constants.
+const (
+	// LogStreamInterval is how often each replica looks for due batches.
+	LogStreamInterval = 2 * time.Second
+	// LogStreamBatchSize / LogStreamBatchBytes bound one batch.
+	LogStreamBatchSize  = 500
+	LogStreamBatchBytes = 1 << 20
+	// LogStreamTimeout bounds one delivery request (an S3 upload included).
+	LogStreamTimeout = 30 * time.Second
+	// LogStreamDeliveryRetention keeps finished deliveries visible.
+	LogStreamDeliveryRetention = 7 * 24 * time.Hour
+)
+
 // LogoutDispatchInterval is how often each replica looks for due
 // back-channel logout notifications.
 const LogoutDispatchInterval = 5 * time.Second

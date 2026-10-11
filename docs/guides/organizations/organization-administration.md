@@ -115,7 +115,7 @@ created for, no sign-in.
   `iamclient.Environment.CreateSetupLink`) or an organization **owner** in the
   portal (*Setup links*) picks the **intents**: `sso` (SAML, OIDC and LDAP
   connections, with the service-provider details to give the identity
-  provider), `directory` (SCIM tokens) and `domains` (add and verify). The
+  provider), `directory` (SCIM tokens), `domains` (add and verify) and `log_streams` (the organization's [log streams](../platform/log-streams.md#organization-administrators)). The
   default lifetime is 7 days, the maximum 30; an organization holds at most 50
   live links.
 - **The URL** is `<issuer>/org-admin/<environment>/setup#ik_setup_…`. The
@@ -133,7 +133,7 @@ created for, no sign-in.
 - **What the bearer can do.** It works only on this organization's `/admin`
   routes and holds the permissions of its intents: `sso` and `directory` →
   `iam:org:read` + `iam:org:sso:write`; `domains` → `iam:org:read` +
-  `iam:org:domains:write`. Everything else (members, users, roles,
+  `iam:org:domains:write`; `log_streams` → `iam:org:read` + `iam:org:log-streams:write` (streams, not the audit log). Everything else (members, users, roles,
   invitations, resources, branding, password policy, events, setup links) is
   403. Revoking or expiring the link ends its sessions at once, and so does
   deactivating the organization (its links and bearers are then a uniform 401).
@@ -232,6 +232,9 @@ request and response bodies are the management API's.
 | `GET /directories` (the organization's [SCIM](../enterprise/scim-provisioning.md#self-service-for-organization-admins) tokens, never their secrets, plus `scim_url`), `POST /directories` (`name`, optional `expires_in`, `adopt_existing_members`, `adopt_scope`, `map_phone`; 201 with the `secret` once), `DELETE /directories/:credential` (204; another organization's credential is 404) | `iam:org:read`, `iam:org:sso:write` |
 | `GET /setup-links`, `POST /setup-links` (`intents`, optional `expires_in`; 201 with the `url` once), `DELETE /setup-links/:link` ([setup links](#setup-links); owners only) | every `iam:org:*` permission |
 | `GET /events` (`?action=` prefix) | `iam:org:audit:read` |
+| `GET /audit-logs`, `GET /audit-logs/export?format=ndjson\|csv` (the organization's [app audit log](../audit-logs.md#organization-administrators); `organization_id` is always the caller's) | `iam:org:audit:read` |
+| `GET /log-streams`, `GET /log-streams/:id`, `GET /log-streams/:id/deliveries` | `iam:org:audit:read` or `iam:org:log-streams:write` |
+| `POST /log-streams`, `PATCH`/`DELETE /log-streams/:id`, `POST /log-streams/:id/test`, `/enable`, `/rotate-secret`, `/deliveries/:delivery/retry` ([organization log streams](../platform/log-streams.md#organization-administrators): audit logs only; secrets shown once) | `iam:org:log-streams:write` (the built-in `org_owner` role has it; sessions issued before the upgrade get it at their next sign-in) |
 | `GET /branding`, `PUT /branding`, `DELETE /branding` ([organization branding](../applications/hosted-login.md#organization-branding): sign-in pages, invitation pages and emails) | `iam:org:read`, `iam:org:settings:write` |
 | `GET /password-policy`, `PUT /password-policy`, `DELETE /password-policy` ([requirements](../sign-in/password-policy.md) that only tighten the environment's) | `iam:org:read`, `iam:org:settings:write` |
 | `GET /resources` (owned), `GET /resource-grants` (`?resource_id=`), `GET /granted-resources` (received) | `iam:org:resources:read` |

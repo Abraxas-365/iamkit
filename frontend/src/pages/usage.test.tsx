@@ -12,7 +12,7 @@ let limits: { deployment: Record<string, number>; environment: Record<string, nu
 let calls: { method: string; path: string; query: string; body?: Record<string, unknown> }[]
 let role = 'owner'
 
-const day = (d: string, logins: number) => ({ day: d, metrics: { logins, users_created: 0, tokens: logins * 2, emails: 0, sms: 0, action_calls: 0, api_requests: 0 } })
+const day = (d: string, logins: number) => ({ day: d, metrics: { logins, users_created: 0, tokens: logins * 2, emails: 0, sms: 0, action_calls: 0, api_requests: 0, audit_events: 0 } })
 
 beforeEach(() => {
   limits = { deployment: { users_max: 100 }, environment: {}, effective: { users_max: 100 } }
@@ -36,7 +36,7 @@ beforeEach(() => {
       path === '/projects' ? [{ id: 'project1', name: 'Billing' }] :
         path === '/projects/project1/environments' ? [{ id: 'env1', name: 'Production' }] :
           path === `${env}/limits` ? limits :
-            path === `${env}/usage` ? { days: [day('2026-09-30', 3), day('2026-10-01', 5)], totals: { logins: 8, users_created: 0, tokens: 16, emails: 0, sms: 0, action_calls: 0, api_requests: 0 }, now: [{ name: 'users_max', count: 42, max: limits.effective.users_max ?? null }, { name: 'organizations_max', count: 3, max: null }, { name: 'applications_max', count: 1, max: null }] } :
+            path === `${env}/usage` ? { days: [day('2026-09-30', 3), day('2026-10-01', 5)], totals: { logins: 8, users_created: 0, tokens: 16, emails: 0, sms: 0, action_calls: 0, api_requests: 0, audit_events: 0 }, now: [{ name: 'users_max', count: 42, max: limits.effective.users_max ?? null }, { name: 'organizations_max', count: 3, max: null }, { name: 'applications_max', count: 1, max: null }] } :
               path.startsWith(env) ? { items: [], page: { total: 0, limit: 200, offset: 0 } } : []
     return Response.json(data)
   })
@@ -63,7 +63,7 @@ it('shows usage and tightens limits', async () => {
   await u.type(screen.getByRole('spinbutton', { name: 'SMS per day' }), '10')
   await u.click(screen.getByRole('button', { name: 'Save limits' }))
   await waitFor(() => expect(calls.find(c => c.method === 'PUT')?.body).toEqual({
-    users_max: 50, organizations_max: null, applications_max: null, requests_per_minute: null, emails_per_day: null, sms_per_day: 10, action_calls_per_minute: null,
+    users_max: 50, organizations_max: null, applications_max: null, requests_per_minute: null, emails_per_day: null, sms_per_day: 10, action_calls_per_minute: null, audit_events_per_minute: null,
   }))
   expect(await screen.findByText('Server: 100 · in effect: 50')).toBeTruthy()
 })

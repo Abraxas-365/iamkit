@@ -72,6 +72,10 @@ const named: Record<string, string> = {
   'webhook.create': t('Added a webhook'), 'webhook.update': t('Updated a webhook'), 'webhook.delete': t('Deleted a webhook'),
   'webhook.rotate_secret': t('Rotated a webhook secret'), 'webhook.replay': t('Replayed webhook events'), 'webhook.retry': t('Retried a webhook delivery'),
   'webhook.disabled': t('Webhook disabled after failing deliveries'),
+  'audit_log_action.create': t('Added an audit log action'), 'audit_log_action.update': t('Updated an audit log action'), 'audit_log_action.delete': t('Deleted an audit log action'),
+  'log_stream.create': t('Added a log stream'), 'log_stream.update': t('Updated a log stream'), 'log_stream.delete': t('Deleted a log stream'),
+  'log_stream.rotate_secret': t('Rotated a log stream secret'), 'log_stream.retry_delivery': t('Retried a log stream delivery'),
+  'log_stream.disable': t('Log stream disabled after failing deliveries'),
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-/i
 

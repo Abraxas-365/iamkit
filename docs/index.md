@@ -29,7 +29,7 @@ Then read the [concepts](concepts/identity-model.md): the
 | Model tenants and people | [Organizations](guides/organizations/organizations.md), [customer-side administration](guides/organizations/organization-administration.md), [user profiles](guides/organizations/user-profiles.md), [impersonation](guides/organizations/impersonation.md) |
 | Migrate users from another provider | [Importing users with their passwords](guides/migration/importing-users.md), then [Auth0](guides/migration/from-auth0.md), [Firebase](guides/migration/from-firebase.md), [Clerk](guides/migration/from-clerk.md), [Amazon Cognito](guides/migration/from-cognito.md) or [Supabase](guides/migration/from-supabase.md) |
 | Authenticate services | [Service accounts](guides/machines/service-accounts.md), [machine users and access tokens](guides/machines/machine-users.md) |
-| Extend and tune the platform | [Actions](guides/platform/actions.md), [email delivery](guides/platform/email-delivery.md), [feature flags](guides/platform/feature-flags.md), [usage and limits](guides/platform/usage-limits.md) |
+| Extend and tune the platform | [Actions](guides/platform/actions.md), [app audit logs](guides/audit-logs.md), [email delivery](guides/platform/email-delivery.md), [feature flags](guides/platform/feature-flags.md), [log streams](guides/platform/log-streams.md), [usage and limits](guides/platform/usage-limits.md) |
 
 Runnable code is in the [examples](examples/README.md).
 

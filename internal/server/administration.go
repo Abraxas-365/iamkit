@@ -8,8 +8,15 @@ func (s *Server) administrationRoutes(e fiber.Router) {
 		s.Events.Register(e)
 		s.Events.RegisterHistory(e)
 	}
+	if s.AuditLogEvents != nil {
+		s.AuditLogEvents.Register(e)
+		s.AuditLogActions.Register(e)
+	}
 	if s.Webhooks != nil {
 		s.Webhooks.Register(e)
+	}
+	if s.LogStreams != nil {
+		s.LogStreams.Register(e)
 	}
 	s.Grants.Register(e)
 	org := e.Group("/organizations/:organization", s.Structure.Check)

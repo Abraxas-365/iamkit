@@ -12,6 +12,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
+	"github.com/Abraxas-365/iamkit/internal/iam/logstream"
 	"github.com/Abraxas-365/iamkit/internal/iam/orgadmin"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
@@ -47,6 +48,9 @@ type Deps struct {
 	DirectoryViews      provisioning.ControlQueries
 	SetupLinks          orgadmin.SetupLinkCommands
 	SetupLinkViews      orgadmin.SetupLinkQueries
+	AuditLogs           orgadmin.AuditLogs
+	LogStreams          logstream.Commands
+	LogStreamViews      logstream.Queries
 	// Issuer is IAMKit's public URL; the SCIM base URL derives from it.
 	Issuer string
 }

@@ -69,6 +69,27 @@ it('steps through the intents to a Done screen', async () => {
   expect(await screen.findByRole('heading', { name: 'All done' })).toBeTruthy()
 })
 
+it('shows only Log streams for a log_streams link, without sources', async () => {
+  exchange = () => ok(['log_streams'])
+  fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+    const body = init.body ? JSON.parse(String(init.body)) : undefined
+    calls.push({ url, method: init.method ?? 'GET', body, auth: (init.headers as Record<string, string> | undefined)?.Authorization })
+    if (url === '/identity/v1/org-admin/env1') return Response.json({ client_id: 'client1', environment_id: 'env1', url: 'https://iam.example/org-admin/env1' })
+    if (url === '/identity/v1/org-admin/setup') return exchange(body)
+    if (url.endsWith('/admin/log-streams')) return Response.json({ items: [] })
+    return Response.json(page([]))
+  })
+  open()
+  const steps = await screen.findByRole('list', { name: 'Setup steps' })
+  expect(within(steps).getAllByRole('listitem')).toHaveLength(1)
+  expect(await screen.findByRole('heading', { name: 'Log streams' })).toBeTruthy()
+  expect(screen.queryByRole('link', { name: 'Audit logs' })).toBeNull()
+  const user = userEvent.setup()
+  await user.click((await screen.findAllByRole('button', { name: 'Add log stream' }))[0])
+  expect(screen.queryByText('Sources')).toBeNull()
+  expect(calls.some(c => c.url.includes('/admin/log-streams') && c.auth === 'Bearer ik_setupsess_abc')).toBe(true)
+})
+
 it('shows only the intents the link allows', async () => {
   exchange = () => ok(['domains'])
   open()

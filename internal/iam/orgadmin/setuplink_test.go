@@ -13,9 +13,10 @@ import (
 
 func TestIntentPermissions(t *testing.T) {
 	cases := map[string][]string{
-		orgadmin.IntentSSO:       {authorization.PermOrgRead, authorization.PermOrgSSOWrite},
-		orgadmin.IntentDirectory: {authorization.PermOrgRead, authorization.PermOrgSSOWrite},
-		orgadmin.IntentDomains:   {authorization.PermOrgDomainsWrite, authorization.PermOrgRead},
+		orgadmin.IntentSSO:        {authorization.PermOrgRead, authorization.PermOrgSSOWrite},
+		orgadmin.IntentDirectory:  {authorization.PermOrgRead, authorization.PermOrgSSOWrite},
+		orgadmin.IntentDomains:    {authorization.PermOrgDomainsWrite, authorization.PermOrgRead},
+		orgadmin.IntentLogStreams: {authorization.PermOrgLogStreamsWrite, authorization.PermOrgRead},
 	}
 	for intent, want := range cases {
 		got := orgadmin.IntentPermissions([]string{intent})
@@ -25,7 +26,7 @@ func TestIntentPermissions(t *testing.T) {
 		}
 	}
 	all := orgadmin.IntentPermissions(orgadmin.Intents)
-	if len(all) != 3 || slices.Contains(all, authorization.PermOrgMembersRead) {
+	if len(all) != 4 || slices.Contains(all, authorization.PermOrgMembersRead) {
 		t.Fatalf("all = %v", all)
 	}
 	if got := orgadmin.IntentPermissions([]string{"bogus"}); len(got) != 0 {

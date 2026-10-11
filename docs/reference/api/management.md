@@ -178,7 +178,7 @@ Administrative inventories include `GET /sessions` (optional `user_id`, `organiz
 [event log](../events.md) (cursor-paged by event id; `GET /events/export`
 streams it as NDJSON, and `GET /<users|organizations|applications|oauth-clients|roles|resources>/:id/history`
 is one entity's [change history](../events.md#change-history)), and `…/webhooks`,
-[event webhook](../event-webhooks.md) subscriptions with their delivery log. Sessions carry display labels
+[event webhook](../event-webhooks.md) subscriptions with their delivery log, and `…/log-streams`, [log streams](../../guides/platform/log-streams.md) (Datadog, Splunk, S3, HTTPS) with theirs. Sessions carry display labels
 `user_name,user_email,organization_name,application_name,resource_name` and
 audit events an `actor_label` (operator or end-user email; empty when unknown)
 and a `target_label` (current name of the innermost entity in `target_id`, e.g.

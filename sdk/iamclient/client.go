@@ -51,6 +51,11 @@ func (c *Client) Do(ctx context.Context, method, path string, input, output any)
 
 // do is Do with an encoded query string; path itself never carries one.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, input, output any) error {
+	return c.doWith(ctx, method, path, query, nil, input, output)
+}
+
+// doWith is do with extra request headers.
+func (c *Client) doWith(ctx context.Context, method, path string, query url.Values, headers []transport.Header, input, output any) error {
 	if !strings.HasPrefix(c.key, "ik_mgmt_") {
 		return fmt.Errorf("management credential required")
 	}
@@ -60,7 +65,7 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if len(query) > 0 {
 		path += "?" + query.Encode()
 	}
-	return transport.Do(c.http, ctx, method, c.baseURL+"/management/v1"+path, []transport.Header{
+	return transport.Do(c.http, ctx, method, c.baseURL+"/management/v1"+path, append([]transport.Header{
 		{Key: "X-API-Key", Value: c.key},
-	}, input, output)
+	}, headers...), input, output)
 }

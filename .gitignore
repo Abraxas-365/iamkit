@@ -12,3 +12,6 @@ coverage*
 .DS_Store
 /go.work
 /go.work.sum
+# Also the node_modules symlinks worktrees share (a trailing slash would
+# match directories only).
+node_modules

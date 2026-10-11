@@ -15,6 +15,7 @@ limits, nothing changes: every limit is unlimited by default.
 | `requests_per_minute` | `/api/v1` requests to the environment, per minute | 429 `QUOTA_EXCEEDED` |
 | `emails_per_day` | Emails sent, per UTC day (codes, invitations, verification) | 429 `QUOTA_EXCEEDED` on code requests (`POST /identity/v1/challenges`, sign-up, email factor codes) for any address; invitations are still created with `delivery: failed` |
 | `sms_per_day` | SMS sent, per UTC day | 429 `QUOTA_EXCEEDED` |
+| `audit_events_per_minute` | [App audit log](../audit-logs.md) events accepted, per minute | 429 `QUOTA_EXCEEDED` on `POST …/audit-logs/events` |
 | `action_calls_per_minute` | [Action](actions.md) target calls, per minute | The call is skipped like an open breaker (`action.failed`, outcome `skipped`); the flow fails only for `interrupt_on_error` targets |
 
 Errors carry `details.limit` and `details.max`:
@@ -80,6 +81,7 @@ Daily usage counts, per environment and UTC day:
 | `tokens` | Access tokens issued (identity API, `/oauth/token`, device flow, machine tokens) | By each replica, written every 30 seconds and at shutdown |
 | `emails`, `sms` | Messages delivered | Same |
 | `action_calls` | Action target calls made | Same |
+| `audit_events` | [App audit log](../audit-logs.md) events accepted | Same |
 | `api_requests` | `/api/v1` requests to the environment | Same |
 
 Console: **Settings → Usage and limits** (last 7, 30 or 90 days).

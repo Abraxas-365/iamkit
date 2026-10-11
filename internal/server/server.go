@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"github.com/Abraxas-365/iamkit/internal/iam/logstream"
+	"github.com/Abraxas-365/iamkit/internal/iam/logstream/adapters/logstreamhttp"
 	"io/fs"
 	"log/slog"
 	"strconv"
@@ -11,6 +13,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/action/adapters/actionhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/adapters/apphttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/auditlog/adapters/auditloghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/event"
@@ -69,6 +72,12 @@ type APIHandlerSet struct {
 	Events *eventhttp.Handler
 	// Webhooks serves event webhook subscriptions (iam:webhooks:*).
 	Webhooks *eventhttp.Subscriptions
+	// LogStreams serves log streams (iam:audit-logs:read/manage).
+	LogStreams *logstreamhttp.Handler
+	// AuditLogEvents and AuditLogActions serve the app audit log
+	// (iam:audit-logs:read/write/manage).
+	AuditLogEvents  *auditloghttp.Events
+	AuditLogActions *auditloghttp.Actions
 	// Usage serves daily usage (iam:usage:read).
 	Usage *usagehttp.Handler
 }
@@ -121,10 +130,17 @@ type Server struct {
 	SetupLinks *orgadminhttp.SetupLinks
 	// Events serves the environment's event log.
 	Events *eventhttp.Handler
+	// AuditLogEvents and AuditLogActions serve the app audit log.
+	AuditLogEvents  *auditloghttp.Events
+	AuditLogActions *auditloghttp.Actions
 	// Webhooks serves event webhook subscriptions; WebhookDispatcher sends
 	// one round of due deliveries (the worker runs it; tests call it).
 	Webhooks          *eventhttp.Subscriptions
 	WebhookDispatcher event.Dispatcher
+	// LogStreams serves log streams; LogStreamDispatcher sends one round of
+	// due batches (the worker runs it; tests call it).
+	LogStreams          *logstreamhttp.Handler
+	LogStreamDispatcher logstream.Dispatcher
 	// LogoutDeliveries is the back-channel logout delivery log.
 	LogoutDeliveries *oauthhttp.Logouts
 	// LogoutDispatcher sends due back-channel logout notifications once

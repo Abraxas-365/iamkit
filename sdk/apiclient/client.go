@@ -55,6 +55,11 @@ func (c *Client) Do(ctx context.Context, method, path string, input, output any)
 
 // do is Do with an encoded query string; path itself never carries one.
 func (c *Client) do(ctx context.Context, method, path string, query url.Values, input, output any) error {
+	return c.doWith(ctx, method, path, query, nil, input, output)
+}
+
+// doWith is do with extra request headers.
+func (c *Client) doWith(ctx context.Context, method, path string, query url.Values, headers []transport.Header, input, output any) error {
 	if c.token == "" {
 		return &apierror.Error{Code: "UNAUTHORIZED", Message: "bearer token required", HTTPStatus: 401}
 	}
@@ -64,9 +69,9 @@ func (c *Client) do(ctx context.Context, method, path string, query url.Values, 
 	if len(query) > 0 {
 		path += "?" + query.Encode()
 	}
-	return transport.Do(c.http, ctx, method, c.baseURL+"/api/v1"+path, []transport.Header{
+	return transport.Do(c.http, ctx, method, c.baseURL+"/api/v1"+path, append([]transport.Header{
 		{Key: "Authorization", Value: "Bearer " + c.token},
-	}, input, output)
+	}, headers...), input, output)
 }
 
 // Environment returns a handle scoped to the given environment ID.

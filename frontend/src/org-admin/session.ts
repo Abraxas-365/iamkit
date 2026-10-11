@@ -206,7 +206,7 @@ export class Client {
 
   get base() { return `/api/v1/environments/${this.environment}/organizations/${this.organization}/admin` }
 
-  async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
+  private async send(path: string, init: RequestInit, retry = true): Promise<Response> {
     const tokens = this.setup ? readSetup(this.environment) : readTokens(this.environment)
     if (!tokens) { this.expire(); throw new PortalError(401, this.setup ? t('This setup link is invalid, has expired or was revoked.') : t('Your session ended. Sign in again.')) }
     const res = await fetch(`${this.base}${path}`, {
@@ -215,17 +215,25 @@ export class Client {
     })
     if (res.status === 401 && this.setup) this.expire()
     else if (res.status === 401 && retry) {
-      if (await refresh(this.environment, this.portal.client_id)) return this.request<T>(path, init, false)
+      if (await refresh(this.environment, this.portal.client_id)) return this.send(path, init, false)
       this.onExpired()
     }
     if (!res.ok) {
       const body = await res.json().catch(() => null)
       throw new PortalError(res.status, body?.error?.message || (res.status === 403 ? t('You do not have permission to do this.') : res.statusText || t('Request failed.')), body?.error?.code)
     }
+    return res
+  }
+
+  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const res = await this.send(path, init)
     if (res.status === 204) return undefined as T
     const text = await res.text()
     return text ? JSON.parse(text) as T : undefined as T
   }
+
+  /** download reads a file answer (an export) as a Blob. */
+  async download(path: string): Promise<Blob> { return (await this.send(path, {})).blob() }
 
   get<T>(path: string, signal?: AbortSignal) { return this.request<T>(path, { signal }) }
   post<T>(path: string, body?: unknown) { return this.request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) }) }

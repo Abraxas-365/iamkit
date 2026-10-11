@@ -7,6 +7,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
+	"github.com/Abraxas-365/iamkit/internal/iam/logstream"
 	"github.com/Abraxas-365/iamkit/internal/iam/orgadmin"
 	"github.com/Abraxas-365/iamkit/internal/iam/orgadmin/adapters/orgadminhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/orgadmin/adapters/orgadminpg"
@@ -47,6 +48,9 @@ type Deps struct {
 	PasswordPolicyViews authentication.PasswordPolicyQueries
 	Directories         provisioning.ControlCommands
 	DirectoryViews      provisioning.ControlQueries
+	AuditLogs           orgadmin.AuditLogs
+	LogStreams          logstream.Commands
+	LogStreamViews      logstream.Queries
 	// SetupSecrets generates the setup link secrets (mgmtsecret.Generator).
 	SetupSecrets orgadmin.SetupSecrets
 }
@@ -81,6 +85,7 @@ func New(deps Deps) Module {
 		Branding: deps.Branding, BrandingViews: deps.BrandingViews,
 		PasswordPolicies: deps.PasswordPolicies, PasswordPolicyViews: deps.PasswordPolicyViews,
 		Directories: deps.Directories, DirectoryViews: deps.DirectoryViews, Issuer: deps.Issuer,
+		AuditLogs: deps.AuditLogs, LogStreams: deps.LogStreams, LogStreamViews: deps.LogStreamViews,
 	})
 	portals := orgadminsvc.NewPortals(orgadminpg.NewPortal(deps.DB), deps.Issuer)
 	return Module{Commands: service, Queries: service, HTTP: orgadminhttp.New(service, service, deps.Caller),
