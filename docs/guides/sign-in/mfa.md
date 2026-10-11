@@ -214,6 +214,11 @@ No session exists yet. Continue with the same `mfa_token`:
   `{mfa_token, factor:"email"}` and verify the emailed code. The answer carries
   the token pair plus `recovery_codes` (shown once).
 
+When [risk signals](risk-signals.md#the-challenge) challenge a sign-in the
+answer is this same shape with `"factors":["email"]` and
+`"reason":"risk_challenge"`: no factor needs to be enrolled, the code goes to the
+user's verified email; use `/mfa/challenge` with `factor: "email"`, then `/mfa/verify`.
+
 A pending login lasts 5 minutes and allows 5 wrong codes, then the user must
 sign in again. These endpoints are rate limited.
 

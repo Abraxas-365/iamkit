@@ -92,6 +92,17 @@ spec:
             - name: IAMKIT_TRUSTED_PROXIES
               value: {{ join "," . | quote }}
             {{- end }}
+            {{- if .Values.geoip.enabled }}
+            - name: IAMKIT_GEOIP_DB
+              value: {{ include "iamkit.geoipDatabase" . | quote }}
+            {{- end }}
+            {{- with .Values.geoip.header }}
+            {{- if not $.Values.trustedProxies }}
+            {{- fail "geoip.header needs trustedProxies (the header is believed only from a trusted proxy)" }}
+            {{- end }}
+            - name: IAMKIT_GEOIP_HEADER
+              value: {{ . | quote }}
+            {{- end }}
             {{- if .Values.metrics.enabled }}
             - name: IAMKIT_METRICS_ADDR
               value: ":{{ .Values.metrics.port }}"
@@ -113,6 +124,11 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
+            {{- if .Values.geoip.enabled }}
+            - name: geoip
+              mountPath: {{ include "iamkit.geoipDir" . }}
+              readOnly: true
+            {{- end }}
           startupProbe:
             httpGet:
               path: /health
@@ -144,6 +160,51 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+        {{- if .Values.geoip.enabled }}
+        - name: geoip-update
+          image: "{{ .Values.geoip.image.repository }}:{{ .Values.geoip.image.tag }}"
+          imagePullPolicy: {{ .Values.geoip.image.pullPolicy }}
+          securityContext:
+            {{- include "iamkit.containerSecurityContext" . | nindent 12 }}
+          # entry.sh with GEOIPUPDATE_FREQUENCY=0 downloads once and exits;
+          # the loop keeps a failing download from ever crashing the pod.
+          command:
+            - sh
+            - -c
+            - |
+              while true; do
+                if GEOIPUPDATE_FREQUENCY=0 /usr/bin/entry.sh; then
+                  sleep {{ mul (int .Values.geoip.frequencyHours) 3600 }}
+                else
+                  echo "geoipupdate failed; retrying in 15 minutes" >&2
+                  sleep 900
+                fi
+              done
+          env:
+            - name: GEOIPUPDATE_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "geoip.existingSecret is required when geoip.enabled" .Values.geoip.existingSecret }}
+                  key: {{ .Values.geoip.accountIdKey }}
+            - name: GEOIPUPDATE_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.geoip.existingSecret }}
+                  key: {{ .Values.geoip.licenseKeyKey }}
+            - name: GEOIPUPDATE_EDITION_IDS
+              value: {{ .Values.geoip.editionId | quote }}
+            - name: GEOIPUPDATE_DB_DIR
+              value: {{ include "iamkit.geoipDir" . }}
+          volumeMounts:
+            - name: geoip
+              mountPath: {{ include "iamkit.geoipDir" . }}
+            - name: tmp
+              mountPath: /tmp
+          {{- with .Values.geoip.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
       volumes:
         - name: signing-key
           secret:
@@ -155,6 +216,11 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        {{- if .Values.geoip.enabled }}
+        - name: geoip
+          emptyDir:
+            sizeLimit: 256Mi
+        {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

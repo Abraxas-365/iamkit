@@ -224,6 +224,14 @@ func (f *fakeSecondFactor) Enrolling(context.Context, identity.EnvironmentID, id
 	return authentication.Enrollment{Secret: "ABC", URI: "otpauth://totp/x"}, nil
 }
 
+func (f *fakeSecondFactor) SendRisk(context.Context, authentication.Context, identity.UserID) (authentication.CodeSent, error) {
+	return authentication.CodeSent{Factor: "email"}, nil
+}
+
+func (f *fakeSecondFactor) VerifyRisk(context.Context, authentication.Context, identity.UserID, authentication.Proof) error {
+	return nil
+}
+
 type hashSecrets struct{}
 
 func (hashSecrets) Hash(raw string) []byte { return []byte("h:" + raw) }

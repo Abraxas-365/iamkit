@@ -44,6 +44,10 @@ const (
 	// policy; machine user keys also need iam:users:write.
 	PermAPIKeysRead  = "iam:api-keys:read"
 	PermAPIKeysWrite = "iam:api-keys:write"
+	// Bot protection and risk signals: the CAPTCHA configuration, the
+	// risk policy and restrictions, and the sign-in attempt log.
+	PermSecurityRead  = "iam:security:read"
+	PermSecurityWrite = "iam:security:write"
 )
 
 // Organization-bound permissions. They only open the
@@ -104,6 +108,7 @@ var IAMResourcePermissions = append([]string{
 	PermUsageRead,
 	PermAuditLogsRead, PermAuditLogsWrite, PermAuditLogsManage,
 	PermAPIKeysRead, PermAPIKeysWrite,
+	PermSecurityRead, PermSecurityWrite,
 }, OrgPermissions...)
 
 // Built-in roles of the IAM resource (roles.system_role). Every environment

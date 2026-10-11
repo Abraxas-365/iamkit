@@ -124,3 +124,23 @@ export {
   type IssuedAPIKey,
   type NewAPIKey,
 } from "./apikeys.js";
+export {
+  SecurityClient,
+  type CaptchaConfig,
+  type CaptchaInput,
+  type CaptchaProvider,
+  type NewRiskRestriction,
+  type RestrictionKind,
+  type RiskAction,
+  type RiskDetection,
+  type RiskPolicy,
+  type RiskPolicyInput,
+  type RiskRestriction,
+  type RiskThresholds,
+  type SecurityClientOptions,
+  type SecurityStatus,
+  type SignInAttempt,
+  type SignInAttemptFilter,
+  type SignInAttemptPage,
+  type UserDevice,
+} from "./security.js";

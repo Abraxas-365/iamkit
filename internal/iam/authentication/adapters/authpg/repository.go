@@ -11,6 +11,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/event"
 	"github.com/Abraxas-365/iamkit/internal/iam/event/adapters/eventpg"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/telemetry"
 	"github.com/jmoiron/sqlx"
@@ -254,7 +255,19 @@ func (t *Transaction) Resolve(ctx context.Context, b authentication.Context, use
 }
 func (t *Transaction) CreateSession(ctx context.Context, b authentication.Context, user identity.UserID, id identity.SessionID, authenticated, expires time.Time, amr []string) error {
 	clientIP, clientAgent := identity.ClientInfoFrom(ctx).Args()
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,amr,authenticated_at,ip_address,user_agent) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, id, b.EnvironmentID, b.OrganizationID, user, b.ApplicationID, b.ResourceID, expires, pq.StringArray(amr), authenticated, clientIP, clientAgent)
+	// What risk evaluation saw (nothing when it did not run) goes to the
+	// session and its session.created event.
+	var country any
+	detections := []string{}
+	if d, ok := risk.DecisionFrom(ctx); ok && !d.Off {
+		if d.Country != "" {
+			country = d.Country
+		}
+		if d.Detections != nil {
+			detections = d.Detections
+		}
+	}
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,amr,authenticated_at,ip_address,user_agent,country,risk_detections) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, id, b.EnvironmentID, b.OrganizationID, user, b.ApplicationID, b.ResourceID, expires, pq.StringArray(amr), authenticated, clientIP, clientAgent, country, pq.StringArray(detections))
 	if err != nil {
 		return failure(err)
 	}

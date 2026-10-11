@@ -152,6 +152,29 @@ const (
 
 // ErrMethodNotAllowed refuses a sign-in method the environment or the
 // organization does not allow.
+// ErrRiskChallenge asks for a risk challenge where none can be parked
+// (e.g. a pre_sign_in action's challenge on a path without a pending
+// login): the caller turns it into a challenge or refuses the sign-in.
+func ErrRiskChallenge() error {
+	e := errx.Forbidden("this sign-in needs an extra verification")
+	e.Code = CodeRiskChallenge
+	return e
+}
+
+// ErrChallengeUnavailable: a risk challenge was asked of a user without a
+// verified email address.
+func ErrChallengeUnavailable() error {
+	e := errx.Forbidden("this sign-in needs an extra verification that is not available for this account")
+	e.Code = CodeChallengeUnavailable
+	return e
+}
+
+// Codes of the risk challenge errors.
+const (
+	CodeRiskChallenge        = "RISK_CHALLENGE"
+	CodeChallengeUnavailable = "CHALLENGE_UNAVAILABLE"
+)
+
 func ErrMethodNotAllowed() error {
 	e := errx.Forbidden("this sign-in method is not allowed here")
 	e.Code = CodeMethodNotAllowed

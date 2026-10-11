@@ -18,6 +18,17 @@ routes. Supply deadlines and never log token-pair values.
 - `InitiateChallenge(ctx, environment, email, purpose)` (or `InitiateChallengeWith`
   with `ChallengeRequest.Login` for an email or username) and
   `VerifyChallenge(ctx, ChallengeVerification{...})`.
+- Bot protection and risk signals: `Captcha(ctx, environment)` returns the
+  `PublicCaptcha` (`Enabled`, `Provider`, `SiteKey`, `Headless`) to render;
+  `PasswordLogin`, `ChallengeRequest`, `SignupRequest`, code-login and
+  `DirectoryLogin` requests carry `CaptchaToken` (the widget's answer, tokens
+  are single use) and `DeviceID` (a random 16–128 character id you keep per
+  browser or install; without it `new_device` is not evaluated). Failures:
+  `apierror.CodeCaptchaRequired` (`IsCaptchaRequired`, `Provider()`),
+  `CodeSignInBlocked`, `CodeRiskChallenge`, `CodeChallengeUnavailable`; a
+  [risk challenge](../../guides/sign-in/risk-signals.md#the-challenge) is a
+  `TokenPair` with `MFAReason == authclient.MFAReasonRiskChallenge` and
+  `Factors == ["email"]`: call `ChallengeMFA` with `"email"`, then `VerifyMFA`.
 - `StartFederation(ctx, FederationStart{...})`; browser-cookie handling is still
   your integration's responsibility, not a headless substitute for browser binding.
 - `PreviewInvitation(ctx, token)` and `AcceptInvitation(ctx, InvitationAcceptance{...})`

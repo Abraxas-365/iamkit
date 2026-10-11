@@ -16,6 +16,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 )
@@ -32,6 +33,8 @@ type Service struct {
 	signups        hosted.Signups
 	passkeys       hosted.Passkeys
 	features       hosted.Features
+	captcha        hosted.Captcha
+	risk           hosted.Risk
 	now            func() time.Time
 }
 
@@ -53,6 +56,14 @@ func (s *Service) SetSignups(signups hosted.Signups) { s.signups = signups }
 // SetFeatures reads feature flags (without it every flag is on: all
 // languages are offered).
 func (s *Service) SetFeatures(features hosted.Features) { s.features = features }
+
+// SetCaptcha lets Authorization tell custom sign-in UIs which CAPTCHA the
+// headless steps need (without it none is announced).
+func (s *Service) SetCaptcha(captcha hosted.Captcha) { s.captcha = captcha }
+
+// SetRisk applies risk evaluation (restrictions, detections, the attempt
+// log, challenges) to the pages (without it none of it runs).
+func (s *Service) SetRisk(r hosted.Risk) { s.risk = r }
 
 // options are the client's sign-in options within the environment's
 // sign-in policy: what its pages offer. A SAML sign-in has no OAuth client
@@ -157,7 +168,7 @@ func (s *Service) Page(ctx context.Context, r hosted.Request, email string) (hos
 	if err != nil {
 		return hosted.Page{}, err
 	}
-	return hosted.Page{Settings: settings, SignIn: options, Connections: options.Offered(connections), Language: settings.Preferred(uiLocales(p)), Texts: hosted.TextScope{Client: client.ID, Organization: organization}}, nil
+	return hosted.Page{Environment: client.Environment, Settings: settings, SignIn: options, Connections: options.Offered(connections), Language: settings.Preferred(uiLocales(p)), Texts: hosted.TextScope{Client: client.ID, Organization: organization}}, nil
 }
 
 // Authorization describes a pending authorization to the client's own
@@ -210,6 +221,11 @@ func (s *Service) Authorization(ctx context.Context, r hosted.Request, acceptLan
 	if texts != nil {
 		out.Texts = texts
 	}
+	if s.captcha != nil {
+		if pub, err := s.captcha.PublicCaptcha(ctx, client.Environment, risk.SurfaceHeadless); err == nil && pub.Enabled {
+			out.Captcha = &hosted.CaptchaInfo{Provider: pub.Provider, SiteKey: pub.SiteKey}
+		}
+	}
 	return out, nil
 }
 
@@ -260,8 +276,12 @@ func (s *Service) Passkey(ctx context.Context, r hosted.Request, session string,
 	if err != nil {
 		return hosted.Result{}, err
 	}
+	if err = s.screen(ctx, target, "", authentication.MethodPasskey); err != nil {
+		return hosted.Result{}, err
+	}
 	verified, err := s.authenticator.VerifyPasskey(ctx, target.Environment, session, credential)
 	if err != nil {
+		s.failed(ctx, target, "", authentication.MethodPasskey, err)
 		return hosted.Result{}, err
 	}
 	return s.result(ctx, r, target, verified)
@@ -427,8 +447,12 @@ func (s *Service) Password(ctx context.Context, r hosted.Request, email, secret 
 	if err != nil {
 		return hosted.Result{}, err
 	}
+	if err = s.screen(ctx, target, email, authentication.MethodPassword); err != nil {
+		return hosted.Result{}, err
+	}
 	verified, err := s.authenticator.VerifyPassword(ctx, target.Environment, email, secret)
 	if err != nil {
+		s.failed(ctx, target, email, authentication.MethodPassword, err)
 		return hosted.Result{}, err
 	}
 	return s.result(ctx, r, target, verified)
@@ -439,6 +463,9 @@ func (s *Service) SendCode(ctx context.Context, r hosted.Request, email string) 
 	if err != nil {
 		return identity.ChallengeID{}, err
 	}
+	if err = s.screen(ctx, target, email, authentication.MethodCode); err != nil {
+		return identity.ChallengeID{}, err
+	}
 	return s.challenges.InitiateChallenge(ctx, target.Environment, email, "login", uiLocales(p))
 }
 
@@ -447,8 +474,12 @@ func (s *Service) VerifyCode(ctx context.Context, r hosted.Request, challenge id
 	if err != nil {
 		return hosted.Result{}, err
 	}
+	if err = s.screen(ctx, target, "", authentication.MethodCode); err != nil {
+		return hosted.Result{}, err
+	}
 	verified, err := s.authenticator.VerifyCode(ctx, target.Environment, challenge, code)
 	if err != nil {
+		s.failed(ctx, target, "", authentication.MethodCode, err)
 		return hosted.Result{}, err
 	}
 	return s.result(ctx, r, target, verified)
@@ -495,8 +526,12 @@ func (s *Service) Directory(ctx context.Context, r hosted.Request, connection id
 	if err != nil {
 		return hosted.Result{}, err
 	}
+	if err = s.screen(ctx, target, email, authentication.MethodSSO); err != nil {
+		return hosted.Result{}, err
+	}
 	verified, err := s.federation.DirectoryHosted(ctx, target.Environment, connection, email, password)
 	if err != nil {
+		s.failed(ctx, target, email, authentication.MethodSSO, err)
 		return hosted.Result{}, err
 	}
 	return s.result(ctx, r, target, verified)
@@ -505,6 +540,9 @@ func (s *Service) Directory(ctx context.Context, r hosted.Request, connection id
 func (s *Service) Federated(ctx context.Context, r hosted.Request, verified authentication.Verified) (hosted.Result, error) {
 	target, err := s.pending(ctx, r)
 	if err != nil {
+		return hosted.Result{}, err
+	}
+	if err = s.screen(ctx, target, verified.Email, authentication.MethodSSO); err != nil {
 		return hosted.Result{}, err
 	}
 	return s.result(ctx, r, target, verified)
@@ -568,11 +606,21 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 	}
 	organization := organizations[0].ID
 	login.Chosen = organization
+	if login.RiskChallenge {
+		// Parked until the emailed code: nothing else moves on.
+		return hosted.Result{SecondFactor: true, Factors: []string{mfa.KindEmail}, RiskChallenge: true}, nil
+	}
+	var req authentication.Requirement
 	if s.second != nil && !proven {
-		req, err := s.second.Requirement(ctx, target.Boundary(organization), verified.User, verified.FederatedFor(organization), verified.Methods())
-		if err != nil {
+		if req, err = s.second.Requirement(ctx, target.Boundary(organization), verified.User, verified.FederatedFor(organization), verified.Methods()); err != nil {
 			return hosted.Result{}, err
 		}
+	}
+	rctx, sig, decision, out, done, err := s.assess(ctx, r, target, login, organization, proven || req.Needed)
+	if done || err != nil {
+		return out, err
+	}
+	if s.second != nil && !proven {
 		if req.Needed {
 			if err = s.park(ctx, r, target, login); err != nil {
 				return hosted.Result{}, err
@@ -587,10 +635,19 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 		// Last, after any second factor: a password alone never sets a new one.
 		return hosted.Result{PasswordChange: true}, s.park(ctx, r, target, login)
 	}
-	issued, err := s.authenticator.Issue(ctx, target.Boundary(organization), verified)
+	issued, err := s.authenticator.Issue(rctx, target.Boundary(organization), verified)
+	if err != nil && challengeAsked(err) {
+		// A pre_sign_in action asked for a challenge.
+		if out, ok, cerr := s.challenge(ctx, r, target, login, sig, decision); cerr != nil || ok {
+			return out, cerr
+		}
+		decision.SatisfiedBy = "unverifiable"
+		issued, err = s.authenticator.Issue(risk.WithDecision(hostedCtx(ctx), decision), target.Boundary(organization), verified)
+	}
 	if err != nil {
 		return hosted.Result{}, err
 	}
+	s.record(ctx, sig, risk.OutcomeSuccess, decision)
 	if err = s.repository.DeleteLogin(ctx, s.secrets.Hash(r.Ticket)); err != nil {
 		return hosted.Result{}, err
 	}
@@ -666,6 +723,9 @@ func (s *Service) SecurityKey(ctx context.Context, r hosted.Request) (authentica
 	if err != nil {
 		return authentication.WebAuthnOptions{}, err
 	}
+	if login.RiskChallenge {
+		return authentication.WebAuthnOptions{}, errx.Forbidden("a security key does not answer this verification")
+	}
 	return s.second.AssertFor(ctx, boundary(target, login), login.Verified.User, login.Verified.Methods())
 }
 
@@ -681,9 +741,11 @@ func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, proof auth
 	if authentication.HasMFA(login.Verified.AMR) {
 		return s.step(ctx, r, target, login)
 	}
-	req, err := s.requirement(ctx, target, login)
-	if err != nil {
-		return hosted.Result{}, err
+	var req authentication.Requirement
+	if !login.RiskChallenge {
+		if req, err = s.requirement(ctx, target, login); err != nil {
+			return hosted.Result{}, err
+		}
 	}
 	// The try is reserved before the code is checked so parallel posts
 	// cannot share one count.
@@ -697,7 +759,12 @@ func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, proof auth
 		}
 		return hosted.Result{}, hosted.ErrLoginExpired()
 	}
-	v, err := s.second.Verify(ctx, boundary(target, login), login.Verified.User, login.Verified.Methods(), proof, req.Enroll)
+	var v mfa.Verification
+	if login.RiskChallenge {
+		err = s.second.VerifyRisk(ctx, boundary(target, login), login.Verified.User, proof)
+	} else {
+		v, err = s.second.Verify(ctx, boundary(target, login), login.Verified.User, login.Verified.Methods(), proof, req.Enroll)
+	}
 	if err != nil {
 		if mfa.IsInvalidCode(err) {
 			if used >= config.MFAAttempts {
@@ -711,6 +778,13 @@ func (s *Service) SecondFactor(ctx context.Context, r hosted.Request, proof auth
 			return hosted.Result{}, hosted.ErrWrongCode(config.MFAAttempts - used)
 		}
 		return hosted.Result{}, err
+	}
+	if login.RiskChallenge {
+		// The inbox is proven ("otp" without "mfa"): the sign-in goes on
+		// and the challenge is not asked again.
+		login.RiskChallenge = false
+		login.Verified.AMR = append(login.Verified.AMR, "otp")
+		return s.step(ctx, r, target, login)
 	}
 	login.Verified.AMR = append(login.Verified.AMR, mfa.AMR(v.Proof)...)
 	if len(v.RecoveryCodes) > 0 {
@@ -727,6 +801,16 @@ func (s *Service) SendFactorCode(ctx context.Context, r hosted.Request, factor s
 	target, login, err := s.parked(ctx, r)
 	if err != nil {
 		return hosted.Result{}, err
+	}
+	if login.RiskChallenge {
+		if factor != mfa.KindEmail {
+			return hosted.Result{}, errx.Forbidden("only an emailed code answers this verification")
+		}
+		sent, err := s.second.SendRisk(ctx, boundary(target, login), login.Verified.User)
+		if err != nil {
+			return hosted.Result{}, err
+		}
+		return hosted.Result{SecondFactor: true, Factors: []string{mfa.KindEmail}, RiskChallenge: true, Sent: &sent}, nil
 	}
 	if authentication.HasMFA(login.Verified.AMR) {
 		return s.step(ctx, r, target, login)
@@ -753,6 +837,9 @@ func (s *Service) Enrollment(ctx context.Context, r hosted.Request) (hosted.Resu
 	target, login, err := s.parked(ctx, r)
 	if err != nil {
 		return hosted.Result{}, err
+	}
+	if login.RiskChallenge {
+		return hosted.Result{}, errx.Forbidden("answer the emailed code first")
 	}
 	req, err := s.requirement(ctx, target, login)
 	if err != nil {
@@ -782,6 +869,9 @@ func (s *Service) ChangePassword(ctx context.Context, r hosted.Request, secret s
 	}
 	if !login.Verified.PasswordExpired || login.Chosen.IsZero() {
 		return hosted.Result{}, errx.Validation("no password change is pending")
+	}
+	if login.RiskChallenge {
+		return hosted.Result{}, errx.Forbidden("answer the emailed code first")
 	}
 	if s.second != nil && !authentication.HasMFA(login.Verified.AMR) {
 		req, err := s.requirement(ctx, target, login)

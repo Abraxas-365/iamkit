@@ -1,4 +1,4 @@
-import { IAMKitError, ErrorCodes, boundaryOf, type Authorization, type Boundary, type Enrollment, type MFAPending, type SignIn, type SignInResult } from "@iamkit/js";
+import { IAMKitError, ErrorCodes, RiskChallengeReason, boundaryOf, type Authorization, type Boundary, type CaptchaWidget, type Enrollment, type MFAPending, type SignIn, type SignInResult } from "@iamkit/js";
 
 /** The steps of a sign-in, mirroring IAMKit's hosted pages. */
 export type Step =
@@ -9,6 +9,9 @@ export type Step =
   | "code" // an emailed sign-in code was sent
   | "reset" // a password reset code was sent: code + new password
   | "ldap" // the organization's directory password
+  | "captcha" // bot protection: solve the widget (`state.captcha`), the pending action then resumes
+  | "risk_challenge" // an unusual sign-in: an emailed code (sent on entry), answered with `verifyFactor`
+  | "blocked" // a restriction or risk rule refused the sign-in (`state.error` says why)
   | "mfa" // a second factor is pending
   | "enroll" // the organization requires an authenticator: scan, then verify
   | "signup" // name (+ password) for a new account
@@ -22,8 +25,18 @@ export interface FlowState {
   authorization?: Authorization;
   /** The email or username being signed in. */
   login: string;
-  /** A pending second factor (step `mfa`/`enroll`). */
+  /** A pending second factor (step `mfa`/`enroll`/`risk_challenge`). */
   mfa?: MFAPending;
+  /**
+   * The bot-protection widget the headless sign-in needs (the ticket's
+   * `captcha`, or what a `CAPTCHA_REQUIRED` answer led to). Render it
+   * (`<Captcha>`) and hand its answer to `setCaptchaToken`.
+   */
+  captcha?: CaptchaWidget;
+  /** The widget's current answer, spent by the next protected call. */
+  captchaToken?: string;
+  /** Changes after every protected call: use it as the widget's `key` so it is solved afresh. */
+  captchaRound: number;
   /** Authenticator enrollment (step `enroll`): show `otpauth_uri` as a QR code. */
   enrollment?: Enrollment;
   /** Where a code was sent (mfa email/sms). */
@@ -67,7 +80,9 @@ type Listener = () => void;
  * once the state settled; failures land in `state.error`.
  */
 export class SignInFlow {
-  private current: FlowState = { step: "loading", login: "", busy: false };
+  private current: FlowState = { step: "loading", login: "", busy: false, captchaRound: 0 };
+  private resume?: () => Promise<void>;
+  private resumeStep: Step = "identify";
   private listeners = new Set<Listener>();
   private challengeId = "";
   private password = "";
@@ -102,8 +117,82 @@ export class SignInFlow {
       await action();
       this.set({ busy: false });
     } catch (err) {
-      this.set({ busy: false, error: asError(err) });
+      const error = asError(err);
+      this.set({ busy: false, error, ...(refused.has(error.code) ? { step: "blocked" as const } : {}) });
     }
+  }
+
+  /**
+   * Hands over the widget's answer. In step `captcha` the action that was
+   * waiting for it resumes; elsewhere it is kept for the next protected
+   * call (password, code and reset requests, sign-up, directory login).
+   */
+  setCaptchaToken(token: string): Promise<void> {
+    this.set({ captchaToken: token });
+    const resume = this.resume;
+    if (this.current.step === "captcha" && resume) {
+      this.resume = undefined;
+      return this.run(resume);
+    }
+    return Promise.resolve();
+  }
+
+  /** The widget's answer expired or failed: forget it and render a fresh widget. */
+  expireCaptcha(): void {
+    this.set({ captchaToken: undefined, captchaRound: this.current.captchaRound + 1 });
+  }
+
+  /**
+   * Runs a call that carries the CAPTCHA answer. Without one (and a widget
+   * to solve) the flow moves to step `captcha` and `resume` runs once it is
+   * handed over; a `CAPTCHA_REQUIRED` answer does the same with a fresh
+   * widget. The answer is single use: it is spent whatever the outcome.
+   */
+  private async protect(resume: () => Promise<void>, call: (captchaToken: string | undefined) => Promise<void>): Promise<void> {
+    if (this.current.captcha && !this.current.captchaToken) {
+      this.pause(resume);
+      return;
+    }
+    const token = this.current.captchaToken;
+    if (this.current.step === "captcha") {
+      // Back to the step the user was on: a failed call stays there.
+      this.set({ step: this.resumeStep });
+    }
+    if (token) {
+      this.set({ captchaToken: undefined, captchaRound: this.current.captchaRound + 1 });
+    }
+    try {
+      await call(token);
+    } catch (err) {
+      if (err instanceof IAMKitError && err.code === ErrorCodes.CaptchaRequired && (await this.askCaptcha())) {
+        this.set({ captchaToken: undefined, captchaRound: this.current.captchaRound + 1, error: err });
+        this.pause(resume);
+        return;
+      }
+      throw err;
+    }
+  }
+
+  private pause(resume: () => Promise<void>): void {
+    this.resume = resume;
+    if (this.current.step !== "captcha") {
+      this.resumeStep = this.current.step;
+    }
+    this.set({ step: "captcha" });
+  }
+
+  // askCaptcha makes sure a widget is known after CAPTCHA_REQUIRED: the
+  // ticket's, else the environment's public configuration.
+  private async askCaptcha(): Promise<boolean> {
+    if (this.current.captcha) {
+      return true;
+    }
+    const found = await this.iam.getCaptchaConfig(this.authorization().environment_id).catch(() => undefined);
+    if (found?.enabled && found.provider && found.site_key) {
+      this.set({ captcha: { provider: found.provider, site_key: found.site_key } });
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -120,7 +209,7 @@ export class SignInFlow {
         throw err;
       }
       const login = authorization.login_hint ?? "";
-      this.set({ authorization, login, step: "identify" });
+      this.set({ authorization, login, step: "identify", captcha: authorization.captcha });
       if (location) {
         const back = await this.iam.federation.finish(location).catch((err) => {
           throw asError(err);
@@ -192,29 +281,34 @@ export class SignInFlow {
   /** Back to the identifier step. */
   restart(): void {
     this.password = "";
+    this.resume = undefined;
     this.set({ step: "identify", error: undefined, mfa: undefined, enrollment: undefined, codeSentTo: undefined });
   }
 
   submitPassword(password: string): Promise<void> {
-    return this.run(async () => {
-      this.password = password;
-      try {
-        await this.signedIn(await this.iam.login(this.need(), { login: this.current.login, password }));
-      } catch (err) {
-        if (err instanceof IAMKitError && err.code === ErrorCodes.PasswordChangeRequired) {
-          this.set({ step: "new_password" });
-          return;
+    const attempt = (): Promise<void> =>
+      this.protect(attempt, async (captchaToken) => {
+        this.password = password;
+        try {
+          await this.signedIn(await this.iam.login(this.need(), { login: this.current.login, password, captchaToken }));
+        } catch (err) {
+          if (err instanceof IAMKitError && err.code === ErrorCodes.PasswordChangeRequired) {
+            this.set({ step: "new_password" });
+            return;
+          }
+          throw err;
         }
-        throw err;
-      }
-    });
+      });
+    return this.run(attempt);
   }
 
   /** Replaces an expired password (step `new_password`). */
   changePassword(newPassword: string): Promise<void> {
-    return this.run(async () => {
-      await this.signedIn(await this.iam.login(this.need(), { login: this.current.login, password: this.password, newPassword }));
-    });
+    const attempt = (): Promise<void> =>
+      this.protect(attempt, async (captchaToken) => {
+        await this.signedIn(await this.iam.login(this.need(), { login: this.current.login, password: this.password, newPassword, captchaToken }));
+      });
+    return this.run(attempt);
   }
 
   /** Emails a sign-in code (step `code`). */
@@ -222,10 +316,15 @@ export class SignInFlow {
     return this.run(() => this.sendCodeNow());
   }
 
-  private async sendCodeNow(): Promise<void> {
-    const sent = await this.iam.sendCode({ environmentId: this.authorization().environment_id, login: this.current.login, purpose: "login", locale: this.options.locale });
-    this.challengeId = sent.challengeId;
-    this.set({ step: "code" });
+  private sendCodeNow(): Promise<void> {
+    return this.protect(
+      () => this.sendCodeNow(),
+      async (captchaToken) => {
+        const sent = await this.iam.sendCode({ environmentId: this.authorization().environment_id, login: this.current.login, purpose: "login", locale: this.options.locale, captchaToken });
+        this.challengeId = sent.challengeId;
+        this.set({ step: "code" });
+      },
+    );
   }
 
   verifyCode(code: string): Promise<void> {
@@ -236,27 +335,39 @@ export class SignInFlow {
 
   /** Emails a password reset code (step `reset`). */
   forgotPassword(): Promise<void> {
-    return this.run(async () => {
-      const sent = await this.iam.sendCode({ environmentId: this.authorization().environment_id, login: this.current.login, purpose: "password_reset", locale: this.options.locale });
-      this.challengeId = sent.challengeId;
-      this.set({ step: "reset" });
-    });
+    const attempt = (): Promise<void> =>
+      this.protect(attempt, async (captchaToken) => {
+        const sent = await this.iam.sendCode({ environmentId: this.authorization().environment_id, login: this.current.login, purpose: "password_reset", locale: this.options.locale, captchaToken });
+        this.challengeId = sent.challengeId;
+        this.set({ step: "reset" });
+      });
+    return this.run(attempt);
   }
 
   /** Sets the new password, then signs in with it. */
   resetPassword(code: string, password: string): Promise<void> {
-    return this.run(async () => {
-      await this.iam.resetPassword({ environmentId: this.authorization().environment_id, challengeId: this.challengeId, code: code.trim(), password });
-      this.password = password;
-      await this.signedIn(await this.iam.login(this.need(), { login: this.current.login, password }));
-    });
+    let reset = false;
+    const attempt = (): Promise<void> => {
+      // The code is spent by the reset: a CAPTCHA pause before the sign-in must not repeat it.
+      return this.protect(attempt, async (captchaToken) => {
+        if (!reset) {
+          await this.iam.resetPassword({ environmentId: this.authorization().environment_id, challengeId: this.challengeId, code: code.trim(), password });
+          reset = true;
+        }
+        this.password = password;
+        await this.signedIn(await this.iam.login(this.need(), { login: this.current.login, password, captchaToken }));
+      });
+    };
+    return this.run(attempt);
   }
 
   /** The organization's directory password (step `ldap`). */
   submitDirectoryPassword(password: string): Promise<void> {
-    return this.run(async () => {
-      await this.signedIn(await this.iam.federation.ldap(this.need(), { connectionId: this.connection, email: this.current.login, password }));
-    });
+    const attempt = (): Promise<void> =>
+      this.protect(attempt, async (captchaToken) => {
+        await this.signedIn(await this.iam.federation.ldap(this.need(), { connectionId: this.connection, email: this.current.login, password, captchaToken }));
+      });
+    return this.run(attempt);
   }
 
   /** Signs in with a passkey; nothing happens when the user dismissed it. */
@@ -326,14 +437,16 @@ export class SignInFlow {
 
   /** Emails the verification code of a new account. */
   signup(input: { email?: string; name: string; password?: string; acceptTerms?: boolean }): Promise<void> {
-    return this.run(async () => {
-      const email = (input.email ?? this.current.login).trim();
-      this.set({ login: email });
-      const sent = await this.iam.signup.start({ environmentId: this.authorization().environment_id, email, name: input.name, password: input.password, acceptTerms: input.acceptTerms, locale: this.options.locale });
-      this.challengeId = sent.challengeId;
-      this.password = input.password ?? "";
-      this.set({ step: "signup_verify" });
-    });
+    const attempt = (): Promise<void> =>
+      this.protect(attempt, async (captchaToken) => {
+        const email = (input.email ?? this.current.login).trim();
+        this.set({ login: email });
+        const sent = await this.iam.signup.start({ environmentId: this.authorization().environment_id, email, name: input.name, password: input.password, acceptTerms: input.acceptTerms, locale: this.options.locale, captchaToken });
+        this.challengeId = sent.challengeId;
+        this.password = input.password ?? "";
+        this.set({ step: "signup_verify" });
+      });
+    return this.run(attempt);
   }
 
   /** Creates the account, then signs in (with the password, else an emailed code). */
@@ -343,15 +456,29 @@ export class SignInFlow {
       const authz = this.authorization();
       this.boundary = boundaryOf(authz, authz.organization_id ?? created.organization_id);
       if (this.password) {
-        await this.signedIn(await this.iam.login(this.boundary, { login: this.current.login, password: this.password }));
+        await this.protect(
+          () => this.signInAfterSignup(),
+          (captchaToken) => this.signInAfterSignup(captchaToken),
+        );
       } else {
         await this.sendCodeNow();
       }
     });
   }
 
+  private async signInAfterSignup(captchaToken?: string): Promise<void> {
+    await this.signedIn(await this.iam.login(this.need(), { login: this.current.login, password: this.password, captchaToken }));
+  }
+
   private async signedIn(result: SignInResult): Promise<void> {
     if (result.status === "mfa_required") {
+      if (result.mfa.reason === RiskChallengeReason && result.mfa.factors?.includes("email") && !result.mfa.enrollment_required) {
+        // An unusual sign-in: the same emailed code as the `code` step, sent at once.
+        this.set({ step: "risk_challenge", mfa: result.mfa, codeSentTo: undefined });
+        const sent = await this.iam.mfa.send(result.mfa.mfa_token, "email");
+        this.set({ codeSentTo: sent.destination });
+        return;
+      }
       this.set({ step: "mfa", mfa: result.mfa, codeSentTo: undefined });
       if (result.mfa.enrollment_required) {
         this.set({ step: "enroll", enrollment: await this.iam.mfa.enroll(result.mfa.mfa_token) });
@@ -392,6 +519,10 @@ export class SignInFlow {
     return this.current.mfa.mfa_token;
   }
 }
+
+// Answers that end a sign-in: a restriction or risk rule refused it, or a
+// risk challenge cannot be sent. Retrying with the same input cannot help.
+const refused = new Set<string>([ErrorCodes.SignInBlocked, ErrorCodes.RiskChallenge, ErrorCodes.ChallengeUnavailable]);
 
 function asError(err: unknown): IAMKitError {
   if (err instanceof IAMKitError) return err;

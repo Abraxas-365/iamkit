@@ -100,6 +100,9 @@ type Module struct {
 	// Brand sets where rendered emails read the environment's brand, once
 	// the module owning it is built.
 	Brand func(authentication.Branding)
+	// Risk sets risk evaluation (restrictions, detections, attempts) once
+	// the risk module is built; without it sign-in never consults risk.
+	Risk func(authentication.Risk)
 	// WaitDeliveries waits for code emails still being sent after their
 	// response (shutdown, tests).
 	WaitDeliveries func(timeout time.Duration) bool
@@ -210,6 +213,7 @@ func New(deps Deps) Module {
 		Signups: service, SignupHTTP: authhttp.NewSignupHandler(service),
 		SMS: sms, SMSQueries: sms, SMSHTTP: authhttp.NewSMSHandler(sms, sms, deps.ActorID),
 		Brand:          func(b authentication.Branding) { branding.b.Store(&b) },
+		Risk:           service.SetRisk,
 		WaitDeliveries: service.WaitDeliveries,
 	}
 }

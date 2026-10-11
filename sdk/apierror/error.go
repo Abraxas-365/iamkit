@@ -43,6 +43,34 @@ const (
 	CodeAccountExists  = "ACCOUNT_EXISTS"
 )
 
+// Bot protection and risk error codes (HTTP 403 unless noted). They appear
+// only when the operator configured a CAPTCHA, a risk policy or restrictions:
+// CAPTCHA_REQUIRED asks for a (new) captcha_token — Details["provider"] names
+// the provider; SIGN_IN_BLOCKED means a restriction or risk rule refused the
+// sign-in (do not retry); RISK_CHALLENGE asks for a risk challenge where
+// none can be parked; CHALLENGE_UNAVAILABLE means the user has no verified
+// email to challenge.
+const (
+	CodeCaptchaRequired      = "CAPTCHA_REQUIRED"
+	CodeSignInBlocked        = "SIGN_IN_BLOCKED"
+	CodeRiskChallenge        = "RISK_CHALLENGE"
+	CodeChallengeUnavailable = "CHALLENGE_UNAVAILABLE"
+)
+
+// IsCaptchaRequired reports whether the sign-in needs a captcha_token.
+func (e *Error) IsCaptchaRequired() bool { return e.Code == CodeCaptchaRequired }
+
+// IsSignInBlocked reports whether a restriction or risk rule refused the
+// sign-in.
+func (e *Error) IsSignInBlocked() bool { return e.Code == CodeSignInBlocked }
+
+// Provider returns the CAPTCHA provider a CAPTCHA_REQUIRED error names
+// ("turnstile" or "hcaptcha"), or "".
+func (e *Error) Provider() string {
+	provider, _ := e.Details["provider"].(string)
+	return provider
+}
+
 // Rule returns the password policy rule a PASSWORD_POLICY error names, or "".
 func (e *Error) Rule() string {
 	rule, _ := e.Details["rule"].(string)

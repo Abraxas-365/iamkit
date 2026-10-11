@@ -234,6 +234,9 @@ type Enrollment struct {
 type Account struct {
 	Email  string `db:"email"`
 	Issuer string `db:"issuer"`
+	// Verified: the email address is verified (risk challenges go only to
+	// verified addresses).
+	Verified bool `db:"verified"`
 }
 
 // Policy is the data a login's second-factor requirement depends on.
@@ -305,6 +308,11 @@ type Pending struct {
 	// PasswordHash replaces the user's expired password once the second
 	// factor passed; "" keeps it.
 	PasswordHash string
+	// Challenge: a risk challenge (only the email factor, to the user's
+	// verified address, even without an enrolled email factor).
+	// RiskDetections are carried to the session.
+	Challenge      bool
+	RiskDetections []string
 }
 
 // Verification is a verified second factor: the proof used and, when the

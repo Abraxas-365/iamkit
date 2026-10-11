@@ -4,6 +4,7 @@
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <label for="email">{{.T "hosted.form.login"}}</label>
 <input id="email" type="text" name="email" value="{{.Email}}" inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="{{if .SignIn.Passkey}}username webauthn{{else}}username{{end}}" required autofocus>
+{{template "captcha" .}}
 <button type="submit">{{.T "hosted.form.continue"}}</button>
 </form>
 {{end}}
@@ -49,6 +50,7 @@
 {{if .SignIn.Terms}}
 <label class="check" for="accept_terms"><input id="accept_terms" type="checkbox" name="accept_terms" required><span>{{if .Brand.Legal.TermsURL}}{{.T "hosted.form.accept_terms_link"}} <a href="{{.Brand.Legal.TermsURL}}" target="_blank" rel="noopener noreferrer">{{.T "hosted.legal.terms"}}</a>{{if .Brand.Legal.PrivacyURL}} {{.T "hosted.form.and"}} <a href="{{.Brand.Legal.PrivacyURL}}" target="_blank" rel="noopener noreferrer">{{.T "hosted.legal.privacy"}}</a>{{end}}{{else}}{{.T "hosted.form.accept_terms"}}{{end}}</span></label>
 {{end}}
+{{template "captcha" .}}
 <button type="submit">{{.T "hosted.form.create_account"}}</button>
 </form>
 <form method="get" action="/hosted/login">
@@ -185,7 +187,7 @@
 <div class="error" id="webauthn-error" role="alert" hidden></div>
 <form method="post" action="/hosted/login/mfa" id="key-form">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<input type="hidden" name="factors" value="{{.FactorList}}">
+<input type="hidden" name="factors" value="{{.FactorList}}">{{if .RiskChallenge}}<input type="hidden" name="risk" value="true">{{end}}
 <input type="hidden" name="webauthn_session" value="">
 <input type="hidden" name="credential" value="">
 <button type="button" data-webauthn="/hosted/login/mfa/webauthn" data-form="key-form" data-failed="{{.T "hosted.error.webauthn"}}" hidden>{{.T "hosted.form.security_key"}}</button>
@@ -194,20 +196,20 @@
 {{end}}
 <form method="post" action="/hosted/login/mfa">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<input type="hidden" name="factors" value="{{.FactorList}}">
+<input type="hidden" name="factors" value="{{.FactorList}}">{{if .RiskChallenge}}<input type="hidden" name="risk" value="true">{{end}}
 <label for="code">{{.T "hosted.form.code"}}</label>
 <input id="code" type="text" name="code" maxlength="20" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" required{{if not (.Offers "webauthn")}} autofocus{{end}}>
 <button type="submit">{{.T "hosted.form.verify"}}</button>
 </form>
 {{if .Offers "email"}}<form method="post" action="/hosted/login/mfa/send">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<input type="hidden" name="factors" value="{{.FactorList}}">
+<input type="hidden" name="factors" value="{{.FactorList}}">{{if .RiskChallenge}}<input type="hidden" name="risk" value="true">{{end}}
 <input type="hidden" name="factor" value="email">
 <button type="submit" class="link">{{.T "hosted.form.factor_email"}}</button>
 </form>{{end}}
 {{if .Offers "sms"}}<form method="post" action="/hosted/login/mfa/send">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
-<input type="hidden" name="factors" value="{{.FactorList}}">
+<input type="hidden" name="factors" value="{{.FactorList}}">{{if .RiskChallenge}}<input type="hidden" name="risk" value="true">{{end}}
 <input type="hidden" name="factor" value="sms">
 <button type="submit" class="link">{{.T "hosted.form.factor_sms"}}</button>
 </form>{{end}}
@@ -301,6 +303,7 @@
 <p class="muted">{{.T "hosted.device.warning"}}</p>
 <form method="post" action="/hosted/device/approve">
 <input type="hidden" name="user_code" value="{{.UserCode}}">
+{{template "captcha" .}}
 <button type="submit">{{.T "hosted.device.approve"}}</button>
 </form>
 <form method="post" action="/hosted/device/deny">
@@ -308,3 +311,6 @@
 <button type="submit" class="secondary">{{.T "hosted.device.deny"}}</button>
 </form>
 {{end}}
+
+{{define "captcha"}}{{with .Captcha}}<div class="{{.Class}}" data-sitekey="{{.SiteKey}}" data-action="{{.Action}}"></div>
+<script src="{{.Script}}" nonce="{{$.Nonce}}" async defer></script>{{end}}{{end}}

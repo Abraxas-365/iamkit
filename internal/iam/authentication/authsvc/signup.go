@@ -11,6 +11,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -61,6 +62,10 @@ func (s *Service) Signup(ctx context.Context, input authentication.Signup) (iden
 	}
 	if s.deliverySvc == nil && s.delivery == nil {
 		return identity.ChallengeID{}, errx.External("email delivery is not configured")
+	}
+	// Restrictions (ip, country, email domain) apply to sign-ups too.
+	if err := s.screen(ctx, authentication.Context{EnvironmentID: input.Environment}, input.Email, risk.MethodSignup); err != nil {
+		return identity.ChallengeID{}, err
 	}
 	policy, err := s.signInPolicy(ctx, input.Environment)
 	if err != nil {
@@ -191,6 +196,9 @@ func (s *Service) CompleteSignup(ctx context.Context, environment identity.Envir
 	}
 	if row.Attempts >= 5 {
 		return authentication.SignedUp{}, errx.Unauthorized("invalid challenge")
+	}
+	if err = s.screen(ctx, authentication.Context{EnvironmentID: environment}, row.Email, risk.MethodSignup); err != nil {
+		return authentication.SignedUp{}, err
 	}
 	if subtle.ConstantTimeCompare(row.Hash, s.secrets.Hash(signup.String()+":"+code)) != 1 {
 		if err = tx.FailSignup(ctx, signup); err != nil {

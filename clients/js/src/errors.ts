@@ -48,4 +48,45 @@ export const ErrorCodes = {
   SignupDisabled: "SIGNUP_DISABLED",
   PasswordResetDisabled: "PASSWORD_RESET_DISABLED",
   ActionDenied: "ACTION_DENIED",
+  /** The environment asks for a (new) `captchaToken`; `details.provider` names the provider. */
+  CaptchaRequired: "CAPTCHA_REQUIRED",
+  /** A restriction or risk rule refused the sign-in: do not retry. */
+  SignInBlocked: "SIGN_IN_BLOCKED",
+  /** A risk challenge was needed where none can be parked. */
+  RiskChallenge: "RISK_CHALLENGE",
+  /** A risk challenge was needed but the user has no verified email. */
+  ChallengeUnavailable: "CHALLENGE_UNAVAILABLE",
 } as const;
+
+function codeOf(error: unknown, code: string): error is IAMKitError {
+  return error instanceof IAMKitError && error.code === code;
+}
+
+/** The sign-in needs a `captchaToken` (solve the widget, then retry). */
+export function isCaptchaRequired(error: unknown): error is IAMKitError {
+  return codeOf(error, ErrorCodes.CaptchaRequired);
+}
+
+/** A restriction or risk rule refused the sign-in (retrying will not help). */
+export function isSignInBlocked(error: unknown): error is IAMKitError {
+  return codeOf(error, ErrorCodes.SignInBlocked);
+}
+
+/** A risk challenge was needed where none can be parked (`RISK_CHALLENGE`). */
+export function isRiskChallenge(error: unknown): error is IAMKitError {
+  return codeOf(error, ErrorCodes.RiskChallenge);
+}
+
+/** A risk challenge was needed but the user has no verified email. */
+export function isChallengeUnavailable(error: unknown): error is IAMKitError {
+  return codeOf(error, ErrorCodes.ChallengeUnavailable);
+}
+
+/** The provider a `CAPTCHA_REQUIRED` error names (`turnstile`, `hcaptcha`), or undefined. */
+export function captchaProvider(error: unknown): string | undefined {
+  if (!isCaptchaRequired(error)) {
+    return undefined;
+  }
+  const provider = error.details?.provider;
+  return typeof provider === "string" ? provider : undefined;
+}

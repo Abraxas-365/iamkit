@@ -13,6 +13,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/i18n"
 	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
@@ -30,6 +31,7 @@ type Service struct {
 	signups     authentication.SignupRepository
 	actions     authentication.Actions
 	usage       authentication.Usage
+	risk        authentication.Risk
 	// mail tracks code emails still being sent after their response
 	// (deliverLater).
 	mail sync.WaitGroup
@@ -109,6 +111,19 @@ func (s *Service) SetSecondFactor(second authentication.SecondFactor) { s.second
 var _ authentication.MFACommands = (*Service)(nil)
 
 func (s *Service) Login(ctx context.Context, boundary authentication.Context, login, password, newPassword string) (authentication.Result, error) {
+	// Before the password (and before any account lookup), so a refused
+	// sign-in reveals nothing about the account.
+	if err := s.screen(ctx, boundary, login, authentication.MethodPassword); err != nil {
+		return authentication.Result{}, err
+	}
+	out, err := s.login(ctx, boundary, login, password, newPassword)
+	if err != nil {
+		s.credentialFailed(ctx, boundary, login, authentication.MethodPassword, err)
+	}
+	return out, err
+}
+
+func (s *Service) login(ctx context.Context, boundary authentication.Context, login, password, newPassword string) (authentication.Result, error) {
 	var out authentication.Result
 	email, username, err := identity.Login(login)
 	if err != nil || boundary.Validate() != nil || len(password) > config.PasswordMaxLength {
@@ -161,7 +176,7 @@ func (s *Service) Login(ctx context.Context, boundary authentication.Context, lo
 			return out, commitThen(tx, err)
 		}
 	}
-	out, err = s.signIn(ctx, tx, boundary, account.ID, authentication.MethodPassword, false, hash)
+	out, err = s.signIn(ctx, tx, boundary, account.ID, authentication.MethodPassword, false, hash, login)
 	return out, credentialFailure(err)
 }
 
@@ -178,7 +193,7 @@ func commitThen(tx authentication.Transaction, err error) error {
 // the boundary, then either parks the login for its second factor or
 // creates the session. tx is committed or left for the caller to roll back.
 func (s *Service) SignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string) (authentication.Result, error) {
-	return s.signIn(ctx, tx, boundary, user, method, false, "")
+	return s.signIn(ctx, tx, boundary, user, method, false, "", "")
 }
 
 // SignInFederated finishes a headless single sign-on. Only an
@@ -186,6 +201,9 @@ func (s *Service) SignIn(ctx context.Context, tx authentication.Transaction, bou
 // enforcement and may stand in for its second factor; a user of an
 // environment (social) connection is held to both like a password login.
 func (s *Service) SignInFederated(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, email string, organizationSSO bool) (authentication.Result, error) {
+	if err := s.screen(ctx, boundary, email, authentication.MethodSSO); err != nil {
+		return authentication.Result{}, err
+	}
 	if !organizationSSO {
 		if err := s.allowed(ctx, tx, boundary, authentication.MethodSocial); err != nil {
 			return authentication.Result{}, err
@@ -194,7 +212,7 @@ func (s *Service) SignInFederated(ctx context.Context, tx authentication.Transac
 			return authentication.Result{}, err
 		}
 	}
-	return s.signIn(ctx, tx, boundary, user, authentication.MethodSSO, organizationSSO, "")
+	return s.signIn(ctx, tx, boundary, user, authentication.MethodSSO, organizationSSO, "", email)
 }
 
 // SocialAllowed refuses an environment (social) connection's login before
@@ -211,50 +229,111 @@ func (s *Service) SocialAllowed(ctx context.Context, boundary authentication.Con
 // signIn finishes the login. passwordHash replaces an expired password: in
 // tx before the session (so a refused session keeps the old one), or once
 // the second factor passed.
-func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string, federated bool, passwordHash string) (authentication.Result, error) {
+func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string, federated bool, passwordHash, login string) (authentication.Result, error) {
 	// Domain capture runs where every headless method converges and before
 	// access is resolved, so a just-joined organization counts at once.
 	if err := tx.JoinByDomain(ctx, boundary.EnvironmentID, user); err != nil {
 		return authentication.Result{}, err
 	}
 	amr := authentication.FirstFactorAMR(method)
-	// A passkey verified the user on the key: it is multi-factor already.
-	if s.second != nil && !authentication.HasMFA(amr) {
-		// Access first, so the MFA answer never reveals a membership the
-		// user does not have.
+	// Access first, so neither the risk decision nor the MFA answer ever
+	// reveals a membership the user does not have.
+	if s.risk != nil || (s.second != nil && !authentication.HasMFA(amr)) {
 		if _, err := tx.Resolve(ctx, boundary, user); err != nil {
 			return authentication.Result{}, err
 		}
-		req, err := s.second.Requirement(ctx, boundary, user, federated, amr)
+	}
+	sig := s.signal(boundary, user, login, method, authentication.HasMFA(amr))
+	var profile authentication.Profile
+	if s.risk != nil {
+		// The account's own address: email domain restrictions hold for
+		// usernames, passkeys and federation too (a failed read is "").
+		profile, _ = tx.ActiveProfile(ctx, boundary.EnvironmentID, user)
+		sig.Email = profile.Email
+	}
+	decision := s.assess(ctx, sig)
+	var req authentication.Requirement
+	// A passkey verified the user on the key: it is multi-factor already.
+	if s.second != nil && !authentication.HasMFA(amr) {
+		var err error
+		if req, err = s.second.Requirement(ctx, boundary, user, federated, amr); err != nil {
+			return authentication.Result{}, err
+		}
+	}
+	sig.MFA = sig.MFA || req.Needed
+	if decision.Action == risk.ActionChallenge && decision.SatisfiedBy == "" && !sig.MFA && !sig.EmailProof {
+		decision = decision.Resolve(sig.MFA, sig.EmailProof, s.second != nil && profile.EmailVerified && profile.Email != "")
+	} else {
+		decision = decision.Resolve(sig.MFA, sig.EmailProof, true)
+	}
+	if decision.SatisfiedBy == "mfa" && method == authentication.MethodPasskey {
+		decision.SatisfiedBy = "passkey"
+	}
+	if decision.Block() {
+		s.record(ctx, sig, risk.OutcomeBlocked, decision)
+		return authentication.Result{}, risk.ErrSignInBlocked()
+	}
+	if decision.Challenge() {
+		out, ok, err := s.parkChallenge(ctx, tx, boundary, user, amr, passwordHash, sig, decision)
+		if err != nil || ok {
+			return out, err
+		}
+		decision.SatisfiedBy = "unverifiable"
+		return s.sessionAfter(ctx, nil, boundary, user, amr, passwordHash, sig, decision)
+	}
+	if req.Needed {
+		// Commit first: it keeps a consumed challenge consumed and
+		// releases row locks the pending-login insert would wait on.
+		if err := tx.Commit(); err != nil {
+			return authentication.Result{}, err
+		}
+		// Like the hosted enrollment page: a login that must add a
+		// factor but may add none would park a login nothing finishes.
+		if req.Enroll && len(req.Factors) == 0 {
+			e := errx.Forbidden("no second factor this sign-in may add is allowed; contact your administrator")
+			e.Code = "FACTOR_NOT_ALLOWED"
+			return authentication.Result{}, e
+		}
+		token, err := s.second.Begin(ctx, boundary, user, amr, req.Enroll, passwordHash)
 		if err != nil {
 			return authentication.Result{}, err
 		}
-		if req.Needed {
-			// Commit first: it keeps a consumed challenge consumed and
-			// releases row locks the pending-login insert would wait on.
-			if err = tx.Commit(); err != nil {
-				return authentication.Result{}, err
-			}
-			// Like the hosted enrollment page: a login that must add a
-			// factor but may add none would park a login nothing finishes.
-			if req.Enroll && len(req.Factors) == 0 {
-				e := errx.Forbidden("no second factor this sign-in may add is allowed; contact your administrator")
-				e.Code = "FACTOR_NOT_ALLOWED"
-				return authentication.Result{}, e
-			}
-			token, err := s.second.Begin(ctx, boundary, user, amr, req.Enroll, passwordHash)
-			if err != nil {
-				return authentication.Result{}, err
-			}
-			return authentication.Result{MFA: &authentication.MFA{Token: token, Factors: req.Factors, EnrollmentRequired: req.Enroll}}, nil
-		}
+		return authentication.Result{MFA: &authentication.MFA{Token: token, Factors: req.Factors, EnrollmentRequired: req.Enroll}}, nil
 	}
-	if passwordHash != "" {
-		if err := tx.SetPassword(ctx, boundary.EnvironmentID, user, passwordHash); err != nil {
+	return s.sessionAfter(ctx, tx, boundary, user, amr, passwordHash, sig, decision)
+}
+
+// sessionAfter creates the session of a login whose first factor (and
+// risk evaluation) passed. tx is the sign-in transaction, or nil when it
+// was committed already (a challenge that could not be asked): a new one
+// is opened. A pre_sign_in action asking for a challenge parks one.
+func (s *Service) sessionAfter(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, amr []string, passwordHash string, sig risk.Signal, decision risk.Decision) (authentication.Result, error) {
+	if tx == nil {
+		var err error
+		if tx, err = s.repository.Begin(ctx); err != nil {
 			return authentication.Result{}, err
 		}
+		defer tx.Rollback()
 	}
-	issued, err := s.NewSession(ctx, tx, boundary, user, amr)
+	issued, err := s.newSession(risk.WithDecision(ctx, decision), tx, boundary, user, amr, passwordHash)
+	if err != nil && riskChallenge(err) && s.risk != nil {
+		// The action asked: the password (if new) is stored with the
+		// pending login and applied once the code passed.
+		out, ok, perr := s.parkChallenge(ctx, tx, boundary, user, amr, passwordHash, sig, decision)
+		if perr != nil || ok {
+			return out, perr
+		}
+		decision.SatisfiedBy = "unverifiable"
+		tx2, berr := s.repository.Begin(ctx)
+		if berr != nil {
+			return authentication.Result{}, berr
+		}
+		defer tx2.Rollback()
+		issued, err = s.newSession(risk.WithDecision(ctx, decision), tx2, boundary, user, amr, passwordHash)
+	}
+	if err == nil {
+		s.record(ctx, sig, risk.OutcomeSuccess, decision)
+	}
 	return authentication.Result{Issued: issued}, err
 }
 
@@ -278,14 +357,39 @@ func (s *Service) VerifyMFA(ctx context.Context, token string, proof authenticat
 				return err
 			}
 		}
-		out, err = s.NewSession(ctx, tx, done.Boundary, done.User, done.AMR)
-		return credentialFailure(err)
+		sctx, decision, sig := s.completed(ctx, tx, done)
+		if out, err = s.NewSession(sctx, tx, done.Boundary, done.User, done.AMR); err != nil {
+			return credentialFailure(err)
+		}
+		s.record(ctx, sig, risk.OutcomeSuccess, decision)
+		return nil
 	})
 	if err != nil {
 		return authentication.Issued{}, err
 	}
 	out.RecoveryCodes = done.RecoveryCodes
 	return out, nil
+}
+
+// completed is the risk context of a login finished by its second factor
+// or a risk challenge: the decision for the session and pre_sign_in (a
+// completed challenge carries the detections that asked for it; an
+// ordinary second factor is assessed again, a challenge satisfied by it).
+func (s *Service) completed(ctx context.Context, tx authentication.Transaction, done authentication.Completed) (context.Context, risk.Decision, risk.Signal) {
+	sig := s.signal(done.Boundary, done.User, "", methodOf(done.AMR), true)
+	var decision risk.Decision
+	if done.Challenge {
+		decision = risk.Decision{Action: risk.ActionNone, Detections: done.RiskDetections, Challenged: true}
+		if decision.Detections == nil {
+			decision.Detections = []string{}
+		}
+		if s.risk != nil {
+			decision.Country = s.assess(ctx, sig).Country
+		}
+	} else {
+		decision = s.assess(ctx, sig).Resolve(true, false, true)
+	}
+	return risk.WithDecision(ctx, decision), decision, sig
 }
 
 // EnrollMFA starts the authenticator of a login whose organization requires
@@ -364,6 +468,13 @@ func errSSORequired() error {
 }
 
 func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, amr []string) (authentication.Issued, error) {
+	return s.newSession(ctx, tx, boundary, user, amr, "")
+}
+
+// newSession creates the session; passwordHash (an expired password's
+// replacement) is stored after the pre_sign_in hook, which may refuse or
+// ask for a challenge, and before the session.
+func (s *Service) newSession(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, amr []string, passwordHash string) (authentication.Issued, error) {
 	sessionID := identity.NewSessionID()
 	// Whole seconds: auth_time is a Unix time, and the stored value must
 	// match the first token's claim exactly.
@@ -377,6 +488,11 @@ func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction,
 	if err = s.preSignIn(ctx, tx, boundary, user, amr); err != nil {
 		return out, err
 	}
+	if passwordHash != "" {
+		if err = tx.SetPassword(ctx, boundary.EnvironmentID, user, passwordHash); err != nil {
+			return out, err
+		}
+	}
 	expires := now.Add(config.SessionTTL)
 	if err = tx.CreateSession(ctx, boundary, user, sessionID, now, expires, amr); err != nil {
 		return out, err
@@ -388,19 +504,37 @@ func (s *Service) NewSession(ctx context.Context, tx authentication.Transaction,
 	return out, tx.Commit()
 }
 
-// preSignIn runs function:pre_sign_in, which may refuse the session.
+// preSignIn runs function:pre_sign_in, which may refuse the session or,
+// when the sign-in has neither a second factor nor an inbox proof, ask
+// for a risk challenge (ErrRiskChallenge: the caller parks it). The risk
+// decision in ctx (risk.WithDecision) is the action's Input.Risk.
 func (s *Service) preSignIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, amr []string) error {
 	if s.actions == nil {
 		return nil
 	}
-	_, err := s.actions.Run(ctx, boundary.EnvironmentID, action.PreSignIn, func() action.Input {
+	decision, decided := risk.DecisionFrom(ctx)
+	result, err := s.actions.Run(ctx, boundary.EnvironmentID, action.PreSignIn, func() action.Input {
 		in := action.Input{Organization: &boundary.OrganizationID, Application: &boundary.ApplicationID, Method: amr, User: &action.UserInput{ID: &user}}
 		if profile, err := tx.ActiveProfile(ctx, boundary.EnvironmentID, user); err == nil {
 			in.User.Email, in.User.Name, in.User.Username = profile.Email, profile.Name, profile.Username
 		}
+		if decided && !decision.Off {
+			info := identity.ClientInfoFrom(ctx)
+			in.Risk = &action.RiskInput{IP: info.IP, UserAgent: info.UserAgent, Country: decision.Country, Detections: append([]string{}, decision.Detections...),
+				Action: decision.Action, DeviceKnown: decision.DeviceKnown, Challenged: decision.Challenged, Surface: risk.RequestFrom(ctx).Surface}
+			if in.Risk.Action == "" {
+				in.Risk.Action = risk.ActionNone
+			}
+		}
 		return in
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if result.Challenge && s.risk != nil && s.second != nil && challengeAsked(amr, decision) {
+		return authentication.ErrRiskChallenge()
+	}
+	return nil
 }
 
 func (s *Service) saveRefresh(ctx context.Context, tx authentication.Transaction, user identity.UserID, session identity.SessionID, expires time.Time) (string, error) {
@@ -465,6 +599,17 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 	if s.deliverySvc == nil && s.delivery == nil {
 		return identity.ChallengeID{}, errx.External("email delivery is not configured")
 	}
+	if purpose == "login" || purpose == "password_reset" {
+		// A denied address or country gets no code, whoever it asks for
+		// (a reset is a password sign-in's recovery).
+		method := authentication.MethodCode
+		if purpose == "password_reset" {
+			method = authentication.MethodPassword
+		}
+		if err = s.screen(ctx, authentication.Context{EnvironmentID: environment}, login, method); err != nil {
+			return identity.ChallengeID{}, err
+		}
+	}
 	// Refused before any account lookup: the answer reveals none.
 	switch purpose {
 	case "password_reset":
@@ -516,6 +661,19 @@ func (s *Service) InitiateChallenge(ctx context.Context, environment identity.En
 }
 
 func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.Context, challengeID identity.ChallengeID, code, purpose, password string) (authentication.Result, error) {
+	if purpose == "login" {
+		if err := s.screen(ctx, boundary, "", authentication.MethodCode); err != nil {
+			return authentication.Result{}, err
+		}
+	}
+	out, err := s.verifyChallenge(ctx, boundary, challengeID, code, purpose, password)
+	if purpose == "login" && err != nil {
+		s.credentialFailed(ctx, boundary, "", authentication.MethodCode, err)
+	}
+	return out, err
+}
+
+func (s *Service) verifyChallenge(ctx context.Context, boundary authentication.Context, challengeID identity.ChallengeID, code, purpose, password string) (authentication.Result, error) {
 	var out authentication.Result
 	if boundary.EnvironmentID.IsZero() || challengeID.IsZero() || len(code) != 8 {
 		return out, errx.Unauthorized("invalid challenge")
@@ -580,7 +738,7 @@ func (s *Service) VerifyChallenge(ctx context.Context, boundary authentication.C
 		return out, err
 	}
 	if purpose == "login" {
-		return s.SignIn(ctx, tx, boundary, row.User, authentication.MethodCode)
+		return s.signIn(ctx, tx, boundary, row.User, authentication.MethodCode, false, "", row.Email)
 	}
 	return out, tx.Commit()
 }

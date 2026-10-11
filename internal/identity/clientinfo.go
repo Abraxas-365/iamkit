@@ -18,6 +18,10 @@ const MaxUserAgent = 512
 type ClientInfo struct {
 	IP        string
 	UserAgent string
+	// Country is the ISO 3166-1 alpha-2 country a trusted proxy reported
+	// (IAMKIT_GEOIP_HEADER, read only from Server.TrustedProxies); "" when
+	// unknown. A GeoIP database, when configured, is consulted instead.
+	Country string
 }
 
 type clientInfoKey struct{}
@@ -43,6 +47,16 @@ func NewClientInfo(ip, userAgent string) ClientInfo {
 	}
 	out.UserAgent = agent
 	return out
+}
+
+// WithCountry returns i with country when it is two ASCII letters
+// (upper-cased); anything else ("XX", "T1" Tor, empty) leaves it unknown.
+func (i ClientInfo) WithCountry(country string) ClientInfo {
+	c := strings.ToUpper(strings.TrimSpace(country))
+	if len(c) == 2 && c[0] >= 'A' && c[0] <= 'Z' && c[1] >= 'A' && c[1] <= 'Z' && c != "XX" {
+		i.Country = c
+	}
+	return i
 }
 
 // WithClientInfo returns ctx carrying the client of the request.

@@ -5,6 +5,10 @@
 # every issued token; a new encryption key makes stored secrets unreadable).
 #
 #   deploy/compose/setup.sh traefik iam.example.com ops@example.com
+#
+# Optional GeoIP (docs/guides/platform/geoip.md): with GEOIPUPDATE_ACCOUNT_ID
+# and GEOIPUPDATE_LICENSE_KEY in the environment (a free MaxMind account), the
+# generated .env enables the geoip profile and IAMKIT_GEOIP_DB.
 set -euo pipefail
 
 usage() {
@@ -22,6 +26,18 @@ dir=$(cd "$(dirname "$0")/$variant" && pwd)
 if [ -e "$dir/.env" ] || [ -e "$dir/secrets/jwt.pem" ]; then
   echo "$dir/.env or secrets/jwt.pem already exists; not overwriting" >&2
   exit 1
+fi
+
+profiles=
+geoip_note='# GEOIPUPDATE_ACCOUNT_ID=
+# GEOIPUPDATE_LICENSE_KEY=
+# IAMKIT_GEOIP_DB=/geoip/GeoLite2-City.mmdb'
+if [ -n "${GEOIPUPDATE_ACCOUNT_ID:-}" ] && [ -n "${GEOIPUPDATE_LICENSE_KEY:-}" ]; then
+  case $GEOIPUPDATE_ACCOUNT_ID$GEOIPUPDATE_LICENSE_KEY in *[!A-Za-z0-9_]*) echo "GEOIPUPDATE_* values may only hold letters, digits and _" >&2; exit 2 ;; esac
+  profiles=geoip
+  geoip_note="GEOIPUPDATE_ACCOUNT_ID=$GEOIPUPDATE_ACCOUNT_ID
+GEOIPUPDATE_LICENSE_KEY=$GEOIPUPDATE_LICENSE_KEY
+IAMKIT_GEOIP_DB=/geoip/GeoLite2-City.mmdb"
 fi
 
 umask 077
@@ -44,8 +60,9 @@ OIDC_HMAC_SECRET=$(openssl rand -hex 32)
 IAMKIT_ENCRYPTION_KEY=$(openssl rand -base64 32)
 
 # Optional services (Compose profiles). For Redis add "redis" and set
-# REDIS_URL; for the OpenTelemetry collector add "otel" and set the endpoint.
-COMPOSE_PROFILES=
+# REDIS_URL; for the OpenTelemetry collector add "otel" and set the endpoint;
+# for GeoIP (risk signals) add "geoip" and set the MaxMind variables below.
+COMPOSE_PROFILES=$profiles
 # REDIS_URL=redis://redis:6379/0
 # OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 
@@ -53,6 +70,10 @@ COMPOSE_PROFILES=
 # name the client. Change it if it overlaps a network of this host.
 # EDGE_SUBNET=10.89.250.0/24
 
+# GeoIP: country restrictions and impossible-travel detection. A free MaxMind
+# GeoLite2 account (account id + license key) feeds the geoip-update service;
+# IAMKit reloads the file when it changes.
+$geoip_note
 # Every other IAMKit variable (docs/reference/configuration.md) can be added
 # here: the iamkit container reads this file, e.g. EMAIL_PROVIDER, SMTP_*.
 EOF

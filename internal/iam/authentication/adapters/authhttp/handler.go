@@ -6,6 +6,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
@@ -15,21 +16,32 @@ type Handler struct {
 	mfa      authentication.MFACommands
 	passkeys authentication.PasskeyCommands
 	issue    func(*fiber.Ctx, authentication.Issued) error
+	captcha  authentication.Captcha
 }
 
+// Captcha gates /login, /challenges (every purpose) behind the
+// environment's headless CAPTCHA (nil: none); the risk module is assembled
+// after authentication, so the composition root sets it.
+func (h *Handler) Captcha(captcha authentication.Captcha) { h.captcha = captcha }
+
 func New(commands authentication.Commands, mfa authentication.MFACommands, passkeys authentication.PasskeyCommands, issue func(*fiber.Ctx, authentication.Issued) error) *Handler {
-	return &Handler{commands, mfa, passkeys, issue}
+	return &Handler{commands: commands, mfa: mfa, passkeys: passkeys, issue: issue}
 }
 
 // Respond answers a login step: the token response, or 200
-// {mfa_required:true, mfa_token, factors, enrollment_required} when the
+// {mfa_required:true, mfa_token, factors, enrollment_required[, reason]} when the
 // login continues at /identity/v1/mfa/verify.
 func Respond(c *fiber.Ctx, out authentication.Result, issue func(*fiber.Ctx, authentication.Issued) error) error {
 	if out.MFA == nil {
 		return issue(c, out.Issued)
 	}
 	c.Set("Cache-Control", "no-store")
-	return c.JSON(fiber.Map{"mfa_required": true, "mfa_token": out.MFA.Token, "factors": out.MFA.Factors, "enrollment_required": out.MFA.EnrollmentRequired, "expires_in": int(config.MFALoginTTL.Seconds())})
+	body := fiber.Map{"mfa_required": true, "mfa_token": out.MFA.Token, "factors": out.MFA.Factors, "enrollment_required": out.MFA.EnrollmentRequired, "expires_in": int(config.MFALoginTTL.Seconds())}
+	if out.MFA.Reason != "" {
+		// "risk_challenge": the emailed code is asked because the sign-in looked unusual.
+		body["reason"] = out.MFA.Reason
+	}
+	return c.JSON(body)
 }
 
 // loginOf prefers the login field (email or username) over email.
@@ -49,11 +61,19 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 		Password string `json:"password"`
 		// NewPassword replaces an expired password (PASSWORD_CHANGE_REQUIRED).
 		NewPassword string `json:"new_password"`
+		// CaptchaToken answers the environment's headless CAPTCHA; DeviceID
+		// is the client's device identifier (risk signals).
+		CaptchaToken string `json:"captcha_token"`
+		DeviceID     string `json:"device_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.Login(c.UserContext(), input.Context, loginOf(input.Login, input.Email), input.Password, input.NewPassword)
+	ctx, err := authentication.HeadlessRequest(c.UserContext(), h.captcha, input.EnvironmentID, risk.CaptchaLogin, input.CaptchaToken, input.DeviceID)
+	if err != nil {
+		return err
+	}
+	out, err := h.commands.Login(ctx, input.Context, loginOf(input.Login, input.Email), input.Password, input.NewPassword)
 	if err != nil {
 		return err
 	}
@@ -66,12 +86,15 @@ func (h *Handler) Login(c *fiber.Ctx) error {
 func (h *Handler) VerifyMFA(c *fiber.Ctx) error {
 	var input struct {
 		Token string `json:"mfa_token"`
+		// DeviceID is the client's device identifier (risk signals): a
+		// completed risk challenge marks that device as known.
+		DeviceID string `json:"device_id"`
 		authentication.Proof
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.mfa.VerifyMFA(c.UserContext(), input.Token, input.Proof)
+	out, err := h.mfa.VerifyMFA(risk.WithRequest(c.UserContext(), risk.Request{Surface: risk.SurfaceHeadless, Device: input.DeviceID}), input.Token, input.Proof)
 	if err != nil {
 		return err
 	}
@@ -193,12 +216,18 @@ func (h *Handler) InitiateChallenge(c *fiber.Ctx) error {
 		Email   string `json:"email"`
 		Purpose string `json:"purpose"`
 		// Locale is the email language (a tag or list); optional.
-		Locale string `json:"locale"`
+		Locale       string `json:"locale"`
+		CaptchaToken string `json:"captcha_token"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.InitiateChallenge(c.UserContext(), input.Environment, loginOf(input.Login, input.Email), input.Purpose, input.Locale)
+	// Every purpose sends an email, so every one is gated (email bombing).
+	ctx, err := authentication.HeadlessRequest(c.UserContext(), h.captcha, input.Environment, risk.CaptchaLogin, input.CaptchaToken, "")
+	if err != nil {
+		return err
+	}
+	id, err := h.commands.InitiateChallenge(ctx, input.Environment, loginOf(input.Login, input.Email), input.Purpose, input.Locale)
 	if err != nil {
 		return err
 	}
@@ -212,11 +241,12 @@ func (h *Handler) VerifyChallenge(c *fiber.Ctx) error {
 		Code     string               `json:"code"`
 		Purpose  string               `json:"purpose"`
 		Password string               `json:"password"`
+		DeviceID string               `json:"device_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.commands.VerifyChallenge(c.UserContext(), input.Context, input.ID, input.Code, input.Purpose, input.Password)
+	out, err := h.commands.VerifyChallenge(risk.WithRequest(c.UserContext(), risk.Request{Surface: risk.SurfaceHeadless, Device: input.DeviceID}), input.Context, input.ID, input.Code, input.Purpose, input.Password)
 	if err != nil {
 		return err
 	}

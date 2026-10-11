@@ -22,6 +22,9 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	if s.UserKeys != nil {
 		s.UserKeys.Register(e)
 	}
+	if s.Security != nil {
+		s.Security.Register(e)
+	}
 	if s.Factors != nil {
 		s.Factors.Register(e)
 	}

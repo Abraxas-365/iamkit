@@ -21,7 +21,7 @@ every call off at once without deleting the configuration.
 
 | Condition | Runs | Targets may |
 | --- | --- | --- |
-| `function:pre_sign_in` | Before a user session is created — every sign-in method (password, codes, passkeys, federation, hosted and headless) | deny |
+| `function:pre_sign_in` | Before a user session is created — every sign-in method (password, codes, passkeys, federation, hosted and headless) | deny, ask for a [risk challenge](#risk-input-and-challenges-pre_sign_in) |
 | `function:pre_registration` | Before a self-service sign-up, or a federated first sign-in that would create a user, creates the account (linking an existing account by email does not count) | deny |
 | `function:post_federation` | After an identity provider verified the user, before the account is linked or updated | deny, patch `name` |
 | `function:pre_access_token` | Before an OAuth access token is issued; again on every refresh | deny, add claims |
@@ -87,6 +87,7 @@ webhook-signature: v1,K5p4…
 | `client_id`, `scopes` | Token and UserInfo conditions |
 | `user` (`id`, `email`, `name`, `username`) | When a user is known; no `id` before registration |
 | `amr` | Sign-in and token conditions: how the user signed in |
+| `risk` (`ip`, `user_agent`, `country`, `detections`, `action`, `device_known`, `challenged`, `surface`) | `pre_sign_in`, when the `risk_signals` [feature flag](feature-flags.md) is on; see [below](#risk-input-and-challenges-pre_sign_in) |
 | `identity` (`connection_id`, `provider`, `subject`, `email`, `name`, `groups`) | `post_federation` and federated `pre_registration`; `groups` are the provider's groups (read-only, omitted when none) |
 | `request` | `request:*`: the request body (never a password) |
 
@@ -135,6 +136,42 @@ Answer `204` (or `200` with an empty body or `{}`) to change nothing. A
   refresh.
 - **`patch`** replaces the listed string fields, then the request is
   validated again as if the caller had sent the new values.
+- **`challenge`** (`{"challenge": true}`, `function:pre_sign_in` only) asks for
+  a [risk challenge](#risk-input-and-challenges-pre_sign_in). Any other
+  condition that answers it is a validation error ("this condition cannot ask
+  for a challenge").
+
+### Risk input and challenges (`pre_sign_in`)
+
+[Risk signals](../sign-in/risk-signals.md) add what IAMKit saw about the sign-in
+to the `pre_sign_in` request, after the credentials were right:
+
+```json
+{"condition":"function:pre_sign_in","environment_id":"7ae0…","user":{"id":"33b4…","email":"ada@example.com"},
+ "amr":["pwd"],
+ "risk":{"ip":"203.0.113.7","user_agent":"Mozilla/5.0 …","country":"PE",
+         "detections":["new_device"],"action":"log","device_known":false,
+         "surface":"hosted"}}
+```
+
+| `risk` field | Meaning |
+| --- | --- |
+| `ip`, `user_agent`, `country` | The client as IAMKit saw it; `country` needs [GeoIP](geoip.md) and is omitted without it |
+| `detections` | The detections that fired (any action but `off`); empty when none |
+| `action` | The strongest action of those detections: `none`, `log`, `notify`, `challenge` or `block` |
+| `device_known` | The user signed in from this device before; `false` also when the client sent no device id |
+| `challenged` | `true` when the user just answered a risk challenge (the action runs again after it) |
+| `surface` | `hosted` or `headless` |
+
+`risk` is omitted when the `risk_signals` flag is off. Answer
+`{"challenge": true}` to require an emailed code to the user's verified email
+before the session exists, for example to challenge every sign-in from a
+country your policy does not cover. IAMKit ignores the challenge when the
+sign-in already proved the inbox (an email code), is multi-factor (a passkey) or
+will ask for a second factor, when the user has no verified email, and when it
+was already answered (`risk.challenged`): a second `challenge` never loops. The
+client sees the usual `mfa_required` answer with `reason: "risk_challenge"`.
+Where no challenge can be parked the sign-in fails with 403 `RISK_CHALLENGE`.
 
 ## Set it up
 

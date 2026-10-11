@@ -131,6 +131,8 @@ type (
 	auditActionTag   struct{} // registered app audit log action
 	auditEventTag    struct{} // app audit log event
 	logStreamTag     struct{} // log stream (SIEM / object storage)
+	attemptTag       struct{} // sign-in attempt (risk signals)
+	restrictionTag   struct{} // risk allow/deny restriction
 )
 
 // tagName returns a human-readable name for error messages.
@@ -205,6 +207,10 @@ func tagName[T any]() string {
 		return "event_id"
 	case logStreamTag:
 		return "stream_id"
+	case attemptTag:
+		return "attempt_id"
+	case restrictionTag:
+		return "restriction_id"
 	default:
 		return "id"
 	}
@@ -257,6 +263,10 @@ type (
 	AuditEventID = ID[auditEventTag]
 	// LogStreamID names a log stream.
 	LogStreamID = ID[logStreamTag]
+	// SignInAttemptID names a recorded sign-in attempt.
+	SignInAttemptID = ID[attemptTag]
+	// RestrictionID names a risk allow/deny restriction.
+	RestrictionID = ID[restrictionTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -297,6 +307,8 @@ func NewSetupLinkID() SetupLinkID         { return NewID[setupLinkTag]() }
 func NewAuditActionID() AuditActionID     { return NewID[auditActionTag]() }
 func NewAuditEventID() AuditEventID       { return NewID[auditEventTag]() }
 func NewLogStreamID() LogStreamID         { return NewID[logStreamTag]() }
+func NewSignInAttemptID() SignInAttemptID { return NewID[attemptTag]() }
+func NewRestrictionID() RestrictionID     { return NewID[restrictionTag]() }
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -330,14 +342,16 @@ func ParseServiceProviderID(raw string) (ServiceProviderID, error) {
 func ParseResourceGrantID(raw string) (ResourceGrantID, error) {
 	return ParseID[resourceGrantTag](raw)
 }
-func ParseAPIKeyID(raw string) (APIKeyID, error)             { return ParseID[apiKeyTag](raw) }
-func ParseUserKeyID(raw string) (UserKeyID, error)           { return ParseID[userKeyTag](raw) }
-func ParseSubscriptionID(raw string) (SubscriptionID, error) { return ParseID[subscriptionTag](raw) }
-func ParseTargetID(raw string) (TargetID, error)             { return ParseID[targetTag](raw) }
-func ParseSetupLinkID(raw string) (SetupLinkID, error)       { return ParseID[setupLinkTag](raw) }
-func ParseAuditActionID(raw string) (AuditActionID, error)   { return ParseID[auditActionTag](raw) }
-func ParseAuditEventID(raw string) (AuditEventID, error)     { return ParseID[auditEventTag](raw) }
-func ParseLogStreamID(raw string) (LogStreamID, error)       { return ParseID[logStreamTag](raw) }
+func ParseAPIKeyID(raw string) (APIKeyID, error)               { return ParseID[apiKeyTag](raw) }
+func ParseUserKeyID(raw string) (UserKeyID, error)             { return ParseID[userKeyTag](raw) }
+func ParseSubscriptionID(raw string) (SubscriptionID, error)   { return ParseID[subscriptionTag](raw) }
+func ParseTargetID(raw string) (TargetID, error)               { return ParseID[targetTag](raw) }
+func ParseSetupLinkID(raw string) (SetupLinkID, error)         { return ParseID[setupLinkTag](raw) }
+func ParseAuditActionID(raw string) (AuditActionID, error)     { return ParseID[auditActionTag](raw) }
+func ParseAuditEventID(raw string) (AuditEventID, error)       { return ParseID[auditEventTag](raw) }
+func ParseLogStreamID(raw string) (LogStreamID, error)         { return ParseID[logStreamTag](raw) }
+func ParseSignInAttemptID(raw string) (SignInAttemptID, error) { return ParseID[attemptTag](raw) }
+func ParseRestrictionID(raw string) (RestrictionID, error)     { return ParseID[restrictionTag](raw) }
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.
 func MustParseEnvironmentID(raw string) EnvironmentID   { return MustParseID[environmentTag](raw) }

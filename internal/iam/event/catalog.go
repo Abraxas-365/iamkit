@@ -212,6 +212,27 @@ const (
 	// APIKeyPolicyUpdated: the environment's API key policy changed.
 	APIKeyPolicyUpdated = "api_key_policy.updated"
 
+	// Bot protection and risk signals. CaptchaUpdated / CaptchaDeleted:
+	// the environment's CAPTCHA configuration (never the secret).
+	CaptchaUpdated = "captcha.updated"
+	CaptchaDeleted = "captcha.deleted"
+	// RiskPolicyUpdated / RiskPolicyDeleted: the environment's risk policy
+	// (deleted = back to every detection off).
+	RiskPolicyUpdated = "risk_policy.updated"
+	RiskPolicyDeleted = "risk_policy.deleted"
+	// RiskRestrictionCreated / RiskRestrictionDeleted: an allow or deny
+	// restriction (data kind, value, action).
+	RiskRestrictionCreated = "risk_restriction.created"
+	RiskRestrictionDeleted = "risk_restriction.deleted"
+	// RiskDetected: a sign-in fired detections whose action is log or
+	// stronger; subject = the sign-in attempt, data user_id, detections,
+	// action, outcome, ip, country, method, surface.
+	RiskDetected = "risk.detected"
+	// SignInBlocked: a deny restriction or a block detection refused a
+	// sign-in (or signup); subject = the attempt, data reason
+	// (restriction|detection), restriction_id or detections, ip, country.
+	SignInBlocked = "sign_in.blocked"
+
 	ActionTargetCreated       = "action_target.created"
 	ActionTargetUpdated       = "action_target.updated"
 	ActionTargetDeleted       = "action_target.deleted"

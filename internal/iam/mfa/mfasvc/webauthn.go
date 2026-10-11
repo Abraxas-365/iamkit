@@ -183,6 +183,9 @@ func (s *Service) Assert(ctx context.Context, token string) (authentication.WebA
 	if err = tx.Rollback(); err != nil {
 		return authentication.WebAuthnOptions{}, err
 	}
+	if p.Challenge {
+		return authentication.WebAuthnOptions{}, factorNotAllowed(mfa.KindWebAuthn)
+	}
 	return s.AssertFor(ctx, p.Boundary, p.User, p.AMR)
 }
 

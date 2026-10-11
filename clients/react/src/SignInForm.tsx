@@ -1,6 +1,7 @@
 import type { IAMKitError } from "@iamkit/js";
 import { type FormEvent, type ReactNode } from "react";
 import type { FlowOptions } from "./flow.js";
+import { Captcha } from "./Captcha.js";
 import { useSignIn } from "./hooks.js";
 import { translator, type Translate } from "./texts.js";
 
@@ -32,6 +33,13 @@ export interface SignInFormProps extends FlowOptions {
   renderError?: (error: IAMKitError, t: Translate) => ReactNode;
   /** Renders the authenticator URI as a QR code (step `enroll`). */
   renderQRCode?: (otpauthURI: string) => ReactNode;
+  /**
+   * Renders the bot-protection widget (step `captcha`) instead of the
+   * built-in `<Captcha>`: call `onToken` with the widget's answer.
+   */
+  renderCaptcha?: (props: { provider: string; siteKey: string; onToken: (token: string) => void; onExpire: () => void; key: number }) => ReactNode;
+  /** Script nonce for the CAPTCHA widget under a strict CSP. */
+  nonce?: string;
 }
 
 /**
@@ -41,7 +49,7 @@ export interface SignInFormProps extends FlowOptions {
  * sign-up. Unstyled; style it with `classNames` or `[data-iamkit]`.
  */
 export function SignInForm(props: SignInFormProps) {
-  const { texts, classNames: cn = {}, renderError, renderQRCode, ...options } = props;
+  const { texts, classNames: cn = {}, renderError, renderQRCode, renderCaptcha, nonce, ...options } = props;
   const { state, flow } = useSignIn(options);
   const authz = state.authorization;
   const t = translator(authz, texts);
@@ -209,6 +217,53 @@ export function SignInForm(props: SignInFormProps) {
               {submit("hosted.form.sign_in")}
             </>,
           )}
+          {startOver}
+        </>
+      );
+      break;
+    case "captcha": {
+      const widget = state.captcha;
+      const onToken = (token: string) => void flow.setCaptchaToken(token);
+      const onExpire = () => flow.expireCaptcha();
+      body = (
+        <>
+          {title("hosted.title.captcha")}
+          {subtitle(t("hosted.subtitle.captcha"))}
+          {error}
+          {widget
+            ? renderCaptcha
+              ? renderCaptcha({ provider: widget.provider, siteKey: widget.site_key, onToken, onExpire, key: state.captchaRound })
+              : <Captcha key={state.captchaRound} widget={widget} onToken={onToken} onExpire={onExpire} nonce={nonce} />
+            : null}
+          {startOver}
+        </>
+      );
+      break;
+    }
+    case "blocked":
+      body = (
+        <>
+          {title("hosted.title.blocked")}
+          {subtitle(t("hosted.blocked"))}
+          {startOver}
+        </>
+      );
+      break;
+    case "risk_challenge":
+      body = (
+        <>
+          {title("hosted.title.risk_challenge")}
+          {subtitle(t("hosted.subtitle.risk_challenge"))}
+          {state.codeSentTo ? <p {...part("notice")}>{t("hosted.notice.factor_sent_email", state.codeSentTo)}</p> : null}
+          {error}
+          {form(
+            (d) => void flow.verifyFactor(value(d, "code")),
+            <>
+              {field("code", "hosted.form.code", { inputMode: "numeric", autoComplete: "one-time-code", autoFocus: true })}
+              {submit("hosted.form.verify")}
+            </>,
+          )}
+          {secondary("hosted.form.factor_email", () => void flow.sendFactorCode("email"))}
           {startOver}
         </>
       );

@@ -1,9 +1,9 @@
 "use client";
 
-import { IAMKitProvider, SignInForm, useIAMKit } from "@iamkit/react";
+import { Captcha, IAMKitProvider, SignInForm, useIAMKit } from "@iamkit/react";
 import { useEffect, useRef, useState } from "react";
 
-export function SignIn(props: { issuer: string; organizationId?: string; params: Record<string, string> }) {
+export function SignIn(props: { issuer: string; organizationId?: string; captchaTheme?: "light" | "dark" | "auto"; params: Record<string, string> }) {
   return (
     <IAMKitProvider baseUrl={props.issuer}>
       <Ticketed {...props} />
@@ -11,7 +11,7 @@ export function SignIn(props: { issuer: string; organizationId?: string; params:
   );
 }
 
-function Ticketed({ organizationId, params }: { organizationId?: string; params: Record<string, string> }) {
+function Ticketed({ organizationId, captchaTheme, params }: { organizationId?: string; captchaTheme?: "light" | "dark" | "auto"; params: Record<string, string> }) {
   const iam = useIAMKit();
   const [ticket, setTicket] = useState(params.ticket ?? "");
   const [error, setError] = useState("");
@@ -59,6 +59,15 @@ function Ticketed({ organizationId, params }: { organizationId?: string; params:
       ticket={ticket}
       // The organization when the authorize request named none.
       organization={organizationId}
+      // Bot protection needs nothing here: when the environment's CAPTCHA
+      // covers headless sign-in the ticket says so and <SignInForm> shows
+      // the widget step itself. IAMKIT_CAPTCHA_THEME (off by default) swaps
+      // in our own <Captcha> as the example of a custom widget.
+      renderCaptcha={
+        captchaTheme
+          ? ({ provider, siteKey, onToken, onExpire, key }) => <Captcha key={key} widget={{ provider, site_key: siteKey }} onToken={onToken} onExpire={onExpire} options={{ theme: captchaTheme }} />
+          : undefined
+      }
       // Style with classNames (e.g. Tailwind) or, as here, the
       // data-iamkit attributes in globals.css.
       renderQRCode={(uri) => (

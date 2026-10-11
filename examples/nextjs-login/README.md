@@ -51,6 +51,16 @@ npm run build && npm start
 | `APP_URL` | This app's public URL |
 | `IAMKIT_ORGANIZATION_ID` | Optional: the organization to sign in to when the authorize request names none and the email has no SSO organization |
 
+| `IAMKIT_CAPTCHA_THEME` | Optional (`light`, `dark`, `auto`): renders the bot-protection widget with the example's own `<Captcha>` and that theme. Off by default |
+
+**Bot protection.** Nothing to configure here: when the environment's CAPTCHA
+(Turnstile or hCaptcha) has headless sign-in on, the ticket carries the widget
+and `<SignInForm>` shows a "Verify you are human" step before the first
+protected call. The browser also needs the provider's script, frame and
+connect hosts allowed if you set a Content-Security-Policy. Sign-in calls send
+a `device_id` kept in `localStorage`. The parity journeys run without a
+CAPTCHA and are unchanged.
+
 Invitation emails can link to `${APP_URL}/invitation?token=…` instead of
 the hosted invitation page.
 

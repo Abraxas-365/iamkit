@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { usePaginatedList } from '@/hooks/use-paginated-list'
+import { useList } from '@/hooks/use-list'
 import { message } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,8 @@ import { Avatar } from '@/components/library/avatar'
 import { MetadataEditor, ProfileAttributes } from '@/components/library/metadata-editor'
 import { UserAPIKeys } from './user-api-keys'
 import { UserKeys } from './machine-keys'
+import { SignInAttempts } from '@/components/library/sign-in-attempts'
+import type { KnownDevice } from '@/lib/risk'
 import { HistorySection } from './history'
 import { ImpersonationBadge } from './activity'
 import { describeUserAgent } from '@/lib/user-agent'
@@ -109,6 +112,7 @@ export default function UserDetailPage() {
       ? <UserKeys base={base} user={{ id: user.id, name: label }} canWrite={canWrite} />
       : <SecondFactors path={path} user={user} canWrite={canWrite} />}
     <Sessions base={base} console={console} user={user} canWrite={canWrite} />
+    {!machine && <UserSecurity base={base} console={console} user={user} />}
     <HistorySection path={path} refresh={user} />
 
     {canWrite && <DetailSection danger title={t('Danger zone')}>
@@ -290,4 +294,29 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
     {revokeAll && <ConfirmDialog title={t('Sign {{user}} out everywhere?', { user: user.email || user.name })} description={t('Every active session ends: refresh tokens stop working and they must sign in again. Access tokens already issued stay valid until they expire.')} confirmLabel={t('Sign out everywhere')} onClose={() => setRevokeAll(false)} confirm={async () => { const out = await api.post<{ revoked: number }>(`${base}/users/${user.id}/revoke-sessions`); toast.success(t('{{count}} sessions revoked', { count: out.revoked })); list.reload() }} />}
     {revoke && <ConfirmDialog title={t('Revoke this session?')} description={t('{{user}} is signed out of {{application}} and must sign in again.', { user: user.email, application: revoke.application_name || t('the application') })} confirmLabel={t('Revoke session')} onClose={() => setRevoke(null)} confirm={async () => { await api.delete(`${base}/sessions/${revoke.id}`); toast.success(t('Session revoked')); list.reload() }} />}
   </DetailSection>
+}
+
+/** UserSecurity shows the user's recent sign-in attempts and the devices
+ * they signed in from (read-only; the security log lives under Security). */
+function UserSecurity({ base, console, user }: { base: string; console: string; user: User }) {
+  const list = useList<KnownDevice>(`${base}/users/${user.id}/devices`)
+  return <>
+    <DetailSection title={t('Recent sign-in attempts')} description={t('Every attempt to sign in as this user, newest first, with what the risk checks found.')}
+      actions={<Link to={`${console}/security?tab=attempts`} className="text-sm text-primary hover:underline">{t('All sign-in attempts')}</Link>}>
+      <SignInAttempts userId={user.id} limit={10} />
+    </DetailSection>
+    <DetailSection title={t('Known devices')} description={t('Devices this user has signed in from. A sign-in from a new one can trigger the new device detection.')}>
+      <DataTable
+        columns={[t('Device'), { header: t('Last IP address'), nowrap: true, hideBelow: 'md' }, { header: t('Country'), hideBelow: 'md' }, { header: t('First seen'), nowrap: true, hideBelow: 'lg' }, { header: t('Last seen'), nowrap: true }]}
+        loading={list.loading} error={list.error} retry={list.reload}
+        empty={<EmptyState icon={<Smartphone />} title={t('No known devices')} description={t('Devices are recorded when risk signals are on and the user signs in.')} />}
+        rows={list.data.map(d => [
+          d.user_agent ? <span title={d.user_agent}>{describeUserAgent(d.user_agent)}</span> : '—',
+          d.last_ip || '—',
+          d.last_country || '—',
+          <Time value={d.first_seen_at} />,
+          <Time value={d.last_seen_at} />,
+        ])} />
+    </DetailSection>
+  </>
 }

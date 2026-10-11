@@ -1,7 +1,9 @@
-export { IAMKitError, ErrorCodes, toError } from "./errors.js";
+export { IAMKitError, ErrorCodes, toError, captchaProvider, isCaptchaRequired, isChallengeUnavailable, isRiskChallenge, isSignInBlocked } from "./errors.js";
+export { createDeviceId, deviceKey } from "./device.js";
 export { challengeOf, createVerifier } from "./pkce.js";
 export { getAssertion, webauthnSupported } from "./webauthn.js";
 export {
+  RiskChallengeReason,
   SignIn,
   createSignIn,
   boundaryOf,
@@ -9,6 +11,8 @@ export {
   type Authorization,
   type AuthorizationStart,
   type Boundary,
+  type CaptchaConfig,
+  type CaptchaWidget,
   type Branding,
   type CodeSent,
   type Connection,
@@ -19,6 +23,7 @@ export {
   type Methods,
   type MFAPending,
   type Organization,
+  type Signals,
   type SignedUp,
   type SignInOptions,
   type SignInResult,

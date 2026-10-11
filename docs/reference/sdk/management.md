@@ -56,6 +56,15 @@ Feature flags: `Features`, `Feature(ctx, name)`, `SetFeature(ctx, name,
 enabled)` and `ResetFeature(ctx, name)` (see
 [feature flags](../../guides/platform/feature-flags.md)).
 
+Bot protection and risk signals (also on `apiclient`, with `iam:security:read`
+and `iam:security:write`): `Captcha`, `SaveCaptcha(ctx, CaptchaInput)`,
+`DeleteCaptcha`, `TestCaptcha`; `RiskPolicy`, `SaveRiskPolicy`,
+`DeleteRiskPolicy`; `RiskRestrictions(ctx, filter)`, `CreateRiskRestriction`,
+`DeleteRiskRestriction`; `SignInAttempts(ctx, filter)` (keyset pages),
+`SignInAttempt(ctx, id)`; `UserDevices(ctx, user)`; `RiskStatus` (see
+[bot protection](../../guides/sign-in/bot-protection.md) and
+[risk signals](../../guides/sign-in/risk-signals.md)).
+
 Usage and limits: `Limits`, `SetLimits(ctx, map[string]int64)` (the
 `Limit*` constants name them) and `Usage(ctx, days)` (see
 [usage and limits](../../guides/platform/usage-limits.md)).

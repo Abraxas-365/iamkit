@@ -41,6 +41,16 @@ type Authorization struct {
 	// Texts are the custom sign-in texts for Locale (hosted.* keys; the
 	// catalog's words otherwise).
 	Texts i18n.Texts `json:"texts"`
+	// Captcha is the CAPTCHA the headless sign-in steps need (render the
+	// provider's widget with SiteKey and send its answer as captcha_token);
+	// absent when the environment has none for custom UIs.
+	Captcha *CaptchaInfo `json:"captcha,omitempty"`
+}
+
+// CaptchaInfo is the widget a custom sign-in UI renders.
+type CaptchaInfo struct {
+	Provider string `json:"provider"`
+	SiteKey  string `json:"site_key"`
 }
 
 // Branding is the look of a sign-in for a custom UI.

@@ -4,6 +4,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
@@ -11,7 +12,12 @@ import (
 // SignupHandler serves self-registration (/identity/v1/signup).
 type SignupHandler struct {
 	commands authentication.SignupCommands
+	captcha  authentication.Captcha
 }
+
+// Captcha gates signups behind the environment's headless CAPTCHA (nil:
+// none); set by the composition root.
+func (h *SignupHandler) Captcha(captcha authentication.Captcha) { h.captcha = captcha }
 
 func NewSignupHandler(commands authentication.SignupCommands) *SignupHandler {
 	return &SignupHandler{commands: commands}
@@ -20,11 +26,18 @@ func NewSignupHandler(commands authentication.SignupCommands) *SignupHandler {
 // Signup emails a code confirming the address: 202 {challenge_id,
 // expires_in}, the same whether or not the email already has an account.
 func (h *SignupHandler) Signup(c *fiber.Ctx) error {
-	var input authentication.Signup
+	var input struct {
+		authentication.Signup
+		CaptchaToken string `json:"captcha_token"`
+	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	id, err := h.commands.Signup(c.UserContext(), input)
+	ctx, err := authentication.HeadlessRequest(c.UserContext(), h.captcha, input.Environment, risk.CaptchaSignup, input.CaptchaToken, "")
+	if err != nil {
+		return err
+	}
+	id, err := h.commands.Signup(ctx, input.Signup)
 	if err != nil {
 		return err
 	}

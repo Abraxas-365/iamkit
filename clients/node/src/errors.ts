@@ -54,6 +54,11 @@ export const ErrorCodes = {
   QuotaExceeded: "QUOTA_EXCEEDED",
   PasswordChangeRequired: "PASSWORD_CHANGE_REQUIRED",
   PasswordPolicy: "PASSWORD_POLICY",
+  // Bot protection and risk
+  CaptchaRequired: "CAPTCHA_REQUIRED",
+  SignInBlocked: "SIGN_IN_BLOCKED",
+  RiskChallenge: "RISK_CHALLENGE",
+  ChallengeUnavailable: "CHALLENGE_UNAVAILABLE",
   // OAuth
   InvalidGrant: "invalid_grant",
   InvalidClient: "invalid_client",

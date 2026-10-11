@@ -196,3 +196,46 @@ func TestBlobPortIsSDKFree(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Risk signals: the GeoIP database reader (maxminddb) and the CAPTCHA
+// provider clients stay in their adapters (riskgeo, riskcaptcha), which only
+// the risk module assembly and the composition root import; the risk
+// domain imports no other IAM module (consumers declare one-method ports
+// over risk types, never the reverse).
+func TestRiskAdaptersStayInRiskModule(t *testing.T) {
+	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		normalized := filepath.ToSlash(path)
+		assembly := strings.Contains(normalized, "/riskmodule/") || strings.Contains(normalized, "/bootstrap/")
+		inGeo := strings.Contains(normalized, "/risk/adapters/riskgeo/")
+		domain := strings.HasSuffix(filepath.Dir(normalized), "/iam/risk")
+		for _, spec := range file.Imports {
+			name, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				return err
+			}
+			if strings.HasPrefix(name, "github.com/oschwald/") && !inGeo {
+				t.Errorf("%s imports the GeoIP reader %s outside riskgeo", path, name)
+			}
+			if (strings.HasSuffix(name, "/risk/adapters/riskgeo") || strings.HasSuffix(name, "/risk/adapters/riskcaptcha")) && !assembly {
+				t.Errorf("%s imports the risk adapter %s outside the module assembly", path, name)
+			}
+			if domain && strings.Contains(name, "/internal/iam/") {
+				t.Errorf("%s: the risk domain imports another IAM package %s", path, name)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

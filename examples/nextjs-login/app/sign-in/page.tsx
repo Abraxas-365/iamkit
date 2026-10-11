@@ -16,5 +16,5 @@ export const dynamic = "force-dynamic";
 export default async function SignInPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const params = await searchParams;
   const c = config();
-  return <SignIn issuer={c.issuer} organizationId={c.organizationId} params={params} />;
+  return <SignIn issuer={c.issuer} organizationId={c.organizationId} captchaTheme={c.captchaTheme} params={params} />;
 }

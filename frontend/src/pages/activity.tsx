@@ -56,6 +56,9 @@ const named: Record<string, string> = {
   'user.sessions_revoked': t('Signed a user out everywhere'), 'user.password_change_required': t('Required a password change'),
   'user.profile_updated': t('Updated a user profile'), 'user.metadata_set': t('Set user metadata'), 'user.metadata_deleted': t('Removed user metadata'),
   'user.phone_verified': t('Phone number verified'), 'user.phone_verified_set': t('Changed whether a phone number is verified'), 'user.phone_removed': t('Phone number removed'),
+  'captcha.update': t('Updated bot protection'), 'captcha.delete': t('Deleted bot protection'),
+  'risk_policy.update': t('Updated the risk policy'), 'risk_policy.delete': t('Reset the risk policy'),
+  'risk_restriction.create': t('Added a risk restriction'), 'risk_restriction.delete': t('Removed a risk restriction'),
   'api_key.create': t('Created an API key'), 'api_key.revoke': t('Revoked an API key'), 'api_key_policy.update': t('Updated the API key policy'),
   'user.access_token_created': t('Created a personal access token'), 'user.access_token_revoked': t('Revoked a personal access token'),
   'user.key_added': t('Added a machine user key'), 'user.key_removed': t('Removed a machine user key'),
@@ -148,6 +151,10 @@ const eventVerbs: Record<string, (subject: string) => string> = {
 }
 const eventNamed: Record<string, string> = {
   'api_key.created': t('API key created'), 'api_key.revoked': t('API key revoked'), 'api_key_policy.updated': t('API key policy updated'),
+  'captcha.updated': t('Bot protection updated'), 'captcha.deleted': t('Bot protection deleted'),
+  'risk_policy.updated': t('Risk policy updated'), 'risk_policy.deleted': t('Risk policy reset'),
+  'risk_restriction.created': t('Risk restriction added'), 'risk_restriction.deleted': t('Risk restriction removed'),
+  'risk.detected': t('Risk detected at sign-in'), 'sign_in.blocked': t('Sign-in blocked'),
   'login.failed': t('Sign-in failed'), 'session.created': t('Signed in'), 'session.revoked': t('Session ended'),
   'user.sessions_revoked': t('Signed out everywhere'), 'user.password_change_required': t('Password change required'), 'user.password_changed': t('Password changed'),
   'user.signed_up': t('User signed up'), 'user.provisioned': t('User provisioned by the directory'), 'user.deprovisioned': t('User deprovisioned by the directory'),

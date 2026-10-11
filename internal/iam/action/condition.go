@@ -35,11 +35,14 @@ type Condition struct {
 	Claims bool `json:"claims"`
 	// Patch names the input fields a call target may replace.
 	Patch []string `json:"patch,omitempty"`
+	// Challenge: a call target may ask for a risk challenge (an emailed
+	// code before the session).
+	Challenge bool `json:"challenge,omitempty"`
 }
 
 // Conditions is the catalog, in display order.
 var Conditions = []Condition{
-	{Name: PreSignIn, Description: "Before a user session is created (every sign-in method)", Deny: true},
+	{Name: PreSignIn, Description: "Before a user session is created (every sign-in method)", Deny: true, Challenge: true},
 	{Name: PreRegistration, Description: "Before a self-service signup or a federated first sign-in creates a user", Deny: true},
 	{Name: PostFederation, Description: "After an external identity provider verified a user, before the account is linked", Deny: true, Patch: []string{"name"}},
 	{Name: PreAccessToken, Description: "Before an OAuth access token is issued (also on refresh)", Deny: true, Claims: true},
@@ -78,6 +81,27 @@ type Input struct {
 	Identity *IdentityInput `json:"identity,omitempty"`
 	// Request is the body of a request:* condition.
 	Request json.RawMessage `json:"request,omitempty"`
+	// Risk is what risk evaluation saw (pre_sign_in only; omitted when the
+	// risk_signals feature is off).
+	Risk *RiskInput `json:"risk,omitempty"`
+}
+
+// RiskInput is the risk context of a sign-in.
+type RiskInput struct {
+	IP        string `json:"ip,omitempty"`
+	UserAgent string `json:"user_agent,omitempty"`
+	Country   string `json:"country,omitempty"`
+	// Detections are the detections that fired (any action but off);
+	// Action is the strongest (risk.ActionNone when none).
+	Detections []string `json:"detections"`
+	Action     string   `json:"action"`
+	// DeviceKnown: the user signed in from this device before (false
+	// also when no device id came).
+	DeviceKnown bool `json:"device_known"`
+	// Challenged: the user just answered a risk challenge.
+	Challenged bool `json:"challenged,omitempty"`
+	// Surface is hosted or headless.
+	Surface string `json:"surface,omitempty"`
 }
 
 // UserInput is the user a flow is about.
@@ -108,12 +132,18 @@ type Response struct {
 	Claims map[string]json.RawMessage `json:"claims,omitempty"`
 	// Patch replaces input fields the condition lets targets change.
 	Patch map[string]json.RawMessage `json:"patch,omitempty"`
+	// Challenge asks for a risk challenge: the user must answer a code
+	// emailed to their verified address before the session (ignored when
+	// the sign-in already proved the inbox or a second factor runs).
+	Challenge bool `json:"challenge,omitempty"`
 }
 
 // Result is what the targets of a condition decided, merged in order.
 type Result struct {
 	Claims map[string]json.RawMessage
 	Patch  map[string]string
+	// Challenge: a target asked for a risk challenge.
+	Challenge bool
 }
 
 // Claim names reserved by the tokens IAMKit issues; a target cannot set them.
@@ -135,6 +165,9 @@ func (r Response) Check(condition Condition) error {
 			return errx.Validation("message must be at most 200 characters")
 		}
 		return nil
+	}
+	if r.Challenge && !condition.Challenge {
+		return errx.Validation("this condition cannot ask for a challenge")
 	}
 	if len(r.Claims) > 0 {
 		if !condition.Claims {
@@ -167,6 +200,7 @@ func (r Response) Check(condition Condition) error {
 
 // Merge adds a later target's claims and patches over the earlier ones.
 func (r *Result) Merge(response Response) {
+	r.Challenge = r.Challenge || response.Challenge
 	for name, value := range response.Claims {
 		if r.Claims == nil {
 			r.Claims = map[string]json.RawMessage{}

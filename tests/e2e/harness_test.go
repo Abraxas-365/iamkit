@@ -177,6 +177,13 @@ var testEncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}
 
 func newHarness(t *testing.T, opts ...bootstrap.Option) *Harness {
 	t.Helper()
+	return newHarnessWith(t, nil, opts...)
+}
+
+// newHarnessWith is newHarness with a hook that configures the server
+// (trusted proxies, GeoIP header…) before its app is built.
+func newHarnessWith(t *testing.T, configure func(*server.Server), opts ...bootstrap.Option) *Harness {
+	t.Helper()
 	db := freshDB(t)
 	owner, err := bootstrap.Management(db).Bootstrap(context.Background(), "owner@example.com", "Workspace")
 	if err != nil {
@@ -195,6 +202,9 @@ func newHarness(t *testing.T, opts ...bootstrap.Option) *Harness {
 	idp := &switchTransport{}
 	opts = append([]bootstrap.Option{bootstrap.WithResolver(dns), bootstrap.WithSealer(sealer), bootstrap.WithFederationTransport(idp)}, opts...)
 	s := bootstrap.New(db, key, "https://iam.example", mail, opts...)
+	if configure != nil {
+		configure(s)
+	}
 	app := s.App()
 	t.Cleanup(func() { app.Shutdown() })
 	return &Harness{t: t, DB: db, App: contracted(t, app, s.WaitDeliveries), Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp, Server: s}
@@ -302,7 +312,13 @@ type Env struct {
 
 func newEnv(t *testing.T, opts ...bootstrap.Option) *Env {
 	t.Helper()
-	h := newHarness(t, opts...)
+	return newEnvWith(t, nil, opts...)
+}
+
+// newEnvWith is newEnv with newHarnessWith's server hook.
+func newEnvWith(t *testing.T, configure func(*server.Server), opts ...bootstrap.Option) *Env {
+	t.Helper()
+	h := newHarnessWith(t, configure, opts...)
 	project := h.ID("POST", "/management/v1/projects", fiber.Map{"name": "Product"})
 	id := h.ID("POST", "/management/v1/projects/"+project+"/environments", fiber.Map{"name": "production"})
 	e := &Env{Harness: h, EnvID: id, Base: "/management/v1/environments/" + id,

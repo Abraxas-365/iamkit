@@ -27,6 +27,7 @@ type instrumentSet struct {
 	workerLag   metric.Float64Gauge
 	cache       metric.Int64Counter
 	rehashes    metric.Int64Counter
+	riskErrors  metric.Int64Counter
 }
 
 var current atomic.Pointer[instrumentSet]
@@ -65,6 +66,8 @@ func instruments() *instrumentSet {
 		metric.WithDescription("Shared cache (REDIS_URL) lookups by key family and result."))
 	s.rehashes, _ = m.Int64Counter("iamkit.password.rehashes", metric.WithUnit("{rehash}"),
 		metric.WithDescription("Stale password hashes (imported formats, old bcrypt cost) replaced at sign-in."))
+	s.riskErrors, _ = m.Int64Counter("iamkit.risk.errors", metric.WithUnit("{error}"),
+		metric.WithDescription("Risk evaluation errors that failed open, by stage."))
 	current.Store(s)
 	return s
 }
@@ -201,4 +204,10 @@ func CacheLookup(ctx context.Context, family, result string) {
 // PasswordRehash records one stale password hash replaced at sign-in.
 func PasswordRehash(ctx context.Context) {
 	instruments().rehashes.Add(ctx, 1)
+}
+
+// RiskError records one risk evaluation error that failed open (the
+// sign-in went on); stage names where (screen, assess, record, alert).
+func RiskError(ctx context.Context, stage string) {
+	instruments().riskErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("stage", stage)))
 }

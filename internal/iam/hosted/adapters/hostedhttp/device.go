@@ -1,12 +1,14 @@
 package hostedhttp
 
 import (
+	"log/slog"
 	"net/url"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
@@ -64,6 +66,10 @@ func (h *Handler) deviceLookup(c *fiber.Ctx) error {
 	v := h.deviceView(c, &request)
 	v.UserCode, v.Device = oauth.FormatUserCode(oauth.NormalizeUserCode(code)), &request
 	v.Subtitle = v.T("hosted.device.confirm", request.Application)
+	// The user code names the environment, so the widget is asked here, on
+	// the confirmation of a valid code.
+	h.arm(c, &v, request.Environment, deviceKey(code))
+	v.show(risk.CaptchaDevice)
 	return render(c, fiber.StatusOK, "device-confirm", v)
 }
 
@@ -85,9 +91,33 @@ func (h *Handler) deviceRetry(c *fiber.Ctx, code string, err error) error {
 // login approves it instead of redirecting to an application.
 func (h *Handler) deviceApprove(c *fiber.Ctx) error {
 	code := c.FormValue("user_code")
+	var pass *view
+	if h.captcha != nil {
+		request, err := h.devices.DeviceRequest(c.UserContext(), code)
+		if err != nil {
+			return h.deviceRetry(c, code, err)
+		}
+		v := h.deviceView(c, &request)
+		v.UserCode, v.Device = oauth.FormatUserCode(oauth.NormalizeUserCode(code)), &request
+		v.Subtitle = v.T("hosted.device.confirm", request.Application)
+		h.arm(c, &v, request.Environment, deviceKey(code))
+		if err := h.solve(c, &v, deviceKey(code), risk.CaptchaDevice); err != nil {
+			status, text := failed(c, v, err)
+			v.Error = text
+			v.show(risk.CaptchaDevice)
+			return render(c, status, "device-confirm", v)
+		}
+		pass = &v
+	}
 	ticket, binding, err := h.devices.StartDevice(c.UserContext(), code)
 	if err != nil {
 		return h.deviceRetry(c, code, err)
+	}
+	if pass != nil && pass.pub != nil {
+		// The journey that follows is the hosted one: its ticket carries the pass.
+		if err := h.captcha.GrantPass(c.UserContext(), pass.Environment, ticketHash(ticket)); err != nil {
+			slog.Warn("hosted device: CAPTCHA pass not stored", "err", err)
+		}
 	}
 	c.Cookie(&fiber.Cookie{Name: authorizationCookie, Value: binding, Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: int(config.OAuthAuthorizationTicketTTL.Seconds())})
 	c.Set("Cache-Control", "no-store")
@@ -134,3 +164,7 @@ func (h *Handler) PostForm(c *fiber.Ctx, environment identity.EnvironmentID, act
 	v.Title, v.Subtitle = v.T("hosted.title.redirecting"), v.T("hosted.subtitle.redirecting")
 	return render(c, fiber.StatusOK, "post", v)
 }
+
+// deviceKey identifies a user code in hosted_captcha_passes while it has no
+// ticket (the hash of the key is what is stored).
+func deviceKey(code string) string { return "device:" + oauth.NormalizeUserCode(code) }

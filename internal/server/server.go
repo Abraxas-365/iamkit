@@ -5,6 +5,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/apikey/adapters/apikeyhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/logstream"
 	"github.com/Abraxas-365/iamkit/internal/iam/logstream/adapters/logstreamhttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk/adapters/riskhttp"
 	"io/fs"
 	"log/slog"
 	"strconv"
@@ -50,6 +51,9 @@ type APIHandlerSet struct {
 	Users *userhttp.Handler
 	// APIKeys serves API keys (operators, and machine users' keys).
 	APIKeys *apikeyhttp.Handler
+	// Security serves CAPTCHA, risk policy, restrictions and sign-in
+	// attempts (iam:security:read / write).
+	Security *riskhttp.Handler
 	// UserKeys serves machine users' keys (JWT-bearer login).
 	UserKeys        *userhttp.Keys
 	Organizations   *orghttp.Handler
@@ -110,7 +114,11 @@ type Server struct {
 	Users               *userhttp.Handler
 	APIKeys             *apikeyhttp.Handler
 	// APIKeySelf serves /identity/v1/me/api-keys.
-	APIKeySelf     *apikeyhttp.Self
+	APIKeySelf *apikeyhttp.Self
+	// Security serves bot protection and risk signals settings;
+	// CaptchaPublic serves GET /identity/v1/captcha/:environment.
+	Security       *riskhttp.Handler
+	CaptchaPublic  *riskhttp.Public
 	UserKeys       *userhttp.Keys
 	Delivery       *authhttp.DeliveryHandler
 	SMS            *authhttp.SMSHandler
@@ -189,6 +197,10 @@ type Server struct {
 	// Fiber's default reads X-Forwarded-Proto/-Host from anyone).
 	// Env: IAMKIT_TRUSTED_PROXIES
 	TrustedProxies []string
+	// GeoIPHeader names a header carrying the client's country (e.g.
+	// CF-IPCountry), read only from TrustedProxies into
+	// identity.ClientInfo.Country. Env: IAMKIT_GEOIP_HEADER
+	GeoIPHeader string
 	// Cache pings the shared cache (REDIS_URL) for /health's cache field;
 	// nil reports "none".
 	Cache func(context.Context) error
@@ -347,7 +359,7 @@ func (s *Server) App() *fiber.App {
 	app := fiber.New(s.config())
 	app.Use(observe)
 	app.Use(recover.New())
-	app.Use(clientInfo)
+	app.Use(s.clientInfo)
 	s.limiters = 0
 
 	rateLimit := s.RateLimitPerMinute
@@ -421,6 +433,9 @@ func (s *Server) App() *fiber.App {
 	auth.Get("/me/sessions", sessionsLimit, s.Tokens.Sessions)
 	auth.Post("/me/sessions/revoke-others", sessionsLimit, s.Tokens.RevokeOtherSessions)
 	auth.Delete("/me/sessions/:id", sessionsLimit, s.Tokens.RevokeSession)
+	if s.CaptchaPublic != nil {
+		s.CaptchaPublic.Register(auth, s.limit(limiter.Config{Max: 60, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}))
+	}
 	if s.APIKeySelf != nil {
 		s.APIKeySelf.Register(auth, s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}))
 	}

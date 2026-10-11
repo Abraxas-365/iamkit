@@ -63,6 +63,8 @@ Workspace-level commands (me, projects, environments, operators, keys) do not.`,
 	cmd.AddCommand(usersCmd())
 	cmd.AddCommand(machineUsersCmd())
 	cmd.AddCommand(apiKeysCmd())
+	cmd.AddCommand(captchaCmd())
+	cmd.AddCommand(riskCmd())
 	cmd.AddCommand(organizationsCmd())
 	cmd.AddCommand(groupsCmd())
 	cmd.AddCommand(applicationsCmd())

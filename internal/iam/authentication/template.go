@@ -22,6 +22,9 @@ const (
 	// PurposeMFA is a second-factor code of the user's email factor. Only
 	// environments that allow the email factor ever send one.
 	PurposeMFA = "mfa"
+	// PurposeSecurityAlert tells a user their sign-in looked unusual (risk
+	// detections with action notify). It carries no code or link.
+	PurposeSecurityAlert = "security_alert"
 )
 
 // Copy is the wording of one email. The layout around it (logo, code box,
@@ -128,6 +131,11 @@ const (
 	PlaceholderOrganization = "organization" // invited-to organization
 	PlaceholderInviter      = "inviter"      // who invited
 	PlaceholderExpiresAt    = "expires_at"   // invitation expiry date
+	PlaceholderReason       = "reason"       // security alert: why the sign-in was flagged
+	PlaceholderOccurredAt   = "occurred_at"  // security alert: when
+	PlaceholderCountry      = "country"      // security alert: where (country code)
+	PlaceholderIP           = "ip"           // security alert: client address
+	PlaceholderUserAgent    = "user_agent"   // security alert: client software
 )
 
 var placeholders = map[string][]string{
@@ -136,6 +144,7 @@ var placeholders = map[string][]string{
 	PurposeEmailVerification: {PlaceholderAppName, PlaceholderEmail, PlaceholderCode, PlaceholderExpiresIn},
 	PurposeMFA:               {PlaceholderAppName, PlaceholderEmail, PlaceholderCode, PlaceholderExpiresIn},
 	PurposeInvitation:        {PlaceholderAppName, PlaceholderEmail, PlaceholderOrganization, PlaceholderInviter, PlaceholderExpiresAt},
+	PurposeSecurityAlert:     {PlaceholderAppName, PlaceholderEmail, PlaceholderReason, PlaceholderOccurredAt, PlaceholderCountry, PlaceholderIP, PlaceholderUserAgent},
 	PurposeTest:              {PlaceholderAppName, PlaceholderEmail},
 }
 

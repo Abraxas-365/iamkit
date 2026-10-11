@@ -56,10 +56,11 @@ func TestClientInfoMiddleware(t *testing.T) {
 		t.Helper()
 		app := fiber.New(s.config())
 		var got identity.ClientInfo
-		app.Use(clientInfo)
+		app.Use(s.clientInfo)
 		app.Get("/", func(c *fiber.Ctx) error { got = identity.ClientInfoFrom(c.UserContext()); return nil })
 		r := httptest.NewRequest("GET", "/", nil)
 		r.Header.Set("User-Agent", strings.Repeat("a", 600))
+		r.Header.Set("CF-IPCountry", "pe")
 		if forwarded != "" {
 			r.Header.Set("X-Forwarded-For", forwarded)
 		}
@@ -73,7 +74,14 @@ func TestClientInfoMiddleware(t *testing.T) {
 	if got := get(&Server{}, "203.0.113.7"); got.IP != "0.0.0.0" || len(got.UserAgent) != identity.MaxUserAgent {
 		t.Fatalf("untrusted = %+v", got)
 	}
-	if got := get(&Server{TrustedProxies: []string{"0.0.0.0/8"}}, "203.0.113.7"); got.IP != "203.0.113.7" {
+	if got := get(&Server{TrustedProxies: []string{"0.0.0.0/8"}}, "203.0.113.7"); got.IP != "203.0.113.7" || got.Country != "" {
 		t.Fatalf("trusted = %+v", got)
+	}
+	// The country header is believed from trusted proxies only.
+	if got := get(&Server{GeoIPHeader: "CF-IPCountry"}, ""); got.Country != "" {
+		t.Fatalf("untrusted country = %+v", got)
+	}
+	if got := get(&Server{GeoIPHeader: "CF-IPCountry", TrustedProxies: []string{"0.0.0.0/8"}}, "203.0.113.7"); got.Country != "PE" {
+		t.Fatalf("trusted country = %+v", got)
 	}
 }

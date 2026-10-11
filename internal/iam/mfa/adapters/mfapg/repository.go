@@ -110,7 +110,7 @@ func (r *Repository) Allowed(ctx context.Context, environment identity.Environme
 // the environment.
 func (r *Repository) Account(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (mfa.Account, error) {
 	var out mfa.Account
-	err := r.db.GetContext(ctx, &out, `SELECT coalesce(u.email,'') AS email, coalesce(nullif(s.display_name,''), e.name) AS issuer
+	err := r.db.GetContext(ctx, &out, `SELECT coalesce(u.email,'') AS email, u.email_verified AS verified, coalesce(nullif(s.display_name,''), e.name) AS issuer
 		FROM users u JOIN environments e ON e.id=u.environment_id
 		LEFT JOIN login_settings s ON s.environment_id=u.environment_id
 		WHERE u.id=$1 AND u.environment_id=$2 AND u.active`, user, environment)
@@ -150,11 +150,19 @@ func (r *Repository) SaveUnconfirmed(ctx context.Context, environment identity.E
 	return failure(tx.Commit())
 }
 
+// detections is never nil: the column is NOT NULL.
+func detections(d []string) []string {
+	if d == nil {
+		return []string{}
+	}
+	return d
+}
+
 // SavePending stores a pending login and sweeps expired ones.
 func (r *Repository) SavePending(ctx context.Context, hash []byte, p mfa.Pending) error {
 	_, err := r.db.ExecContext(ctx, `WITH sweep AS (DELETE FROM mfa_logins WHERE expires_at<now())
-		INSERT INTO mfa_logins(token_hash,environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,expires_at,password_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-		hash, p.Boundary.EnvironmentID, p.Boundary.OrganizationID, p.Boundary.ApplicationID, p.Boundary.ResourceID, p.User, pq.StringArray(p.AMR), p.Enroll, p.Expires, p.PasswordHash)
+		INSERT INTO mfa_logins(token_hash,environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,expires_at,password_hash,challenge,risk_detections) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+		hash, p.Boundary.EnvironmentID, p.Boundary.OrganizationID, p.Boundary.ApplicationID, p.Boundary.ResourceID, p.User, pq.StringArray(p.AMR), p.Enroll, p.Expires, p.PasswordHash, p.Challenge, pq.StringArray(detections(p.RiskDetections)))
 	return failure(err)
 }
 
@@ -322,15 +330,17 @@ func (t *Transaction) Pending(ctx context.Context, hash []byte) (mfa.Pending, er
 		Attempts     int                     `db:"attempts"`
 		Expires      time.Time               `db:"expires_at"`
 		PasswordHash string                  `db:"password_hash"`
+		Challenge    bool                    `db:"challenge"`
+		Detections   pq.StringArray          `db:"risk_detections"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,attempts,expires_at,password_hash FROM mfa_logins WHERE token_hash=$1 AND expires_at>now() FOR UPDATE`, hash)
+	err := t.tx.GetContext(ctx, &row, `SELECT environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,attempts,expires_at,password_hash,challenge,risk_detections FROM mfa_logins WHERE token_hash=$1 AND expires_at>now() FOR UPDATE`, hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return mfa.Pending{}, errx.Unauthorized("sign in again")
 	}
 	if err != nil {
 		return mfa.Pending{}, failure(err)
 	}
-	return mfa.Pending{Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, User: row.User, AMR: []string(row.AMR), Enroll: row.Enroll, Attempts: row.Attempts, Expires: row.Expires, PasswordHash: row.PasswordHash}, nil
+	return mfa.Pending{Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, User: row.User, AMR: []string(row.AMR), Enroll: row.Enroll, Attempts: row.Attempts, Expires: row.Expires, PasswordHash: row.PasswordHash, Challenge: row.Challenge, RiskDetections: []string(row.Detections)}, nil
 }
 
 func (t *Transaction) FailPending(ctx context.Context, hash []byte) error {

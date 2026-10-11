@@ -26,6 +26,13 @@ type Logins interface {
 	// codes. issue (the session) runs before the commit, so a failed session
 	// keeps the pending login and the factor unconfirmed.
 	Complete(ctx context.Context, token string, proof authentication.Proof, issue func(done authentication.Completed) error) (authentication.Completed, error)
+	// BeginChallenge parks a login until a risk challenge (an emailed code
+	// to the user's verified address; ErrChallengeUnavailable without one).
+	BeginChallenge(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string, passwordHash string, detections []string) (string, error)
+	// SendRisk emails the risk challenge code (hosted pages); VerifyRisk
+	// checks it. Neither enrolls anything.
+	SendRisk(ctx context.Context, boundary authentication.Context, user identity.UserID) (authentication.CodeSent, error)
+	VerifyRisk(ctx context.Context, boundary authentication.Context, user identity.UserID, proof authentication.Proof) error
 	// Enroll starts the TOTP factor of a pending login that must enroll.
 	Enroll(ctx context.Context, token string) (authentication.Enrollment, error)
 	// Challenge sends a code for a pending login: to the user's email or SMS

@@ -211,6 +211,14 @@ var actions = map[string]named{
 	"api_key.create":        {APIKeyCreated, "api_key"},
 	"api_key.revoke":        {APIKeyRevoked, "api_key"},
 	"api_key_policy.update": {APIKeyPolicyUpdated, "environment"},
+	// Bot protection and risk signals (risk.Action*; target = the
+	// environment, or the restriction id).
+	"captcha.update":          {CaptchaUpdated, "environment"},
+	"captcha.delete":          {CaptchaDeleted, "environment"},
+	"risk_policy.update":      {RiskPolicyUpdated, "environment"},
+	"risk_policy.delete":      {RiskPolicyDeleted, "environment"},
+	"risk_restriction.create": {RiskRestrictionCreated, "risk_restriction"},
+	"risk_restriction.delete": {RiskRestrictionDeleted, "risk_restriction"},
 	// Ends a session: the trigger writes session.revoked.
 	"oauth.logout": {},
 }

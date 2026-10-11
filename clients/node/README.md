@@ -121,6 +121,30 @@ const { data, error } = await iam.GET("/management/v1/environments/{environment}
 
 Requests are typed from the OpenAPI document (`@iamkit/api`).
 
+## Bot protection and risk signals
+
+`SecurityClient` manages an environment's CAPTCHA, risk policy, allow/deny
+restrictions and the sign-in attempt log over `/api/v1` (a token with
+`iam:security:read` / `iam:security:write`):
+
+```ts
+import { SecurityClient } from "@iamkit/node";
+
+const security = new SecurityClient({ baseUrl: "https://iam.example.com", token: () => accessToken() });
+await security.setCaptcha(env, { provider: "turnstile", site_key, secret, headless: true });
+await security.testCaptcha(env);
+await security.setRiskPolicy(env, { actions: { new_device: "notify", ip_velocity: "block" } });
+await security.createRestriction(env, { kind: "country", value: "XX", action: "deny" });
+const { items, next } = await security.listAttempts(env, { outcome: "blocked", limit: 50 });
+const devices = await security.listUserDevices(env, userId);
+```
+
+Also `getCaptcha`, `deleteCaptcha`, `getRiskPolicy`, `deleteRiskPolicy`,
+`listRestrictions`, `deleteRestriction`, `getAttempt`, `getStatus`.
+`IdentityClient.login` forwards `captchaToken` and `deviceId` for a BFF, and
+a pending login may carry `reason: "risk_challenge"`. New `ErrorCodes`:
+`CaptchaRequired`, `SignInBlocked`, `RiskChallenge`, `ChallengeUnavailable`.
+
 ## Develop
 
 ```sh

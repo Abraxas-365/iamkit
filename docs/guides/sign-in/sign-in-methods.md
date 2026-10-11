@@ -66,6 +66,16 @@ organization (the hosted chooser), organizations that refuse the method are
 left out of the choice; when none allows it the sign-in is refused. The chosen
 organization is checked again when the session is issued.
 
+## Bot protection and risk signals
+
+Two optional layers sit on top of the methods, per environment and off until
+configured: [bot protection](bot-protection.md) (a Turnstile or hCaptcha
+challenge before the credential is looked at) and [risk signals](risk-signals.md)
+(brute-force, impossible-travel and new-device detections, IP, country and
+email-domain restrictions, and an emailed-code challenge). They apply to every
+method that takes a password or code; passkeys and the SSO connection shortcut
+skip the CAPTCHA.
+
 ## Unknown accounts
 
 IAMKit never reveals whether an account exists: wrong passwords, unknown

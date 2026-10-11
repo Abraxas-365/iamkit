@@ -40,7 +40,7 @@ inspect containers; restrict Docker/platform administration.
 ## Compose with TLS
 
 `deploy/compose/` runs IAMKit, PostgreSQL and a TLS proxy on one Docker host,
-with Redis and an OpenTelemetry collector as optional profiles:
+with Redis, an OpenTelemetry collector and GeoIP as optional profiles:
 
 | Variant | Proxy | Certificates |
 | --- | --- | --- |
@@ -77,7 +77,11 @@ Optional services are Compose profiles in `.env`: `COMPOSE_PROFILES=redis` with
 `REDIS_URL=redis://redis:6379/0` ([Redis](scaling-and-abuse.md#redis-optional)),
 `otel` with `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318`
 ([tracing and metrics](observability.md#tracing-and-metrics); edit
-`deploy/compose/otel-collector.yaml` to export to your backend). Any other
+`deploy/compose/otel-collector.yaml` to export to your backend), and `geoip`
+(a MaxMind `geoipupdate` container sharing its database volume with IAMKit; set
+`GEOIPUPDATE_ACCOUNT_ID`, `GEOIPUPDATE_LICENSE_KEY` and
+`IAMKIT_GEOIP_DB=/geoip/GeoLite2-City.mmdb`, or give `setup.sh` the two
+MaxMind variables and it writes them; see [GeoIP](../guides/platform/geoip.md)). Any other
 variable from [configuration](../reference/configuration.md) goes in `.env`
 too. If the proxy network's subnet overlaps one of the host's, set
 `EDGE_SUBNET`.
@@ -127,6 +131,13 @@ What the chart sets up:
   (`minAvailable: 1`). Background jobs run on every replica and coordinate in
   the database; `workers.enabled=false` turns them off for a release (keep one
   release with them). Set `redis.existingSecret` for shared rate limits.
+- **GeoIP** (optional): `geoip.enabled=true` with `geoip.existingSecret` (a
+  Secret holding `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY`) adds a
+  MaxMind `geoipupdate` sidecar to every pod that keeps a GeoLite2 database in a
+  pod-local volume and points `IAMKIT_GEOIP_DB` at it (`geoip.editionId`,
+  `geoip.frequencyHours`). `geoip.header` (for example `CF-IPCountry`) uses a
+  country header from your proxy instead and requires `trustedProxies`. See
+  [GeoIP](../guides/platform/geoip.md).
 - **Metrics**: `metrics.enabled` serves Prometheus on port 9464 of the
   Service (never the Ingress); `metrics.serviceMonitor.enabled` adds a
   Prometheus Operator `ServiceMonitor`.

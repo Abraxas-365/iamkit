@@ -57,12 +57,40 @@ location.assign(await iam.complete(ticket, result.tokens.access_token));
 | `invitation.preview` / `invitation.accept` | `/identity/v1/invitations/*` |
 | `organizations(accessToken, …)` | `GET /identity/v1/organizations` |
 | `complete(ticket, accessToken, approve?)` | `POST /oauth/authorize/complete` (JSON) |
+| `getCaptchaConfig(env)` | `GET /identity/v1/captcha/:environment` (public) |
 
 Every sign-in step resolves a `SignInResult`: `{status: "signed_in", tokens}`
 or `{status: "mfa_required", mfa}`. Failures throw `IAMKitError` with the
 HTTP `status`, IAMKit's `code` (see `ErrorCodes`, e.g.
 `PASSWORD_CHANGE_REQUIRED` → call `login` again with `newPassword`) and
 public `details`.
+
+## Bot protection and risk signals
+
+Both are off until the operator configures them; nothing changes for UIs
+that ignore them.
+
+- **CAPTCHA.** When the environment's bot protection covers headless
+  sign-in, `getCaptchaConfig(env)` (or `Authorization.captcha` on the ticket)
+  gives the `provider` (`turnstile`, `hcaptcha`) and `site_key`. Solve the
+  widget and pass its answer as `captchaToken` to `login`, `sendCode`,
+  `signup.start` and `federation.ldap`. A missing or invalid token throws
+  `CAPTCHA_REQUIRED` (`isCaptchaRequired(e)`, `captchaProvider(e)`): solve a
+  fresh widget and retry (tokens are single use).
+- **Device id.** Sign-in calls carry a `device_id`: 32 random hex characters
+  created once in `localStorage` (`iamkit.device_id`). It enables the
+  new-device detection and the user's device list; it is not a fingerprint.
+  Pass `deviceId: "…"` to supply your own, `deviceId: false` to opt out (per
+  call too), `deviceStorage` to keep it elsewhere. Nothing is sent where
+  there is no storage (server rendering).
+- **Risk challenge.** An unusual sign-in answers `mfa_required` with
+  `mfa.reason === "risk_challenge"` and `factors: ["email"]`: call
+  `mfa.send(token, "email")`, then `mfa.verify(token, code)` — the same as an
+  email second factor.
+- **Errors.** `SIGN_IN_BLOCKED` (`isSignInBlocked`) means a restriction or
+  risk rule refused the sign-in: do not retry. `RISK_CHALLENGE` and
+  `CHALLENGE_UNAVAILABLE` (no verified email to send the code to) have
+  `isRiskChallenge` / `isChallengeUnavailable`.
 
 Tokens are never stored. The only state kept is the federation PKCE
 verifier, in `sessionStorage` (or the `storage` option) between

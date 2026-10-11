@@ -29,6 +29,8 @@ type Request struct {
 // Page is what the first sign-in page shows: the branding, the methods
 // the client offers, and its environment connections.
 type Page struct {
+	// Environment is the environment of the pending authorization.
+	Environment identity.EnvironmentID
 	Settings    Settings
 	SignIn      SignIn
 	Connections []federation.ConnectionSummary
@@ -75,6 +77,9 @@ type Result struct {
 	EnrollEmail bool
 	// RecoveryCodes are shown once after enrolling; the user then continues.
 	RecoveryCodes []string
+	// RiskChallenge: the SecondFactor page asks for a code emailed because
+	// the sign-in looked unusual, not for the user's second factor.
+	RiskChallenge bool
 }
 
 // Login is a verified user parked between hosted steps.
@@ -82,6 +87,12 @@ type Login struct {
 	Verified authentication.Verified
 	Chosen   identity.OrganizationID
 	Attempts int
+	// RiskChallenge: risk evaluation (or a pre_sign_in action) asked for
+	// an emailed code before the session; the second-factor page then
+	// accepts only the email factor. RiskDetections are carried to the
+	// session.
+	RiskChallenge  bool
+	RiskDetections []string
 }
 
 // ErrLoginExpired is returned when the parked login is gone (expired, or

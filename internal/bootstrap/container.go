@@ -61,6 +61,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/adapters/orghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/organization/orgmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning/provmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk/riskmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/samlidp/samlmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/adapters/saccthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/sacctmodule"
@@ -107,6 +108,31 @@ type options struct {
 	features       feature.Deployment
 	limits         usage.Values
 	redis          *cacheredis.Client
+	// Phase 5: bot protection and risk signals (wired by riskmodule).
+	captcha          http.RoundTripper
+	attemptRetention time.Duration
+	geoipDB          string
+	geoipHeader      string
+}
+
+// WithCaptchaTransport replaces the guarded transport CAPTCHA siteverify
+// calls go through (tests and dev with a fake provider on a loopback
+// address). IAMKIT_ALLOW_PRIVATE_DELIVERY does not apply to it.
+func WithCaptchaTransport(t http.RoundTripper) Option {
+	return func(o *options) { o.captcha = t }
+}
+
+// WithSignInAttemptRetention sets how long sign-in attempts are kept
+// (IAMKIT_SIGN_IN_ATTEMPT_RETENTION, default config.SignInAttemptRetention).
+func WithSignInAttemptRetention(d time.Duration) Option {
+	return func(o *options) { o.attemptRetention = d }
+}
+
+// WithGeoIP sets the deployment's GeoIP: a MaxMind-format database file
+// (IAMKIT_GEOIP_DB) and/or a country header trusted proxies set
+// (IAMKIT_GEOIP_HEADER, e.g. CF-IPCountry). Both empty = no GeoIP.
+func WithGeoIP(database, header string) Option {
+	return func(o *options) { o.geoipDB, o.geoipHeader = database, header }
 }
 
 // WithRedis shares rate limits, per-minute limits and hot-read caches
@@ -292,11 +318,26 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Workers.Add(actionModule.Jobs...)
 	s.Workers.Add(usageModule.Jobs...)
 	s.Workers.Add(auditLogModule.Jobs...)
+	riskModule := riskmodule.New(riskmodule.Deps{DB: db, Cipher: o.sealer, Features: featureModule.Queries, Transport: o.captcha, Issuer: issuer,
+		GeoIPDB: o.geoipDB, GeoIPHeader: o.geoipHeader, Retention: o.attemptRetention, ActorID: server.OperatorID,
+		Mail: authenticationModule.DeliveryService, Secret: func() string { return os.Getenv("IAMKIT_ENCRYPTION_KEY") }})
+	authenticationModule.Risk(riskModule.Evaluator)
+	waitDeliveries := s.WaitDeliveries
+	s.WaitDeliveries = func(timeout time.Duration) bool {
+		return waitDeliveries(timeout) && riskModule.WaitAlerts(timeout)
+	}
+	s.Security = riskModule.HTTP
+	s.CaptchaPublic = riskModule.Public
+	s.Workers.Add(riskModule.Jobs...)
+	// W2: the headless CAPTCHA gates /login, /challenges, /signup and the LDAP login.
+	authenticationModule.HTTP.Captcha(riskModule.Captchas)
+	authenticationModule.SignupHTTP.Captcha(riskModule.Captchas)
+	federationModule.HTTP.Captcha(riskModule.Captchas)
 	samlModule := samlmodule.New(samlmodule.Deps{DB: db, Keys: signingModule.Keyring, Issuer: issuer, ActorID: server.OperatorID})
 	if on, ok := o.features[config.FeatureSAMLIdP]; !ok || on {
 		s.SAML = samlModule.HTTP
 	}
-	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: tickets{oauth: oauthModule.Flows, saml: samlModule.Flows}, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Passkeys: authenticationModule.Passkeys, Features: featureModule.Queries, Finish: finisher(oauthModule.HTTP.Finish, samlModule.HTTP), ActorID: server.OperatorID})
+	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: tickets{oauth: oauthModule.Flows, saml: samlModule.Flows}, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Passkeys: authenticationModule.Passkeys, Features: featureModule.Queries, Captcha: hostedCaptcha{riskModule.Captchas, riskModule.Captcha}, Risk: riskModule.Evaluator, Finish: finisher(oauthModule.HTTP.Finish, samlModule.HTTP), ActorID: server.OperatorID})
 	s.Hosted = hostedModule.HTTP
 	samlModule.HTTP.PostForm(hostedModule.HTTP.PostForm)
 	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
@@ -364,6 +405,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Webhooks:        eventModule.Webhooks.WithActor(actor),
 		LogStreams:      logStreamModule.HTTP.WithActor(actor),
 		Usage:           usageModule.HTTP,
+		Security:        riskModule.HTTP.WithActor(actor),
 	}
 	s.OrgAdminPortal = orgAdmin.PortalHTTP
 	s.SetupLinks = orgAdmin.SetupLinkHTTP
@@ -482,6 +524,14 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		}
 		auditRetention = d
 	}
+	attemptRetention := config.SignInAttemptRetention
+	if v := os.Getenv("IAMKIT_SIGN_IN_ATTEMPT_RETENTION"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < 24*time.Hour {
+			return nil, errx.Validation("IAMKIT_SIGN_IN_ATTEMPT_RETENTION must be a duration of at least 24h (e.g. 720h)")
+		}
+		attemptRetention = d
+	}
 	features, unknown, err := feature.ParseDeployment(os.Getenv("IAMKIT_FEATURES"))
 	if err != nil {
 		return nil, err
@@ -497,7 +547,13 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	opts := []Option{WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso), WithWebAuthnOrigins(list(os.Getenv("IAMKIT_WEBAUTHN_ORIGINS"))), WithEventRetention(retention), WithAuditLogRetention(auditRetention), WithFeatures(features), WithLimits(limits)}
+	geoHeader := strings.TrimSpace(os.Getenv("IAMKIT_GEOIP_HEADER"))
+	if geoHeader != "" && len(proxies) == 0 {
+		// A country header is only believed from a trusted proxy.
+		return nil, errx.Validation("IAMKIT_GEOIP_HEADER needs IAMKIT_TRUSTED_PROXIES")
+	}
+	opts := []Option{WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso), WithWebAuthnOrigins(list(os.Getenv("IAMKIT_WEBAUTHN_ORIGINS"))), WithEventRetention(retention), WithAuditLogRetention(auditRetention), WithFeatures(features), WithLimits(limits),
+		WithSignInAttemptRetention(attemptRetention), WithGeoIP(strings.TrimSpace(os.Getenv("IAMKIT_GEOIP_DB")), geoHeader)}
 	var redis *cacheredis.Client
 	if v := os.Getenv("REDIS_URL"); v != "" {
 		if redis, err = cacheredis.Open(context.Background(), v); err != nil {
@@ -514,6 +570,7 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 	}
 	s.AllowedOrigins = os.Getenv("CORS_ALLOWED_ORIGINS")
 	s.TrustedProxies = proxies
+	s.GeoIPHeader = geoHeader
 	if v := os.Getenv("RATE_LIMIT_PER_MINUTE"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			s.RateLimitPerMinute = n

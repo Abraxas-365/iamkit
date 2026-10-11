@@ -1,4 +1,5 @@
 import type { IAMKitClient, operations, Schema } from "@iamkit/api";
+import { DeviceId } from "./device.js";
 import { IAMKitError, toError } from "./errors.js";
 import { done, transport, unwrap, type TransportOptions } from "./http.js";
 import { challengeOf, createVerifier } from "./pkce.js";
@@ -7,8 +8,26 @@ import { getAssertion } from "./webauthn.js";
 type Json<Op extends keyof operations, Status extends number> = operations[Op]["responses"] extends Record<Status, { content: { "application/json": infer T } }> ? T : never;
 type SignInAnswer = Json<"postIdentityLogin", 200>;
 
-/** What `GET /identity/v1/authorize/:ticket` describes: client, methods, branding, texts. */
-export type Authorization = Schema<"Authorization">;
+/** The bot-protection widget a headless sign-in must solve (`captchaToken`). */
+export interface CaptchaWidget {
+  provider: "turnstile" | "hcaptcha" | (string & {});
+  site_key: string;
+}
+
+/** `GET /identity/v1/captcha/:environment`: `enabled` is false when headless sign-in needs no CAPTCHA. */
+export interface CaptchaConfig {
+  enabled: boolean;
+  provider?: CaptchaWidget["provider"];
+  site_key?: string;
+  headless?: boolean;
+}
+
+/**
+ * What `GET /identity/v1/authorize/:ticket` describes: client, methods,
+ * branding, texts, and `captcha` when the environment's CAPTCHA protects
+ * headless sign-in.
+ */
+export type Authorization = Omit<Schema<"Authorization">, "captcha"> & { captcha?: CaptchaWidget };
 /** The sign-in methods a ticket offers. */
 export type Methods = Schema<"Methods">;
 export type Branding = Schema<"Branding">;
@@ -23,8 +42,24 @@ export type Organization = Schema<"AuthenticationOrganization">;
 
 /** An access/refresh token pair (+ recovery codes after a first enrollment). */
 export type Tokens = Extract<SignInAnswer, { access_token: string }>;
-/** A pending second factor: answer it with the `mfa` calls. */
-export type MFAPending = Extract<SignInAnswer, { mfa_token: string }>;
+/**
+ * A pending second factor: answer it with the `mfa` calls. `reason` is
+ * `risk_challenge` when the code is asked because the sign-in looked unusual
+ * (`factors` is then `["email"]`: `mfa.send(token, "email")`, then
+ * `mfa.verify`); absent for an ordinary second factor.
+ */
+export type MFAPending = Extract<SignInAnswer, { mfa_token: string }> & { reason?: "risk_challenge" | (string & {}) };
+
+/** The `reason` of a risk-challenge MFA result. */
+export const RiskChallengeReason = "risk_challenge";
+
+/** Bot protection and risk inputs of the calls that sign in or start a sign-in. */
+export interface Signals {
+  /** The CAPTCHA widget's answer (`getCaptchaConfig` / `Authorization.captcha` tell whether and which). */
+  captchaToken?: string;
+  /** Overrides the client's device id for this call (`false` sends none). */
+  deviceId?: string | false;
+}
 
 /** The result of every sign-in step. */
 export type SignInResult = { status: "signed_in"; tokens: Tokens } | { status: "mfa_required"; mfa: MFAPending };
@@ -80,6 +115,16 @@ export interface SignInOptions extends TransportOptions {
    * round trip. Defaults to `sessionStorage` in browsers.
    */
   storage?: VerifierStore;
+  /**
+   * The device id sent with sign-in calls (`device_id`), which enables the
+   * environment's new-device detection and the user's device list. By
+   * default a random 32-hex id is created once and kept in `localStorage`
+   * (`iamkit.device_id`); nothing is sent where there is no storage (server
+   * rendering). Pass a string to supply your own, `false` to opt out.
+   */
+  deviceId?: string | false;
+  /** Where the generated device id is kept (default `localStorage`). */
+  deviceStorage?: VerifierStore;
 }
 
 const verifierKey = "iamkit.federation.verifier";
@@ -98,12 +143,35 @@ export class SignIn {
   private readonly baseUrl: string;
   private readonly fetcher: typeof fetch;
   private readonly storage?: VerifierStore;
+  private readonly device: DeviceId;
 
   constructor(options: SignInOptions) {
     this.client = transport(options);
     this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.fetcher = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
     this.storage = options.storage ?? (typeof sessionStorage !== "undefined" ? sessionStorage : undefined);
+    this.device = new DeviceId(options.deviceId, options.deviceStorage);
+  }
+
+  /** The device id this client sends with sign-in calls, or undefined (opted out, no storage). */
+  deviceId(): string | undefined {
+    return this.device.get();
+  }
+
+  /**
+   * The environment's public bot-protection setup (no token needed). When
+   * `enabled`, render the `provider` widget with `site_key` and pass its
+   * answer as `captchaToken` on `login`, `sendCode`, `signup.start` and
+   * `federation.ldap`.
+   */
+  getCaptchaConfig(environmentId: string): Promise<CaptchaConfig> {
+    return unwrap(this.client.GET("/identity/v1/captcha/{environment}", { params: { path: { environment: environmentId } } })) as Promise<CaptchaConfig>;
+  }
+
+  /** Adds `captcha_token` and `device_id` to a request body (both omitted when unset). */
+  private signals<T extends object>(body: T, input: Signals = {}): T & { captcha_token?: string; device_id?: string } {
+    const device = input.deviceId === undefined ? this.device.get() : input.deviceId || undefined;
+    return { ...body, ...(input.captchaToken ? { captcha_token: input.captchaToken } : {}), ...(device ? { device_id: device } : {}) };
   }
 
   /**
@@ -142,8 +210,9 @@ export class SignIn {
   }
 
   /** Describes a ticket (needs the browser binding cookie from `authorize`). */
-  authorization(ticket: string): Promise<Authorization> {
-    return unwrap(this.client.GET("/identity/v1/authorize/{ticket}", { params: { path: { ticket } } }));
+  async authorization(ticket: string): Promise<Authorization> {
+    const { captcha, ...rest } = await unwrap(this.client.GET("/identity/v1/authorize/{ticket}", { params: { path: { ticket } } }));
+    return captcha ? { ...rest, captcha } : rest;
   }
 
   /**
@@ -159,8 +228,8 @@ export class SignIn {
    * Password sign-in with an email or username. Pass `newPassword` after a
    * `PASSWORD_CHANGE_REQUIRED` error to replace an expired password.
    */
-  async login(boundary: Boundary, input: { login: string; password: string; newPassword?: string }): Promise<SignInResult> {
-    const answer = await unwrap(this.client.POST("/identity/v1/login", { body: { ...context(boundary), login: input.login, password: input.password, new_password: input.newPassword } }));
+  async login(boundary: Boundary, input: { login: string; password: string; newPassword?: string } & Signals): Promise<SignInResult> {
+    const answer = await unwrap(this.client.POST("/identity/v1/login", { body: this.signals({ ...context(boundary), login: input.login, password: input.password, new_password: input.newPassword }, input) }));
     return signInResult(answer);
   }
 
@@ -169,14 +238,16 @@ export class SignIn {
    * resets the password (`resetPassword`). The answer is the same whether
    * or not the account exists.
    */
-  async sendCode(input: { environmentId: string; login: string; purpose: "login" | "password_reset"; locale?: string }): Promise<{ challengeId: string; expiresIn: number }> {
-    const out = await unwrap(this.client.POST("/identity/v1/challenges", { body: { environment_id: input.environmentId, login: input.login, purpose: input.purpose, locale: input.locale } }));
+  async sendCode(input: { environmentId: string; login: string; purpose: "login" | "password_reset"; locale?: string } & Signals): Promise<{ challengeId: string; expiresIn: number }> {
+    const out = await unwrap(this.client.POST("/identity/v1/challenges", { body: this.signals({ environment_id: input.environmentId, login: input.login, purpose: input.purpose, locale: input.locale }, input) }));
     return { challengeId: out.challenge_id, expiresIn: out.expires_in };
   }
 
   /** Signs in with an emailed code. */
-  async verifyCode(boundary: Boundary, input: { challengeId: string; code: string }): Promise<SignInResult> {
-    const { data, error, response } = await this.client.POST("/identity/v1/challenges/verify", { body: { ...context(boundary), challenge_id: input.challengeId, code: input.code, purpose: "login" } });
+  async verifyCode(boundary: Boundary, input: { challengeId: string; code: string; deviceId?: string | false }): Promise<SignInResult> {
+    const { data, error, response } = await this.client.POST("/identity/v1/challenges/verify", {
+      body: this.signals({ ...context(boundary), challenge_id: input.challengeId, code: input.code, purpose: "login" as const }, { deviceId: input.deviceId }),
+    });
     if (!response.ok || !data) {
       throw toError(response.status, error);
     }
@@ -262,8 +333,10 @@ export class SignIn {
       return signInResult(answer);
     },
     /** Signs in with an organization's LDAP directory (discovery `provider: "ldap"`). */
-    ldap: async (boundary: Boundary, input: { connectionId: string; email: string; password: string }): Promise<SignInResult> => {
-      const answer = await unwrap(this.client.POST("/identity/v1/federation/ldap/login", { body: { ...context(boundary), connection_id: input.connectionId, email: input.email, password: input.password } }));
+    ldap: async (boundary: Boundary, input: { connectionId: string; email: string; password: string } & Signals): Promise<SignInResult> => {
+      const answer = await unwrap(
+        this.client.POST("/identity/v1/federation/ldap/login", { body: this.signals({ ...context(boundary), connection_id: input.connectionId, email: input.email, password: input.password }, input) }),
+      );
       return signInResult(answer);
     },
   };
@@ -271,8 +344,12 @@ export class SignIn {
   /** Self-service sign-up (when the sign-in policy allows it). */
   readonly signup = {
     /** Emails a verification code; the same answer for existing accounts. */
-    start: async (input: { environmentId: string; email: string; name: string; password?: string; locale?: string; acceptTerms?: boolean }): Promise<{ challengeId: string; expiresIn: number }> => {
-      const out = await unwrap(this.client.POST("/identity/v1/signup", { body: { environment_id: input.environmentId, email: input.email, name: input.name, password: input.password, locale: input.locale, accept_terms: input.acceptTerms } }));
+    start: async (input: { environmentId: string; email: string; name: string; password?: string; locale?: string; acceptTerms?: boolean } & Signals): Promise<{ challengeId: string; expiresIn: number }> => {
+      const out = await unwrap(
+        this.client.POST("/identity/v1/signup", {
+          body: this.signals({ environment_id: input.environmentId, email: input.email, name: input.name, password: input.password, locale: input.locale, accept_terms: input.acceptTerms }, input),
+        }),
+      );
       return { challengeId: out.challenge_id, expiresIn: out.expires_in };
     },
     /** Creates the account (no session: sign in next). */

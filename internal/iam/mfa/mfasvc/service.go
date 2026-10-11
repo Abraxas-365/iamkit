@@ -111,6 +111,125 @@ func (s *Service) Begin(ctx context.Context, boundary authentication.Context, us
 	return raw, err
 }
 
+// BeginChallenge parks a login until a risk challenge: an emailed code to
+// the user's verified address. No factor is enrolled and the challenge
+// accepts only that code. Users without a verified email (or a deployment
+// without delivery) cannot be challenged.
+func (s *Service) BeginChallenge(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string, passwordHash string, detections []string) (string, error) {
+	if s.sender == nil {
+		return "", authentication.ErrChallengeUnavailable()
+	}
+	account, err := s.repository.Account(ctx, boundary.EnvironmentID, user)
+	if err != nil {
+		return "", err
+	}
+	if !account.Verified || account.Email == "" {
+		return "", authentication.ErrChallengeUnavailable()
+	}
+	raw, hash, err := s.secrets.Generate("ik_mfa_")
+	if err != nil {
+		return "", err
+	}
+	err = s.repository.SavePending(ctx, hash, mfa.Pending{Boundary: boundary, User: user, AMR: amr, Expires: s.now().Add(config.MFALoginTTL),
+		PasswordHash: passwordHash, Challenge: true, RiskDetections: detections})
+	return raw, err
+}
+
+// riskFactor locks the factor that holds a risk challenge's code: the
+// user's email factor when active, else a scratch unconfirmed one that is
+// removed once the code passed (a challenge never enrolls a factor).
+func (s *Service) riskFactor(ctx context.Context, tx mfa.Transaction, environment identity.EnvironmentID, user identity.UserID, create bool) (mfa.Factor, error) {
+	factors, err := tx.Factors(ctx, environment, user)
+	if err != nil {
+		return mfa.Factor{}, err
+	}
+	f, found := mfa.Find(factors, mfa.KindEmail)
+	if found && (f.Active() || !create) {
+		return f, nil
+	}
+	if !create {
+		return mfa.Factor{}, nil
+	}
+	return tx.SaveCodeFactor(ctx, environment, user, identity.NewFactorID(), mfa.KindEmail, "")
+}
+
+// sendRisk emails the risk challenge code.
+func (s *Service) sendRisk(ctx context.Context, tx mfa.Transaction, environment identity.EnvironmentID, user identity.UserID) (authentication.CodeSent, error) {
+	if s.sender == nil {
+		return authentication.CodeSent{}, authentication.ErrChallengeUnavailable()
+	}
+	account, err := s.repository.Account(ctx, environment, user)
+	if err != nil {
+		return authentication.CodeSent{}, err
+	}
+	if !account.Verified || account.Email == "" {
+		return authentication.CodeSent{}, authentication.ErrChallengeUnavailable()
+	}
+	f, err := s.riskFactor(ctx, tx, environment, user, true)
+	if err != nil {
+		return authentication.CodeSent{}, err
+	}
+	return s.send(ctx, tx, environment, user, f, mfa.PurposeLogin)
+}
+
+// checkRisk verifies the emailed code of a risk challenge. A wrong code
+// counts against the live code (dropped after config.MFAAttempts).
+func (s *Service) checkRisk(ctx context.Context, tx mfa.Transaction, environment identity.EnvironmentID, user identity.UserID, proof authentication.Proof) (bool, error) {
+	code := mfa.NormalizeCode(proof.Code)
+	if proof.WebAuthn() || code == "" {
+		return false, nil
+	}
+	f, err := s.riskFactor(ctx, tx, environment, user, false)
+	if err != nil || f.ID.IsZero() || !f.Coded() {
+		return false, err
+	}
+	if !f.CodeLive(s.now()) || subtle.ConstantTimeCompare(f.Code, s.codeHash(f.ID, code)) != 1 {
+		if f.CodeLive(s.now()) {
+			err = tx.FailCode(ctx, f.ID, config.MFAAttempts)
+		}
+		return false, err
+	}
+	if f.Active() {
+		return true, tx.UseCode(ctx, f.ID)
+	}
+	return true, tx.DeleteFactor(ctx, environment, user, f.ID)
+}
+
+// SendRisk is the hosted pages' way to email a risk challenge code.
+func (s *Service) SendRisk(ctx context.Context, boundary authentication.Context, user identity.UserID) (authentication.CodeSent, error) {
+	tx, err := s.repository.Begin(ctx)
+	if err != nil {
+		return authentication.CodeSent{}, err
+	}
+	defer tx.Rollback()
+	out, err := s.sendRisk(ctx, tx, boundary.EnvironmentID, user)
+	if err != nil {
+		return authentication.CodeSent{}, err
+	}
+	return out, tx.Commit()
+}
+
+// VerifyRisk checks a risk challenge code for the hosted pages; a wrong
+// code is invalid_code (the wrong count is kept).
+func (s *Service) VerifyRisk(ctx context.Context, boundary authentication.Context, user identity.UserID, proof authentication.Proof) error {
+	tx, err := s.repository.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	ok, err := s.checkRisk(ctx, tx, boundary.EnvironmentID, user, proof)
+	if err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	if !ok {
+		return invalidCode()
+	}
+	return nil
+}
+
 func (s *Service) pendingHash(token string) ([]byte, error) {
 	if !strings.HasPrefix(token, "ik_mfa_") {
 		return nil, errx.Unauthorized("sign in again")
@@ -169,6 +288,16 @@ func (s *Service) Challenge(ctx context.Context, token, factor string) (authenti
 	p, err := s.pending(ctx, tx, token)
 	if err != nil {
 		return authentication.CodeSent{}, err
+	}
+	if p.Challenge {
+		if factor != mfa.KindEmail {
+			return authentication.CodeSent{}, factorNotAllowed(factor)
+		}
+		out, err := s.sendRisk(ctx, tx, p.Boundary.EnvironmentID, p.User)
+		if err != nil {
+			return authentication.CodeSent{}, err
+		}
+		return out, tx.Commit()
 	}
 	out, err := s.challenge(ctx, tx, p.Boundary, p.User, p.AMR, factor, p.Enroll)
 	if err != nil {
@@ -293,14 +422,23 @@ func (s *Service) Complete(ctx context.Context, token string, proof authenticati
 		}
 		return authentication.Completed{}, errx.Unauthorized("sign in again")
 	}
-	policy, err := s.repository.Policy(ctx, p.Boundary, p.User)
-	if err != nil {
-		return authentication.Completed{}, err
-	}
 	m := mfa.Mutation{Environment: p.Boundary.EnvironmentID, Actor: p.User.String(), Target: p.User.String()}
-	v, ok, err := s.check(ctx, tx, m, p.User, proof, loginScope(policy, p.AMR, p.Enroll))
-	if err != nil {
-		return authentication.Completed{}, err
+	var v mfa.Verification
+	var ok bool
+	if p.Challenge {
+		// A risk challenge accepts only the emailed code; it proves the
+		// inbox ("otp"), not a second factor.
+		if ok, err = s.checkRisk(ctx, tx, p.Boundary.EnvironmentID, p.User, proof); err != nil {
+			return authentication.Completed{}, err
+		}
+	} else {
+		policy, err := s.repository.Policy(ctx, p.Boundary, p.User)
+		if err != nil {
+			return authentication.Completed{}, err
+		}
+		if v, ok, err = s.check(ctx, tx, m, p.User, proof, loginScope(policy, p.AMR, p.Enroll)); err != nil {
+			return authentication.Completed{}, err
+		}
 	}
 	if !ok {
 		if err = tx.FailPending(ctx, hash); err == nil {
@@ -314,7 +452,12 @@ func (s *Service) Complete(ctx context.Context, token string, proof authenticati
 	if err = tx.DeletePending(ctx, hash); err != nil {
 		return authentication.Completed{}, err
 	}
-	done := authentication.Completed{Boundary: p.Boundary, User: p.User, AMR: append(append([]string{}, p.AMR...), mfa.AMR(v.Proof)...), RecoveryCodes: v.RecoveryCodes, PasswordHash: p.PasswordHash}
+	amr := append(append([]string{}, p.AMR...), mfa.AMR(v.Proof)...)
+	if p.Challenge {
+		amr = append(append([]string{}, p.AMR...), "otp")
+	}
+	done := authentication.Completed{Boundary: p.Boundary, User: p.User, AMR: amr, RecoveryCodes: v.RecoveryCodes, PasswordHash: p.PasswordHash,
+		Challenge: p.Challenge, RiskDetections: p.RiskDetections}
 	if issue != nil {
 		// issue commits its own session transaction while this one (and a
 		// pooled connection) stays open. Should the commit below then fail,

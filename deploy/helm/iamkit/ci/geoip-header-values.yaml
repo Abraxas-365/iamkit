@@ -1,0 +1,20 @@
+# chart-testing values: GeoIP country from a trusted proxy's header (the
+# database sidecar needs MaxMind credentials, so CI does not install it).
+issuer: https://iam.ci.example
+replicaCount: 2
+database:
+  existingSecret: iamkit-ci
+secrets:
+  signingKey:
+    existingSecret: iamkit-ci-signing
+  hmac:
+    existingSecret: iamkit-ci
+  encryption:
+    existingSecret: iamkit-ci
+trustedProxies: [10.244.0.0/16]
+geoip:
+  header: CF-IPCountry
+resources:
+  requests:
+    cpu: 10m
+    memory: 64Mi

@@ -208,6 +208,10 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 		h.KeyRoutes(e.Group("/api-keys", keys))
 		h.PolicyRoutes(e.Group("/api-key-policy", keys))
 	}
+	if h := s.APIHandlers.Security; h != nil {
+		h.ReadRoutes(e, apiauth.RequirePermission(authorization.PermSecurityRead))
+		h.WriteRoutes(e, apiauth.RequirePermission(authorization.PermSecurityWrite))
+	}
 	if h := s.APIHandlers.LogStreams; h != nil {
 		h.Routes(e.Group("/log-streams", apiauth.ReadWrite(authorization.PermAuditLogsRead, authorization.PermAuditLogsManage)))
 	}

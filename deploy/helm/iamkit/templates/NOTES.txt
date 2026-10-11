@@ -7,6 +7,9 @@ No Ingress was created: route {{ include "iamkit.issuer" . }} to service {{ incl
 {{- if not .Values.trustedProxies }}
 trustedProxies is empty: IAMKit sees your ingress controller as every client (per-IP rate limits are shared). Set it to the controller's pod range.
 {{- end }}
+{{- if .Values.geoip.enabled }}
+GeoIP: the geoip-update sidecar downloads {{ .Values.geoip.editionId }} into each pod (first download within a minute or two); see GET …/risk/status.
+{{- end }}
 
 Check it:
   helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

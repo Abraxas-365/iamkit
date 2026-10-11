@@ -77,7 +77,14 @@ type MFA struct {
 	Token              string   `json:"mfa_token"`
 	Factors            []string `json:"factors"`
 	EnrollmentRequired bool     `json:"enrollment_required"`
+	// Reason is "risk_challenge" when the code is asked because the
+	// sign-in looked unusual (factors is then ["email"]); omitted for an
+	// ordinary second factor.
+	Reason string `json:"reason,omitempty"`
 }
+
+// ReasonRiskChallenge is MFA.Reason of a risk challenge.
+const ReasonRiskChallenge = "risk_challenge"
 
 // Requirement says whether a login needs a second factor and whether the
 // user must enroll one first.
@@ -93,6 +100,10 @@ type Completed struct {
 	User          identity.UserID
 	AMR           []string
 	RecoveryCodes []string
+	// Challenge: the pending login was a risk challenge;
+	// RiskDetections go to the session.
+	Challenge      bool
+	RiskDetections []string
 	// PasswordHash replaces the user's expired password now that the
 	// second factor passed; "" keeps it.
 	PasswordHash string

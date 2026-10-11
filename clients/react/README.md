@@ -45,19 +45,41 @@ Texts use the hosted catalog keys (`hosted.form.sign_in`, …): your `texts`
 prop › the operator's custom texts for the ticket's locale
 (`authorization.texts`) › English defaults (`defaultTexts`).
 
+### Bot protection and risk steps
+
+When the environment's CAPTCHA covers headless sign-in the ticket carries
+`captcha{provider, site_key}`: `<SignInForm>` then pauses protected calls
+(password, code, reset, sign-up, directory) at a `captcha` step, renders
+`<Captcha>` and resumes with the answer; a `CAPTCHA_REQUIRED` reply does the
+same. An unusual sign-in (`reason: "risk_challenge"`) becomes the
+`risk_challenge` step (the emailed code is sent at once and answered like an
+email second factor); `SIGN_IN_BLOCKED` and the other refusals end in the
+`blocked` step. Pass `renderCaptcha` to draw the widget yourself and `nonce`
+for a strict CSP; the page's CSP must allow the provider's script, frame and
+connect hosts.
+
+- `<Captcha widget={{provider, site_key}} onToken onExpire? onError? options? nonce?>` —
+  loads the Turnstile or hCaptcha script once, renders explicitly with the
+  site key and removes the widget on unmount. A render-prop child
+  `({ref, status, reset}) => …` lets you host the widget in your own markup.
+  Give it `key={state.captchaRound}` to get a fresh widget after an answer was spent.
+- `loadCaptchaScript(provider, nonce?)`, `captchaScripts`.
+- `IAMKitProvider` also takes `deviceId` / `deviceStorage` (see `@iamkit/js`).
+
 ## Hooks
 
 - `useSignIn({ticket, organization?, returnTo?, navigate?, locale?})` →
   `{state, flow}`: `state.step` (`identify`, `password`, `code`, `mfa`,
   `enroll`, `new_password`, `reset`, `ldap`, `signup`, `signup_verify`,
-  `redirecting`, `failed`), `state.authorization` (methods, connections,
+  `captcha`, `risk_challenge`, `blocked`, `redirecting`, `failed`), `state.authorization` (methods, connections,
   branding, texts), `state.error` (`IAMKitError`), `state.busy`; actions
   `flow.identify(login)`, `submitPassword`, `changePassword`, `sendCode`,
   `verifyCode`, `forgotPassword`, `resetPassword`, `submitDirectoryPassword`,
   `passkey()`, `connect(connectionId)`, `verifyFactor(code)`,
   `sendFactorCode("email"|"sms")`, `securityKey()`, `enroll()`,
   `beginSignup()`, `signup(…)`, `verifySignup(code)`, `restart()`,
-  `proceed()`. Build any markup on it.
+  `proceed()`, `setCaptchaToken(token)`, `expireCaptcha()` (`state.captcha`,
+  `state.captchaToken`, `state.captchaRound`). Build any markup on it.
 - `useInvitation(token)` → `{preview, accepted, accept}`.
 - `useIAMKit()` → the `@iamkit/js` client.
 

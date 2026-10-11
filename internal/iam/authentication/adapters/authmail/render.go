@@ -144,11 +144,38 @@ func placeholderValues(m authentication.Message, appName, locale string) map[str
 			values[authentication.PlaceholderExpiresAt] = i18n.Date(locale, *m.ExpiresAt)
 		}
 	case authentication.PurposeTest:
+	case authentication.PurposeSecurityAlert:
+		reason := "email.security_alert.reason." + m.Detection
+		values[authentication.PlaceholderReason] = i18n.T(locale, reason)
+		if values[authentication.PlaceholderReason] == reason {
+			values[authentication.PlaceholderReason] = i18n.T(locale, "email.common.unknown")
+		}
+		if m.OccurredAt != nil {
+			values[authentication.PlaceholderOccurredAt] = i18n.Date(locale, *m.OccurredAt) + " " + m.OccurredAt.UTC().Format("15:04 UTC")
+		}
+		unknown := i18n.T(locale, "email.common.unknown")
+		values[authentication.PlaceholderCountry] = orUnknown(singleLine(m.Country), unknown)
+		values[authentication.PlaceholderIP] = orUnknown(singleLine(m.IP), unknown)
+		values[authentication.PlaceholderUserAgent] = orUnknown(truncate(singleLine(m.UserAgent), 120), unknown)
 	default:
 		values[authentication.PlaceholderCode] = m.Code
 		values[authentication.PlaceholderExpiresIn] = strconv.Itoa(int(config.ChallengeTTL.Minutes()))
 	}
 	return values
+}
+
+func orUnknown(s, unknown string) string {
+	if s == "" {
+		return unknown
+	}
+	return s
+}
+
+func truncate(s string, max int) string {
+	if r := []rune(s); len(r) > max {
+		return string(r[:max])
+	}
+	return s
 }
 
 func brandView(b authentication.Brand) viewBrand {

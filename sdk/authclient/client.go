@@ -10,6 +10,7 @@ package authclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -62,6 +63,16 @@ type LoginContext struct {
 	ResourceID     string `json:"resource_id"`
 }
 
+// Bot protection and risk (headless routes: login, challenges, signup, LDAP
+// login). CaptchaToken is the widget's answer; the environment asks for it
+// (apierror.CodeCaptchaRequired) only when its CAPTCHA has Headless on — read
+// the provider and site key with Captcha. DeviceID is a stable random id
+// (16–128 characters) the client keeps per browser or device: it enables the
+// new-device detection and the user's device list; without it that detection
+// is not evaluated.
+
+// PasswordLogin signs in with a password (see Login). CaptchaToken and
+// DeviceID are described above.
 type PasswordLogin struct {
 	LoginContext
 	// Email or Login: Login accepts an email or a username.
@@ -73,7 +84,9 @@ type PasswordLogin struct {
 	// password policy says the password is too old; send the same login
 	// again with NewPassword set. With a second factor the new password is
 	// saved once VerifyMFA succeeds.
-	NewPassword string `json:"new_password,omitempty"`
+	NewPassword  string `json:"new_password,omitempty"`
+	CaptchaToken string `json:"captcha_token,omitempty"`
+	DeviceID     string `json:"device_id,omitempty"`
 }
 
 // TokenPair is a login answer. When MFARequired is set there are no tokens
@@ -94,7 +107,14 @@ type TokenPair struct {
 	MFAToken           string   `json:"mfa_token,omitempty"`
 	Factors            []string `json:"factors,omitempty"`
 	EnrollmentRequired bool     `json:"enrollment_required,omitempty"`
+	// MFAReason is "risk_challenge" when the code is asked because the
+	// sign-in looked unusual (Factors is then ["email"]: ChallengeMFA with
+	// "email", then VerifyMFA); empty for an ordinary second factor.
+	MFAReason string `json:"reason,omitempty"`
 }
+
+// MFAReasonRiskChallenge is TokenPair.MFAReason of a risk challenge.
+const MFAReasonRiskChallenge = "risk_challenge"
 
 // Enrollment is an authenticator to add: show the otpauth URI as a QR code
 // (or the secret for manual entry).
@@ -162,6 +182,8 @@ type ChallengeVerification struct {
 	Code        string `json:"code"`
 	Purpose     string `json:"purpose"`
 	Password    string `json:"password,omitempty"`
+	// DeviceID: see PasswordLogin (a login by code is a sign-in).
+	DeviceID string `json:"device_id,omitempty"`
 }
 
 type FederationStart struct {
@@ -431,14 +453,45 @@ func (c *Client) BeginPasskeyLogin(ctx context.Context, environment string) (Web
 // directory (Discovery.Provider "ldap"). It answers like Login, including
 // MFARequired.
 func (c *Client) DirectoryLogin(ctx context.Context, boundary LoginContext, connection, email, password string) (TokenPair, error) {
+	return c.DirectoryLoginWith(ctx, DirectoryLogin{LoginContext: boundary, ConnectionID: connection, Email: email, Password: password})
+}
+
+// DirectoryLogin is DirectoryLoginWith's request. CaptchaToken and DeviceID
+// are described with PasswordLogin.
+type DirectoryLogin struct {
+	LoginContext
+	ConnectionID string `json:"connection_id"`
+	Email        string `json:"email"`
+	Password     string `json:"password"`
+	CaptchaToken string `json:"captcha_token,omitempty"`
+	DeviceID     string `json:"device_id,omitempty"`
+}
+
+// DirectoryLoginWith is DirectoryLogin with a CAPTCHA token and device id.
+func (c *Client) DirectoryLoginWith(ctx context.Context, input DirectoryLogin) (TokenPair, error) {
 	var out TokenPair
-	body := struct {
-		LoginContext
-		Connection string `json:"connection_id"`
-		Email      string `json:"email"`
-		Password   string `json:"password"`
-	}{boundary, connection, email, password}
-	err := c.request(ctx, "/federation/ldap/login", "", body, &out)
+	err := c.request(ctx, "/federation/ldap/login", "", input, &out)
+	return out, err
+}
+
+// PublicCaptcha is what a sign-in UI needs to render the widget; Enabled is
+// false when headless sign-in needs no CAPTCHA.
+type PublicCaptcha struct {
+	Enabled  bool   `json:"enabled"`
+	Provider string `json:"provider,omitempty"`
+	SiteKey  string `json:"site_key,omitempty"`
+	Headless bool   `json:"headless,omitempty"`
+}
+
+// Captcha reads the environment's headless CAPTCHA (public, no token): when
+// Enabled, solve the widget of Provider with SiteKey and send its answer as
+// CaptchaToken on login, challenge, signup and directory login requests.
+func (c *Client) Captcha(ctx context.Context, environment string) (PublicCaptcha, error) {
+	var out PublicCaptcha
+	if environment == "" || strings.ContainsAny(environment, "/?#.%\\") {
+		return out, fmt.Errorf("invalid environment")
+	}
+	err := c.requestMethod(ctx, "GET", "/captcha/"+environment, "", nil, &out)
 	return out, err
 }
 
@@ -527,6 +580,10 @@ type ChallengeRequest struct {
 	Login   string `json:"login,omitempty"`
 	Purpose string `json:"purpose"`
 	Locale  string `json:"locale,omitempty"`
+	// CaptchaToken and DeviceID: see Signals (CaptchaToken is checked for
+	// every purpose: each one sends an email).
+	CaptchaToken string `json:"captcha_token,omitempty"`
+	DeviceID     string `json:"device_id,omitempty"`
 }
 
 // InitiateChallengeWith is InitiateChallenge with every option.
@@ -558,6 +615,9 @@ type SignupRequest struct {
 	// when the environment's sign-in policy sets require_terms (else 400
 	// TERMS_REQUIRED).
 	AcceptTerms bool `json:"accept_terms,omitempty"`
+	// CaptchaToken and DeviceID: see Signals.
+	CaptchaToken string `json:"captcha_token,omitempty"`
+	DeviceID     string `json:"device_id,omitempty"`
 }
 
 // SignedUp is the account a completed sign-up created.

@@ -50,6 +50,8 @@ func sample(purpose string) authentication.Message {
 	switch purpose {
 	case authentication.PurposeInvitation:
 		m.Token, m.Link, m.Organization, m.Inviter, m.ExpiresAt = "ik_inv_token", "https://app.acme.io/invite?token=ik_inv_token", "Acme Corp", "Bob", &testExpires
+	case authentication.PurposeSecurityAlert:
+		m.Detection, m.IP, m.Country, m.UserAgent, m.OccurredAt = "new_device", "203.0.113.7", "PE", "Mozilla/5.0 (X11; Linux x86_64)", &testExpires
 	case authentication.PurposeTest:
 	default:
 		m.Code = "12345678"

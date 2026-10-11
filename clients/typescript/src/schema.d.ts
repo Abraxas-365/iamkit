@@ -267,6 +267,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/captcha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentCaptcha"];
+        put: operations["putApiEnvironmentsbyEnvironmentCaptcha"];
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentCaptcha"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/captcha/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** TestCaptcha checks the stored secret with the provider (204 = accepted). */
+        post: operations["postApiEnvironmentsbyEnvironmentCaptchaTest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/delivery": {
         parameters: {
             query?: never;
@@ -1960,6 +1993,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/risk-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentRiskPolicy"];
+        put: operations["putApiEnvironmentsbyEnvironmentRiskPolicy"];
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentRiskPolicy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/risk-restrictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentRiskRestrictions"];
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentRiskRestrictions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/risk-restrictions/{restriction}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentRiskRestrictionsbyRestriction"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/risk/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentRiskStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/role-assignments": {
         parameters: {
             query?: never;
@@ -2085,6 +2182,39 @@ export interface paths {
         get?: never;
         /** SetAuthentication sets how the account authenticates at /oauth/token: client_secret_basic, client_secret_post or private_key_jwt with jwks or jwks_uri. */
         put: operations["putApiEnvironmentsbyEnvironmentServiceAccountsbyIdAuthentication"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/sign-in-attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Attempts lists sign-in attempts, newest first (?before= cursor, limit, user_id, ip, outcome, detection, country). */
+        get: operations["getApiEnvironmentsbyEnvironmentSignInAttempts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/sign-in-attempts/{attempt}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentSignInAttemptsbyAttempt"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -2270,6 +2400,23 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["postApiEnvironmentsbyEnvironmentUsersbyIdDeactivate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/users/{id}/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Devices lists the devices a user signed in from (newest first). */
+        get: operations["getApiEnvironmentsbyEnvironmentUsersbyIdDevices"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2599,6 +2746,22 @@ export interface paths {
         };
         /** Authorization serves GET /identity/v1/authorize/:ticket: what a custom sign-in UI needs to render a pending authorization of its client (the ticket /oauth/authorize answered with, read under the br... */
         get: operations["getIdentityAuthorizebyTicket"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity/v1/captcha/{environment}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getIdentityCaptchabyEnvironment"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3864,6 +4027,39 @@ export interface paths {
         get: operations["getManagementEnvironmentsbyEnvironmentAuditLogsEventsbyId"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/captcha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentCaptcha"];
+        put: operations["putManagementEnvironmentsbyEnvironmentCaptcha"];
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentCaptcha"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/captcha/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** TestCaptcha checks the stored secret with the provider (204 = accepted). */
+        post: operations["postManagementEnvironmentsbyEnvironmentCaptchaTest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5412,6 +5608,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/management/v1/environments/{environment}/risk-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentRiskPolicy"];
+        put: operations["putManagementEnvironmentsbyEnvironmentRiskPolicy"];
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentRiskPolicy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/risk-restrictions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentRiskRestrictions"];
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentRiskRestrictions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/risk-restrictions/{restriction}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentRiskRestrictionsbyRestriction"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/risk/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentRiskStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/management/v1/environments/{environment}/role-assignments": {
         parameters: {
             query?: never;
@@ -5636,6 +5896,39 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["deleteManagementEnvironmentsbyEnvironmentSessionsbyId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/sign-in-attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Attempts lists sign-in attempts, newest first (?before= cursor, limit, user_id, ip, outcome, detection, country). */
+        get: operations["getManagementEnvironmentsbyEnvironmentSignInAttempts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/sign-in-attempts/{attempt}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentSignInAttemptsbyAttempt"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -5902,6 +6195,23 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["postManagementEnvironmentsbyEnvironmentUsersbyIdDeactivate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/users/{id}/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Devices lists the devices a user signed in from (newest first). */
+        get: operations["getManagementEnvironmentsbyEnvironmentUsersbyIdDevices"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6899,6 +7209,7 @@ export interface components {
             /** @description UUID (empty when unset) */
             organization_id?: string | null;
             request?: unknown | null;
+            risk?: components["schemas"]["RiskInputInput"] | null;
             scopes?: string[] | null;
             user?: components["schemas"]["UserInputInput"] | null;
         };
@@ -6948,6 +7259,11 @@ export interface components {
             reason?: string;
             source: string;
             status?: number | null;
+        };
+        AttemptPage: {
+            items: components["schemas"]["RiskAttempt"][] | null;
+            /** @description UUID (empty when unset) */
+            next?: string | null;
         };
         AttributeMapping: {
             email?: string;
@@ -7018,6 +7334,7 @@ export interface components {
             application_id: string;
             audience: string;
             branding: components["schemas"]["Branding"];
+            captcha?: components["schemas"]["CaptchaInfo"] | null;
             /** @description UUID (empty when unset) */
             client_id: string;
             /** @description UUID (empty when unset) */
@@ -7060,6 +7377,30 @@ export interface components {
             status?: number | null;
             /** @description UUID (empty when unset) */
             target_id: string;
+        };
+        CaptchaConfig: {
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            has_secret: boolean;
+            headless: boolean;
+            hosted: boolean;
+            hostnames: string[] | null;
+            provider: string;
+            site_key: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        CaptchaInfo: {
+            provider: string;
+            site_key: string;
+        };
+        CaptchaInputInput: {
+            headless?: boolean | null;
+            hosted?: boolean | null;
+            hostnames?: string[] | null;
+            provider?: string;
+            secret?: string | null;
+            site_key?: string;
         };
         CatalogInput: {
             name?: string;
@@ -7144,6 +7485,7 @@ export interface components {
             redirect_to: string;
         };
         Condition: {
+            challenge?: boolean;
             claims: boolean;
             deny: boolean;
             description: string;
@@ -7424,6 +7766,15 @@ export interface components {
             provider: string;
             source: string;
         };
+        Device: {
+            /** Format: date-time */
+            first_seen_at: string;
+            last_country?: string;
+            last_ip?: string;
+            /** Format: date-time */
+            last_seen_at: string;
+            user_agent?: string;
+        };
         DeviceAuthorization: {
             device_code: string;
             expires_in: number;
@@ -7657,6 +8008,16 @@ export interface components {
         FooterInput: {
             links?: components["schemas"]["LinkInput"][] | null;
             text?: string;
+        };
+        GeoStatus: {
+            /** Format: date-time */
+            build_date?: string | null;
+            countries: boolean;
+            database?: string;
+            error?: string;
+            header?: string;
+            source: string;
+            travel: boolean;
         };
         GrantInput: {
             /** @description UUID (empty when unset) */
@@ -8107,6 +8468,12 @@ export interface components {
             expires_in?: string | null;
             public_key?: unknown | null;
         };
+        NewRestrictionInput: {
+            action?: string;
+            kind?: string;
+            note?: string;
+            value?: string;
+        };
         Operator: {
             active: boolean;
             email: string;
@@ -8486,6 +8853,14 @@ export interface components {
             updated_at?: string;
             user_keys?: boolean;
         };
+        PolicyInputInput: {
+            actions?: {
+                [key: string]: string;
+            } | null;
+            block_if_unverifiable?: boolean;
+            notify_user?: boolean | null;
+            thresholds?: components["schemas"]["ThresholdsInput"] | null;
+        };
         Portal: {
             /** @description UUID (empty when unset) */
             application_id?: string;
@@ -8563,6 +8938,12 @@ export interface components {
             external_id?: string;
             /** @description UUID (empty when unset) */
             user_id?: string;
+        };
+        PublicCaptcha: {
+            enabled: boolean;
+            headless?: boolean;
+            provider?: string;
+            site_key?: string;
         };
         QueryPaginatedDelivery: {
             items: components["schemas"]["EventDelivery"][] | null;
@@ -8679,6 +9060,7 @@ export interface components {
             require_grant?: boolean;
         };
         Response: {
+            challenge?: boolean;
             claims?: {
                 [key: string]: unknown | null;
             } | null;
@@ -8688,8 +9070,68 @@ export interface components {
                 [key: string]: unknown | null;
             } | null;
         };
+        Restriction: {
+            action: string;
+            /** Format: date-time */
+            created_at: string;
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            kind: string;
+            note: string;
+            value: string;
+        };
         RetireInput: {
             force?: boolean;
+        };
+        RiskAttempt: {
+            action: string;
+            captcha?: string;
+            country?: string;
+            /** Format: date-time */
+            created_at: string;
+            detections: string[] | null;
+            device: boolean;
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            ip?: string;
+            latitude?: number | null;
+            longitude?: number | null;
+            method: string;
+            /** @description UUID (empty when unset) */
+            organization_id?: string | null;
+            outcome: string;
+            reason?: string;
+            surface: string;
+            user_agent?: string;
+            /** @description UUID (empty when unset) */
+            user_id?: string | null;
+        };
+        RiskInputInput: {
+            action?: string;
+            challenged?: boolean;
+            country?: string;
+            detections?: string[] | null;
+            device_known?: boolean;
+            ip?: string;
+            surface?: string;
+            user_agent?: string;
+        };
+        RiskPolicy: {
+            actions: {
+                [key: string]: string;
+            } | null;
+            block_if_unverifiable: boolean;
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            notify_user: boolean;
+            saved: boolean;
+            thresholds: components["schemas"]["Thresholds"];
+            /** Format: date-time */
+            updated_at?: string | null;
         };
         Role: {
             /** @description UUID (empty when unset) */
@@ -9072,14 +9514,10 @@ export interface components {
             retired_at?: string | null;
             state: string;
         };
-        SignupInput: {
-            accept_terms?: boolean;
-            email?: string;
-            /** @description UUID (empty when unset) */
-            environment_id?: string;
-            locale?: string;
-            name?: string;
-            password?: string;
+        Status: {
+            captcha: boolean;
+            geoip: components["schemas"]["GeoStatus"];
+            risk_signals: boolean;
         };
         Stream: {
             active: boolean;
@@ -9268,6 +9706,20 @@ export interface components {
             mode?: string;
             radius?: number | null;
             spacing?: string;
+        };
+        Thresholds: {
+            ip_distinct_logins_per_hour: number;
+            ip_failures_per_hour: number;
+            stale_after_days: number;
+            travel_speed_kmh: number;
+            user_failures_per_hour: number;
+        };
+        ThresholdsInput: {
+            ip_distinct_logins_per_hour?: number;
+            ip_failures_per_hour?: number;
+            stale_after_days?: number;
+            travel_speed_kmh?: number;
+            user_failures_per_hour?: number;
         };
         Token: {
             /** @description UUID (empty when unset) */
@@ -10495,6 +10947,170 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AuditlogEvent"];
                 };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentCaptcha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptchaConfig"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putApiEnvironmentsbyEnvironmentCaptcha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CaptchaInputInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptchaConfig"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentCaptcha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentCaptchaTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Client error */
             "4XX": {
@@ -17573,6 +18189,303 @@ export interface operations {
             };
         };
     };
+    getApiEnvironmentsbyEnvironmentRiskPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskPolicy"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putApiEnvironmentsbyEnvironmentRiskPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PolicyInputInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskPolicy"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentRiskPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentRiskRestrictions: {
+        parameters: {
+            query?: {
+                action?: string;
+                kind?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Restriction"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentRiskRestrictions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["NewRestrictionInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Restriction"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentRiskRestrictionsbyRestriction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                restriction: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentRiskStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Status"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getApiEnvironmentsbyEnvironmentRoleAssignments: {
         parameters: {
             query?: {
@@ -18193,6 +19106,97 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Account"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentSignInAttempts: {
+        parameters: {
+            query?: {
+                before?: string;
+                country?: string;
+                detection?: string;
+                ip?: string;
+                limit?: number;
+                outcome?: string;
+                user_id?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptPage"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentSignInAttemptsbyAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                attempt: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskAttempt"];
                 };
             };
             /** @description Client error */
@@ -19021,6 +20025,50 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentUsersbyIdDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Device"][] | null;
+                    };
+                };
             };
             /** @description Client error */
             "4XX": {
@@ -20199,6 +21247,47 @@ export interface operations {
             };
         };
     };
+    getIdentityCaptchabyEnvironment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCaptcha"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     postIdentityChallenges: {
         parameters: {
             query?: never;
@@ -20209,6 +21298,7 @@ export interface operations {
         requestBody?: {
             content: {
                 "application/json": {
+                    captcha_token?: string;
                     email?: string;
                     /** @description UUID (empty when unset) */
                     environment_id?: string;
@@ -20269,6 +21359,7 @@ export interface operations {
                     /** @description UUID (empty when unset) */
                     challenge_id?: string;
                     code?: string;
+                    device_id?: string;
                     /** @description UUID (empty when unset) */
                     environment_id?: string;
                     /** @description UUID (empty when unset) */
@@ -20299,6 +21390,7 @@ export interface operations {
                         factors: string[] | null;
                         mfa_required: boolean;
                         mfa_token: string;
+                        reason?: string;
                     };
                 };
             };
@@ -20415,6 +21507,7 @@ export interface operations {
                         factors: string[] | null;
                         mfa_required: boolean;
                         mfa_token: string;
+                        reason?: string;
                     };
                     "text/html": unknown;
                 };
@@ -20505,8 +21598,10 @@ export interface operations {
                 "application/json": {
                     /** @description UUID (empty when unset) */
                     application_id?: string;
+                    captcha_token?: string;
                     /** @description UUID (empty when unset) */
                     connection_id?: string;
+                    device_id?: string;
                     email?: string;
                     /** @description UUID (empty when unset) */
                     environment_id?: string;
@@ -20537,6 +21632,7 @@ export interface operations {
                         factors: string[] | null;
                         mfa_required: boolean;
                         mfa_token: string;
+                        reason?: string;
                     };
                 };
             };
@@ -20595,6 +21691,7 @@ export interface operations {
                         factors: string[] | null;
                         mfa_required: boolean;
                         mfa_token: string;
+                        reason?: string;
                     };
                 };
             };
@@ -20915,6 +22012,8 @@ export interface operations {
                 "application/json": {
                     /** @description UUID (empty when unset) */
                     application_id?: string;
+                    captcha_token?: string;
+                    device_id?: string;
                     email?: string;
                     /** @description UUID (empty when unset) */
                     environment_id?: string;
@@ -20947,6 +22046,7 @@ export interface operations {
                         factors: string[] | null;
                         mfa_required: boolean;
                         mfa_token: string;
+                        reason?: string;
                     };
                 };
             };
@@ -22668,6 +23768,7 @@ export interface operations {
                 "application/json": {
                     code?: string;
                     credential?: unknown | null;
+                    device_id?: string;
                     mfa_token?: string;
                     webauthn_session?: string;
                 };
@@ -22975,6 +24076,7 @@ export interface operations {
                         factors: string[] | null;
                         mfa_required: boolean;
                         mfa_token: string;
+                        reason?: string;
                     };
                 };
             };
@@ -23067,7 +24169,16 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["SignupInput"];
+                "application/json": {
+                    accept_terms?: boolean;
+                    captcha_token?: string;
+                    email?: string;
+                    /** @description UUID (empty when unset) */
+                    environment_id?: string;
+                    locale?: string;
+                    name?: string;
+                    password?: string;
+                };
             };
         };
         responses: {
@@ -24779,6 +25890,170 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AuditlogEvent"];
                 };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentCaptcha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptchaConfig"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putManagementEnvironmentsbyEnvironmentCaptcha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CaptchaInputInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaptchaConfig"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentCaptcha: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentCaptchaTest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Client error */
             "4XX": {
@@ -31863,6 +33138,303 @@ export interface operations {
             };
         };
     };
+    getManagementEnvironmentsbyEnvironmentRiskPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskPolicy"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putManagementEnvironmentsbyEnvironmentRiskPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PolicyInputInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskPolicy"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentRiskPolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentRiskRestrictions: {
+        parameters: {
+            query?: {
+                action?: string;
+                kind?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Restriction"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentRiskRestrictions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["NewRestrictionInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Restriction"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentRiskRestrictionsbyRestriction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                restriction: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentRiskStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Status"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getManagementEnvironmentsbyEnvironmentRoleAssignments: {
         parameters: {
             query?: {
@@ -32880,6 +34452,97 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentSignInAttempts: {
+        parameters: {
+            query?: {
+                before?: string;
+                country?: string;
+                detection?: string;
+                ip?: string;
+                limit?: number;
+                outcome?: string;
+                user_id?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttemptPage"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentSignInAttemptsbyAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                attempt: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskAttempt"];
+                };
             };
             /** @description Client error */
             "4XX": {
@@ -34048,6 +35711,50 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentUsersbyIdDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["Device"][] | null;
+                    };
+                };
             };
             /** @description Client error */
             "4XX": {

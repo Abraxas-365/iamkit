@@ -45,6 +45,11 @@ it('describes semantic event types', () => {
   expect(describeEvent('login.failed')).toBe('Sign-in failed')
   expect(describeEvent('membership.removed')).toBe('Membership removed')
   expect(describeEvent('org_unit.created')).toBe('Org unit created')
+  expect(describeEvent('risk.detected')).toBe('Risk detected at sign-in')
+  expect(describeEvent('sign_in.blocked')).toBe('Sign-in blocked')
+  expect(describeEvent('captcha.updated')).toBe('Bot protection updated')
+  expect(describeEvent('risk_restriction.created')).toBe('Risk restriction added')
+  expect(describeAction('risk_policy.delete')).toBe('Reset the risk policy')
 })
 
 // Every named audit action the server writes (the classifier's catalog in

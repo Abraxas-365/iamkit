@@ -97,6 +97,47 @@ Skipped rows (no email, unsupported hash, existing with `--skip-existing`) do
 not change the exit code. Password hashes are never printed or written to the
 errors file.
 
+## Bot protection and risk signals
+
+Per-environment [CAPTCHA](../guides/sign-in/bot-protection.md) and
+[risk signals](../guides/sign-in/risk-signals.md), with the management key the
+CLI is configured with. The CAPTCHA secret never goes in an argument: it is read
+from stdin (`--secret-stdin`) or `IAMKIT_CAPTCHA_SECRET`; omitted, the stored
+secret is kept (required the first time).
+
+```sh
+IAMKIT_CAPTCHA_SECRET="$SECRET" iam captcha set --provider turnstile --site-key "$SITE_KEY"
+printf %s "$SECRET" | iam captcha set --provider hcaptcha --site-key "$SITE_KEY" --secret-stdin --headless=false
+iam captcha get               # never shows the secret
+iam captcha test              # checks the secret with the provider (5 a minute)
+iam captcha delete
+
+iam risk status               # GeoIP source, captcha and risk_signals flags
+iam risk policy get
+iam risk policy set --ip-velocity block --new-device challenge --user-failures-per-hour 5
+iam risk policy delete        # every detection off again
+iam risk restrictions add --kind ip --value 203.0.113.0/24 --action deny
+iam risk restrictions add --kind email_domain --value acme.com --action allow --note "staff"
+iam risk restrictions list --kind country
+iam risk restrictions remove RESTRICTION_ID
+iam risk attempts list --outcome blocked --limit 20
+iam risk attempts get ATTEMPT_ID
+iam users devices USER_ID
+```
+
+`iam captcha set` takes `--provider` (`turnstile` or `hcaptcha`), `--site-key`,
+`--hosted` and `--headless` (both default true) and a repeatable `--hostname`.
+`iam risk policy set` changes only the flags you pass: one flag per detection
+(`--ip-velocity`, `--user-brute-force`, `--impossible-travel`, `--new-device`,
+`--stale-account`, each taking that detection's actions), the thresholds
+`--ip-failures-per-hour`, `--ip-distinct-logins-per-hour`,
+`--user-failures-per-hour`, `--stale-after-days` and `--travel-speed-kmh`,
+`--notify-user` and `--block-if-unverifiable`. `iam risk restrictions add` needs
+`--kind`, `--value` and `--action` (`allow` or `deny`) and takes `--note`.
+`iam risk attempts list` filters with `--user`, `--ip`, `--outcome`,
+`--detection`, `--country` and pages with `--limit` and `--before`; add
+`-o json` to any of them for raw JSON.
+
 ## API keys
 
 [API keys](../guides/machines/api-keys.md) of every owner kind, with the

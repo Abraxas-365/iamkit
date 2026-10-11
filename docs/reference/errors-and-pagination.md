@@ -18,6 +18,20 @@ confirmed. `ACTION_DENIED` (403) means an [action](../guides/platform/actions.md
 the request (its message is the receiver's); `ACTION_FAILED` (502) that an
 action target set to interrupt on error failed.
 
+[Bot protection](../guides/sign-in/bot-protection.md) and
+[risk signals](../guides/sign-in/risk-signals.md) add these, only on
+environments that configured them:
+
+| Code | Status | Meaning and what to do |
+| --- | --- | --- |
+| `CAPTCHA_REQUIRED` | 403 | The request has no valid `captcha_token` (missing, invalid, expired, already used, wrong hostname or action). `details.provider` is `turnstile` or `hcaptcha`; render a fresh widget and resend. Never sent when the provider is unreachable (the check fails open) |
+| `SIGN_IN_BLOCKED` | 403 | A deny [restriction](../guides/sign-in/risk-signals.md#restrictions) or a `block` risk detection refused the sign-in or sign-up. Identical for known and unknown accounts; do not retry |
+| `RISK_CHALLENGE` | 403 | A risk challenge is required where none can be parked (for example a server-side flow); ordinary sign-in routes answer `mfa_required` with `reason: "risk_challenge"` instead |
+| `CHALLENGE_UNAVAILABLE` | 403 | A challenge is required but the user has no verified email to send the code to |
+| `CAPTCHA_SECRET_INVALID` | 422 | Management only: the provider rejected the stored secret (the **Test** button) |
+| `GEOIP_REQUIRED` | 422 | Management only: `impossible_travel` or a country restriction needs [GeoIP](../guides/platform/geoip.md), which this deployment lacks |
+| `RESTRICTION_LIMIT_REACHED` | 422 | Management only: 1000 restrictions in the environment |
+
 | Status | Typical action |
 | --- | --- |
 | 400 | Correct invalid fields/context, not a blind retry |

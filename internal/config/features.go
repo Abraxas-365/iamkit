@@ -37,6 +37,12 @@ const (
 	// FeatureActions runs the environment's actions (hooks); off skips
 	// every condition without calling its targets.
 	FeatureActions = "actions"
+	// FeatureCaptcha requires the environment's CAPTCHA where it is
+	// configured; off is a kill switch that skips every check.
+	FeatureCaptcha = "captcha"
+	// FeatureRiskSignals records sign-in attempts and known devices and
+	// applies the risk policy and restrictions; off skips all of it.
+	FeatureRiskSignals = "risk_signals"
 )
 
 // Flags is the registry, in display order.
@@ -44,6 +50,8 @@ var Flags = []Flag{
 	{Name: FeatureBetaLanguages, Default: true, Scope: FeatureEnvironment, Description: "Offer machine-drafted (beta) languages on hosted pages and emails when the environment does not list its languages"},
 	{Name: FeatureSAMLIdP, Default: true, Scope: FeatureDeployment, Description: "Serve IAMKit as a SAML 2.0 identity provider for applications"},
 	{Name: FeatureActions, Default: true, Scope: FeatureEnvironment, Description: "Call the environment's actions (sign-in, token and request hooks)"},
+	{Name: FeatureCaptcha, Default: true, Scope: FeatureEnvironment, Description: "Require the environment's CAPTCHA (bot protection) where it is configured"},
+	{Name: FeatureRiskSignals, Default: true, Scope: FeatureEnvironment, Description: "Record sign-in attempts and apply the environment's risk policy and restrictions"},
 }
 
 // FindFlag returns the registered flag called name.

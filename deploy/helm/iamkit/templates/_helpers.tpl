@@ -43,6 +43,14 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- required "issuer is required (the public HTTPS origin)" .Values.issuer | trimSuffix "/" -}}
 {{- end -}}
 
+{{- define "iamkit.geoipDir" -}}
+/geoip
+{{- end -}}
+
+{{- define "iamkit.geoipDatabase" -}}
+{{ include "iamkit.geoipDir" . }}/{{ .Values.geoip.editionId }}.mmdb
+{{- end -}}
+
 {{/* Environment shared by the server and the migration Job. */}}
 {{- define "iamkit.databaseEnv" -}}
 - name: DATABASE_URL

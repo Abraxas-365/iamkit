@@ -29,6 +29,12 @@ type Deps struct {
 	Passkeys hosted.Passkeys
 	// Features gates beta behavior (nil: every flag on).
 	Features hosted.Features
+	// Captcha shows the environment's CAPTCHA on the identify, sign-up and
+	// device pages and announces the headless one to custom UIs (nil:
+	// never).
+	Captcha hosted.Captcha
+	// Risk applies restrictions, detections and challenges (nil: none).
+	Risk hosted.Risk
 	// Finish completes the OAuth authorization (oauthhttp.Handler.Finish).
 	Finish  hostedhttp.Finisher
 	ActorID func(*fiber.Ctx) string
@@ -58,7 +64,16 @@ func New(deps Deps) Module {
 	if deps.Features != nil {
 		service.SetFeatures(deps.Features)
 	}
+	if deps.Captcha != nil {
+		service.SetCaptcha(deps.Captcha)
+	}
+	if deps.Risk != nil {
+		service.SetRisk(deps.Risk)
+	}
 	handler := hostedhttp.New(service, service, service, deps.Invitations, deps.Finish, deps.ActorID)
 	handler.Texts(service, service)
+	if deps.Captcha != nil {
+		handler.Captcha(deps.Captcha)
+	}
 	return Module{Flow: service, Commands: service, Queries: service, TextCommands: service, TextQueries: service, HTTP: handler}
 }

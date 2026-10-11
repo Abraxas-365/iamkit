@@ -48,6 +48,8 @@ export interface MFAPending {
   enrollment_required: boolean;
   factors: string[];
   expires_in: number;
+  /** `risk_challenge`: the code is asked because the sign-in looked unusual (`factors` is `["email"]`); absent for an ordinary second factor. */
+  reason?: "risk_challenge" | (string & {});
 }
 
 /** Where a session lives: the token's organization, application and resource. */
@@ -96,13 +98,19 @@ export class IdentityClient {
    * Password login (`login` = email or username). Answers tokens, or an
    * MFAPending to continue with verifyMFA. A `PASSWORD_CHANGE_REQUIRED`
    * error asks to send the same login again with newPassword.
+   * `captchaToken` is the bot-protection widget's answer (a `CAPTCHA_REQUIRED`
+   * error asks for it); `deviceId` (16–128 characters) is the end user's
+   * stable device id for the new-device detection; a BFF forwards the
+   * browser's, and `@iamkit/js` creates one.
    */
-  login(boundary: Boundary, credentials: { login: string; password: string; newPassword?: string }): Promise<TokenPair | MFAPending> {
+  login(boundary: Boundary, credentials: { login: string; password: string; newPassword?: string; captchaToken?: string; deviceId?: string }): Promise<TokenPair | MFAPending> {
     return this.http.json("/identity/v1/login", {
       ...body(boundary),
       login: credentials.login,
       password: credentials.password,
       ...(credentials.newPassword ? { new_password: credentials.newPassword } : {}),
+      ...(credentials.captchaToken ? { captcha_token: credentials.captchaToken } : {}),
+      ...(credentials.deviceId ? { device_id: credentials.deviceId } : {}),
     });
   }
 

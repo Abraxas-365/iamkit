@@ -9,6 +9,8 @@ a feature-flag service for your applications.
 | Name | Scope | Default | What it gates |
 | --- | --- | --- | --- |
 | `beta_languages` | environment | on | The machine-drafted (beta) [languages](../applications/hosted-login.md#language) of hosted pages and emails. Off offers only the reviewed languages (English, Spanish) plus the environment's chosen default language, when the environment has not listed its languages; an explicit list in the login settings always wins |
+| `captcha` | environment | on | [Bot protection](../sign-in/bot-protection.md): off skips every CAPTCHA check and renders no widget, keeping the saved configuration. A kill switch for a misbehaving provider |
+| `risk_signals` | environment | on | [Risk signals](../sign-in/risk-signals.md): off stops recording sign-in attempts and devices and skips detections, restrictions and the `risk` input of actions |
 | `saml_idp` | deployment | on | IAMKit as a [SAML identity provider](../applications/saml-apps.md): off unmounts `/saml/:environment/*` and the `…/saml/service-providers` API (404) |
 
 The defaults reproduce IAMKit without flags.
@@ -26,6 +28,7 @@ name means `true`), read at start-up:
 
 ```sh
 IAMKIT_FEATURES=saml_idp=false,beta_languages=false
+IAMKIT_FEATURES=captcha=false     # kill switch for every environment
 ```
 
 A value other than a boolean stops the server from starting. Names IAMKit

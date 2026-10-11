@@ -23,6 +23,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 	"rsc.io/qr"
@@ -66,6 +67,7 @@ type Handler struct {
 	finish      Finisher
 	actor       func(*fiber.Ctx) string
 	devices     hosted.Devices
+	captcha     hosted.Captcha
 	// texts are the custom sign-in texts (nil: the catalog's words).
 	texts struct {
 		commands hosted.TextCommands
@@ -188,12 +190,27 @@ type view struct {
 	// offer to send a code); EnrollEmail offers enrolling the email address.
 	Factors     []string
 	EnrollEmail bool
+	// RiskChallenge: the MFA page asks for the code emailed because the
+	// sign-in looked unusual (email code only).
+	RiskChallenge bool
 	// Post is the form the "post" page submits to another site (a SAML
 	// response to the service provider's ACS).
 	Post *PostForm
 	// Preview renders a sample for the console's script-less frame: what
 	// the page script reveals in a browser with WebAuthn is shown.
 	Preview bool
+	// Captcha is the widget the page renders (nil: none).
+	Captcha *widget
+	// Environment, device, pub, passed and unavailable are the journey's
+	// risk state (see arm): not rendered.
+	Environment identity.EnvironmentID
+	device      string
+	pub         *risk.PublicCaptcha
+	passed      bool
+	unavailable bool
+	// captchaErr: the CAPTCHA configuration could not be read (credential
+	// posts are refused, never let through unchecked).
+	captchaErr error
 }
 
 // PostForm is a cross-site form post: the action and hidden fields.
@@ -258,12 +275,20 @@ func render(c *fiber.Ctx, status int, page string, v view) error {
 	} else if v.Post != nil {
 		scripts = "; script-src 'nonce-" + v.Nonce + "'"
 	}
+	// A page with a CAPTCHA widget admits its provider's hosts.
+	styles := "'nonce-" + v.Nonce + "'"
+	if w := v.Captcha; w != nil {
+		scripts = w.policy(v.Nonce, v.Script())
+		if w.styles != "" {
+			styles += " " + w.styles
+		}
+	}
 	// Fonts load only when the theme sets one: IAMKit's own ('self') or a
 	// custom https file.
 	if v.Brand.FontSrc != "" {
 		scripts += "; font-src " + v.Brand.FontSrc
 	}
-	c.Set("Content-Security-Policy", "default-src 'none'; style-src 'nonce-"+v.Nonce+"'; img-src https: data:; base-uri 'none'; frame-ancestors 'none'"+scripts)
+	c.Set("Content-Security-Policy", "default-src 'none'; style-src "+styles+"; img-src https: data:; base-uri 'none'; frame-ancestors 'none'"+scripts)
 	c.Set("Cache-Control", "no-store")
 	c.Set("Content-Type", fiber.MIMETextHTMLCharsetUTF8)
 	return c.Status(status).Send(out)
@@ -319,6 +344,7 @@ var (
 		"MFA_LOCKED":                  "hosted.error.too_many",
 		"PASSWORD_CHANGE_REQUIRED":    "hosted.subtitle.password_expired",
 		"TOO_MANY_REQUESTS":           "hosted.error.too_many",
+		risk.CodeCaptchaRequired:      "hosted.error.captcha",
 		"ACCOUNT_EXISTS":              "hosted.error.account_exists",
 		"SIGNUP_DISABLED":             "hosted.error.signup_disabled",
 		"TERMS_REQUIRED":              "hosted.error.terms_required",
@@ -410,6 +436,7 @@ func (h *Handler) base(c *fiber.Ctx, r hosted.Request) (view, bool, error) {
 	}
 	v := view{Lang: page.Settings.Negotiate(page.Language, c.Get(fiber.HeaderAcceptLanguage)), Brand: brandOf(page.Settings, ""), Ticket: r.Ticket, Connections: page.Connections, SignIn: page.SignIn}
 	h.word(c, &v, page.Settings.Environment, page.Texts)
+	h.arm(c, &v, page.Environment, r.Ticket)
 	return v, true, nil
 }
 
@@ -443,6 +470,7 @@ func (h *Handler) login(c *fiber.Ctx) error {
 		}
 	}
 	v.Title = v.T("hosted.title.sign_in")
+	v.show(risk.CaptchaLogin)
 	return render(c, fiber.StatusOK, "identify", v)
 }
 
@@ -465,10 +493,14 @@ func (h *Handler) identify(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email = v.T("hosted.title.sign_in"), c.FormValue("email")
+	if err := h.solve(c, &v, r.Ticket, risk.CaptchaLogin); err != nil {
+		return h.identifyAgain(c, v, err)
+	}
 	route, err := h.flow.Identify(c.UserContext(), r, v.Email)
 	if err != nil {
 		status, text := failed(c, v, err)
 		v.Error = text
+		v.show(risk.CaptchaLogin)
 		return render(c, status, "identify", v)
 	}
 	if route.Redirect != "" {
@@ -491,6 +523,9 @@ func (h *Handler) directory(c *fiber.Ctx) error {
 	v.Title, v.Email = v.T("hosted.title.sign_in"), c.FormValue("email")
 	connection, _ := identity.ParseConnectionID(c.FormValue("connection_id"))
 	v.Connection = &connection
+	if err := h.needPass(c, &v, r.Ticket); err != nil {
+		return h.identifyAgain(c, v, err)
+	}
 	result, err := h.flow.Directory(c.UserContext(), r, connection, v.Email, c.FormValue("password"))
 	if err != nil {
 		return h.retry(c, v, "directory", err)
@@ -505,6 +540,9 @@ func (h *Handler) password(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email = v.T("hosted.title.sign_in"), c.FormValue("email")
+	if err := h.needPass(c, &v, r.Ticket); err != nil {
+		return h.identifyAgain(c, v, err)
+	}
 	result, err := h.flow.Password(c.UserContext(), r, v.Email, c.FormValue("password"))
 	if err != nil {
 		return h.retry(c, v, "password", err)
@@ -519,6 +557,9 @@ func (h *Handler) sendCode(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email = v.T("hosted.title.check_email"), c.FormValue("email")
+	if err := h.needPass(c, &v, r.Ticket); err != nil {
+		return h.identifyAgain(c, v, err)
+	}
 	v.Challenge, err = h.flow.SendCode(c.UserContext(), r, v.Email)
 	if err != nil {
 		return h.retry(c, v, "password", err)
@@ -534,6 +575,9 @@ func (h *Handler) verifyCode(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title = v.T("hosted.title.check_email")
+	if err := h.needPass(c, &v, r.Ticket); err != nil {
+		return h.identifyAgain(c, v, err)
+	}
 	v.Challenge, _ = identity.ParseChallengeID(c.FormValue("challenge_id"))
 	result, err := h.flow.VerifyCode(c.UserContext(), r, v.Challenge, c.FormValue("code"))
 	if err != nil {
@@ -558,6 +602,9 @@ func (h *Handler) sendReset(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email = v.T("hosted.title.reset"), c.FormValue("email")
+	if err := h.needPass(c, &v, r.Ticket); err != nil {
+		return h.identifyAgain(c, v, err)
+	}
 	v.Challenge, err = h.flow.SendReset(c.UserContext(), r, v.Email)
 	if err != nil {
 		return h.retry(c, v, "password", err)
@@ -573,6 +620,9 @@ func (h *Handler) reset(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email = v.T("hosted.title.reset"), c.FormValue("email")
+	if err := h.needPass(c, &v, r.Ticket); err != nil {
+		return h.identifyAgain(c, v, err)
+	}
 	v.Challenge, _ = identity.ParseChallengeID(c.FormValue("challenge_id"))
 	if err = h.flow.Reset(c.UserContext(), r, v.Challenge, c.FormValue("code"), c.FormValue("password")); err != nil {
 		return h.retry(c, v, "reset", err)
@@ -649,6 +699,10 @@ func (h *Handler) secondFactor(c *fiber.Ctx) error {
 		}
 		v.Title, v.Subtitle = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa")
 		v.Factors = factorList(c.FormValue("factors"))
+		if c.FormValue("risk") == "true" {
+			v.RiskChallenge = true
+			v.Title, v.Subtitle = v.T("hosted.title.risk_challenge"), v.T("hosted.subtitle.risk_challenge")
+		}
 		return h.retry(c, v, "mfa", err)
 	}
 	return h.result(c, v, result)
@@ -718,6 +772,10 @@ func (h *Handler) sendFactorCode(c *fiber.Ctx) error {
 		}
 		v.Title, v.Subtitle = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa")
 		v.Factors = factorList(c.FormValue("factors"))
+		if c.FormValue("risk") == "true" {
+			v.RiskChallenge = true
+			v.Title, v.Subtitle = v.T("hosted.title.risk_challenge"), v.T("hosted.subtitle.risk_challenge")
+		}
 		return h.retry(c, v, "mfa", err)
 	}
 	return h.result(c, v, result)
@@ -795,10 +853,15 @@ func (h *Handler) result(c *fiber.Ctx, v view, result hosted.Result) error {
 	case result.Login != nil:
 		return h.finish(c, v.Ticket, *result.Login)
 	case result.SecondFactor:
-		v.Title, v.Subtitle, v.Factors = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa"), result.Factors
+		v.Title, v.Subtitle, v.Factors, v.RiskChallenge = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa"), result.Factors, result.RiskChallenge
+		if result.RiskChallenge {
+			v.Title, v.Subtitle = v.T("hosted.title.risk_challenge"), v.T("hosted.subtitle.risk_challenge")
+		}
 		if s := result.Sent; s != nil {
 			v.Notice = v.T("hosted.notice.factor_sent_"+s.Factor, s.Destination)
-			v.Subtitle = v.T("hosted.subtitle.mfa_code")
+			if !result.RiskChallenge {
+				v.Subtitle = v.T("hosted.subtitle.mfa_code")
+			}
 		}
 		return render(c, fiber.StatusOK, "mfa", v)
 	case result.Enroll != nil || result.EnrollEmail:
@@ -827,7 +890,20 @@ func (h *Handler) retry(c *fiber.Ctx, v view, page string, err error) error {
 		page, v.Title, v.Subtitle = "identify", v.T("hosted.title.sign_in"), ""
 	}
 	v.Error = text
+	if page == "identify" {
+		v.show(risk.CaptchaLogin)
+	}
 	return render(c, status, page, v)
+}
+
+// identifyAgain returns to the identify page, with the widget when the
+// ticket has no pass, for a CAPTCHA that was missing or wrong.
+func (h *Handler) identifyAgain(c *fiber.Ctx, v view, err error) error {
+	v.Title, v.Subtitle = v.T("hosted.title.sign_in"), ""
+	status, text := failed(c, v, err)
+	v.Error = text
+	v.show(risk.CaptchaLogin)
+	return render(c, status, "identify", v)
 }
 
 // federate sends the browser to the identity provider with the federation

@@ -2,6 +2,7 @@ package hostedhttp
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
@@ -18,6 +19,7 @@ func (h *Handler) signupPage(c *fiber.Ctx) error {
 		v.Title, v.Error = v.T("hosted.title.sign_in"), v.T("hosted.error.signup_disabled")
 		return render(c, fiber.StatusForbidden, "identify", v)
 	}
+	v.show(risk.CaptchaSignup)
 	return render(c, fiber.StatusOK, "signup", v)
 }
 
@@ -29,6 +31,12 @@ func (h *Handler) signup(c *fiber.Ctx) error {
 		return err
 	}
 	v.Title, v.Email, v.Name = v.T("hosted.title.signup"), c.FormValue("email"), c.FormValue("name")
+	if err := h.solve(c, &v, r.Ticket, risk.CaptchaSignup); err != nil {
+		status, text := failed(c, v, err)
+		v.Error = text
+		v.show(risk.CaptchaSignup)
+		return render(c, status, "signup", v)
+	}
 	v.Challenge, err = h.flow.Signup(c.UserContext(), r, v.Email, v.Name, c.FormValue("password"), c.FormValue("accept_terms") == "on")
 	if err != nil {
 		var e *errx.Error
@@ -37,6 +45,7 @@ func (h *Handler) signup(c *fiber.Ctx) error {
 			v.Title = v.T("hosted.title.sign_in")
 			return h.retry(c, v, "identify", err)
 		}
+		v.show(risk.CaptchaSignup)
 		return h.retry(c, v, "signup", err)
 	}
 	v.Title, v.Notice = v.T("hosted.title.check_email"), v.T("hosted.notice.signup_sent", v.Email)

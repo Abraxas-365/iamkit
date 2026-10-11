@@ -330,6 +330,33 @@ env.ResetEmailTemplate(ctx, iamclient.EmailLogin, "es")
 
 `apiclient.Environment` has the same delivery methods for scoped tokens.
 
+#### Bot Protection and Risk Signals
+
+Both are off until configured. Secrets are write-only and need
+`IAMKIT_ENCRYPTION_KEY` on the server.
+
+```go
+env.SaveCaptcha(ctx, iamclient.CaptchaInput{
+    Provider: iamclient.CaptchaTurnstile, SiteKey: "1x00000000000000000000AA", Secret: &secret,
+})
+_ = env.TestCaptcha(ctx) // nil: the provider accepts the secret
+
+env.SaveRiskPolicy(ctx, iamclient.RiskPolicyInput{
+    Actions: map[string]string{
+        iamclient.RiskNewDevice:   iamclient.RiskActionNotify,
+        iamclient.RiskIPVelocity:  iamclient.RiskActionBlock,
+    },
+})
+env.CreateRiskRestriction(ctx, iamclient.NewRiskRestriction{
+    Kind: iamclient.RestrictionCountry, Value: "XX", Action: iamclient.RestrictionDeny,
+})
+page, _ := env.SignInAttempts(ctx, iamclient.SignInAttemptFilter{Outcome: iamclient.AttemptBlocked})
+devices, _ := env.UserDevices(ctx, "user-id")
+status, _ := env.RiskStatus(ctx) // GeoIP and what the deployment supports
+```
+
+`apiclient.Environment` has the same methods (`iam:security:read`/`write`).
+
 ---
 
 ## authclient — Identity API
@@ -361,6 +388,14 @@ tokens, err := client.Login(ctx, authclient.PasswordLogin{
 })
 // tokens.AccessToken, tokens.RefreshToken
 ```
+
+Environments with bot protection ask headless clients for a CAPTCHA answer:
+read the widget with `client.Captcha(ctx, environmentID)` (public), solve it in
+the browser and send it as `PasswordLogin.CaptchaToken` (also on
+`ChallengeRequest`, `SignupRequest` and `DirectoryLogin`). `DeviceID` (a stable
+random id of 16–128 characters per device) enables new-device detection. An
+unusual sign-in answers `TokenPair.MFAReason == authclient.MFAReasonRiskChallenge`
+with `Factors` `["email"]`: `ChallengeMFA` with `"email"`, then `VerifyMFA`.
 
 ### Token Refresh
 
@@ -612,6 +647,12 @@ expired password is `apierror.CodePasswordChangeRequired`: repeat `Login` with
 `PasswordLogin.NewPassword` set. A sign-in method the environment or
 organization turns off is `apierror.CodeMethodNotAllowed`, a disabled password
 reset `apierror.CodePasswordResetDisabled` (both 403).
+
+A missing or invalid CAPTCHA answer is `apierror.CodeCaptchaRequired`
+(`apiErr.IsCaptchaRequired()`, `apiErr.Provider()`); a restriction or risk rule
+that refused the sign-in is `apierror.CodeSignInBlocked` (`IsSignInBlocked()`:
+do not retry). `CodeRiskChallenge` and `CodeChallengeUnavailable` (no verified
+email to send a risk code to) are 403 too.
 
 OAuth endpoints return `*authclient.OAuthError` instead:
 

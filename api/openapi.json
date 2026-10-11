@@ -445,6 +445,16 @@
               }
             ]
           },
+          "risk": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RiskInputInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "scopes": {
             "items": {
               "type": "string"
@@ -646,6 +656,30 @@
           "latency_ms",
           "purpose",
           "source"
+        ],
+        "type": "object"
+      },
+      "AttemptPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RiskAttempt"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "next": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -893,6 +927,16 @@
           "branding": {
             "$ref": "#/components/schemas/Branding"
           },
+          "captcha": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaptchaInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "client_id": {
             "description": "UUID (empty when unset)",
             "type": "string"
@@ -1059,6 +1103,106 @@
           "outcome",
           "target_id"
         ],
+        "type": "object"
+      },
+      "CaptchaConfig": {
+        "properties": {
+          "environment_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "has_secret": {
+            "type": "boolean"
+          },
+          "headless": {
+            "type": "boolean"
+          },
+          "hosted": {
+            "type": "boolean"
+          },
+          "hostnames": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "site_key": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "environment_id",
+          "has_secret",
+          "headless",
+          "hosted",
+          "hostnames",
+          "provider",
+          "site_key",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "CaptchaInfo": {
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "site_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "site_key"
+        ],
+        "type": "object"
+      },
+      "CaptchaInputInput": {
+        "properties": {
+          "headless": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "hosted": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "hostnames": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": "string"
+          },
+          "secret": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "site_key": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "CatalogInput": {
@@ -1429,6 +1573,9 @@
       },
       "Condition": {
         "properties": {
+          "challenge": {
+            "type": "boolean"
+          },
           "claims": {
             "type": "boolean"
           },
@@ -2447,6 +2594,32 @@
         ],
         "type": "object"
       },
+      "Device": {
+        "properties": {
+          "first_seen_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "last_country": {
+            "type": "string"
+          },
+          "last_ip": {
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user_agent": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "type": "object"
+      },
       "DeviceAuthorization": {
         "properties": {
           "device_code": {
@@ -3412,6 +3585,41 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "GeoStatus": {
+        "properties": {
+          "build_date": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "countries": {
+            "type": "boolean"
+          },
+          "database": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "header": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "travel": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "countries",
+          "source",
+          "travel"
+        ],
         "type": "object"
       },
       "GrantInput": {
@@ -5021,6 +5229,23 @@
                 "type": "null"
               }
             ]
+          }
+        },
+        "type": "object"
+      },
+      "NewRestrictionInput": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
           }
         },
         "type": "object"
@@ -6679,6 +6904,39 @@
         },
         "type": "object"
       },
+      "PolicyInputInput": {
+        "properties": {
+          "actions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "block_if_unverifiable": {
+            "type": "boolean"
+          },
+          "notify_user": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "thresholds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ThresholdsInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
       "Portal": {
         "properties": {
           "application_id": {
@@ -6928,6 +7186,26 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "PublicCaptcha": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "headless": {
+            "type": "boolean"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "site_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
         "type": "object"
       },
       "QueryPaginatedDelivery": {
@@ -7365,6 +7643,9 @@
       },
       "Response": {
         "properties": {
+          "challenge": {
+            "type": "boolean"
+          },
           "claims": {
             "additionalProperties": {
               "anyOf": [
@@ -7402,12 +7683,223 @@
         },
         "type": "object"
       },
+      "Restriction": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "environment_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "created_at",
+          "environment_id",
+          "id",
+          "kind",
+          "note",
+          "value"
+        ],
+        "type": "object"
+      },
       "RetireInput": {
         "properties": {
           "force": {
             "type": "boolean"
           }
         },
+        "type": "object"
+      },
+      "RiskAttempt": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "captcha": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "detections": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "device": {
+            "type": "boolean"
+          },
+          "environment_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "longitude": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "method": {
+            "type": "string"
+          },
+          "organization_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "surface": {
+            "type": "string"
+          },
+          "user_agent": {
+            "type": "string"
+          },
+          "user_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "created_at",
+          "detections",
+          "device",
+          "environment_id",
+          "id",
+          "method",
+          "outcome",
+          "surface"
+        ],
+        "type": "object"
+      },
+      "RiskInputInput": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "challenged": {
+            "type": "boolean"
+          },
+          "country": {
+            "type": "string"
+          },
+          "detections": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "device_known": {
+            "type": "boolean"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "surface": {
+            "type": "string"
+          },
+          "user_agent": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RiskPolicy": {
+        "properties": {
+          "actions": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "block_if_unverifiable": {
+            "type": "boolean"
+          },
+          "environment_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "notify_user": {
+            "type": "boolean"
+          },
+          "saved": {
+            "type": "boolean"
+          },
+          "thresholds": {
+            "$ref": "#/components/schemas/Thresholds"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "actions",
+          "block_if_unverifiable",
+          "environment_id",
+          "notify_user",
+          "saved",
+          "thresholds"
+        ],
         "type": "object"
       },
       "Role": {
@@ -8805,28 +9297,23 @@
         ],
         "type": "object"
       },
-      "SignupInput": {
+      "Status": {
         "properties": {
-          "accept_terms": {
+          "captcha": {
             "type": "boolean"
           },
-          "email": {
-            "type": "string"
+          "geoip": {
+            "$ref": "#/components/schemas/GeoStatus"
           },
-          "environment_id": {
-            "description": "UUID (empty when unset)",
-            "type": "string"
-          },
-          "locale": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "password": {
-            "type": "string"
+          "risk_signals": {
+            "type": "boolean"
           }
         },
+        "required": [
+          "captcha",
+          "geoip",
+          "risk_signals"
+        ],
         "type": "object"
       },
       "Stream": {
@@ -9509,6 +9996,53 @@
           },
           "spacing": {
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "Thresholds": {
+        "properties": {
+          "ip_distinct_logins_per_hour": {
+            "type": "integer"
+          },
+          "ip_failures_per_hour": {
+            "type": "integer"
+          },
+          "stale_after_days": {
+            "type": "integer"
+          },
+          "travel_speed_kmh": {
+            "type": "integer"
+          },
+          "user_failures_per_hour": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ip_distinct_logins_per_hour",
+          "ip_failures_per_hour",
+          "stale_after_days",
+          "travel_speed_kmh",
+          "user_failures_per_hour"
+        ],
+        "type": "object"
+      },
+      "ThresholdsInput": {
+        "properties": {
+          "ip_distinct_logins_per_hour": {
+            "type": "integer"
+          },
+          "ip_failures_per_hour": {
+            "type": "integer"
+          },
+          "stale_after_days": {
+            "type": "integer"
+          },
+          "travel_speed_kmh": {
+            "type": "integer"
+          },
+          "user_failures_per_hour": {
+            "type": "integer"
           }
         },
         "type": "object"
@@ -11984,6 +12518,222 @@
             "accessToken": []
           }
         ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/captcha": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentCaptcha",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentCaptcha",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptchaConfig"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "put": {
+        "operationId": "putApiEnvironmentsbyEnvironmentCaptcha",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptchaInputInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptchaConfig"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/captcha/test": {
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentCaptchaTest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "TestCaptcha checks the stored secret with the provider (204 = accepted).",
         "tags": [
           "Scoped API"
         ]
@@ -23695,6 +24445,432 @@
         ]
       }
     },
+    "/api/v1/environments/{environment}/risk-policy": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentRiskPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentRiskPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "put": {
+        "operationId": "putApiEnvironmentsbyEnvironmentRiskPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyInputInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/risk-restrictions": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentRiskRestrictions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/Restriction"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentRiskRestrictions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewRestrictionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Restriction"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/risk-restrictions/{restriction}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentRiskRestrictionsbyRestriction",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "restriction",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/risk/status": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentRiskStatus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
     "/api/v1/environments/{environment}/role-assignments": {
       "get": {
         "operationId": "getApiEnvironmentsbyEnvironmentRoleAssignments",
@@ -24755,6 +25931,176 @@
           }
         ],
         "summary": "SetAuthentication sets how the account authenticates at /oauth/token: client_secret_basic, client_secret_post or private_key_jwt with jwks or jwks_uri.",
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/sign-in-attempts": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentSignInAttempts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "country",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "detection",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ip",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "Attempts lists sign-in attempts, newest first (?before= cursor, limit, user_id, ip, outcome, detection, country).",
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/sign-in-attempts/{attempt}": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentSignInAttemptsbyAttempt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attempt",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAttempt"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
         "tags": [
           "Scoped API"
         ]
@@ -26027,6 +27373,85 @@
             "accessToken": []
           }
         ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/users/{id}/devices": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentUsersbyIdDevices",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/Device"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "Devices lists the devices a user signed in from (newest first).",
         "tags": [
           "Scoped API"
         ]
@@ -27853,6 +29278,57 @@
         ]
       }
     },
+    "/identity/v1/captcha/{environment}": {
+      "get": {
+        "operationId": "getIdentityCaptchabyEnvironment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicCaptcha"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
     "/identity/v1/challenges": {
       "post": {
         "operationId": "postIdentityChallenges",
@@ -27861,6 +29337,9 @@
             "application/json": {
               "schema": {
                 "properties": {
+                  "captcha_token": {
+                    "type": "string"
+                  },
                   "email": {
                     "type": "string"
                   },
@@ -27957,6 +29436,9 @@
                   "code": {
                     "type": "string"
                   },
+                  "device_id": {
+                    "type": "string"
+                  },
                   "environment_id": {
                     "description": "UUID (empty when unset)",
                     "type": "string"
@@ -28039,6 +29521,9 @@
                           "type": "boolean"
                         },
                         "mfa_token": {
+                          "type": "string"
+                        },
+                        "reason": {
                           "type": "string"
                         }
                       },
@@ -28249,6 +29734,9 @@
                         },
                         "mfa_token": {
                           "type": "string"
+                        },
+                        "reason": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -28333,8 +29821,14 @@
                     "description": "UUID (empty when unset)",
                     "type": "string"
                   },
+                  "captcha_token": {
+                    "type": "string"
+                  },
                   "connection_id": {
                     "description": "UUID (empty when unset)",
+                    "type": "string"
+                  },
+                  "device_id": {
                     "type": "string"
                   },
                   "email": {
@@ -28419,6 +29913,9 @@
                           "type": "boolean"
                         },
                         "mfa_token": {
+                          "type": "string"
+                        },
+                        "reason": {
                           "type": "string"
                         }
                       },
@@ -28543,6 +30040,9 @@
                           "type": "boolean"
                         },
                         "mfa_token": {
+                          "type": "string"
+                        },
+                        "reason": {
                           "type": "string"
                         }
                       },
@@ -28987,6 +30487,12 @@
                     "description": "UUID (empty when unset)",
                     "type": "string"
                   },
+                  "captcha_token": {
+                    "type": "string"
+                  },
+                  "device_id": {
+                    "type": "string"
+                  },
                   "email": {
                     "type": "string"
                   },
@@ -29075,6 +30581,9 @@
                           "type": "boolean"
                         },
                         "mfa_token": {
+                          "type": "string"
+                        },
+                        "reason": {
                           "type": "string"
                         }
                       },
@@ -31426,6 +32935,9 @@
                       }
                     ]
                   },
+                  "device_id": {
+                    "type": "string"
+                  },
                   "mfa_token": {
                     "type": "string"
                   },
@@ -31902,6 +33414,9 @@
                         },
                         "mfa_token": {
                           "type": "string"
+                        },
+                        "reason": {
+                          "type": "string"
                         }
                       },
                       "required": [
@@ -32053,7 +33568,31 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SignupInput"
+                "properties": {
+                  "accept_terms": {
+                    "type": "boolean"
+                  },
+                  "captcha_token": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "environment_id": {
+                    "description": "UUID (empty when unset)",
+                    "type": "string"
+                  },
+                  "locale": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
               }
             }
           }
@@ -34975,6 +36514,234 @@
             "operatorSession": []
           }
         ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/captcha": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentCaptcha",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentCaptcha",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptchaConfig"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "put": {
+        "operationId": "putManagementEnvironmentsbyEnvironmentCaptcha",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaptchaInputInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaptchaConfig"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/captcha/test": {
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentCaptchaTest",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "TestCaptcha checks the stored secret with the provider (204 = accepted).",
         "tags": [
           "Management API"
         ]
@@ -46822,6 +48589,453 @@
         ]
       }
     },
+    "/management/v1/environments/{environment}/risk-policy": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentRiskPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentRiskPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "put": {
+        "operationId": "putManagementEnvironmentsbyEnvironmentRiskPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyInputInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskPolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/risk-restrictions": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentRiskRestrictions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/Restriction"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentRiskRestrictions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewRestrictionInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Restriction"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/risk-restrictions/{restriction}": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentRiskRestrictionsbyRestriction",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "restriction",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/risk/status": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentRiskStatus",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
     "/management/v1/environments/{environment}/role-assignments": {
       "get": {
         "operationId": "getManagementEnvironmentsbyEnvironmentRoleAssignments",
@@ -48550,6 +50764,182 @@
         "responses": {
           "204": {
             "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/sign-in-attempts": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentSignInAttempts",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "country",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "detection",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "ip",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "outcome",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttemptPage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "Attempts lists sign-in attempts, newest first (?before= cursor, limit, user_id, ip, outcome, detection, country).",
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/sign-in-attempts/{attempt}": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentSignInAttemptsbyAttempt",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attempt",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiskAttempt"
+                }
+              }
+            },
+            "description": "OK"
           },
           "4XX": {
             "content": {
@@ -50435,6 +52825,88 @@
             "operatorSession": []
           }
         ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/users/{id}/devices": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentUsersbyIdDevices",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/Device"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "Devices lists the devices a user signed in from (newest first).",
         "tags": [
           "Management API"
         ]

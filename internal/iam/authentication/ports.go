@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/action"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 )
@@ -31,6 +32,12 @@ type SecondFactor interface {
 	// Begin parks the login until its second factor; passwordHash (a
 	// replacement for an expired password) is stored once it passes.
 	Begin(ctx context.Context, boundary Context, user identity.UserID, amr []string, enroll bool, passwordHash string) (string, error)
+	// BeginChallenge parks the login until a risk challenge: a code
+	// emailed to the user's verified address (Challenge "email" sends it;
+	// Complete with an email proof finishes it). detections go to the
+	// session. A user without a verified email cannot be challenged
+	// (ErrChallengeUnavailable).
+	BeginChallenge(ctx context.Context, boundary Context, user identity.UserID, amr []string, passwordHash string, detections []string) (string, error)
 	// Complete verifies the proof of a pending login and runs issue before
 	// committing: when issue fails the verification rolls back.
 	Complete(ctx context.Context, token string, proof Proof, issue func(done Completed) error) (Completed, error)
@@ -382,6 +389,24 @@ type Breaches interface {
 // every user session and pre_registration before a signup.
 type Actions interface {
 	Run(ctx context.Context, environment identity.EnvironmentID, condition string, build func() action.Input) (action.Result, error)
+}
+
+// Risk is risk evaluation of sign-ins (risk.Evaluator): Screen before
+// any credential (a deny restriction → risk.ErrSignInBlocked), Assess
+// after the first factor, Record once the outcome is known. nil (the
+// default) skips all of it.
+type Risk interface {
+	Screen(ctx context.Context, signal risk.Signal) error
+	Assess(ctx context.Context, signal risk.Signal) risk.Decision
+	Record(ctx context.Context, signal risk.Signal, outcome string, decision risk.Decision)
+}
+
+// Captcha verifies the headless captcha_token of /login, /challenges,
+// /signup and the LDAP login (risk.CaptchaQueries.CheckCaptcha): "" when
+// no CAPTCHA applies, risk.CaptchaPassed / CaptchaUnavailable, or
+// risk.ErrCaptchaRequired.
+type Captcha interface {
+	CheckCaptcha(ctx context.Context, check risk.CaptchaCheck) (string, error)
 }
 
 // Usage meters the environment (usage.Commands): Admit checks the users

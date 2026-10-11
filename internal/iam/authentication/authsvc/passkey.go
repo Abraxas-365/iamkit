@@ -87,6 +87,9 @@ func (s *Service) PasskeyLogin(ctx context.Context, boundary authentication.Cont
 	if err = s.allowed(ctx, tx, boundary, authentication.MethodPasskey); err != nil {
 		return authentication.Result{}, err
 	}
+	if err = s.screen(ctx, boundary, "", authentication.MethodPasskey); err != nil {
+		return authentication.Result{}, err
+	}
 	user, email, err := s.passkeyUser(ctx, tx, boundary.EnvironmentID, session, credential)
 	if err != nil {
 		return authentication.Result{}, err
@@ -94,6 +97,6 @@ func (s *Service) PasskeyLogin(ctx context.Context, boundary authentication.Cont
 	if err = requireNoSSO(ctx, tx, boundary, email); err != nil {
 		return authentication.Result{}, err
 	}
-	out, err := s.signIn(ctx, tx, boundary, user, authentication.MethodPasskey, false, "")
+	out, err := s.signIn(ctx, tx, boundary, user, authentication.MethodPasskey, false, "", "")
 	return out, credentialFailure(err)
 }

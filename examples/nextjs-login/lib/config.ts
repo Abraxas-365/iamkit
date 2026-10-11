@@ -13,6 +13,14 @@ export interface Config {
   appUrl: string;
   /** Organization used when the authorize request names none. */
   organizationId?: string;
+  /**
+   * Optional: `light`, `dark` or `auto` renders the bot-protection widget
+   * (Turnstile or hCaptcha, whichever the environment configured) with the
+   * example's own <Captcha> and that theme. Unset: <SignInForm>'s built-in
+   * widget. Either way nothing shows unless the environment's CAPTCHA has
+   * headless sign-in on.
+   */
+  captchaTheme?: "light" | "dark" | "auto";
 }
 
 export function config(): Config {
@@ -28,7 +36,12 @@ export function config(): Config {
     clientId: need("IAMKIT_CLIENT_ID"),
     appUrl: need("APP_URL"),
     organizationId: process.env.IAMKIT_ORGANIZATION_ID || undefined,
+    captchaTheme: theme(process.env.IAMKIT_CAPTCHA_THEME),
   };
+}
+
+function theme(value: string | undefined): Config["captchaTheme"] {
+  return value === "light" || value === "dark" || value === "auto" ? value : undefined;
 }
 
 export const redirectUri = (c: Config) => `${c.appUrl}/callback`;

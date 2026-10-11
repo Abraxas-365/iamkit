@@ -9,6 +9,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
 )
@@ -20,7 +21,12 @@ type Handler struct {
 	actor    func(*fiber.Ctx) string
 	respond  func(*fiber.Ctx, authentication.Result) error
 	hosted   func(*fiber.Ctx, federation.Outcome, error) error
+	captcha  authentication.Captcha
 }
+
+// Captcha gates the LDAP login behind the environment's headless CAPTCHA
+// (nil: none); set by the composition root.
+func (h *Handler) Captcha(captcha authentication.Captcha) { h.captcha = captcha }
 
 func New(commands federation.Commands, queries federation.Queries, flows federation.Flows, actor func(*fiber.Ctx) string, respond func(*fiber.Ctx, authentication.Result) error) *Handler {
 	return &Handler{commands: commands, queries: queries, flows: flows, actor: actor, respond: respond}
@@ -310,11 +316,19 @@ func (h *Handler) DirectoryLogin(c *fiber.Ctx) error {
 		Connection identity.ConnectionID `json:"connection_id"`
 		Email      string                `json:"email"`
 		Password   string                `json:"password"`
+		// CaptchaToken answers the environment's headless CAPTCHA; DeviceID
+		// is the client's device identifier (risk signals).
+		CaptchaToken string `json:"captcha_token"`
+		DeviceID     string `json:"device_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	out, err := h.flows.Directory(c.UserContext(), input.Context, input.Connection, input.Email, input.Password)
+	ctx, err := authentication.HeadlessRequest(c.UserContext(), h.captcha, input.EnvironmentID, risk.CaptchaLogin, input.CaptchaToken, input.DeviceID)
+	if err != nil {
+		return err
+	}
+	out, err := h.flows.Directory(ctx, input.Context, input.Connection, input.Email, input.Password)
 	if err != nil {
 		return err
 	}

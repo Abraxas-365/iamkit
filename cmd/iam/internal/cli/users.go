@@ -28,6 +28,7 @@ func usersCmd() *cobra.Command {
 	cmd.AddCommand(usersStateCmd("reactivate", "Lift a user's suspension", "User reactivated: "))
 	cmd.AddCommand(metadataCmd("users", "user"))
 	cmd.AddCommand(usersProfileCmd())
+	cmd.AddCommand(usersDevicesCmd())
 	return cmd
 }
 

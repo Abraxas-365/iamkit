@@ -10,6 +10,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
+	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
 )
@@ -155,6 +156,30 @@ type SecondFactor interface {
 	AssertFor(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string) (authentication.WebAuthnOptions, error)
 	Send(ctx context.Context, boundary authentication.Context, user identity.UserID, amr []string, factor string, enroll bool) (authentication.CodeSent, error)
 	Enrolling(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (authentication.Enrollment, error)
+	// SendRisk emails the code of a risk challenge to the user's verified
+	// address; VerifyRisk checks it (neither enrolls a factor).
+	SendRisk(ctx context.Context, boundary authentication.Context, user identity.UserID) (authentication.CodeSent, error)
+	VerifyRisk(ctx context.Context, boundary authentication.Context, user identity.UserID, proof authentication.Proof) error
+}
+
+// Captcha is the part of the risk module the hosted pages use: what the
+// widget needs, verifying an answer, and the pass a solved CAPTCHA leaves
+// on the authorization ticket (hash) for the next pages.
+type Captcha interface {
+	PublicCaptcha(ctx context.Context, environment identity.EnvironmentID, surface string) (risk.PublicCaptcha, error)
+	CheckCaptcha(ctx context.Context, check risk.CaptchaCheck) (string, error)
+	GrantPass(ctx context.Context, environment identity.EnvironmentID, ticket []byte) error
+	// UsePass spends one use of the ticket's pass for a credential post
+	// (false: none left, the widget must be solved again).
+	UsePass(ctx context.Context, environment identity.EnvironmentID, ticket []byte) (bool, error)
+	Passed(ctx context.Context, environment identity.EnvironmentID, ticket []byte) (bool, error)
+}
+
+// Risk is risk evaluation for the hosted journey (risk.Evaluator).
+type Risk interface {
+	Screen(ctx context.Context, signal risk.Signal) error
+	Assess(ctx context.Context, signal risk.Signal) risk.Decision
+	Record(ctx context.Context, signal risk.Signal, outcome string, decision risk.Decision)
 }
 
 // Features reads IAMKit's feature flags (feature.Queries).

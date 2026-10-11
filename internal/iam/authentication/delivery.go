@@ -27,6 +27,13 @@ type Message struct {
 	Organization string     `json:"organization,omitempty"`
 	Inviter      string     `json:"inviter,omitempty"`
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+	// Security alerts (purpose security_alert): the detection that fired
+	// and what is known about the sign-in.
+	Detection  string     `json:"detection,omitempty"`
+	IP         string     `json:"ip,omitempty"`
+	Country    string     `json:"country,omitempty"`
+	UserAgent  string     `json:"user_agent,omitempty"`
+	OccurredAt *time.Time `json:"occurred_at,omitempty"`
 
 	Environment identity.EnvironmentID `json:"-"`
 	Locale      string                 `json:"-"` // requested language; "" = environment default
@@ -204,7 +211,7 @@ type PreviewInput struct {
 const MaxAppName = 100
 
 // PreviewPurposes are the emails IAMKit renders.
-var PreviewPurposes = []string{PurposeLogin, PurposePasswordReset, PurposeEmailVerification, PurposeInvitation, PurposeMFA, PurposeTest}
+var PreviewPurposes = []string{PurposeLogin, PurposePasswordReset, PurposeEmailVerification, PurposeInvitation, PurposeMFA, PurposeSecurityAlert, PurposeTest}
 
 // Validate checks the purpose and draft wording; an unknown locale falls
 // back like any other.

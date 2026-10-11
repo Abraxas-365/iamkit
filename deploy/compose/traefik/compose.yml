@@ -65,6 +65,8 @@ services:
       IAMKIT_TRUSTED_PROXIES: ${EDGE_SUBNET:-10.89.250.0/24}
     volumes:
       - keys:/secrets:ro
+      # GeoIP database written by the optional geoip profile; empty otherwise.
+      - geoip:/geoip:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -108,6 +110,31 @@ services:
     networks:
       - backend
 
+  # Optional (COMPOSE_PROFILES=geoip + IAMKIT_GEOIP_DB=/geoip/GeoLite2-City.mmdb):
+  # keeps a MaxMind GeoLite2 database fresh for IAMKit's risk signals
+  # (docs/guides/platform/geoip.md). Needs a free MaxMind account: set
+  # GEOIPUPDATE_ACCOUNT_ID and GEOIPUPDATE_LICENSE_KEY in .env. IAMKit reloads
+  # the file when it changes.
+  geoip-update:
+    image: maxmindinc/geoipupdate:v7.1.0
+    profiles: [geoip]
+    restart: unless-stopped
+    environment:
+      GEOIPUPDATE_ACCOUNT_ID: ${GEOIPUPDATE_ACCOUNT_ID:-}
+      GEOIPUPDATE_LICENSE_KEY: ${GEOIPUPDATE_LICENSE_KEY:-}
+      GEOIPUPDATE_EDITION_IDS: ${GEOIPUPDATE_EDITION_IDS:-GeoLite2-City}
+      # Hours between checks (MaxMind publishes twice a week).
+      GEOIPUPDATE_FREQUENCY: ${GEOIPUPDATE_FREQUENCY:-72}
+    volumes:
+      - geoip:/usr/share/GeoIP
+    healthcheck:
+      test: ["CMD-SHELL", "ls /usr/share/GeoIP/*.mmdb >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+    networks:
+      - egress
+
   # Optional (COMPOSE_PROFILES=otel +
   # OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318).
   otel-collector:
@@ -134,4 +161,5 @@ networks:
 volumes:
   acme:
   keys:
+  geoip:
   pgdata:

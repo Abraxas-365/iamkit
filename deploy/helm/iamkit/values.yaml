@@ -59,6 +59,38 @@ envFrom: []
 # trusts no forwarded header; per-IP rate limits then see the proxy.
 trustedProxies: []
 
+# GeoIP for risk signals (country restrictions, impossible travel;
+# docs/guides/platform/geoip.md). Optional: without it everything else works.
+geoip:
+  # Run a MaxMind geoipupdate sidecar in every pod. It writes a GeoLite2
+  # database into a pod-local volume (no ReadWriteMany storage needed) and
+  # refreshes it every `frequencyHours`; IAMKit reloads the file when it
+  # changes. A failing download is retried every 15 minutes and never makes
+  # the pod unready. Needs a free MaxMind account.
+  enabled: false
+  # Secret with the account id and license key (create it before installing).
+  existingSecret: ""
+  accountIdKey: GEOIPUPDATE_ACCOUNT_ID
+  licenseKeyKey: GEOIPUPDATE_LICENSE_KEY
+  # GeoLite2-City gives country and coordinates (impossible travel);
+  # GeoLite2-Country gives country only.
+  editionId: GeoLite2-City
+  frequencyHours: 72
+  image:
+    repository: maxmindinc/geoipupdate
+    tag: v7.1.0
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+  # Alternative to the database: a country header set by your CDN or proxy
+  # (for example CF-IPCountry). Believed only from trustedProxies, which
+  # must then be set. Country only; independent of `enabled`.
+  header: ""
+
 # Background jobs (back-channel logout, webhooks, pruning) run on every
 # replica unless disabled here; they coordinate through the database.
 workers:

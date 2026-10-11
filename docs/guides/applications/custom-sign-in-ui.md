@@ -114,6 +114,7 @@ sign-in, so the UI can render it the way the hosted pages would:
 | `connections` | Social and environment connections offered as buttons |
 | `branding` | Display name, logo, accent color, theme, legal links (with [organization overrides](hosted-login.md#organization-branding) for the hint) |
 | `texts` | [Custom sign-in texts](hosted-login.md) for `locale`, as `hosted.*` catalog keys |
+| `captcha` | `{provider, site_key}` when the environment's [bot protection](../sign-in/bot-protection.md) asks headless sign-ins for a CAPTCHA; absent otherwise |
 
 ## Complete the authorization
 
@@ -134,6 +135,12 @@ import { IAMKitProvider, SignInForm } from "@iamkit/react";
   <SignInForm ticket={ticket} organization={defaultOrganizationId} classNames={{ button: "btn btn-primary" }} />
 </IAMKitProvider>
 ```
+
+With [bot protection](../sign-in/bot-protection.md) on, `<SignInForm>` shows the
+CAPTCHA step itself and `<Captcha/>` renders the widget in a custom layout.
+`@iamkit/js` also sends a stable `device_id` from `localStorage` so
+[risk signals](../sign-in/risk-signals.md#devices) can recognise returning
+devices; a risk challenge arrives as the email-code second-factor step.
 
 `<SignInForm>` covers every step (`identify`, `password`, `new_password`,
 `code`, `reset`, `ldap`, `mfa`, `enroll`, `signup`, `signup_verify`,
@@ -169,6 +176,12 @@ A request with `prompt=none` has no session to reuse: `authorize` throws
 `error=login_required` and the `state`; navigate there. With `prompt=login` or
 `max_age=0`, complete with a token from a sign-in made after `authorize`
 (see [`prompt` and `max_age`](oauth-oidc.md#prompt-and-max_age)).
+
+A CAPTCHA-protected environment answers 403 `CAPTCHA_REQUIRED` without a
+`captchaToken`, and risk rules can answer 403 `SIGN_IN_BLOCKED` or an
+`mfa_required` result with `reason: "risk_challenge"` (the email code step);
+see [bot protection](../sign-in/bot-protection.md#headless-custom-sign-in-ui) and
+[risk signals](../sign-in/risk-signals.md#the-challenge).
 
 See the package READMEs for every call and error code.
 

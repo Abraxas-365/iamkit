@@ -1,0 +1,14 @@
+Subject: Security alert for your Acme account
+
+Unusual sign-in to your account
+
+A sign-in to your account was flagged: a device we haven't seen before.
+
+When: October 4, 2026 12:00 UTC
+Where: PE (203.0.113.7)
+Device: Mozilla/5.0 (X11; Linux x86_64)
+
+If this was you, you can ignore this email.
+
+--
+If it wasn't you, change your password and review your active sessions.

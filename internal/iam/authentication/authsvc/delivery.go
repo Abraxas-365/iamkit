@@ -228,6 +228,9 @@ func (s *DeliveryService) Preview(ctx context.Context, environmentID identity.En
 			base = url
 		}
 		m.Link = authentication.InvitationLink(base, "sample")
+	case authentication.PurposeSecurityAlert:
+		at := s.now()
+		m.Detection, m.IP, m.Country, m.UserAgent, m.OccurredAt = "new_device", "203.0.113.7", "PE", "Mozilla/5.0", &at
 	case authentication.PurposeTest:
 	default:
 		m.Code = sampleCode

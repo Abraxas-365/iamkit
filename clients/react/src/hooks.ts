@@ -6,8 +6,8 @@ const Context = createContext<SignIn | null>(null);
 
 /** Provides the IAMKit sign-in client to the hooks below. */
 export function IAMKitProvider(props: SignInOptions & { children?: ReactNode }) {
-  const { children, baseUrl, fetch, storage } = props;
-  const iam = useMemo(() => createSignIn({ baseUrl, fetch, storage }), [baseUrl, fetch, storage]);
+  const { children, baseUrl, fetch, storage, deviceId, deviceStorage } = props;
+  const iam = useMemo(() => createSignIn({ baseUrl, fetch, storage, deviceId, deviceStorage }), [baseUrl, fetch, storage, deviceId, deviceStorage]);
   return createElement(Context.Provider, { value: iam }, children);
 }
 

@@ -251,3 +251,42 @@ const CORSMaxAge = 3600
 // ClientOriginCacheTTL is how long an answer about an OAuth client's
 // allowed origin is reused: a removed origin stops working within it.
 const ClientOriginCacheTTL = time.Minute
+
+// Bot protection (CAPTCHA) and risk signals.
+const (
+	// CaptchaTimeout bounds a CAPTCHA provider's siteverify call; a
+	// transport error or a slower answer lets the request through
+	// (logged, iamkit.captcha.unavailable), an "invalid" answer never does.
+	CaptchaTimeout = 5 * time.Second
+	// CaptchaPassTTL is how long a CAPTCHA solved on a hosted page covers
+	// the next pages of the same authorization.
+	CaptchaPassTTL = 10 * time.Minute
+	// CaptchaPassUses is how many credential posts (password, code, reset,
+	// directory) one solved hosted CAPTCHA covers; then the widget is shown
+	// again, so one pass never covers an unbounded guessing run.
+	CaptchaPassUses = 5
+	// SignInAttemptRetention is how long sign-in attempts are kept unless
+	// IAMKIT_SIGN_IN_ATTEMPT_RETENTION says otherwise.
+	SignInAttemptRetention = 30 * 24 * time.Hour
+	// MaxUserDevices caps the known devices of one user; the least
+	// recently seen is forgotten first.
+	MaxUserDevices = 50
+	// UserDeviceRetention forgets a known device (its last IP, country and
+	// User-Agent) not seen for this long; it is then new again.
+	UserDeviceRetention = 180 * 24 * time.Hour
+	// SignInBlockedEventInterval: at most one sign_in.blocked event per
+	// client address and reason within it (every attempt is still kept).
+	SignInBlockedEventInterval = time.Minute
+	// DeviceCookieMaxAge is the lifetime of the hosted device cookie
+	// (__Host-iamkit-device, 400 days: the browser maximum).
+	DeviceCookieMaxAge = 400 * 24 * time.Hour
+	// SecurityAlertInterval: at most one security_alert email per user per
+	// detection within it.
+	SecurityAlertInterval = time.Hour
+	// GeoIPReloadInterval: how often the GeoIP database file is checked
+	// for a newer version (mtime).
+	GeoIPReloadInterval = time.Minute
+	// ImpossibleTravelMinKm: closer sign-ins are never impossible travel
+	// (GeoIP city precision).
+	ImpossibleTravelMinKm = 500
+)

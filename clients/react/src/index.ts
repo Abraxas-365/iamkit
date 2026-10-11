@@ -3,3 +3,4 @@ export { IAMKitProvider, useIAMKit, useInvitation, useSignIn, type Call } from "
 export { SignInForm, type ClassNames, type SignInFormProps } from "./SignInForm.js";
 export { AcceptInvitation, type AcceptInvitationProps } from "./AcceptInvitation.js";
 export { defaultTexts, translator, type Translate } from "./texts.js";
+export { Captcha, captchaScripts, loadCaptchaScript, type CaptchaProps, type CaptchaRenderProps } from "./Captcha.js";

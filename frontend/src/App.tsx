@@ -32,6 +32,7 @@ import APIKeyPolicyPage from '@/pages/api-key-policy'
 import UserSchemaPage from '@/pages/user-schema'
 import SignInPolicyPage from '@/pages/sign-in-policy'
 import SigningKeysPage from '@/pages/signing-keys'
+import SecurityPage from '@/pages/security'
 import FeaturesPage from '@/pages/features'
 import UsagePage from '@/pages/usage'
 import ActionsPage, { ActionTargetPage } from '@/pages/actions'
@@ -82,6 +83,7 @@ export default function App() {
         <Route path="api-key-policy" element={<APIKeyPolicyPage />} />
         <Route path="password-policy" element={<PasswordPolicyPage />} />
         <Route path="sign-in-policy" element={<SignInPolicyPage />} />
+        <Route path="security" element={<SecurityPage />} />
         <Route path="signing-keys" element={<SigningKeysPage />} />
         <Route path="features" element={<FeaturesPage />} />
         <Route path="usage" element={<UsagePage />} />
