@@ -162,7 +162,7 @@
   "hosted.error.sso_not_offered": "Twoja organizacja wymaga logowania jednokrotnego, którego ta aplikacja nie oferuje.",
   "hosted.error.sso_email": "Ten adres e-mail nie może logować się do tej aplikacji przez logowanie jednokrotne.",
   "hosted.error.sso_failed": "Logowanie jednokrotne nie zostało ukończone. Spróbuj ponownie.",
-  "hosted.error.login_required": "Twój dostawca tożsamości użył ponownie wcześniejszego logowania. Zaloguj się ponownie, aby kontynuować.",
+  "hosted.error.login_required": "Twój dostawca tożsamości ponownie wykorzystał wcześniejsze logowanie. Zaloguj się ponownie, aby kontynuować.",
   "hosted.error.credentials": "Nieprawidłowy e-mail, nazwa użytkownika lub hasło.",
   "hosted.error.code": "Ten kod jest nieprawidłowy lub wygasł.",
   "hosted.error.webauthn": "Nie udało się użyć klucza bezpieczeństwa ani klucza dostępu. Spróbuj ponownie lub wybierz inną metodę.",

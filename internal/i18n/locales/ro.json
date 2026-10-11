@@ -161,7 +161,7 @@
   "hosted.error.sso_not_offered": "Organizația dvs. cere autentificare unică, pe care această aplicație nu o oferă.",
   "hosted.error.sso_email": "Cu acest e-mail nu vă puteți conecta la această aplicație prin autentificare unică.",
   "hosted.error.sso_failed": "Autentificarea unică nu s-a finalizat. Încercați din nou.",
-  "hosted.error.login_required": "Furnizorul tău de identitate a refolosit o autentificare anterioară. Autentifică-te din nou pentru a continua.",
+  "hosted.error.login_required": "Furnizorul dvs. de identitate a refolosit o conectare anterioară. Conectați-vă din nou pentru a continua.",
   "hosted.error.credentials": "E-mail, nume de utilizator sau parolă incorecte.",
   "hosted.error.code": "Acest cod nu este valid sau a expirat.",
   "hosted.error.webauthn": "Cheia de securitate sau cheia de acces nu a putut fi folosită. Încercați din nou sau alegeți altă metodă.",

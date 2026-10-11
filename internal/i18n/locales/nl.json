@@ -160,7 +160,7 @@
   "hosted.error.sso_not_offered": "Je organisatie vereist single sign-on, maar deze applicatie biedt dat niet aan.",
   "hosted.error.sso_email": "Met dit e-mailadres kun je niet via single sign-on inloggen bij deze applicatie.",
   "hosted.error.sso_failed": "Single sign-on is niet voltooid. Probeer het opnieuw.",
-  "hosted.error.login_required": "Je identiteitsprovider heeft een eerdere aanmelding hergebruikt. Meld je opnieuw aan om door te gaan.",
+  "hosted.error.login_required": "Je identiteitsprovider heeft een eerdere aanmelding hergebruikt. Log opnieuw in om door te gaan.",
   "hosted.error.credentials": "Onjuist e-mailadres, gebruikersnaam of wachtwoord.",
   "hosted.error.code": "Die code is ongeldig of verlopen.",
   "hosted.error.webauthn": "Je beveiligingssleutel of passkey kon niet worden gebruikt. Probeer het opnieuw of kies een andere methode.",

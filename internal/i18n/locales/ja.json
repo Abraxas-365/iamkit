@@ -159,7 +159,7 @@
   "hosted.error.sso_not_offered": "組織でシングルサインオンが必須ですが、このアプリケーションでは提供されていません。",
   "hosted.error.sso_email": "このメールアドレスでは、シングルサインオンでこのアプリケーションにサインインできません。",
   "hosted.error.sso_failed": "シングルサインオンが完了しませんでした。もう一度お試しください。",
-  "hosted.error.login_required": "IDプロバイダーが以前のサインインを再利用しました。続行するには、もう一度サインインしてください。",
+  "hosted.error.login_required": "ID プロバイダーが以前のサインインを再利用しました。続行するにはもう一度サインインしてください。",
   "hosted.error.credentials": "メールアドレス、ユーザー名、またはパスワードが正しくありません。",
   "hosted.error.code": "このコードは無効か、期限切れです。",
   "hosted.error.webauthn": "セキュリティキーまたはパスキーを使用できませんでした。もう一度試すか、別の方法を選択してください。",

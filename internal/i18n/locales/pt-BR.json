@@ -160,7 +160,7 @@
   "hosted.error.sso_not_offered": "Sua organização exige login único, que este aplicativo não oferece.",
   "hosted.error.sso_email": "Este e-mail não pode entrar neste aplicativo com login único.",
   "hosted.error.sso_failed": "O login único não foi concluído. Tente novamente.",
-  "hosted.error.login_required": "Seu provedor de identidade reutilizou um login anterior. Entre novamente para continuar.",
+  "hosted.error.login_required": "Seu provedor de identidade reutilizou um acesso anterior. Entre novamente para continuar.",
   "hosted.error.credentials": "E-mail, nome de usuário ou senha incorretos.",
   "hosted.error.code": "Esse código é inválido ou expirou.",
   "hosted.error.webauthn": "Não foi possível usar sua chave de segurança ou chave de acesso. Tente novamente ou use outro método.",
