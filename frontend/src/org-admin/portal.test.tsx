@@ -8,6 +8,7 @@ import OrgAdminPortal from './portal'
 const fetchMock = vi.fn()
 const assign = vi.fn()
 let enabled = true
+let keysEnabled = true
 let calls: { url: string; method: string; body?: unknown; auth?: string }[] = []
 
 function jwt(claims: Record<string, unknown>) {
@@ -17,10 +18,15 @@ function jwt(claims: Record<string, unknown>) {
 function signedIn(permissions: string[]) {
   sessionStorage.setItem('iamkit-org-admin:env1', JSON.stringify({ access_token: jwt({ organization_id: 'org1', permissions }), refresh_token: 'rt', expires_at: Date.now() + 60_000 }))
 }
+const apiKey = (over: Record<string, unknown>) => ({
+  id: 'k1', owner: { type: 'organization' }, organization_id: 'org1', organization_name: 'Acme', resource_id: 'r1', resource_name: 'Billing API', name: 'ERP sync', permissions: ['billing:read'],
+  obfuscated_value: 'ik_key_…wxyz', expires_at: '2999-01-01T00:00:00Z', expires: true, last_used_at: null, revoked_at: null, created_by: { kind: 'machine', id: 'abc' }, created_at: '2026-09-29T00:00:00Z', state: 'active', ...over,
+})
 const page = (items: unknown[]) => ({ items, page: { total: items.length, limit: 50, offset: 0 } })
 
 beforeEach(() => {
   enabled = true
+  keysEnabled = true
   calls = []
   sessionStorage.clear()
   vi.stubGlobal('fetch', fetchMock)
@@ -33,6 +39,14 @@ beforeEach(() => {
     if (url === '/oauth/userinfo') return Response.json({ sub: 'u9', email: 'owner@acme.test', name: 'Olivia Owner' })
     const path = url.replace('/api/v1/environments/env1/organizations/org1/admin', '').split('?')[0]
     if (method === 'POST' && path === '/directories') return Response.json({ id: 'c2', secret: 'ik_scim_topsecret', expires_at: '2027-01-01T00:00:00Z', connection_id: 'k1', scim_url: 'https://iam.example/scim/v2' }, { status: 201 })
+    if (method === 'POST' && path === '/api-keys') return Response.json({ ...apiKey({ id: 'k9', name: JSON.parse(String(init.body)).name }), value: 'ik_key_org_secret' }, { status: 201 })
+    if (method === 'GET' && path === '/api-keys/options') return Response.json({ enabled: keysEnabled, max_ttl_days: 100, resources: [{ id: 'r1', name: 'Billing API', audience: 'https://billing', permissions: ['billing:read', 'billing:write'] }] })
+    if (method === 'GET' && path === '/api-keys') {
+      const owner = new URLSearchParams(url.split('?')[1]).get('owner_type')
+      return Response.json(page(owner === 'user'
+        ? [apiKey({ id: 'k2', name: 'laptop', owner: { type: 'user', user_id: 'u1' }, user_name: 'Alice Member', created_by: { kind: 'user', id: 'u1' } })]
+        : [apiKey({})]))
+    }
     if (method === 'POST' && path === '/log-streams') return Response.json({ id: 'ls2' }, { status: 201 })
     if (method === 'PATCH' || method === 'DELETE') return new Response(null, { status: 204 })
     if (path === '/directories') return Response.json({ ...page([{ id: 'c1', name: 'Okta', connection_id: 'k1', expires_at: '2099-01-01T00:00:00Z', revoked_at: null, adopt_existing_members: false, adopt_scope: 'any', map_phone: false }]), scim_url: 'https://iam.example/scim/v2' })
@@ -152,7 +166,7 @@ it('hides directory writes without iam:org:sso:write', async () => {
 })
 
 it('shows the Setup links page only to accounts holding every organization permission', async () => {
-  const all = ['iam:org:read', 'iam:org:settings:write', 'iam:org:members:read', 'iam:org:members:write', 'iam:org:users:write', 'iam:org:roles:read', 'iam:org:roles:assign', 'iam:org:invitations:write', 'iam:org:domains:write', 'iam:org:sso:write', 'iam:org:audit:read', 'iam:org:resources:read', 'iam:org:resources:write', 'iam:org:log-streams:write']
+  const all = ['iam:org:read', 'iam:org:settings:write', 'iam:org:members:read', 'iam:org:members:write', 'iam:org:users:write', 'iam:org:roles:read', 'iam:org:roles:assign', 'iam:org:invitations:write', 'iam:org:domains:write', 'iam:org:sso:write', 'iam:org:audit:read', 'iam:org:resources:read', 'iam:org:resources:write', 'iam:org:log-streams:write', 'iam:org:api-keys:read', 'iam:org:api-keys:write']
   signedIn(all)
   open('/org-admin/env1/setup-links')
   expect(await screen.findByRole('button', { name: 'Create setup link' })).toBeTruthy()
@@ -207,4 +221,70 @@ it('creates organization log streams without a sources choice', async () => {
   await user.type(screen.getByLabelText('API key'), 'dd-key')
   await user.click(screen.getByRole('button', { name: 'Create log stream' }))
   await waitFor(() => expect(calls.find(c => c.method === 'POST' && c.url.endsWith('/admin/log-streams'))?.body).toEqual({ name: 'Mine', destination: 'datadog', config: { site: 'datadoghq.com' }, secret: 'dd-key' }))
+})
+
+it('lists organization keys and members\' keys in two tabs and revokes with the bearer token', async () => {
+  const user = userEvent.setup()
+  signedIn(['iam:org:read', 'iam:org:api-keys:read', 'iam:org:api-keys:write'])
+  open('/org-admin/env1/api-keys')
+  expect(await screen.findByText('ERP sync')).toBeTruthy()
+  expect(within(screen.getByRole('navigation', { name: 'Organization administration' })).getByRole('link', { name: 'API keys' })).toBeTruthy()
+  expect(screen.getByRole('tab', { name: 'Organization keys' }).getAttribute('aria-selected')).toBe('true')
+  expect(screen.getByText('Machine user')).toBeTruthy()
+  await user.click(screen.getByRole('tab', { name: 'Members\' keys' }))
+  expect(await screen.findByText('laptop')).toBeTruthy()
+  expect(screen.getByText('Alice Member')).toBeTruthy()
+  expect(screen.queryByText('ERP sync')).toBeNull()
+  expect(calls.some(c => c.url.includes('/admin/api-keys?') && c.url.includes('owner_type=user'))).toBe(true)
+  await user.click(screen.getByRole('button', { name: 'Actions for laptop' }))
+  await user.click(await screen.findByRole('menuitem', { name: 'Revoke' }))
+  await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Revoke' }))
+  await waitFor(() => expect(calls.some(c => c.method === 'DELETE' && c.url.endsWith('/admin/api-keys/k2') && c.auth?.startsWith('Bearer '))).toBe(true))
+})
+
+it('creates an organization key within the offered resources and lifetimes, showing the value once', async () => {
+  const user = userEvent.setup()
+  signedIn(['iam:org:read', 'iam:org:api-keys:read', 'iam:org:api-keys:write'])
+  open('/org-admin/env1/api-keys')
+  await screen.findByText('ERP sync')
+  await waitFor(() => expect(screen.getAllByRole('button', { name: /Create API key/ })[0].hasAttribute('disabled')).toBe(false))
+  await user.click(screen.getAllByRole('button', { name: /Create API key/ })[0])
+  const dialog = await screen.findByRole('dialog')
+  await user.type(within(dialog).getByLabelText('Name'), 'Billing export')
+  await user.selectOptions(within(dialog).getByLabelText('Resource'), 'r1')
+  await user.click(within(dialog).getByLabelText('billing:read'))
+  // The environment caps lifetimes at 100 days: 30 and 90 days fit, 1 year and never do not.
+  const expiry = within(dialog).getByLabelText<HTMLSelectElement>('Expires in')
+  expect([...expiry.options].map(o => o.text)).toEqual(['30 days', '90 days', '100 days'])
+  expect(expiry.value).toBe('2160h')
+  await user.click(within(dialog).getByRole('button', { name: 'Create' }))
+  await waitFor(() => expect(calls.find(c => c.method === 'POST' && c.url.endsWith('/admin/api-keys'))?.body).toEqual({ resource_id: 'r1', name: 'Billing export', permissions: ['billing:read'], expires_in: '2160h' }))
+  const secret = await screen.findByRole('dialog', { name: 'API key created' })
+  expect(within(secret).getByText('ik_key_org_secret')).toBeTruthy()
+  expect(within(secret).getByText(/shown only once/)).toBeTruthy()
+  await user.click(within(secret).getByRole('button', { name: 'I have saved the key' }))
+  expect(screen.queryByText('ik_key_org_secret')).toBeNull()
+})
+
+it('tells admins that the operator must enable organization keys and disables creating them', async () => {
+  keysEnabled = false
+  signedIn(['iam:org:read', 'iam:org:api-keys:read', 'iam:org:api-keys:write'])
+  open('/org-admin/env1/api-keys')
+  expect(await screen.findByText(/The operator of this environment must enable organization keys/)).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /Create API key/ })).toBeNull()
+  expect(screen.getByText('ERP sync')).toBeTruthy()
+})
+
+it('shows API keys read-only to accounts without the write permission and hides the page without read', async () => {
+  signedIn(['iam:org:read', 'iam:org:api-keys:read'])
+  open('/org-admin/env1/api-keys')
+  expect(await screen.findByText('ERP sync')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /Create API key/ })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Actions for ERP sync' })).toBeNull()
+  expect(calls.some(c => c.url.endsWith('/api-keys/options'))).toBe(false)
+  cleanup()
+  signedIn(['iam:org:read'])
+  open('/org-admin/env1')
+  const nav = await screen.findByRole('navigation', { name: 'Organization administration' })
+  expect(within(nav).queryByRole('link', { name: 'API keys' })).toBeNull()
 })

@@ -110,3 +110,41 @@ e.GET("/invoices", echo.WrapHandler(http.HandlerFunc(invoicesHandler)),
 
 Read claims with `httpauth.Claims(c.Request())` (gin) or
 `httpauth.Claims(c.Request())` (echo) inside the wrapped handler.
+
+## API keys
+
+By default both packages reject `ik_key_` bearers, which are not JWTs. Pass the
+`AllowAPIKeys` option to accept them next to access tokens: the middleware then
+validates a key online on every request through
+[`POST /identity/v1/introspect`](../api/identity.md). The validator is
+`func(context.Context, string) (authclient.APIKey, error)` (`fiberauth.APIKeyValidator`
+/ `httpauth.APIKeyValidator`); pass the `ValidateAPIKey` method of a client built
+with [`authclient.WithAudience`](authentication.md#validating-api-keys):
+
+```go
+client := authclient.New(iamkitURL, authclient.WithAudience(environmentID, audience))
+
+// Fiber
+app.Use(fiberauth.Authenticate(validate, fiberauth.AllowAPIKeys(client.ValidateAPIKey)))
+
+// net/http
+mux.Handle("/invoices", httpauth.Authenticate(validate,
+    httpauth.RequirePermissions(invoicesHandler, "invoices:read"),
+    httpauth.AllowAPIKeys(client.ValidateAPIKey)))
+// or, router-level: httpauth.Middleware(validate, httpauth.AllowAPIKeys(client.ValidateAPIKey))
+```
+
+For an API key `Claims` is nil: read the request's `Principal`
+(`fiberauth.Principal(c)`, `httpauth.Principal(r)`), whose `APIKey` or `Claims`
+is set, with the accessors `OrganizationID()`, `Permissions()`,
+`HasPermission(p)`, `Owner()` (nil for tokens) and `OrganizationBound(id)`.
+`fiberauth.APIKey(c)` / `httpauth.APIKey(r)` return the validated
+`*authclient.APIKey` (`Owner`, `Permissions`, `ExpiresAt`, …) or nil.
+`RequirePermissions` and `RequireOrganization` accept both principals, with the
+key's **effective** permissions, so they work unchanged. Organization keys carry
+an organization but no user and no session: pair `RequireOrganization` with your
+own check on the owner. The key must have been made for the audience you
+configure. A missing validator, a failed validation or a key without an ID is
+`401`. See
+[API keys](../../guides/machines/api-keys.md#validate-keys-in-your-backend).
+

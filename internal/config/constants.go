@@ -49,6 +49,17 @@ const (
 	SetupLinkMaxPerOrg = 50 // live (unrevoked, unexpired) links per organization
 )
 
+// API keys: the policy defaults for environments without an
+// api_key_policies row (live keys per user per organization, live
+// organization keys per organization); a key's last_used_at is rewritten at
+// most every APIKeyUsedInterval. An omitted expires_in never expires
+// (identity.NoExpiry), like WorkOS.
+const (
+	APIKeyMaxPerUserDefault         = 10
+	APIKeyMaxPerOrganizationDefault = 50
+	APIKeyUsedInterval              = time.Minute
+)
+
 // Signing keys. A key an environment stops signing with keeps verifying
 // for SigningKeyRetireDelay: the longest token lifetime plus clock skew.
 // Instances reread published keys every SigningKeyCacheTTL (and on an

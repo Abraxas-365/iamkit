@@ -249,7 +249,7 @@ func (h *Harness) Do(method, path, token string, body any) Response {
 	}
 	r := httptest.NewRequest(method, path, reader)
 	r.Header.Set("Content-Type", "application/json")
-	if strings.HasPrefix(token, "ik_") && !strings.HasPrefix(token, "ik_svc_") && !strings.HasPrefix(token, "ik_pat_") && !strings.HasPrefix(token, "ik_setupsess_") {
+	if strings.HasPrefix(token, "ik_") && !strings.HasPrefix(token, "ik_svc_") && !strings.HasPrefix(token, "ik_key_") && !strings.HasPrefix(token, "ik_setupsess_") {
 		r.Header.Set("X-API-Key", token)
 	} else if token != "" {
 		r.Header.Set("Authorization", "Bearer "+token)

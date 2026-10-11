@@ -26,6 +26,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/action/actionmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/apikey/apikeymodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/adapters/apphttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/application/appmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/auditlog/auditlogmodule"
@@ -242,7 +243,11 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	mfaModule.Deliver(authenticationModule.DeliveryService, authenticationModule.SMS)
 	userModule := usermodule.New(usermodule.Deps{DB: db, Actions: actionModule.Runner, Quota: usageModule.Commands, ActorID: server.OperatorID, PasswordPolicy: authenticationModule.PasswordPolicies, SMS: authenticationModule.SMS})
 	s.Users = userModule.HTTP
-	s.AccessTokens = userModule.AccessTokens
+	apiKeyModule := apikeymodule.New(apikeymodule.Deps{DB: db, Secrets: mgmtsecret.Generator{}, ActorID: server.OperatorID})
+	s.APIKeys = apiKeyModule.HTTP
+	s.APIKeySelf = apiKeyModule.Self(func(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
+		return s.Tokens.Validate(c, environment, audience)
+	})
 	s.UserKeys = userModule.Keys
 	s.Users.SetValidate(func(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
 		return s.Tokens.Validate(c, environment, audience)
@@ -328,6 +333,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		PasswordPolicies: authenticationModule.PasswordPolicyCommands, PasswordPolicyViews: authenticationModule.PasswordPolicies,
 		Directories: provisioningModule.ControlCommands, DirectoryViews: provisioningModule.ControlQueries,
 		AuditLogs: auditLogModule.EventQueries, LogStreams: logStreamModule.Commands, LogStreamViews: logStreamModule.Queries,
+		APIKeys: apiKeyModule.Commands, APIKeyViews: apiKeyModule.Queries,
 		SetupSecrets: mgmtsecret.Generator{},
 	})
 	s.API.WithSetup(orgAdmin.SetupLinkQueries)
@@ -335,7 +341,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	apiUsers.GuardImports(func(c *fiber.Ctx) error { return apiauth.Require(c, authorization.PermUsersImport) })
 	s.APIHandlers = server.APIHandlerSet{
 		Users:           apiUsers,
-		AccessTokens:    userhttp.NewAccessTokens(userModule.AccessTokenCommands, userModule.AccessTokenQueries, actor),
+		APIKeys:         apiKeyModule.HTTP.WithActor(actor),
 		UserKeys:        userhttp.NewKeys(userModule.KeyCommands, userModule.KeyQueries, actor),
 		Organizations:   orghttp.New(organizationModule.Commands, organizationModule.Queries, actor),
 		Structure:       orghttp.NewStructure(organizationModule.StructureCommands, organizationModule.StructureQueries, actor),

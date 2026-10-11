@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/iam/apikey"
 	"github.com/Abraxas-365/iamkit/internal/iam/auditlog"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
@@ -61,6 +62,13 @@ type Commands interface {
 	// links; only owners (Principal.Owner).
 	CreateSetupLink(ctx context.Context, p Principal, input SetupLinkInput) (IssuedSetupLink, error)
 	RevokeSetupLink(ctx context.Context, p Principal, link identity.SetupLinkID) error
+	// CreateAPIKey issues an organization API key (iam:org:api-keys:write;
+	// users only: setup links cannot create keys). Permissions must also be
+	// ones the administrator holds on the resource.
+	CreateAPIKey(ctx context.Context, p Principal, input apikey.NewAPIKey) (apikey.Issued, error)
+	// RevokeAPIKey revokes an organization key or a member's user key
+	// (404 for any other, machine keys included).
+	RevokeAPIKey(ctx context.Context, p Principal, key identity.APIKeyID) error
 	// CreateLogStream creates a log stream of the organization (sources
 	// audit_logs only); the https signing secret is returned once.
 	// Needs iam:org:log-streams:write, as every method below.
@@ -117,6 +125,12 @@ type Queries interface {
 	AuditLogs(ctx context.Context, p Principal, filter auditlog.Filter, limit int) (auditlog.Page, error)
 	// ExportAuditLogs streams the matching events oldest first to write.
 	ExportAuditLogs(ctx context.Context, p Principal, filter auditlog.Filter, write func(auditlog.Event) error) error
+	// APIKeys, APIKey and APIKeyOptions read the organization's keys:
+	// its own and its members' user keys, never machine keys
+	// (iam:org:api-keys:read; options need write).
+	APIKeys(ctx context.Context, p Principal, filter apikey.Filter, page query.Pagination) (query.Paginated[apikey.APIKey], error)
+	APIKey(ctx context.Context, p Principal, key identity.APIKeyID) (apikey.APIKey, error)
+	APIKeyOptions(ctx context.Context, p Principal) (apikey.Options, error)
 	// LogStreams, LogStream and LogStreamDeliveries read the
 	// organization's own streams (not the environment's): they need
 	// iam:org:audit:read or iam:org:log-streams:write.

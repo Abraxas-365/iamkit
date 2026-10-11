@@ -16,8 +16,8 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	}
 	e := r.Group("/environments/:environment", s.Control.Environment)
 	s.Users.Register(e)
-	if s.AccessTokens != nil {
-		s.AccessTokens.Register(e)
+	if s.APIKeys != nil {
+		s.APIKeys.Register(e)
 	}
 	if s.UserKeys != nil {
 		s.UserKeys.Register(e)

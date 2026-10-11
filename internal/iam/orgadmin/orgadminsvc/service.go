@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/apikey"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
@@ -51,6 +52,8 @@ type Deps struct {
 	AuditLogs           orgadmin.AuditLogs
 	LogStreams          logstream.Commands
 	LogStreamViews      logstream.Queries
+	APIKeys             apikey.Commands
+	APIKeyViews         apikey.Queries
 	// Issuer is IAMKit's public URL; the SCIM base URL derives from it.
 	Issuer string
 }
@@ -124,6 +127,7 @@ func (s *Service) Members(ctx context.Context, p orgadmin.Principal, filter orga
 	if err := p.Require(authorization.PermOrgMembersRead); err != nil {
 		return query.Paginated[organization.MemberView]{}, err
 	}
+	filter.HumansOnly = true
 	return s.d.OrganizationViews.Members(ctx, p.Environment, p.Organization, filter, page)
 }
 
@@ -208,6 +212,7 @@ func (s *Service) Users(ctx context.Context, p orgadmin.Principal, filter user.F
 		return query.Paginated[user.User]{}, err
 	}
 	filter.HomeOrganization = p.Organization
+	filter.Kind = user.KindHuman // machine users are operators' business
 	out, err := s.d.UserQueries.List(ctx, p.Environment, filter, page)
 	for i := range out.Items {
 		out.Items[i].Metadata = nil // operators' data

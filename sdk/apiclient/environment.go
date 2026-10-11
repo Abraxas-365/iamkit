@@ -164,23 +164,100 @@ func (e Environment) MachineUsers(ctx context.Context) ([]User, error) {
 	return list[User](ctx, e.client, e.path("users"), url.Values{"kind": {"machine"}})
 }
 
-// CreateAccessToken issues a machine user's personal access token;
-// requires iam:users:write.
-func (e Environment) CreateAccessToken(ctx context.Context, user string, input CreateAccessToken) (IssuedAccessToken, error) {
-	var out IssuedAccessToken
-	return out, e.client.Do(ctx, "POST", e.path("users", user, "access-tokens"), input, &out)
+// APIKeys reads one page of the environment's API keys of every owner type;
+// requires iam:api-keys:read.
+func (e Environment) APIKeys(ctx context.Context, filter APIKeyFilter, page Page) (APIKeyList, error) {
+	var out APIKeyList
+	if err := e.client.do(ctx, "GET", e.path("api-keys"), page.Query(filter.Query()), nil, &out); err != nil {
+		return APIKeyList{}, err
+	}
+	if out.Items == nil {
+		out.Items = []APIKey{}
+	}
+	return out, nil
 }
 
-// AccessTokens lists the first page of a machine user's tokens; requires
-// iam:users:read.
-func (e Environment) AccessTokens(ctx context.Context, user string) ([]AccessToken, error) {
-	return list[AccessToken](ctx, e.client, e.path("users", user, "access-tokens"), nil)
+// APIKey reads one key; requires iam:api-keys:read.
+func (e Environment) APIKey(ctx context.Context, id string) (APIKey, error) {
+	var out APIKey
+	if err := safeSegment(id); err != nil {
+		return out, err
+	}
+	return out, e.client.Do(ctx, "GET", e.path("api-keys", id), nil, &out)
 }
 
-// RevokeAccessToken revokes a token and the sessions exchanged from it;
+// CreateAPIKey issues an organization key; the value is returned once.
+// Requires iam:api-keys:write.
+func (e Environment) CreateAPIKey(ctx context.Context, input NewAPIKey) (IssuedAPIKey, error) {
+	var out IssuedAPIKey
+	return out, e.client.Do(ctx, "POST", e.path("api-keys"), input, &out)
+}
+
+// RevokeAPIKey revokes any key (idempotent); requires iam:api-keys:write.
+func (e Environment) RevokeAPIKey(ctx context.Context, id string) error {
+	if err := safeSegment(id); err != nil {
+		return err
+	}
+	return e.client.Do(ctx, "DELETE", e.path("api-keys", id), nil, nil)
+}
+
+// APIKeyPolicy reads the environment's API key policy; requires
+// iam:api-keys:read.
+func (e Environment) APIKeyPolicy(ctx context.Context) (APIKeyPolicy, error) {
+	var out APIKeyPolicy
+	return out, e.client.Do(ctx, "GET", e.path("api-key-policy"), nil, &out)
+}
+
+// SaveAPIKeyPolicy replaces the policy and returns it; requires
+// iam:api-keys:write.
+func (e Environment) SaveAPIKeyPolicy(ctx context.Context, input APIKeyPolicyInput) (APIKeyPolicy, error) {
+	var out APIKeyPolicy
+	return out, e.client.Do(ctx, "PUT", e.path("api-key-policy"), input, &out)
+}
+
+// SetResourceAPIKeyPermissions replaces a resource's API key allowlist;
+// requires iam:resources:write. Read it back with Resource.
+func (e Environment) SetResourceAPIKeyPermissions(ctx context.Context, resource string, input APIKeyPermissions) error {
+	if err := safeSegment(resource); err != nil {
+		return err
+	}
+	if input.User == nil {
+		input.User = []string{}
+	}
+	if input.Organization == nil {
+		input.Organization = []string{}
+	}
+	return e.client.Do(ctx, "PUT", e.path("resources", resource, "api-key-permissions"), input, nil)
+}
+
+// UserAPIKeys lists every key of a user; requires iam:users:read.
+func (e Environment) UserAPIKeys(ctx context.Context, user string) ([]APIKey, error) {
+	if err := safeSegment(user); err != nil {
+		return nil, err
+	}
+	return list[APIKey](ctx, e.client, e.path("users", user, "api-keys"), nil)
+}
+
+// CreateMachineAPIKey issues a machine user's key (the only kind that reaches
+// /api/v1 and the token exchange); requires iam:users:write.
+func (e Environment) CreateMachineAPIKey(ctx context.Context, user string, input NewAPIKey) (IssuedAPIKey, error) {
+	var out IssuedAPIKey
+	if err := safeSegment(user); err != nil {
+		return out, err
+	}
+	return out, e.client.Do(ctx, "POST", e.path("users", user, "api-keys"), input, &out)
+}
+
+// RevokeUserAPIKey revokes a user's key and the sessions exchanged from it;
 // requires iam:users:write.
-func (e Environment) RevokeAccessToken(ctx context.Context, user, token string) error {
-	return e.client.Do(ctx, "DELETE", e.path("users", user, "access-tokens", token), nil, nil)
+func (e Environment) RevokeUserAPIKey(ctx context.Context, user, id string) error {
+	if err := safeSegment(user); err != nil {
+		return err
+	}
+	if err := safeSegment(id); err != nil {
+		return err
+	}
+	return e.client.Do(ctx, "DELETE", e.path("users", user, "api-keys", id), nil, nil)
 }
 
 // AddUserKey adds a key to a machine user; requires iam:users:write.

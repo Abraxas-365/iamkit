@@ -10,6 +10,9 @@ import (
 type ResourceCommands interface {
 	Create(ctx context.Context, environment identity.EnvironmentID, input Resource) (identity.ResourceID, error)
 	UpdateCatalog(ctx context.Context, m Mutation, resource identity.ResourceID, input Catalog) error
+	// UpdateAPIKeyPermissions replaces the resource's API key allowlist
+	// (audited resource.api_key_permissions_update → resource.updated).
+	UpdateAPIKeyPermissions(ctx context.Context, m Mutation, resource identity.ResourceID, input APIKeyPermissions) error
 	LinkApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) error
 	UnlinkApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) error
 }
@@ -42,6 +45,7 @@ type ResourceRepository interface {
 	List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[Resource], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID) (Resource, error)
 	UpdateCatalog(ctx context.Context, m Mutation, resource identity.ResourceID, input Catalog) error
+	UpdateAPIKeyPermissions(ctx context.Context, m Mutation, resource identity.ResourceID, input APIKeyPermissions) error
 	LinkApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) error
 	UnlinkApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) error
 	ListByApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, page query.Pagination) (query.Paginated[Resource], error)

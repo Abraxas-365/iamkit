@@ -59,6 +59,22 @@ func (s *Service) UpdateCatalog(ctx context.Context, m authorization.Mutation, i
 	}
 	return s.resources.UpdateCatalog(ctx, m, id, input)
 }
+
+// UpdateAPIKeyPermissions replaces the resource's API key allowlist after
+// checking it against the catalog (never on the IAM resource).
+func (s *Service) UpdateAPIKeyPermissions(ctx context.Context, m authorization.Mutation, id identity.ResourceID, input authorization.APIKeyPermissions) error {
+	if id.IsZero() {
+		return errx.Validation("resource ID must be a valid UUID")
+	}
+	existing, err := s.resources.Find(ctx, m.Environment, id)
+	if err != nil {
+		return err
+	}
+	if err := input.Validate(existing); err != nil {
+		return err
+	}
+	return s.resources.UpdateAPIKeyPermissions(ctx, m, id, input)
+}
 func (s *Service) LinkApplication(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) error {
 	if application.IsZero() || resource.IsZero() {
 		return errx.Validation("invalid request")

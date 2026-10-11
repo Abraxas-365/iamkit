@@ -58,12 +58,16 @@ export {
   type WebhookEvent,
 } from "./webhooks.js";
 export {
+  apiKeyOf,
   authenticate,
   claimsOf,
+  principalOf,
   requireMFA,
   requireOrganization,
   requirePermissions,
   type AuthenticatedRequest,
+  type AuthenticateOptions,
+  type Principal,
   type Middleware,
 } from "./middleware.js";
 export {
@@ -97,3 +101,26 @@ export {
   type AuditLogReceipt,
   type AuditLogsClientOptions,
 } from "./auditlogs.js";
+export {
+  APIKeyPrefix,
+  APIKeysClient,
+  MeAPIKeys,
+  createAPIKeyValidator,
+  hasAPIKeyPermission,
+  isAPIKey,
+  validateAPIKey,
+  type APIKey,
+  type APIKeyFilter,
+  type APIKeyList,
+  type APIKeyOptions,
+  type APIKeyOwner,
+  type APIKeyPermissions,
+  type APIKeyPolicy,
+  type APIKeyRecord,
+  type APIKeysClientOptions,
+  type APIKeyState,
+  type APIKeyValidator,
+  type APIKeyValidatorOptions,
+  type IssuedAPIKey,
+  type NewAPIKey,
+} from "./apikeys.js";

@@ -19,8 +19,11 @@ import (
 
 // Actor kinds.
 const (
-	ActorOperator       = "operator"
-	ActorUser           = "user"
+	ActorOperator = "operator"
+	ActorUser     = "user"
+	// ActorMachine is a machine user acting with its API key, a token
+	// exchanged from it or its JWT-bearer key (actor id = the user id).
+	ActorMachine        = "machine"
 	ActorServiceAccount = "service_account"
 	// ActorDirectory is a SCIM provisioning credential.
 	ActorDirectory = "directory"

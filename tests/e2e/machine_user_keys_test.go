@@ -182,7 +182,7 @@ func TestMachineUserKeys(t *testing.T) {
 	iam := e.IAMResource()
 	e.Must("POST", e.Base+"/application-resources", e.Owner, fiber.Map{"application_id": e.Client, "resource_id": iam}, 201)
 	e.Grant(e.Org, bot, iam, "iam:users:read")
-	reader := e.Must("POST", e.Base+"/users/"+bot+"/access-tokens", e.Owner, fiber.Map{"name": "reader", "organization_id": e.Org, "application_id": e.Client, "resource_id": iam}, 201).JSON["token"].(string)
+	reader := e.Must("POST", e.Base+"/users/"+bot+"/api-keys", e.Owner, fiber.Map{"name": "reader", "organization_id": e.Org, "application_id": e.Client, "resource_id": iam}, 201).JSON["value"].(string)
 	api := "/api/v1/environments/" + e.EnvID + "/users/" + bot + "/keys"
 	if got := ids(e.Must("GET", api, reader, nil, 200), "id"); len(got) != 1 || got[0] != ecID {
 		t.Fatalf("api keys = %v", got)

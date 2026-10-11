@@ -210,6 +210,9 @@ func (r *Repository) Members(ctx context.Context, environment identity.Environme
 		base += fmt.Sprintf(" AND m.manager_id=$%d", n)
 		args = append(args, filter.ManagerID)
 	}
+	if filter.HumansOnly {
+		base += " AND u.kind<>'machine'"
+	}
 	if filter.Active != nil {
 		n++
 		base += fmt.Sprintf(" AND m.active=$%d", n)

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"github.com/Abraxas-365/iamkit/internal/iam/apikey/adapters/apikeyhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/logstream"
 	"github.com/Abraxas-365/iamkit/internal/iam/logstream/adapters/logstreamhttp"
 	"io/fs"
@@ -47,8 +48,8 @@ import (
 // These are separate instances wired with JWT-based actor extraction.
 type APIHandlerSet struct {
 	Users *userhttp.Handler
-	// AccessTokens serves machine users' personal access tokens.
-	AccessTokens *userhttp.AccessTokens
+	// APIKeys serves API keys (operators, and machine users' keys).
+	APIKeys *apikeyhttp.Handler
 	// UserKeys serves machine users' keys (JWT-bearer login).
 	UserKeys        *userhttp.Keys
 	Organizations   *orghttp.Handler
@@ -107,14 +108,16 @@ type Server struct {
 	OAuth               *oauthhttp.Handler
 	Hosted              *hostedhttp.Handler
 	Users               *userhttp.Handler
-	AccessTokens        *userhttp.AccessTokens
-	UserKeys            *userhttp.Keys
-	Delivery            *authhttp.DeliveryHandler
-	SMS                 *authhttp.SMSHandler
-	PasswordPolicy      *authhttp.PasswordPolicyHandler
-	SignInPolicy        *authhttp.SignInPolicyHandler
-	Signup              *authhttp.SignupHandler
-	SigningKeys         *signinghttp.Handler
+	APIKeys             *apikeyhttp.Handler
+	// APIKeySelf serves /identity/v1/me/api-keys.
+	APIKeySelf     *apikeyhttp.Self
+	UserKeys       *userhttp.Keys
+	Delivery       *authhttp.DeliveryHandler
+	SMS            *authhttp.SMSHandler
+	PasswordPolicy *authhttp.PasswordPolicyHandler
+	SignInPolicy   *authhttp.SignInPolicyHandler
+	Signup         *authhttp.SignupHandler
+	SigningKeys    *signinghttp.Handler
 	// Features serves IAMKit's feature flags and environment overrides.
 	Features *featurehttp.Handler
 	// Actions serves action targets, executions and the calls log.
@@ -388,7 +391,7 @@ func (s *Server) App() *fiber.App {
 	}
 	auth.Post("/login", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Auth.Login)
 	auth.Post("/machine-token", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Tokens.Machine)
-	auth.Post("/token-exchange", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Tokens.ExchangeAccessToken)
+	auth.Post("/token-exchange", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Tokens.ExchangeAPIKey)
 	auth.Post("/refresh", s.limit(limiter.Config{Max: 30}), s.Auth.Refresh)
 	auth.Post("/challenges", s.limit(limiter.Config{Max: 20}), s.Auth.InitiateChallenge)
 	auth.Post("/challenges/verify", s.limit(limiter.Config{Max: 30}), s.Auth.VerifyChallenge)
@@ -418,9 +421,14 @@ func (s *Server) App() *fiber.App {
 	auth.Get("/me/sessions", sessionsLimit, s.Tokens.Sessions)
 	auth.Post("/me/sessions/revoke-others", sessionsLimit, s.Tokens.RevokeOtherSessions)
 	auth.Delete("/me/sessions/:id", sessionsLimit, s.Tokens.RevokeSession)
+	if s.APIKeySelf != nil {
+		s.APIKeySelf.Register(auth, s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}))
+	}
 	s.Users.RegisterSelf(auth, s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}),
 		s.limit(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}))
-	auth.Post("/introspect", s.Tokens.Introspect)
+	// Resource servers introspect API keys on every request (the only way to
+	// validate user and organization keys): as wide as /oauth/introspect.
+	auth.Post("/introspect", s.rateLimiter(rateLimit*5), s.Tokens.Introspect)
 	auth.Post("/logout", s.Tokens.Logout)
 	auth.Post("/memberships", s.Tokens.AddMember)
 	if s.Factors != nil {

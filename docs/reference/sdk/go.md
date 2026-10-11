@@ -27,6 +27,10 @@ method matches the server. Do not ignore decode errors or assume unit mock tests
 prove live response compatibility. `iamclient.Do` rejects query strings in its
 path; filtered/paginated requests may require direct HTTP with URL encoding.
 
+[API keys](../../guides/machines/api-keys.md) are managed with `iamclient`/`apiclient`
+([management](management.md)), made by users with `authclient`'s self-service
+methods and validated with [`authclient.ValidateAPIKey`](authentication.md#validating-api-keys).
+
 See [management](management.md), [authentication](authentication.md),
 [Fiber](middleware.md#fiber), [net/http](middleware.md#nethttp), [SCIM](scim.md) and the
 [compilable API example](../../examples/go-api/main.go).

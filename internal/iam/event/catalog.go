@@ -31,16 +31,14 @@ const (
 	// UserProvisioned: a SCIM directory took over an existing user
 	// (data.mode: claimed, reactivated, adopted); UserDeprovisioned: SCIM
 	// DELETE removed the user from the directory's organization.
-	UserProvisioned        = "user.provisioned"
-	UserDeprovisioned      = "user.deprovisioned"
-	UserPhoneVerified      = "user.phone_verified"
-	UserPhoneRemoved       = "user.phone_removed"
-	UserAccessTokenCreated = "user.access_token_created"
-	UserAccessTokenRevoked = "user.access_token_revoked"
-	UserKeyAdded           = "user.key_added"
-	UserKeyRemoved         = "user.key_removed"
-	UserSchemaUpdated      = "user_schema.updated"
-	UserSchemaDeleted      = "user_schema.deleted"
+	UserProvisioned   = "user.provisioned"
+	UserDeprovisioned = "user.deprovisioned"
+	UserPhoneVerified = "user.phone_verified"
+	UserPhoneRemoved  = "user.phone_removed"
+	UserKeyAdded      = "user.key_added"
+	UserKeyRemoved    = "user.key_removed"
+	UserSchemaUpdated = "user_schema.updated"
+	UserSchemaDeleted = "user_schema.deleted"
 
 	OrganizationCreated         = "organization.created"
 	OrganizationUpdated         = "organization.updated"
@@ -203,6 +201,16 @@ const (
 	// LogStreamDisabled: the stream failed for
 	// config.EventWebhookDisableAfter and was turned off.
 	LogStreamDisabled = "log_stream.disabled"
+
+	// API keys (user, organization and machine user keys); data carries
+	// owner_type, user_id (user and machine keys), organization_id,
+	// resource_id, name and permissions — never the value. A key revoked
+	// because its owner's membership ended has actor system and
+	// data.reason membership_ended.
+	APIKeyCreated = "api_key.created"
+	APIKeyRevoked = "api_key.revoked"
+	// APIKeyPolicyUpdated: the environment's API key policy changed.
+	APIKeyPolicyUpdated = "api_key_policy.updated"
 
 	ActionTargetCreated       = "action_target.created"
 	ActionTargetUpdated       = "action_target.updated"

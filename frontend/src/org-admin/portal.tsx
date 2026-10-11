@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Activity, Building2, ScrollText, Waypoints, CheckCircle2, Globe, KeyRound, Link2, Lock, LogOut, Mail, Palette, Server, Share2, Tags, UserCog, Users } from 'lucide-react'
+import { Activity, Building2, ScrollText, Waypoints, CheckCircle2, Globe, KeyRound, KeySquare, Link2, Lock, LogOut, Mail, Palette, Server, Share2, Tags, UserCog, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorState } from '@/components/library/patterns'
 import { LogoMark } from '@/components/brand/logo'
@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { cn, message } from '@/lib/utils'
 import { Client, clearSetup, complete, decode, discover, exchangeSetup, readSetup, readTokens, signIn, signOut, userInfo, type Portal, type Setup } from './session'
 import { AdminContext, ORG_PERMISSIONS, OWNER, useAdmin, type Admin } from './context'
+import { APIKeysPage, API_KEYS_READ } from './api-keys'
 import { AuditLogsPage, LogStreamsPage, AUDIT_READ, STREAMS_WRITE } from './audit'
 import { ActivityPage, BrandingPage, ConnectionsPage, DirectoryPage, DomainsPage, InvitationsPage, MembersPage, OverviewPage, PasswordPage, ResourcesPage, RolesPage, SetupLinksPage, UsersPage } from './pages'
 import { t } from '@/lib/i18n'
@@ -27,6 +28,7 @@ const nav: NavItem[] = [
   ['resources', t('Resources'), Share2, 'iam:org:resources:read'],
   ['branding', t('Branding'), Palette, 'iam:org:read'],
   ['password-policy', t('Password policy'), Lock, 'iam:org:read'],
+  ['api-keys', t('API keys'), KeySquare, API_KEYS_READ],
   ['setup-links', t('Setup links'), Link2, OWNER],
   ['activity', t('Activity'), Activity, 'iam:org:audit:read'],
   ['audit-logs', t('Audit logs'), ScrollText, AUDIT_READ],
@@ -180,6 +182,7 @@ function Shell() {
           <Route path="password-policy" element={<Guard permission="iam:org:read"><PasswordPage /></Guard>} />
           <Route path="setup-links" element={<Guard permission={OWNER}><SetupLinksPage /></Guard>} />
           <Route path="activity" element={<Guard permission="iam:org:audit:read"><ActivityPage /></Guard>} />
+          <Route path="api-keys" element={<Guard permission={API_KEYS_READ}><APIKeysPage /></Guard>} />
           <Route path="audit-logs" element={<Guard permission={AUDIT_READ}><AuditLogsPage /></Guard>} />
           <Route path="log-streams" element={<Guard permission={[AUDIT_READ, STREAMS_WRITE]}><LogStreamsPage /></Guard>} />
           <Route path="*" element={<Navigate to={home} replace />} />

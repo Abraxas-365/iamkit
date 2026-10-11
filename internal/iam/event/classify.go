@@ -66,6 +66,7 @@ var routes = []route{
 	{"POST", "/logout-deliveries/:delivery/retry", LogoutDeliveryRetried, "logout_delivery", "delivery"},
 	{"PUT", "/resources/:resource", ResourceUpdated, "resource", "resource"},
 	{"PUT", "/resources/:resource/access", ResourceAccessUpdated, "resource", "resource"},
+	{"PUT", "/resources/:resource/api-key-permissions", ResourceUpdated, "resource", "resource"},
 	{"PUT", "/resource-grants", ResourceGrantUpdated, "resource_grant", ""},
 	{"DELETE", "/resource-grants/:resource_grant", ResourceGrantDeleted, "resource_grant", "resource_grant"},
 	{"POST", "/roles", RoleCreated, "role", ""},
@@ -127,8 +128,6 @@ var actions = map[string]named{
 	"user.phone_verified":                 {UserPhoneVerified, "user"},
 	"user.phone_verified_set":             {UserPhoneVerified, "user"},
 	"user.phone_removed":                  {UserPhoneRemoved, "user"},
-	"user.access_token_created":           {UserAccessTokenCreated, "user"},
-	"user.access_token_revoked":           {UserAccessTokenRevoked, "user"},
 	"user.key_added":                      {UserKeyAdded, "user"},
 	"user.key_removed":                    {UserKeyRemoved, "user"},
 	"user.schema_updated":                 {UserSchemaUpdated, "environment"},
@@ -206,6 +205,12 @@ var actions = map[string]named{
 	"log_stream.rotate_secret":  {LogStreamSecretRotated, "log_stream"},
 	"log_stream.retry_delivery": {LogStreamDeliveryRetried, "log_stream"},
 	"log_stream.disable":        {LogStreamDisabled, "log_stream"},
+	// API keys (apikey.Action*; target = the key id, or
+	// organizations/<org>/api-keys/<id> so organization keys and members'
+	// user keys reach the organization's audit views).
+	"api_key.create":        {APIKeyCreated, "api_key"},
+	"api_key.revoke":        {APIKeyRevoked, "api_key"},
+	"api_key_policy.update": {APIKeyPolicyUpdated, "environment"},
 	// Ends a session: the trigger writes session.revoked.
 	"oauth.logout": {},
 }

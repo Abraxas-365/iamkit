@@ -1,6 +1,220 @@
 {
   "components": {
     "schemas": {
+      "APIKey": {
+        "properties": {
+          "application_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "application_name": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/Creator"
+          },
+          "environment_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "expires": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "obfuscated_value": {
+            "type": "string"
+          },
+          "organization_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "organization_name": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/Owner"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "resource_name": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string"
+          },
+          "user_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "created_at",
+          "created_by",
+          "environment_id",
+          "expires",
+          "expires_at",
+          "id",
+          "last_used_at",
+          "name",
+          "obfuscated_value",
+          "organization_id",
+          "owner",
+          "permissions",
+          "resource_id",
+          "revoked_at",
+          "state"
+        ],
+        "type": "object"
+      },
+      "APIKeyClaims": {
+        "properties": {
+          "expires_at": {
+            "type": "integer"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/APIKeyOwner"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expires_at",
+          "id",
+          "name",
+          "owner",
+          "permissions",
+          "resource_id"
+        ],
+        "type": "object"
+      },
+      "APIKeyOwner": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "organization_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "organization_id",
+          "type"
+        ],
+        "type": "object"
+      },
+      "APIKeyPermissions": {
+        "properties": {
+          "organization": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "user": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "organization",
+          "user"
+        ],
+        "type": "object"
+      },
+      "APIKeyPermissionsInput": {
+        "properties": {
+          "organization": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "user": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "AcceptanceInput": {
         "properties": {
           "name": {
@@ -40,77 +254,6 @@
           "email",
           "organization_id",
           "sso_required",
-          "user_id"
-        ],
-        "type": "object"
-      },
-      "AccessToken": {
-        "properties": {
-          "application_id": {
-            "description": "UUID (empty when unset)",
-            "type": "string"
-          },
-          "application_name": {
-            "type": "string"
-          },
-          "created_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "expires_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "id": {
-            "description": "UUID (empty when unset)",
-            "type": "string"
-          },
-          "last_used_at": {
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "name": {
-            "type": "string"
-          },
-          "organization_id": {
-            "description": "UUID (empty when unset)",
-            "type": "string"
-          },
-          "organization_name": {
-            "type": "string"
-          },
-          "resource_id": {
-            "description": "UUID (empty when unset)",
-            "type": "string"
-          },
-          "resource_name": {
-            "type": "string"
-          },
-          "revoked_at": {
-            "format": "date-time",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "user_id": {
-            "description": "UUID (empty when unset)",
-            "type": "string"
-          }
-        },
-        "required": [
-          "application_id",
-          "created_at",
-          "expires_at",
-          "id",
-          "last_used_at",
-          "name",
-          "organization_id",
-          "resource_id",
-          "revoked_at",
           "user_id"
         ],
         "type": "object"
@@ -1470,7 +1613,7 @@
             "type": "string"
           },
           "options": {
-            "$ref": "#/components/schemas/Options"
+            "$ref": "#/components/schemas/FederationOptions"
           },
           "organization_id": {
             "description": "UUID (empty when unset)",
@@ -1891,6 +2034,20 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "Creator": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
         ],
         "type": "object"
       },
@@ -3081,6 +3238,118 @@
         ],
         "type": "object"
       },
+      "FederationOptions": {
+        "properties": {
+          "attributes": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AttributeMapping"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authorize_url": {
+            "type": "string"
+          },
+          "base_url": {
+            "type": "string"
+          },
+          "bind_dn": {
+            "type": "string"
+          },
+          "ca_pem": {
+            "type": "string"
+          },
+          "claims": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimMapping"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "domains": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "groups_claim": {
+            "type": "string"
+          },
+          "idp_initiated_client_id": {
+            "type": "string"
+          },
+          "key_id": {
+            "type": "string"
+          },
+          "metadata_url": {
+            "type": "string"
+          },
+          "metadata_xml": {
+            "type": "string"
+          },
+          "name_id_format": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sign_requests": {
+            "type": "boolean"
+          },
+          "start_tls": {
+            "type": "boolean"
+          },
+          "team_id": {
+            "type": "string"
+          },
+          "tenant": {
+            "type": "string"
+          },
+          "tenants": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "token_url": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "user_base_dn": {
+            "type": "string"
+          },
+          "user_filter": {
+            "type": "string"
+          },
+          "userinfo_url": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Font": {
         "properties": {
           "family": {
@@ -3757,44 +4026,7 @@
         },
         "type": "object"
       },
-      "InvitationPreview": {
-        "properties": {
-          "email": {
-            "type": "string"
-          },
-          "expires_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "organization_id": {
-            "description": "UUID (empty when unset)",
-            "type": "string"
-          },
-          "organization_name": {
-            "type": "string"
-          },
-          "password_required": {
-            "type": "boolean"
-          },
-          "sso_required": {
-            "type": "boolean"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "email",
-          "expires_at",
-          "organization_id",
-          "organization_name",
-          "password_required",
-          "sso_required",
-          "status"
-        ],
-        "type": "object"
-      },
-      "Issued": {
+      "InvitationIssued": {
         "properties": {
           "accepted_at": {
             "format": "date-time",
@@ -3886,11 +4118,51 @@
         ],
         "type": "object"
       },
-      "IssuedAccessToken": {
+      "InvitationPreview": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "organization_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "organization_name": {
+            "type": "string"
+          },
+          "password_required": {
+            "type": "boolean"
+          },
+          "sso_required": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "expires_at",
+          "organization_id",
+          "organization_name",
+          "password_required",
+          "sso_required",
+          "status"
+        ],
+        "type": "object"
+      },
+      "Issued": {
         "properties": {
           "application_id": {
             "description": "UUID (empty when unset)",
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "application_name": {
             "type": "string"
@@ -3898,6 +4170,16 @@
           "created_at": {
             "format": "date-time",
             "type": "string"
+          },
+          "created_by": {
+            "$ref": "#/components/schemas/Creator"
+          },
+          "environment_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "expires": {
+            "type": "boolean"
           },
           "expires_at": {
             "format": "date-time",
@@ -3917,12 +4199,27 @@
           "name": {
             "type": "string"
           },
+          "obfuscated_value": {
+            "type": "string"
+          },
           "organization_id": {
             "description": "UUID (empty when unset)",
             "type": "string"
           },
           "organization_name": {
             "type": "string"
+          },
+          "owner": {
+            "$ref": "#/components/schemas/Owner"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "resource_id": {
             "description": "UUID (empty when unset)",
@@ -3938,26 +4235,33 @@
               "null"
             ]
           },
-          "token": {
+          "state": {
             "type": "string"
           },
-          "user_id": {
-            "description": "UUID (empty when unset)",
+          "user_name": {
+            "type": "string"
+          },
+          "value": {
             "type": "string"
           }
         },
         "required": [
-          "application_id",
           "created_at",
+          "created_by",
+          "environment_id",
+          "expires",
           "expires_at",
           "id",
           "last_used_at",
           "name",
+          "obfuscated_value",
           "organization_id",
+          "owner",
+          "permissions",
           "resource_id",
           "revoked_at",
-          "token",
-          "user_id"
+          "state",
+          "value"
         ],
         "type": "object"
       },
@@ -4667,7 +4971,7 @@
         ],
         "type": "object"
       },
-      "NewAccessTokenInput": {
+      "NewAPIKeyInput": {
         "properties": {
           "application_id": {
             "description": "UUID (empty when unset)",
@@ -4685,6 +4989,15 @@
           "organization_id": {
             "description": "UUID (empty when unset)",
             "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
           },
           "resource_id": {
             "description": "UUID (empty when unset)",
@@ -4790,41 +5103,19 @@
         ],
         "type": "object"
       },
-      "Options": {
+      "OptionResource": {
         "properties": {
-          "attributes": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AttributeMapping"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "authorize_url": {
+          "audience": {
             "type": "string"
           },
-          "base_url": {
+          "id": {
+            "description": "UUID (empty when unset)",
             "type": "string"
           },
-          "bind_dn": {
+          "name": {
             "type": "string"
           },
-          "ca_pem": {
-            "type": "string"
-          },
-          "claims": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ClaimMapping"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "domains": {
+          "permissions": {
             "items": {
               "type": "string"
             },
@@ -4832,74 +5123,42 @@
               "array",
               "null"
             ]
-          },
-          "groups_claim": {
-            "type": "string"
-          },
-          "idp_initiated_client_id": {
-            "type": "string"
-          },
-          "key_id": {
-            "type": "string"
-          },
-          "metadata_url": {
-            "type": "string"
-          },
-          "metadata_xml": {
-            "type": "string"
-          },
-          "name_id_format": {
-            "type": "string"
-          },
-          "prompt": {
-            "type": "string"
-          },
-          "scopes": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "sign_requests": {
-            "type": "boolean"
-          },
-          "start_tls": {
-            "type": "boolean"
-          },
-          "team_id": {
-            "type": "string"
-          },
-          "tenant": {
-            "type": "string"
-          },
-          "tenants": {
-            "items": {
-              "type": "string"
-            },
-            "type": [
-              "array",
-              "null"
-            ]
-          },
-          "token_url": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          },
-          "user_base_dn": {
-            "type": "string"
-          },
-          "user_filter": {
-            "type": "string"
-          },
-          "userinfo_url": {
-            "type": "string"
           }
         },
+        "required": [
+          "audience",
+          "id",
+          "name",
+          "permissions"
+        ],
+        "type": "object"
+      },
+      "Options": {
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "max_ttl_days": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/components/schemas/OptionResource"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "enabled",
+          "max_ttl_days",
+          "resources"
+        ],
         "type": "object"
       },
       "OptionsInput": {
@@ -5322,6 +5581,21 @@
         },
         "type": "object"
       },
+      "Owner": {
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "user_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
       "Page": {
         "properties": {
           "limit": {
@@ -5341,11 +5615,11 @@
         ],
         "type": "object"
       },
-      "PaginatedAccessToken": {
+      "PaginatedAPIKey": {
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/AccessToken"
+              "$ref": "#/components/schemas/APIKey"
             },
             "type": [
               "array",
@@ -6343,6 +6617,68 @@
         },
         "type": "object"
       },
+      "Policy": {
+        "properties": {
+          "max_per_organization": {
+            "type": "integer"
+          },
+          "max_per_user": {
+            "type": "integer"
+          },
+          "max_ttl_days": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "organization_keys": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user_keys": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "max_per_organization",
+          "max_per_user",
+          "max_ttl_days",
+          "organization_keys",
+          "updated_at",
+          "user_keys"
+        ],
+        "type": "object"
+      },
+      "PolicyInput": {
+        "properties": {
+          "max_per_organization": {
+            "type": "integer"
+          },
+          "max_per_user": {
+            "type": "integer"
+          },
+          "max_ttl_days": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "organization_keys": {
+            "type": "boolean"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user_keys": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
       "Portal": {
         "properties": {
           "application_id": {
@@ -6850,6 +7186,9 @@
       },
       "Resource": {
         "properties": {
+          "api_key_permissions": {
+            "$ref": "#/components/schemas/APIKeyPermissions"
+          },
           "audience": {
             "type": "string"
           },
@@ -6884,6 +7223,7 @@
           }
         },
         "required": [
+          "api_key_permissions",
           "audience",
           "id",
           "name",
@@ -6985,6 +7325,9 @@
       },
       "ResourceInput": {
         "properties": {
+          "api_key_permissions": {
+            "$ref": "#/components/schemas/APIKeyPermissionsInput"
+          },
           "audience": {
             "type": "string"
           },
@@ -9189,6 +9532,16 @@
               "null"
             ]
           },
+          "api_key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/APIKeyClaims"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "application_id": {
             "description": "UUID (empty when unset)",
             "type": "string"
@@ -9821,7 +10174,7 @@
     "securitySchemes": {
       "accessToken": {
         "bearerFormat": "JWT",
-        "description": "End-user or service-account access token (or a machine user's ik_pat_ token)",
+        "description": "End-user or service-account access token (or a machine user's ik_key_ API key)",
         "scheme": "bearer",
         "type": "http"
       },
@@ -9903,6 +10256,420 @@
         },
         "tags": [
           "OAuth 2.0 / OpenID Connect"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/api-key-policy": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentApiKeyPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "put": {
+        "operationId": "putApiEnvironmentsbyEnvironmentApiKeyPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/api-keys": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentApiKeys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resource_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAPIKey"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentApiKeys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAPIKeyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Issued"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "Create issues an organization API key (operators name the organization in the body; there is no granter check).",
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/api-keys/{key}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentApiKeysbyKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentApiKeysbyKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKey"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
         ]
       }
     },
@@ -14197,6 +14964,387 @@
         ]
       }
     },
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/api-keys": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminApiKeys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resource_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAPIKey"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminApiKeys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Issued"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/api-keys/options": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminApiKeysOptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Options"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/organizations/{organization}/admin/api-keys/{key}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminApiKeysbyKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminApiKeysbyKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "organization",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKey"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
     "/api/v1/environments/{environment}/organizations/{organization}/admin/audit-logs": {
       "get": {
         "operationId": "getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminAuditLogs",
@@ -15937,7 +17085,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Issued"
+                  "$ref": "#/components/schemas/InvitationIssued"
                 }
               }
             },
@@ -16074,7 +17222,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Issued"
+                  "$ref": "#/components/schemas/InvitationIssued"
                 }
               }
             },
@@ -19695,7 +20843,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Issued"
+                  "$ref": "#/components/schemas/InvitationIssued"
                 }
               }
             },
@@ -19902,7 +21050,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Issued"
+                  "$ref": "#/components/schemas/InvitationIssued"
                 }
               }
             },
@@ -22480,6 +23628,73 @@
         ]
       }
     },
+    "/api/v1/environments/{environment}/resources/{resource}/api-key-permissions": {
+      "put": {
+        "operationId": "putApiEnvironmentsbyEnvironmentResourcesbyResourceApiKeyPermissions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/APIKeyPermissionsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "UpdateAPIKeyPermissions replaces the resource's API key allowlist.",
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
     "/api/v1/environments/{environment}/role-assignments": {
       "get": {
         "operationId": "getApiEnvironmentsbyEnvironmentRoleAssignments",
@@ -24501,9 +25716,9 @@
         ]
       }
     },
-    "/api/v1/environments/{environment}/users/{id}/access-tokens": {
+    "/api/v1/environments/{environment}/users/{id}/api-keys": {
       "get": {
-        "operationId": "getApiEnvironmentsbyEnvironmentUsersbyIdAccessTokens",
+        "operationId": "getApiEnvironmentsbyEnvironmentUsersbyIdApiKeys",
         "parameters": [
           {
             "in": "path",
@@ -24537,7 +25752,42 @@
           },
           {
             "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resource_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
             "schema": {
               "type": "string"
             }
@@ -24548,7 +25798,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaginatedAccessToken"
+                  "$ref": "#/components/schemas/PaginatedAPIKey"
                 }
               }
             },
@@ -24581,12 +25831,13 @@
             "accessToken": []
           }
         ],
+        "summary": "ListUser lists the keys of one user, any kind.",
         "tags": [
           "Scoped API"
         ]
       },
       "post": {
-        "operationId": "postApiEnvironmentsbyEnvironmentUsersbyIdAccessTokens",
+        "operationId": "postApiEnvironmentsbyEnvironmentUsersbyIdApiKeys",
         "parameters": [
           {
             "in": "path",
@@ -24609,7 +25860,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NewAccessTokenInput"
+                "$ref": "#/components/schemas/NewAPIKeyInput"
               }
             }
           }
@@ -24619,7 +25870,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssuedAccessToken"
+                  "$ref": "#/components/schemas/Issued"
                 }
               }
             },
@@ -24652,14 +25903,15 @@
             "accessToken": []
           }
         ],
+        "summary": "CreateUser issues a machine key for a machine user.",
         "tags": [
           "Scoped API"
         ]
       }
     },
-    "/api/v1/environments/{environment}/users/{id}/access-tokens/{token}": {
+    "/api/v1/environments/{environment}/users/{id}/api-keys/{key}": {
       "delete": {
-        "operationId": "deleteApiEnvironmentsbyEnvironmentUsersbyIdAccessTokensbyToken",
+        "operationId": "deleteApiEnvironmentsbyEnvironmentUsersbyIdApiKeysbyKey",
         "parameters": [
           {
             "in": "path",
@@ -24679,7 +25931,7 @@
           },
           {
             "in": "path",
-            "name": "token",
+            "name": "key",
             "required": true,
             "schema": {
               "type": "string"
@@ -24717,6 +25969,7 @@
             "accessToken": []
           }
         ],
+        "summary": "RevokeUser revokes a key of the user (404 when the key is another's).",
         "tags": [
           "Scoped API"
         ]
@@ -28098,6 +29351,349 @@
         ]
       }
     },
+    "/identity/v1/me/api-keys": {
+      "get": {
+        "operationId": "getIdentityMeApiKeys",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resource_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "audience": {
+                    "type": "string"
+                  },
+                  "environment_id": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAPIKey"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "tags": [
+          "Identity API"
+        ]
+      },
+      "post": {
+        "operationId": "postIdentityMeApiKeys",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAPIKeyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Issued"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
+    "/identity/v1/me/api-keys/options": {
+      "get": {
+        "operationId": "getIdentityMeApiKeysOptions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "audience": {
+                    "type": "string"
+                  },
+                  "environment_id": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Options"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
+    "/identity/v1/me/api-keys/{key}": {
+      "delete": {
+        "operationId": "deleteIdentityMeApiKeysbyKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "audience": {
+                    "type": "string"
+                  },
+                  "environment_id": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
     "/identity/v1/me/factors": {
       "get": {
         "operationId": "getIdentityMeFactors",
@@ -30637,7 +32233,7 @@
             "description": "Server error"
           }
         },
-        "summary": "ExchangeAccessToken trades the personal access token in the Authorization header for an application access token.",
+        "summary": "ExchangeAPIKey trades the machine user's API key in the Authorization header for an application access token.",
         "tags": [
           "Identity API"
         ]
@@ -31465,6 +33061,438 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ActionTestResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/api-key-policy": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentApiKeyPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "put": {
+        "operationId": "putManagementEnvironmentsbyEnvironmentApiKeyPolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/api-keys": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentApiKeys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resource_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAPIKey"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentApiKeys",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewAPIKeyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Issued"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "Create issues an organization API key (operators name the organization in the body; there is no granter check).",
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/api-keys/{key}": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentApiKeysbyKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentApiKeysbyKey",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKey"
                 }
               }
             },
@@ -41190,7 +43218,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Issued"
+                  "$ref": "#/components/schemas/InvitationIssued"
                 }
               }
             },
@@ -41406,7 +43434,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Issued"
+                  "$ref": "#/components/schemas/InvitationIssued"
                 }
               }
             },
@@ -44724,6 +46752,76 @@
         ]
       }
     },
+    "/management/v1/environments/{environment}/resources/{resource}/api-key-permissions": {
+      "put": {
+        "operationId": "putManagementEnvironmentsbyEnvironmentResourcesbyResourceApiKeyPermissions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/APIKeyPermissionsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "UpdateAPIKeyPermissions replaces the resource's API key allowlist.",
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
     "/management/v1/environments/{environment}/role-assignments": {
       "get": {
         "operationId": "getManagementEnvironmentsbyEnvironmentRoleAssignments",
@@ -48014,9 +50112,9 @@
         ]
       }
     },
-    "/management/v1/environments/{environment}/users/{id}/access-tokens": {
+    "/management/v1/environments/{environment}/users/{id}/api-keys": {
       "get": {
-        "operationId": "getManagementEnvironmentsbyEnvironmentUsersbyIdAccessTokens",
+        "operationId": "getManagementEnvironmentsbyEnvironmentUsersbyIdApiKeys",
         "parameters": [
           {
             "in": "path",
@@ -48050,7 +50148,42 @@
           },
           {
             "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "owner_type",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resource_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
             "schema": {
               "type": "string"
             }
@@ -48061,7 +50194,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PaginatedAccessToken"
+                  "$ref": "#/components/schemas/PaginatedAPIKey"
                 }
               }
             },
@@ -48097,12 +50230,13 @@
             "operatorSession": []
           }
         ],
+        "summary": "ListUser lists the keys of one user, any kind.",
         "tags": [
           "Management API"
         ]
       },
       "post": {
-        "operationId": "postManagementEnvironmentsbyEnvironmentUsersbyIdAccessTokens",
+        "operationId": "postManagementEnvironmentsbyEnvironmentUsersbyIdApiKeys",
         "parameters": [
           {
             "in": "path",
@@ -48125,7 +50259,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NewAccessTokenInput"
+                "$ref": "#/components/schemas/NewAPIKeyInput"
               }
             }
           }
@@ -48135,7 +50269,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IssuedAccessToken"
+                  "$ref": "#/components/schemas/Issued"
                 }
               }
             },
@@ -48171,14 +50305,15 @@
             "operatorSession": []
           }
         ],
+        "summary": "CreateUser issues a machine key for a machine user.",
         "tags": [
           "Management API"
         ]
       }
     },
-    "/management/v1/environments/{environment}/users/{id}/access-tokens/{token}": {
+    "/management/v1/environments/{environment}/users/{id}/api-keys/{key}": {
       "delete": {
-        "operationId": "deleteManagementEnvironmentsbyEnvironmentUsersbyIdAccessTokensbyToken",
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentUsersbyIdApiKeysbyKey",
         "parameters": [
           {
             "in": "path",
@@ -48198,7 +50333,7 @@
           },
           {
             "in": "path",
-            "name": "token",
+            "name": "key",
             "required": true,
             "schema": {
               "type": "string"
@@ -48239,6 +50374,7 @@
             "operatorSession": []
           }
         ],
+        "summary": "RevokeUser revokes a key of the user (404 when the key is another's).",
         "tags": [
           "Management API"
         ]

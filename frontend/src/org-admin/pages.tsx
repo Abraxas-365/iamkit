@@ -508,7 +508,7 @@ export function ActivityPage() {
 
 // Who acted. Operators of the platform have no label here (their emails
 // are not the customer's), so they show by kind, never as a bare ID.
-const actorKinds: Record<string, string> = { operator: t('Platform administrator'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)'), setup_link: t('Setup link'), user: t('User') }
+const actorKinds: Record<string, string> = { operator: t('Platform administrator'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)'), setup_link: t('Setup link'), machine: t('Machine user'), user: t('User') }
 function Actor({ event: e }: { event: Event }) {
   const kind = actorKinds[e.actor_kind]
   if (e.actor_label) return <span title={kind}>{e.actor_label}</span>

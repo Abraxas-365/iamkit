@@ -30,13 +30,13 @@ func TestMachineUserEndpoints(t *testing.T) {
 			w.Write([]byte(`{"id":"k1","user_id":"m1","public_key":{"kty":"RSA"},"expires_at":"2027-09-29T00:00:00Z","created_at":"2026-09-29T00:00:00Z","private_key":"-----BEGIN PRIVATE KEY-----"}`))
 		case strings.HasSuffix(r.URL.Path, "/keys"):
 			w.Write([]byte(`{"items":[{"id":"k1","public_key":{"kty":"RSA"}}],"page":{"total":1,"limit":20,"offset":0}}`))
-		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/access-tokens"):
+		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/api-keys"):
 			w.WriteHeader(201)
-			w.Write([]byte(`{"id":"t1","user_id":"m1","name":"ci","expires_at":"2026-10-29T00:00:00Z","created_at":"2026-09-29T00:00:00Z","token":"ik_pat_x"}`))
+			w.Write([]byte(`{"id":"t1","owner":{"type":"machine","user_id":"m1"},"name":"ci","expires_at":"2026-10-29T00:00:00Z","expires":true,"created_at":"2026-09-29T00:00:00Z","state":"active","value":"ik_key_x"}`))
 		case r.Method == "POST":
 			w.WriteHeader(201)
 			w.Write([]byte(`{"id":"m1"}`))
-		case strings.HasSuffix(r.URL.Path, "/access-tokens"):
+		case strings.HasSuffix(r.URL.Path, "/api-keys"):
 			w.Write([]byte(`{"items":[{"id":"t1","name":"ci"}],"page":{"total":1,"limit":20,"offset":0}}`))
 		default:
 			w.Write([]byte(`{"items":[{"id":"m1","kind":"machine","name":"bot"}],"page":{"total":1,"limit":20,"offset":0}}`))
@@ -54,15 +54,15 @@ func TestMachineUserEndpoints(t *testing.T) {
 	if err != nil || len(users) != 1 || users[0].Kind != "machine" {
 		t.Fatalf("machine users = %+v %v", users, err)
 	}
-	issued, err := env.CreateAccessToken(ctx, "m1", CreateAccessToken{Name: "ci", OrganizationID: "o1", ApplicationID: "a1", ResourceID: "r1", ExpiresIn: "720h"})
-	if err != nil || issued.Token != "ik_pat_x" || issued.ID != "t1" {
+	issued, err := env.CreateMachineAPIKey(ctx, "m1", NewAPIKey{Name: "ci", OrganizationID: "o1", ApplicationID: "a1", ResourceID: "r1", ExpiresIn: "720h"})
+	if err != nil || issued.Value != "ik_key_x" || issued.Owner.Type != "machine" || issued.ID != "t1" {
 		t.Fatalf("issued = %+v %v", issued, err)
 	}
-	tokens, err := env.AccessTokens(ctx, "m1")
+	tokens, err := env.UserAPIKeys(ctx, "m1")
 	if err != nil || len(tokens) != 1 {
 		t.Fatalf("tokens = %+v %v", tokens, err)
 	}
-	if err := env.RevokeAccessToken(ctx, "m1", "t1"); err != nil {
+	if err := env.RevokeUserAPIKey(ctx, "m1", "t1"); err != nil {
 		t.Fatal(err)
 	}
 	key, err := env.AddUserKey(ctx, "m1", AddUserKey{ExpiresIn: "720h"})
@@ -76,11 +76,11 @@ func TestMachineUserEndpoints(t *testing.T) {
 	if err := env.RemoveUserKey(ctx, "m1", "k1"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := env.AccessTokens(ctx, "../x"); err == nil {
+	if _, err := env.UserAPIKeys(ctx, "../x"); err == nil {
 		t.Fatal("unsafe segment accepted")
 	}
 	base := "/management/v1/environments/env-1/"
-	expected := []string{"POST " + base + "users", "GET " + base + "users?kind=machine", "POST " + base + "users/m1/access-tokens", "GET " + base + "users/m1/access-tokens", "DELETE " + base + "users/m1/access-tokens/t1",
+	expected := []string{"POST " + base + "users", "GET " + base + "users?kind=machine", "POST " + base + "users/m1/api-keys", "GET " + base + "users/m1/api-keys", "DELETE " + base + "users/m1/api-keys/t1",
 		"POST " + base + "users/m1/keys", "GET " + base + "users/m1/keys", "DELETE " + base + "users/m1/keys/k1"}
 	if strings.Join(calls, "\n") != strings.Join(expected, "\n") {
 		t.Fatalf("calls:\n%s", strings.Join(calls, "\n"))

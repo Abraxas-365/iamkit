@@ -2,7 +2,8 @@
 
 `/api/v1/environments/:environment` accepts **JWT access tokens** in
 `Authorization: Bearer …`, unlike the management API's `X-API-Key`. Raw
-`ik_mgmt_`, `ik_svc_` and `ik_scim_` credentials are rejected here.
+`ik_mgmt_`, `ik_svc_` and `ik_scim_` credentials are rejected here; of the
+`ik_key_` API keys only a machine user's is accepted.
 
 ## Isolation
 
@@ -28,8 +29,10 @@ the `iam:org:*` permissions under `/organizations/:organization/admin`; see
 The setup is an application binding to the built-in IAM resource and a
 service account with selected IAM permissions. Its credential is exchanged at
 `/identity/v1/machine-token` for a JWT. A [machine user](../../guides/machines/machine-users.md)'s
-personal access token for the IAM resource is accepted directly as the bearer,
-with the IAM permissions the machine user holds in the token's organization.
+[API key](../../guides/machines/api-keys.md#machine-keys) (`ik_key_…`) for the IAM
+resource is accepted directly as the bearer, with the IAM permissions the machine
+user holds in the token's organization. User and organization API keys are 401
+here: they never carry `iam:*` permissions.
 
 Every environment has an IAM resource with prefix `iam` and audience
 `urn:iamkit:environment:ENV_UUID`. Discover its ID through the resources list;
@@ -42,15 +45,16 @@ GET/HEAD select the read permission; mutations select write.
 
 | Routes | Permissions |
 | --- | --- |
-| `/users`, `/users/import`, `/users/:id`, `/users/:id/permanent`, `/users/:id/factors`, `/users/:id/unlock`, `/users/:id/deactivate`, `/users/:id/reactivate`, `/users/:id/access-tokens`, `/users/:id/access-tokens/:token`, `/users/:id/keys`, `/users/:id/keys/:key`, `/users/:id/metadata/:key`, `/users/:id/profile`, `/user-schema` (create/list/get/patch/suspend/delete, factor list/reset, password unlock, deactivate/reactivate, metadata, profile, user schema) | `iam:users:read`, `iam:users:write` |
+| `/users`, `/users/import`, `/users/:id`, `/users/:id/permanent`, `/users/:id/factors`, `/users/:id/unlock`, `/users/:id/deactivate`, `/users/:id/reactivate`, `/users/:id/api-keys`, `/users/:id/api-keys/:key`, `/users/:id/keys`, `/users/:id/keys/:key`, `/users/:id/metadata/:key`, `/users/:id/profile`, `/user-schema` (create/list/get/patch/suspend/delete, factor list/reset, password unlock, deactivate/reactivate, metadata, profile, user schema) | `iam:users:read`, `iam:users:write` |
 | `POST /users/import`, and `password_hash` or `email_verified` on `POST /users` (see [importing users](../../guides/migration/importing-users.md)) | `iam:users:write` and `iam:users:import` |
 | `/organizations`, `/organizations/:id`, `/organizations/:id/metadata/:key` (create/list/get/patch, metadata) | `iam:orgs:read`, `iam:orgs:write` |
 | `/organizations/:id/setup-links` (`GET`, `POST`, `DELETE /:link`; see [setup links](../../guides/organizations/organization-administration.md#setup-links)) | `iam:orgs:read` (`GET`), `iam:orgs:write` |
 | `/memberships`, `/organizations/:organization/members`, member removal, structure and group routes | `iam:members:read`, `iam:members:write` |
 | `/applications`, `/applications/:id` (create/list/get/patch) | `iam:apps:read`, `iam:apps:write` |
-| Resources, `PUT /resources/:id/access`, application-resource bindings, application resource lists | `iam:resources:read`, `iam:resources:write` |
+| Resources, `PUT /resources/:id/access`, `PUT /resources/:id/api-key-permissions`, application-resource bindings, application resource lists | `iam:resources:read`, `iam:resources:write` |
 | Roles, role assignments, group role assignments, effective roles, `/resource-grants` | `iam:roles:read`, `iam:roles:write` |
 | Grants | `iam:grants:read`, `iam:grants:write` |
+| API keys (`/api-keys`, `/api-keys/:key`, `/api-key-policy`; see [API keys](../../guides/machines/api-keys.md)) | `iam:api-keys:read`, `iam:api-keys:write` |
 | Service accounts (create/list/get/authentication/revoke) | `iam:service-accounts:read`, `iam:service-accounts:write` |
 | Event log (`GET /events`, `GET /events/export`, see [event log](../events.md)) | `iam:events:read` |
 | Entity history (`GET /users/:id/history`, also `organizations`, `applications`, `roles`, `resources`; see [change history](../events.md#change-history)) | `iam:events:read` and the collection's read permission |

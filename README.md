@@ -334,7 +334,7 @@ online introspection when you need current session/access status.
 | Passkey | `/identity/v1/passkeys/login/begin` and `/finish` (WebAuthn) | Passkey enrolled; HTTPS origin; passkeys allowed by the sign-in policy |
 | Social or enterprise SSO | `POST /identity/v1/federation/start` with connection ID and full boundary; follow provider redirect/callback. LDAP posts the password to `/federation/ldap/login` | Federation connection (OIDC, OAuth 2.0, SAML or LDAP), linked or JIT-provisioned identity and appropriate local access |
 | OAuth/OIDC client flow | Register an OAuth client bound to an app/resource, then use authorization code + S256 PKCE | [Hosted pages](docs/guides/applications/hosted-login.md) or your own UI with [`@iamkit/js`/`@iamkit/react`](docs/guides/applications/custom-sign-in-ui.md); HTTPS; see the [OAuth guide](docs/guides/applications/oauth-oidc.md) |
-| Machines | Service-account `client_credentials`, machine-user personal access tokens or signed JWT assertions | See [service accounts](docs/guides/machines/service-accounts.md) and [machine users](docs/guides/machines/machine-users.md) |
+| Machines | Service-account `client_credentials`, API keys (user, organization and machine) or signed JWT assertions | See [service accounts](docs/guides/machines/service-accounts.md) and [machine users](docs/guides/machines/machine-users.md) and [API keys](docs/guides/machines/api-keys.md) |
 
 OAuth clients represent **apps obtaining tokens from IAMKit**; federation
 connections represent **external providers authenticating users to IAMKit**.

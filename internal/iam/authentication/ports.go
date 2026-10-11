@@ -406,10 +406,10 @@ type TokenIssuer interface {
 	// already authenticated (OAuth client_credentials): the same token
 	// Machine issues for its secret.
 	MachineAccount(ctx context.Context, account identity.AccountID) (string, error)
-	// ExchangeAccessToken trades a personal access token for an ordinary
+	// ExchangeAPIKey trades a machine user's API key for an ordinary
 	// application access token backed by a session (no refresh token) that
-	// ends when the personal access token is revoked.
-	ExchangeAccessToken(ctx context.Context, raw string) (string, error)
+	// ends when the key is revoked; user and organization keys are refused.
+	ExchangeAPIKey(ctx context.Context, raw string) (string, error)
 	// KeyGrant answers the RFC 7523 JWT-bearer grant: an assertion signed
 	// with a machine user's key (kid = key ID, iss = sub = user ID, aud =
 	// the issuer or its token endpoint, single-use jti) becomes an
@@ -423,9 +423,10 @@ type TokenValidator interface {
 	// the caller to specify audience/environment upfront. Used by /api/v1/*
 	// where the token's own claims determine the environment scope.
 	ValidateSelf(ctx context.Context, raw string) (Token, error)
-	// ValidateAccessToken resolves a personal access token (ik_pat_) used
-	// directly as a bearer; its audience is its resource's.
-	ValidateAccessToken(ctx context.Context, raw string) (Token, error)
+	// ValidateAPIKey resolves an API key (ik_key_: user, organization or
+	// machine user) used directly as a bearer; its audience is its
+	// resource's.
+	ValidateAPIKey(ctx context.Context, raw string) (Token, error)
 }
 
 // TokenCodec signs with the environment's signing key (signing.Keyring)
@@ -525,14 +526,14 @@ type TokenRepository interface {
 	ActorActive(ctx context.Context, token Token) (bool, error)
 	Machine(ctx context.Context, hash []byte) (Token, string, error)
 	MachineAccount(ctx context.Context, account identity.AccountID) (Token, string, error)
-	// AccessToken resolves a live personal access token by its hash (not
-	// revoked or expired; machine user, membership, organization and
-	// application active; a grant on its resource) with the permissions
-	// held now, and records the use.
-	AccessToken(ctx context.Context, hash []byte) (PersonalAccessToken, error)
-	// AccessTokenSession returns a live session of the token lasting past
+	// APIKey resolves a live API key by its hash (not revoked or expired;
+	// policy allows its kind; organization, owner, membership and, for
+	// machine users, application and link live) with the permissions it
+	// has now (none = no key), and records the use.
+	APIKey(ctx context.Context, hash []byte) (ResolvedAPIKey, error)
+	// APIKeySession returns a live session of the machine key lasting past
 	// after, else opens session ending at expires.
-	AccessTokenSession(ctx context.Context, token PersonalAccessToken, session identity.SessionID, after, expires time.Time) (identity.SessionID, error)
+	APIKeySession(ctx context.Context, key ResolvedAPIKey, session identity.SessionID, after, expires time.Time) (identity.SessionID, error)
 	// MachineKey resolves a live key (not expired, user an active machine
 	// user).
 	MachineKey(ctx context.Context, key identity.UserKeyID) (MachineKey, error)

@@ -18,7 +18,7 @@ export interface IAMKitOptions extends Omit<ClientOptions, "baseUrl"> {
   managementKey?: string;
   /**
    * Bearer token: an access token (/api/v1, /identity/v1, /oauth/userinfo),
-   * a machine user's `ik_pat_` token or a SCIM credential (/scim/v2). A
+   * a machine user's `ik_key_` API key or a SCIM credential (/scim/v2). A
    * function is called for every request, so it can refresh.
    */
   token?: string | (() => string | undefined | Promise<string | undefined>);

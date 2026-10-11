@@ -47,7 +47,8 @@ var skipped = map[string]string{
 // documented exchange (token boundaries, signatures): an error there is
 // expected from simulated data.
 var clientChecked = map[string]bool{
-	"authclient.Client.Introspect": true,
+	"authclient.Client.Introspect":     true,
+	"authclient.Client.ValidateAPIKey": true,
 }
 
 // Field rules. Input and result types are shared between endpoints (one
@@ -83,7 +84,8 @@ func TestSDKMatchesOpenAPI(t *testing.T) {
 		{"apiclient.Client", api},
 		{"apiclient.Environment", api.Environment(uuid)},
 		{"apiclient.OrgAdmin", api.Environment(uuid).OrgAdmin(uuid)},
-		{"authclient.Client", authclient.New(server.URL)},
+		{"authclient.Client", authclient.New(server.URL, authclient.WithAudience(uuid, "https://api.example.com"))},
+		{"authclient.Me", authclient.New(server.URL).Me("token", uuid, "https://api.example.com")},
 		{"authclient.OAuthClient", authclient.NewOAuth(server.URL, "client", "secret")},
 		{"authclient.KeyLogin", keyLogin},
 		{"scimclient.Client", scimclient.New(server.URL, "ik_scim_test")},
@@ -168,8 +170,8 @@ func stringArg(name string) string {
 		return "failed"
 	case "secret":
 		return "ik_svc_test"
-	case "token":
-		return "ik_pat_test"
+	case "token", "apiKey":
+		return "ik_key_test"
 	case "email":
 		return "ada@example.com"
 	case "phone":

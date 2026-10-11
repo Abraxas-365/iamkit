@@ -21,7 +21,7 @@ interface EventPage { items: IAMEvent[]; next: number }
 interface AuditEvent { id: string; actor_id: string; actor_label: string; actor_kind?: string; action: string; target_id: string; target_label?: string; created_at: string }
 
 // actorKinds labels who acted when it was not an operator.
-const actorKinds: Record<string, string> = { user: t('End user'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)'), setup_link: t('Setup link') }
+const actorKinds: Record<string, string> = { user: t('End user'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)'), setup_link: t('Setup link'), machine: t('Machine user') }
 
 // Each verb is a whole sentence with the item as a placeholder, so a
 // translation can reorder it and agree with the noun.
@@ -56,6 +56,7 @@ const named: Record<string, string> = {
   'user.sessions_revoked': t('Signed a user out everywhere'), 'user.password_change_required': t('Required a password change'),
   'user.profile_updated': t('Updated a user profile'), 'user.metadata_set': t('Set user metadata'), 'user.metadata_deleted': t('Removed user metadata'),
   'user.phone_verified': t('Phone number verified'), 'user.phone_verified_set': t('Changed whether a phone number is verified'), 'user.phone_removed': t('Phone number removed'),
+  'api_key.create': t('Created an API key'), 'api_key.revoke': t('Revoked an API key'), 'api_key_policy.update': t('Updated the API key policy'),
   'user.access_token_created': t('Created a personal access token'), 'user.access_token_revoked': t('Revoked a personal access token'),
   'user.key_added': t('Added a machine user key'), 'user.key_removed': t('Removed a machine user key'),
   'user.schema_updated': t('Updated the user schema'), 'user.schema_deleted': t('Removed the user schema'),
@@ -109,7 +110,7 @@ export function describeAction(action: string, target = '') {
 }
 
 const eventWords: Record<string, string> = {
-  action: t('action'), action_execution: t('action binding'), action_target: t('action target'), application: t('application'), branding: t('branding'),
+  api_key: t('API key'), api_key_policy: t('API key policy'), action: t('action'), action_execution: t('action binding'), action_target: t('action target'), application: t('application'), branding: t('branding'),
   connection: t('federation connection'), delivery: t('email delivery'), device: t('device sign-in'), domain: t('domain'), email_template: t('email template'),
   feature: t('feature'), grant: t('grant'), group: t('group'), group_role: t('group role'), identity: t('linked identity'), impersonation: t('impersonation'),
   invitation: t('invitation'), login: t('sign-in'), logout_delivery: t('logout delivery'), membership: t('membership'), mfa: t('second factor'),
@@ -146,6 +147,7 @@ const eventVerbs: Record<string, (subject: string) => string> = {
   access_token_created: subject => t('{{subject}} access token created', { subject }), access_token_revoked: subject => t('{{subject}} access token revoked', { subject }),
 }
 const eventNamed: Record<string, string> = {
+  'api_key.created': t('API key created'), 'api_key.revoked': t('API key revoked'), 'api_key_policy.updated': t('API key policy updated'),
   'login.failed': t('Sign-in failed'), 'session.created': t('Signed in'), 'session.revoked': t('Session ended'),
   'user.sessions_revoked': t('Signed out everywhere'), 'user.password_change_required': t('Password change required'), 'user.password_changed': t('Password changed'),
   'user.signed_up': t('User signed up'), 'user.provisioned': t('User provisioned by the directory'), 'user.deprovisioned': t('User deprovisioned by the directory'),

@@ -27,14 +27,33 @@ func bearer(c *fiber.Ctx) string {
 	}
 	return parts[1]
 }
+
+// Validate validates the bearer for the self-service routes: sessions and
+// machine users' API keys. API keys of users and organizations are not
+// IAMKit credentials (only introspection resolves them).
 func (h *Tokens) Validate(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
-	return h.validator.Validate(c.UserContext(), bearer(c), audience, environment)
+	token, err := h.validator.Validate(c.UserContext(), bearer(c), audience, environment)
+	if err != nil {
+		return token, err
+	}
+	return token, refuseKey(token)
+}
+
+// refuseKey is 401 for a token standing for a user or organization API key.
+func refuseKey(t authentication.Token) error {
+	if t.APIKey != nil && t.APIKey.Owner.Type != "machine" {
+		return errx.Unauthorized("API keys of users and organizations cannot call the IAMKit API")
+	}
+	return nil
 }
 
 // Self validates the bearer token by its own claims (any environment and
 // audience IAMKit issued it for) and reads the user's profile.
 func (h *Tokens) Self(c *fiber.Ctx) (authentication.Token, authentication.Profile, error) {
 	token, err := h.validator.ValidateSelf(c.UserContext(), bearer(c))
+	if err == nil {
+		err = refuseKey(token)
+	}
 	if err != nil {
 		return token, authentication.Profile{}, err
 	}
@@ -51,7 +70,11 @@ func (h *Tokens) ProfileOf(c *fiber.Ctx, token authentication.Token) (authentica
 // Verify validates a raw access token by its own claims, like Self does
 // for the bearer token (OAuth token exchange subject tokens).
 func (h *Tokens) Verify(c *fiber.Ctx, raw string) (authentication.Token, error) {
-	return h.validator.ValidateSelf(c.UserContext(), raw)
+	token, err := h.validator.ValidateSelf(c.UserContext(), raw)
+	if err == nil {
+		err = refuseKey(token)
+	}
+	return token, err
 }
 
 // Sign issues an access token for audience without writing a response.
@@ -95,10 +118,10 @@ func (h *Tokens) Machine(c *fiber.Ctx) error {
 	return tokenResponse(c, raw, "")
 }
 
-// ExchangeAccessToken trades the personal access token in the
-// Authorization header for an application access token.
-func (h *Tokens) ExchangeAccessToken(c *fiber.Ctx) error {
-	raw, err := h.issuer.ExchangeAccessToken(c.UserContext(), bearer(c))
+// ExchangeAPIKey trades the machine user's API key in the Authorization
+// header for an application access token.
+func (h *Tokens) ExchangeAPIKey(c *fiber.Ctx) error {
+	raw, err := h.issuer.ExchangeAPIKey(c.UserContext(), bearer(c))
 	if err != nil {
 		return err
 	}
@@ -143,7 +166,8 @@ func (h *Tokens) Introspect(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	token, err := h.Validate(c, input.Environment, input.Audience)
+	// Introspection answers for every kind of API key.
+	token, err := h.validator.Validate(c.UserContext(), bearer(c), input.Audience, input.Environment)
 	c.Set("Cache-Control", "no-store")
 	// An outage is not an inactive token: a resource server must not end a
 	// user's session because IAMKit could not reach its database.

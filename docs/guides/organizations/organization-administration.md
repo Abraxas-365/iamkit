@@ -27,6 +27,8 @@ limited to their organization, without operator access or an environment-wide
    | `iam:org:audit:read` | Read the organization's audit events |
    | `iam:org:resources:read` | List the resources the organization owns, their grants, and the grants it received |
    | `iam:org:resources:write` | Grant the organization's own resources to other organizations |
+   | `iam:org:api-keys:read` | List the organization's [API keys](../machines/api-keys.md) and its members' user keys |
+   | `iam:org:api-keys:write` | Create and revoke organization API keys, revoke members' user keys |
 
 2. **Built-in roles.** Every IAM resource has five roles you cannot change or
    delete (they list with `system_role` set, and show as *Built-in* in the
@@ -64,7 +66,7 @@ If you would rather not build these screens, turn on the **organization
 admin portal**: a page IAMKit hosts at `/org-admin/<environment>` where your
 customers' administrators manage their organization — members, home users,
 invitations, roles, domains, single sign-on, resources, branding, password
-rules and activity — using exactly the routes below.
+rules, API keys and activity — using exactly the routes below.
 
 ```bash
 iam org-admin-portal enable   # prints the link to share
@@ -149,6 +151,31 @@ created for, no sign-in.
   `setup_link` (`actor.id` = the link), shown as *Setup link* in the activity
   pages.
 
+## API keys
+
+Organization administrators manage the organization's
+[API keys](../machines/api-keys.md) themselves: the portal's **API keys** page
+(tabs *Organization* and *Members*) or `…/admin/api-keys`. An *organization key*
+belongs to the organization, not to the person who made it, so it keeps working
+when they leave; a member's *user key* is listed too and can be revoked, but
+administrators cannot create one.
+
+- **Prerequisites.** An operator enables organization keys in the environment's
+  [API key policy](../machines/api-keys.md#1-enable-the-kinds-in-the-policy) and
+  lists, per resource, the permissions organization keys may hold. Without
+  both, the page is empty and creating answers 403 `API_KEYS_DISABLED` or 422.
+- **Granter rule.** An administrator can only give a key permissions they hold
+  themselves (the rule [roles](#rules-that-stop-escalation) follow), and only
+  permissions inside the resource's allowlist and what the organization can
+  reach on it. `GET /api-keys/options` lists, per resource, exactly what the
+  caller may offer; the portal's create form is built from it.
+- **Machine users are not here.** `…/admin/users` leaves machine users out and
+  answers 404 for them, and `…/admin/api-keys` never lists machine keys: machine
+  users and their keys stay with operators.
+- **Setup links cannot create keys.** A setup bearer has no user; the intents do
+  not include API keys and `…/admin/api-keys` answers 403 to it.
+- **Audit.** `api_key.created` and `api_key.revoked`, actor the administrator.
+
 ## Rules that stop escalation
 
 - **Roles.** Administrators assign or remove roles of the IAM resource
@@ -231,6 +258,8 @@ request and response bodies are the management API's.
 | `GET /connections`, `GET /connections/:connection`, `POST`, `PATCH /connections/:connection` (`group_mappings` may only name groups of the caller's organization), `DELETE /connections/:connection`, `POST /connections/:connection/enable` (re-enables a disabled connection as it was; 403 for operator `secret_env` connections) | `iam:org:read`, `iam:org:sso:write` |
 | `GET /directories` (the organization's [SCIM](../enterprise/scim-provisioning.md#self-service-for-organization-admins) tokens, never their secrets, plus `scim_url`), `POST /directories` (`name`, optional `expires_in`, `adopt_existing_members`, `adopt_scope`, `map_phone`; 201 with the `secret` once), `DELETE /directories/:credential` (204; another organization's credential is 404) | `iam:org:read`, `iam:org:sso:write` |
 | `GET /setup-links`, `POST /setup-links` (`intents`, optional `expires_in`; 201 with the `url` once), `DELETE /setup-links/:link` ([setup links](#setup-links); owners only) | every `iam:org:*` permission |
+| `GET /api-keys` (organization keys and members' user keys, never machine keys; filters `owner_type`, `user_id`, `resource_id`, `state`), `GET /api-keys/:key`, `GET /api-keys/options` ([API keys](#api-keys)) | `iam:org:api-keys:read` (`options`: `iam:org:api-keys:write`) |
+| `POST /api-keys` (organization key; a person only, never a setup bearer), `DELETE /api-keys/:key` (organization keys and members' user keys; 204) | `iam:org:api-keys:write` |
 | `GET /events` (`?action=` prefix) | `iam:org:audit:read` |
 | `GET /audit-logs`, `GET /audit-logs/export?format=ndjson\|csv` (the organization's [app audit log](../audit-logs.md#organization-administrators); `organization_id` is always the caller's) | `iam:org:audit:read` |
 | `GET /log-streams`, `GET /log-streams/:id`, `GET /log-streams/:id/deliveries` | `iam:org:audit:read` or `iam:org:log-streams:write` |
@@ -243,7 +272,7 @@ request and response bodies are the management API's.
 ## Audit
 
 Every audit event records `actor_kind` (`operator`, `user`,
-`service_account`, `directory`, `setup_link` or `system`) and the `organization_id` its target lies in.
+`service_account`, `directory`, `setup_link`, `machine` or `system`) and the `organization_id` its target lies in.
 `GET /events` returns the organization's events, newest first; operator
 actors appear without their email. Operators see both fields in
 `GET /audit-events`, and the console marks end-user actors.
@@ -259,6 +288,12 @@ grant, err := admin.PutResourceGrant(ctx, apiclient.ResourceGrant{ResourceID: re
 name := "Acme Corp"
 _, err = admin.SaveBranding(ctx, apiclient.OrgBranding{DisplayName: &name}) // nil fields inherit
 _, err = admin.SetPasswordPolicy(ctx, apiclient.OrgPasswordRequirements{MinLength: 16})
+options, err := admin.APIKeyOptions(ctx)                      // what this admin may offer
+key, err := admin.CreateAPIKey(ctx, apiclient.NewAPIKey{
+    ResourceID: resourceID, Name: "warehouse sync", Permissions: []string{"invoices:read"},
+})
+fmt.Println(key.Value) // ik_key_…, shown once
+err = admin.RevokeAPIKey(ctx, key.ID)
 ```
 
 Source: `internal/iam/orgadmin`, `internal/server/api.go`,

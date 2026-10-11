@@ -11,7 +11,7 @@ import { t } from '@/lib/i18n'
 interface HistoryEvent { id: number; type: string; actor: { kind: string; id?: string }; data?: { changes?: Record<string, [unknown, unknown]> }; occurred_at: string }
 interface HistoryPage { items: HistoryEvent[]; next: number }
 
-const actorKinds: Record<string, string> = { user: t('End user'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)') }
+const actorKinds: Record<string, string> = { user: t('End user'), service_account: t('Service account'), system: t('System'), directory: t('Directory (SCIM)'), machine: t('Machine user') }
 
 /** changeValue renders one side of a change compactly. */
 export function changeValue(v: unknown): string {

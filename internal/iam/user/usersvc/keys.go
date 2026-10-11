@@ -70,3 +70,10 @@ func (s *Keys) Keys(ctx context.Context, environment identity.EnvironmentID, id 
 	}
 	return s.repository.Keys(ctx, environment, id, page)
 }
+
+// credentialTarget is the audit target of a machine credential: its id,
+// with the credential id and the user (the event subject) as event data.
+// The user's id comes last, so the activity log names the machine user.
+func credentialTarget(id identity.UserID, credential, key string) string {
+	return credential + "?" + key + "=" + credential + "&user=" + id.String()
+}

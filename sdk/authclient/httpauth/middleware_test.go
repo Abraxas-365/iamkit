@@ -99,3 +99,59 @@ func TestClaimsNilWithoutAuthenticate(t *testing.T) {
 		t.Fatal("expected nil claims without Authenticate")
 	}
 }
+
+func TestAllowAPIKeys(t *testing.T) {
+	tokens := func(context.Context, string) (*authclient.Claims, error) {
+		return &authclient.Claims{Purpose: "application", OrganizationID: "org", Permissions: []string{"read"}}, nil
+	}
+	keys := func(_ context.Context, value string) (authclient.APIKey, error) {
+		if value != "ik_key_good" {
+			return authclient.APIKey{}, context.Canceled
+		}
+		return authclient.APIKey{ID: "k1", OrganizationID: "org", Permissions: []string{"read"}, Owner: authclient.APIKeyOwner{Type: "organization"}}, nil
+	}
+	who := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := "token"
+		if key := APIKey(r); key != nil {
+			name = key.ID + ":" + Principal(r).Owner().Type
+			if Claims(r) != nil {
+				name = "both"
+			}
+		}
+		w.Write([]byte(name))
+	})
+	build := func(options ...Option) http.Handler {
+		mux := http.NewServeMux()
+		mux.Handle("/", RequireOrganization(RequirePermissions(who, "read"), "org"))
+		mux.Handle("/denied", RequirePermissions(who, "write"))
+		mux.Handle("/other", RequireOrganization(who, "other"))
+		return Middleware(tokens, options...)(mux)
+	}
+	for _, test := range []struct {
+		name, path, token string
+		options           []Option
+		status            int
+		body              string
+	}{
+		{"key allowed", "/", "ik_key_good", []Option{AllowAPIKeys(keys)}, 200, "k1:organization"},
+		{"key refused by validator", "/", "ik_key_bad", []Option{AllowAPIKeys(keys)}, 401, ""},
+		{"key without the option", "/", "ik_key_good", nil, 401, ""},
+		{"key lacking permission", "/denied", "ik_key_good", []Option{AllowAPIKeys(keys)}, 403, ""},
+		{"key of another organization", "/other", "ik_key_good", []Option{AllowAPIKeys(keys)}, 403, ""},
+		{"token still works", "/", "jwt", []Option{AllowAPIKeys(keys)}, 200, "token"},
+		{"token without the option", "/", "jwt", nil, 200, "token"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", test.path, nil)
+			r.Header.Set("Authorization", "Bearer "+test.token)
+			w := httptest.NewRecorder()
+			build(test.options...).ServeHTTP(w, r)
+			if w.Code != test.status {
+				t.Fatalf("status = %d", w.Code)
+			}
+			if test.body != "" && w.Body.String() != test.body {
+				t.Fatalf("body = %q", w.Body.String())
+			}
+		})
+	}
+}

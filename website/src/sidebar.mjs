@@ -51,6 +51,7 @@ export const sidebar = [
     group('Machines and services', [
       page('guides/machines/service-accounts'),
       page('guides/machines/machine-users'),
+      page('guides/machines/api-keys'),
     ]),
     group('Platform and extensibility', [
       page('guides/platform/actions'),

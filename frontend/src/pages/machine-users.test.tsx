@@ -14,13 +14,15 @@ let kinds: string[]
 let tokens: Record<string, unknown>[]
 let keys: Record<string, unknown>[]
 let effective: Record<string, unknown>[]
+let human: boolean
 
 beforeEach(() => {
   calls = []
   kinds = []
-  tokens = [{ id: 't1', name: 'nightly', organization_id: 'o1', organization_name: 'Acme', application_id: 'a1', application_name: 'Billing', resource_id: 'r1', resource_name: 'Billing API', expires_at: '2999-01-01T00:00:00Z', last_used_at: null, revoked_at: null, created_at: '2026-09-29T00:00:00Z' }]
+  tokens = [{ id: 't1', owner: { type: 'machine', user_id: 'm1' }, name: 'nightly', obfuscated_value: 'ik_key_…abcd', permissions: null, expires: true, state: 'active', created_by: { kind: 'operator', id: 'op1' }, organization_id: 'o1', organization_name: 'Acme', application_id: 'a1', application_name: 'Billing', resource_id: 'r1', resource_name: 'Billing API', expires_at: '2999-01-01T00:00:00Z', last_used_at: null, revoked_at: null, created_at: '2026-09-29T00:00:00Z' }]
   keys = [{ id: 'k1', user_id: 'm1', public_key: { kty: 'EC', crv: 'P-256', x: 'x', y: 'y', use: 'sig' }, expires_at: '2999-01-01T00:00:00Z', last_used_at: null, created_at: '2026-09-29T00:00:00Z' }]
   effective = []
+  human = false
   vi.stubGlobal('fetch', fetchMock)
   vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
@@ -30,7 +32,8 @@ beforeEach(() => {
     if (method !== 'GET') calls.push({ method, path, body: init.body ? JSON.parse(String(init.body)) : undefined })
     const page = (items: unknown[]) => ({ items, page: { total: items.length, limit: 50, offset: 0 } })
     if (method === 'POST' && path === `${env}/users`) return Response.json({ id: 'm1' }, { status: 201 })
-    if (method === 'DELETE' && path === `${env}/users/m1/access-tokens/t1`) { tokens = [{ ...tokens[0], revoked_at: '2026-09-29T00:00:00Z' }]; return new Response(null, { status: 204 }) }
+    if (method === 'DELETE' && path === `${env}/users/m1/api-keys/t1`) { tokens = [{ ...tokens[0], state: 'revoked', revoked_at: '2026-09-29T00:00:00Z' }]; return new Response(null, { status: 204 }) }
+    if (method === 'POST' && path === `${env}/users/m1/api-keys`) return Response.json({ ...tokens[0], id: 'new', name: 'weekly', value: 'ik_key_secret_value' }, { status: 201 })
     if (method === 'POST' && path === `${env}/users/m1/keys`) {
       const body = JSON.parse(String(init.body))
       const key = { id: 'k2', user_id: 'm1', public_key: body.public_key ?? { kty: 'RSA', n: 'A'.repeat(342), e: 'AQAB' }, expires_at: '2999-01-01T00:00:00Z', last_used_at: null, created_at: '2026-09-29T00:00:00Z' }
@@ -47,8 +50,10 @@ beforeEach(() => {
     const data = path === '/me' ? { operator_id: 'operator1', workspace_id: 'workspace1', role: 'owner' } :
       path === '/projects' ? [{ id: 'project1', name: 'Billing' }] :
         path === '/projects/project1/environments' ? [{ id: 'env1', name: 'Production' }] :
-          path === `${env}/users/m1` ? machine :
-            path === `${env}/users/m1/access-tokens` ? page(tokens) :
+          path === `${env}/users/m1` ? (human ? { ...machine, kind: 'human', name: 'Ana', email: 'ana@acme.test' } : machine) :
+          path === `${env}/users/m1/factors` ? { factors: [], recovery_codes_remaining: 0 } :
+          path === `${env}/resources/r1` ? { id: 'r1', name: 'Billing API', permissions: ['billing:read', 'billing:write'] } :
+            path === `${env}/users/m1/api-keys` ? page(tokens) :
               path === `${env}/users/m1/keys` ? page(keys) :
               path === `${env}/effective-roles` ? { items: effective } :
               path === `${env}/organizations` ? page([{ id: 'o1', name: 'Acme' }]) :
@@ -77,7 +82,7 @@ it('filters users by kind and creates a machine user', async () => {
   await waitFor(() => expect(calls).toContainEqual({ method: 'POST', path: `${env}/users`, body: { kind: 'machine', name: 'ci-bot' } }))
 })
 
-it('shows a machine user with its tokens instead of second factors and revokes one', async () => {
+it('shows a machine user with its API keys instead of second factors and revokes one', async () => {
   const u = userEvent.setup()
   open('users/m1')
   expect(await screen.findByText('Machine user')).toBeTruthy()
@@ -88,16 +93,54 @@ it('shows a machine user with its tokens instead of second factors and revokes o
   await u.click(await screen.findByRole('menuitem', { name: 'Revoke' }))
   const dialog = await screen.findByRole('dialog')
   await u.click(within(dialog).getByRole('button', { name: 'Revoke' }))
-  await waitFor(() => expect(calls.some(c => c.method === 'DELETE' && c.path === `${env}/users/m1/access-tokens/t1`)).toBe(true))
+  await waitFor(() => expect(calls.some(c => c.method === 'DELETE' && c.path === `${env}/users/m1/api-keys/t1`)).toBe(true))
   expect(await screen.findByText('Revoked')).toBeTruthy()
 })
 
-it('warns in the token dialog when the machine user holds no role on the resource', async () => {
+it('creates a machine user key with an optional permission list and shows the value once', async () => {
+  const u = userEvent.setup()
+  open('users/m1/api-keys')
+  expect(await screen.findByText('nightly')).toBeTruthy()
+  expect(screen.getByText('All of the machine user\'s permissions')).toBeTruthy()
+  expect(screen.getByText('ik_key_…abcd')).toBeTruthy()
+  await u.click(screen.getByRole('button', { name: /Create API key/ }))
+  const dialog = await screen.findByRole('dialog')
+  await u.type(within(dialog).getByLabelText('Name'), 'weekly')
+  const pick = async (label: string, option: string) => {
+    const box = within(dialog).getByLabelText(label)
+    await waitFor(() => expect((box as HTMLInputElement).disabled).toBe(false))
+    await u.click(box)
+    fireEvent.mouseDown(await screen.findByText(option, { selector: 'li > span' }))
+  }
+  await pick('Organization', 'Acme')
+  await pick('Application', 'Billing')
+  await pick('Resource', 'Billing API')
+  await u.click(await within(dialog).findByLabelText('billing:read'))
+  expect(within(dialog).getByLabelText<HTMLSelectElement>('Expires in').value).toBe('2160h')
+  await u.click(within(dialog).getByRole('button', { name: 'Create' }))
+  await waitFor(() => expect(calls).toContainEqual({ method: 'POST', path: `${env}/users/m1/api-keys`, body: { name: 'weekly', organization_id: 'o1', application_id: 'a1', resource_id: 'r1', permissions: ['billing:read'], expires_in: '2160h' } }))
+  const secret = await screen.findByRole('dialog', { name: 'API key created' })
+  expect(within(secret).getByText(/shown only once/)).toBeTruthy()
+  expect(within(secret).getByText('ik_key_secret_value')).toBeTruthy()
+})
+
+it('shows a human user\'s keys read-only with revoke and no create button', async () => {
+  human = true
+  tokens = [{ ...tokens[0], id: 'h1', name: 'laptop', owner: { type: 'user', user_id: 'm1' }, permissions: ['billing:read', 'billing:write', 'billing:admin'], expires: false, application_id: undefined }]
+  open('users/m1/api-keys')
+  expect(await screen.findByText('laptop')).toBeTruthy()
+  expect(within(screen.getByText('laptop').closest('tr')!).getByText('Never')).toBeTruthy()
+  expect(screen.getByText('+1 more')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: /Create API key/ })).toBeNull()
+  expect(screen.getByRole('button', { name: 'Actions for laptop' })).toBeTruthy()
+})
+
+it('warns in the key dialog when the machine user holds no role on the resource', async () => {
   effective = [{ organization_id: 'o1', role_id: 'role1', role_name: 'Reader', resource_id: 'r1', resource_name: 'Billing API', source: 'direct', granted: true }]
   const u = userEvent.setup()
   open('users/m1')
   expect(await screen.findByText('nightly')).toBeTruthy()
-  await u.click(screen.getByRole('button', { name: /Create token/ }))
+  await u.click(screen.getByRole('button', { name: /Create API key/ }))
   const dialog = await screen.findByRole('dialog')
   const pick = async (label: string, option: string) => {
     const box = within(dialog).getByLabelText(label)

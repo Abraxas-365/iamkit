@@ -66,11 +66,23 @@ User states: `User.State` (`UserSuspended`, `UserLocked`, `UserInitial`,
 `UserInactive`, `UserActive`) and `LastSignedInAt`, `UsersInState`,
 `DeactivateUser` and `ReactivateUser` (also on `apiclient`, with
 `iam:users:read`/`iam:users:write`; see [user states](../api/users-and-organizations.md#user-states)).
-Machine users: `CreateMachineUser`, `MachineUsers`, `User.Kind`, `CreateAccessToken`
-(answers `IssuedAccessToken.Token`, shown once), `AccessTokens` and
-`RevokeAccessToken`, keys `AddUserKey` (answers `IssuedUserKey.PrivateKey` for a
-generated pair, shown once), `UserKeys` and `RemoveUserKey` (also on `apiclient`,
-with `iam:users:read`/`iam:users:write`; see [machine users](../../guides/machines/machine-users.md)).
+Machine users: `CreateMachineUser`, `MachineUsers`, `User.Kind`, keys
+`AddUserKey` (answers `IssuedUserKey.PrivateKey` for a generated pair, shown
+once), `UserKeys` and `RemoveUserKey` (also on `apiclient`, with
+`iam:users:read`/`iam:users:write`; see [machine users](../../guides/machines/machine-users.md)).
+API keys (also on `apiclient`): `APIKeys(ctx, APIKeyFilter{OwnerType,
+OrganizationID, UserID, ResourceID, State, Search}, Page{Limit, Offset})` (an
+`APIKeyList{Items, Page}`), `APIKey(ctx, id)`, `CreateAPIKey(ctx, NewAPIKey{OrganizationID,
+ResourceID, Name, Permissions, ExpiresIn})` (organization keys; answers
+`IssuedAPIKey.Value`, shown once; `ExpiresIn` is `"2160h"` or `"never"`),
+`RevokeAPIKey`, `APIKeyPolicy` and `SaveAPIKeyPolicy(ctx, APIKeyPolicyInput)`,
+`SetResourceAPIKeyPermissions(ctx, resourceID, APIKeyPermissions{User,
+Organization})` (the resource's allowlists, read from
+`Resource.APIKeyPermissions`), and for machine users `UserAPIKeys(ctx, userID)`,
+`CreateMachineAPIKey(ctx, userID, NewAPIKey{ApplicationID, ResourceID, …})` and
+`RevokeUserAPIKey(ctx, userID, keyID)`
+(`iam:api-keys:read`/`write`, and `iam:users:*` for the machine-user ones; see
+[API keys](../../guides/machines/api-keys.md)).
 Metadata and profiles: `UserMetadata`, `SetUserMetadata`, `DeleteUserMetadata`,
 `OrganizationMetadata`, `SetOrganizationMetadata`, `DeleteOrganizationMetadata`,
 `UpdateUserProfile` (merge patch), `UserSchema`, `SaveUserSchema` (answers
@@ -182,7 +194,7 @@ explicit HTTP URL query handling for filters until a matching helper exists.
 Its `Environment` has the same methods and types as `iamclient`'s for every
 route the two APIs share (`apiclient.User` is `iamclient.User`, and so on):
 users, organizations, members, groups, domains, invitations, org structure,
-applications, resources, roles, grants, service accounts, delivery, SMS,
+applications, resources, roles, grants, service accounts, API keys, delivery, SMS,
 events, webhooks and usage, each gated by its `iam:*` permission.
 Exchange a service credential with `authclient.MachineToken` (or
 `authclient.NewOAuth(url, accountID, secret).ClientCredentials`), pass its access JWT,
@@ -196,7 +208,9 @@ pass the access token of a user signed in to that organization for the IAM
 resource. It covers settings, members, home users, roles, invitations,
 domains, SSO connections, audit events and resource grants (`Resources`,
 `ResourceGrants`, `GrantedResources`, `PutResourceGrant`,
-`DeleteResourceGrant`). `User.HomeOrganizationID`,
+`DeleteResourceGrant`) and the organization's [API keys](../../guides/machines/api-keys.md)
+(`APIKeys(ctx, filter, page)`, `APIKey`, `APIKeyOptions`, `CreateAPIKey`,
+`RevokeAPIKey`; `iam:org:api-keys:read`/`write`). `User.HomeOrganizationID`,
 `CreateUser.HomeOrganizationID`, `UserPatch`/`UpdateUser.HomeOrganizationID` and
 `Role.SystemRole` exist on both clients.
 

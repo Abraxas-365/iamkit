@@ -96,3 +96,41 @@ and the Firebase and Cognito lists. The last line printed is
 Skipped rows (no email, unsupported hash, existing with `--skip-existing`) do
 not change the exit code. Password hashes are never printed or written to the
 errors file.
+
+## API keys
+
+[API keys](../guides/machines/api-keys.md) of every owner kind, with the
+management key the CLI is configured with. The value of a new key is printed
+once, as `ik_key_…`.
+
+```sh
+iam api-keys policy get
+iam api-keys policy set --user-keys --organization-keys --max-ttl-days 365 --max-per-user 10 --max-per-organization 50
+iam resources api-key-permissions set RESOURCE_ID --user invoices:read --organization invoices:read,invoices:write
+iam resources api-key-permissions get RESOURCE_ID
+
+iam api-keys create --organization ORG_ID --resource RESOURCE_ID --name "warehouse sync" \
+  --permission invoices:read --expires-in 2160h      # organization key; --expires-in never or omitted = no expiry
+iam api-keys list --owner-type organization --organization ORG_ID --resource RESOURCE_ID
+iam api-keys get KEY_ID
+iam api-keys revoke KEY_ID
+
+iam machine-users api-keys create USER_ID --org ORG_ID --app APP_ID \
+  --resource RESOURCE_ID --name "nightly export" --expires-in 720h
+iam machine-users api-keys list USER_ID                # --limit, --offset, --search
+iam machine-users api-keys revoke USER_ID KEY_ID
+```
+
+`iam api-keys list` filters with `--owner-type` (`user`, `organization`,
+`machine`), `--organization`, `--user`, `--resource`, `--state` (`active`,
+`revoked`, `expired`) and `--search` (name), and pages with `--limit` and
+`--offset`. `--expires-in` takes `1h`–`8760h` or `never`;
+omitted means `never`, unless the policy sets a maximum. `iam api-keys create`
+makes organization keys; user keys are made by their owners in your application
+and machine keys with `iam machine-users api-keys create` (`--permission`
+omitted = everything the machine user holds). `iam api-keys policy set` changes
+only the flags you pass: `--user-keys=false`, `--organization-keys=false`,
+`--max-ttl-days N` or `--no-max-ttl`, `--max-per-user N` and
+`--max-per-organization N`. `iam resources api-key-permissions set` replaces the
+list of each of `--user` and `--organization` you pass (empty clears) and keeps
+the other. `--permission`, `--user` and `--organization` repeat or take commas.

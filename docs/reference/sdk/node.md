@@ -15,7 +15,8 @@ webhook and action verification, plus typed REST clients generated from the
 | Sign users in to a server-rendered app | `OAuthClient` (`authorizationUrl`, `exchangeCode`, `refresh`, `endSessionUrl`), `createPKCE`, `verifyIdToken` |
 | End sessions on back-channel logout | `verifyLogoutToken` |
 | Call APIs as a service | `OAuthClient.clientCredentials` (secret or `private_key_jwt`), `IdentityClient.machineToken` |
-| Sign a machine user in | `KeyLogin` (JWT-bearer grant), `IdentityClient.exchangeAccessToken` (`ik_pat_`) |
+| Sign a machine user in | `KeyLogin` (JWT-bearer grant), `IdentityClient.exchangeAPIKey` (a machine `ik_key_` API key) |
+| Accept customers' [API keys](../../guides/machines/api-keys.md) | `createAPIKeyValidator` (or `validateAPIKey`), or `authenticate` with `allowApiKeys` |
 | Act for a user | `OAuthClient.exchangeToken` (another resource), `OAuthClient.impersonate` (service account with `can_impersonate`) |
 | Devices without a browser | `OAuthClient.authorizeDevice` + `waitForDevice` |
 | Receive events and actions | `verifyWebhook`, `verifyAction`, `deny` |
@@ -30,13 +31,54 @@ configuration. `application` tokens must carry an organization and a session;
 `machine` tokens must carry neither; any other purpose is refused. Failures
 reject with `IAMKitError` 401 `UNAUTHORIZED`; a JWKS that cannot be fetched is
 503 `JWKS_UNAVAILABLE`, which `authenticate` answers as 503 rather than 401.
-Personal access tokens (`ik_pat_`) and opaque OAuth tokens (`ory_at_`) are not
-JWTs: exchange or introspect them.
+API keys (`ik_key_`) and opaque OAuth tokens (`ory_at_`) are not JWTs: validate,
+exchange or introspect them.
 
 `requireOrganization` takes a fixed ID or a function reading the requested
 organization from the request; the token's `organization_id` must match, so a
 route parameter is never trusted on its own. See [token claims](../token-claims.md)
 and the Go [middleware](middleware.md) rules, which these mirror.
+
+## API keys
+
+`createAPIKeyValidator({baseUrl, environmentId, audience})` returns an
+`APIKeyValidator` whose `validate(rawKey)` checks an `ik_key_`
+[API key](../../guides/machines/api-keys.md#validate-keys-in-your-backend)
+online with `POST /identity/v1/introspect` and resolves to an `APIKey`:
+`id`, `name`, `owner` (`type` `user`, `organization` or `machine`; `id`;
+`organization_id`), `organization_id`, `resource_id`, the **effective**
+`permissions` and `expires_at` (Unix seconds, `0` = never). Unknown, revoked,
+expired or disabled keys, values that are not API keys and an audience other
+than the key's resource reject with 401 `UNAUTHORIZED`; an unreachable IAMKit
+rejects with its own error, so fail closed. `validateAPIKey(rawKey, options)` is
+the one-shot form; `isAPIKey`, `APIKeyPrefix` and `hasAPIKeyPermission(key,
+…permissions)` are small helpers.
+
+```ts
+const keys = createAPIKeyValidator({ baseUrl, environmentId, audience })
+app.use(authenticate(verifier, { allowApiKeys: keys }))
+app.get("/invoices", requirePermissions("invoices:read"), (req, res) => {
+  const key = apiKeyOf(req) // set instead of claimsOf(req) for an API key
+})
+```
+
+`authenticate(verifier, { allowApiKeys })` accepts keys only when given a
+validator (otherwise an `ik_key_` bearer is 401); the key lands on
+`req.iamkitKey` (`apiKeyOf(req)`) and `claimsOf(req)` is `undefined`.
+`principalOf(req)` returns `{claims}` or `{apiKey}`; `requirePermissions` and
+`requireOrganization` accept both, and `requireMFA` refuses keys (no session).
+`new IdentityClient({baseUrl}).exchangeAPIKey(key)` trades a machine user's key
+for an access token (user and organization keys cannot be exchanged), and
+`identity.me(accessToken, environmentId, audience)` returns a `MeAPIKeys` for
+the user's own keys (`list({limit, offset})`, `options()`,
+`create({resourceId, name, permissions, expiresIn})`, `revoke(id)`; creating
+needs a sign-in within 10 minutes).
+`APIKeysClient({baseUrl, token})` administers keys on `/api/v1`: `list`, `get`,
+`create` (organization keys), `revoke`, `policy`, `savePolicy`,
+`setResourceAPIKeyPermissions`, `userKeys`, `createMachineKey`,
+`revokeUserKey`, and for organization administrators `listOrganization`,
+`organizationOptions`, `getOrganizationKey`, `createOrganizationKey` and
+`revokeOrganizationKey`; each takes the environment (and organization) ID first.
 
 ## Audit logs
 

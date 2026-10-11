@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -12,10 +13,10 @@ func machineUsersCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "machine-users",
 		Aliases: []string{"machine-user"},
-		Short:   "Manage machine users and their personal access tokens",
+		Short:   "Manage machine users and their API keys",
 		Long: `Machine users are users without email, password or second factor.
 They join organizations and receive roles, groups and grants like people,
-and authenticate with personal access tokens (ik_pat_), used directly as a
+and authenticate with API keys (ik_key_), used directly as a
 bearer or exchanged at /identity/v1/token-exchange for an access JWT, or
 with keys: a JWT assertion signed with the key is traded at /oauth/token
 (grant urn:ietf:params:oauth:grant-type:jwt-bearer) for an access JWT.
@@ -23,7 +24,7 @@ Deactivate one with "iam users deactivate".`,
 	}
 	cmd.AddCommand(machineUsersListCmd())
 	cmd.AddCommand(machineUsersCreateCmd())
-	cmd.AddCommand(machineTokensCmd())
+	cmd.AddCommand(machineAPIKeysCmd())
 	cmd.AddCommand(machineKeysCmd())
 	return cmd
 }
@@ -82,44 +83,30 @@ func machineUsersCreateCmd() *cobra.Command {
 	return cmd
 }
 
-func machineTokensCmd() *cobra.Command {
+func machineAPIKeysCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:     "tokens",
-		Aliases: []string{"token", "pats"},
-		Short:   "Manage a machine user's personal access tokens",
+		Use:     "api-keys",
+		Aliases: []string{"api-key"},
+		Short:   "Manage a machine user's API keys",
 	}
-	cmd.AddCommand(machineTokensListCmd(), machineTokensCreateCmd(), machineTokensRevokeCmd())
+	cmd.AddCommand(machineAPIKeysListCmd(), machineAPIKeysCreateCmd(), machineAPIKeysRevokeCmd())
 	return cmd
 }
 
-func machineTokensListCmd() *cobra.Command {
+func machineAPIKeysListCmd() *cobra.Command {
 	var limit, offset int
 	var search string
 	cmd := &cobra.Command{
 		Use:   "list USER_ID",
-		Short: "List personal access tokens (never their secrets)",
+		Short: "List a machine user's API keys (never their values)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
-			data, err := c.get(envPath() + "/users/" + args[0] + "/access-tokens" + listQuery(limit, offset, search))
+			data, err := c.get(envPath() + "/users/" + url.PathEscape(args[0]) + "/api-keys" + listQuery(limit, offset, search))
 			if err != nil {
 				return err
 			}
-			newPrinter().table(data, []string{"ID", "NAME", "ORGANIZATION", "RESOURCE", "EXPIRES", "LAST USED", "STATUS"}, func(m map[string]any) []string {
-				status := "active"
-				if v := str(m, "revoked_at"); v != "" && v != "<nil>" {
-					status = "revoked"
-				}
-				org := str(m, "organization_name")
-				if org == "" {
-					org = truncateID(str(m, "organization_id"))
-				}
-				res := str(m, "resource_name")
-				if res == "" {
-					res = truncateID(str(m, "resource_id"))
-				}
-				return []string{str(m, "id"), str(m, "name"), org, res, str(m, "expires_at"), str(m, "last_used_at"), status}
-			})
+			newPrinter().table(data, apiKeyColumns, apiKeyRow)
 			return nil
 		},
 	}
@@ -129,52 +116,54 @@ func machineTokensListCmd() *cobra.Command {
 	return cmd
 }
 
-func machineTokensCreateCmd() *cobra.Command {
+func machineAPIKeysCreateCmd() *cobra.Command {
 	var name, org, app, resource, expiresIn string
+	var permissions []string
 	cmd := &cobra.Command{
 		Use:   "create USER_ID",
-		Short: "Create a personal access token (shown once)",
-		Long: `Creates a personal access token acting as the machine user in one
-organization for one application resource, with the permissions the user
-holds there each time it is used. The token is shown only once.`,
+		Short: "Create an API key for a machine user (value shown once)",
+		Long: `Creates an API key acting as the machine user in one organization for one
+application resource. Without --permission it carries everything the user
+holds there each time it is used; with --permission it carries only those
+(still limited to what the user holds). Machine keys are the only keys that
+reach /api/v1 and /identity/v1/token-exchange.
+
+--expires-in is a duration from 1h to 8760h or "never" (the default). The
+key value is printed once as JSON, with a warning on stderr.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
-			body := map[string]any{"name": name, "organization_id": org, "application_id": app, "resource_id": resource}
-			if expiresIn != "" {
-				body["expires_in"] = expiresIn
-			}
-			data, err := c.post(envPath()+"/users/"+args[0]+"/access-tokens", body)
+			data, err := c.post(envPath()+"/users/"+url.PathEscape(args[0])+"/api-keys", newKeyBody(name, org, app, resource, permissions, expiresIn))
 			if err != nil {
 				return err
 			}
-			// Always output full JSON — the token must be captured.
-			newPrinter().JSON(data)
+			printIssuedKey(data)
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", "Token name (required)")
+	cmd.Flags().StringVar(&name, "name", "", "Key name (required)")
 	cmd.Flags().StringVar(&org, "org", "", "Organization ID, one the machine user belongs to (required)")
 	cmd.Flags().StringVar(&app, "app", "", "Application ID (required)")
 	cmd.Flags().StringVar(&resource, "resource", "", "Resource ID of the application (required)")
-	cmd.Flags().StringVar(&expiresIn, "expires-in", "", `Expiration, 1h to 8760h or "never" (default 24h)`)
+	cmd.Flags().StringSliceVar(&permissions, "permission", nil, "Permission to carry; repeat or comma-separate (default: all the user holds)")
+	cmd.Flags().StringVar(&expiresIn, "expires-in", "", `Expiration, 1h to 8760h or "never" (default never)`)
 	for _, f := range []string{"name", "org", "app", "resource"} {
 		cmd.MarkFlagRequired(f)
 	}
 	return cmd
 }
 
-func machineTokensRevokeCmd() *cobra.Command {
+func machineAPIKeysRevokeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "revoke USER_ID TOKEN_ID",
-		Short: "Revoke a personal access token and the sessions exchanged from it",
+		Use:   "revoke USER_ID KEY_ID",
+		Short: "Revoke a machine user's API key and the sessions exchanged from it",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
-			if _, err := c.delete(envPath() + "/users/" + args[0] + "/access-tokens/" + args[1]); err != nil {
+			if _, err := c.delete(envPath() + "/users/" + url.PathEscape(args[0]) + "/api-keys/" + url.PathEscape(args[1])); err != nil {
 				return err
 			}
-			newPrinter().ok("Access token revoked: " + args[1])
+			newPrinter().ok("API key revoked: " + args[1])
 			return nil
 		},
 	}

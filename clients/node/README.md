@@ -13,7 +13,7 @@ npm install @iamkit/node
 | Access tokens | `createJwtVerifier` (offline, JWKS), `createIntrospectionVerifier` (online), `createKeySet`, `hasPermission`, `hasMFA`, `isImpersonated` |
 | Middleware (Express/Connect) | `authenticate`, `requirePermissions`, `requireOrganization`, `requireMFA`, `claimsOf` |
 | OAuth / OIDC | `OAuthClient` (authorize URL, code + PKCE, refresh, revoke, UserInfo, introspection, client_credentials, device flow, token exchange, impersonation, end-session URL), `createPKCE`, `randomToken`, `verifyIdToken`, `verifyLogoutToken` |
-| Machine users | `KeyLogin` (RFC 7523 JWT-bearer grant), `IdentityClient.exchangeAccessToken` (`ik_pat_`) |
+| Machine users | `KeyLogin` (RFC 7523 JWT-bearer grant), `IdentityClient.exchangeAPIKey` (machine `ik_key_`) |
 | Identity API | `IdentityClient` (login, MFA, refresh, logout, profile, organizations, service-account token) |
 | Webhooks and actions | `verifyWebhook`, `verifyAction`, `verifySignature`, `deny`, `Conditions` |
 | Typed REST clients | `createManagementClient`, `createApiClient`, `createIAMKitClient` (from `@iamkit/api`) |

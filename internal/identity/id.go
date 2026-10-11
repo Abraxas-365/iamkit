@@ -123,7 +123,7 @@ type (
 	factorTag        struct{} // MFA factor
 	spTag            struct{} // SAML service provider
 	resourceGrantTag struct{} // resource granted to an organization
-	accessTokenTag   struct{} // personal access token of a machine user
+	apiKeyTag        struct{} // API key (user, organization or machine user)
 	userKeyTag       struct{} // public key of a machine user (JWT-bearer login)
 	subscriptionTag  struct{} // event webhook subscription
 	targetTag        struct{} // action target (hook endpoint)
@@ -189,8 +189,8 @@ func tagName[T any]() string {
 		return "service_provider_id"
 	case resourceGrantTag:
 		return "resource_grant_id"
-	case accessTokenTag:
-		return "token_id"
+	case apiKeyTag:
+		return "api_key_id"
 	case userKeyTag:
 		return "user_key_id"
 	case subscriptionTag:
@@ -241,8 +241,8 @@ type (
 	ServiceProviderID = ID[spTag]
 	// ResourceGrantID names a resource granted to an organization.
 	ResourceGrantID = ID[resourceGrantTag]
-	// AccessTokenID names a machine user's personal access token.
-	AccessTokenID = ID[accessTokenTag]
+	// APIKeyID names an API key (user, organization or machine user key).
+	APIKeyID = ID[apiKeyTag]
 	// UserKeyID names a machine user's key; it is the kid of its assertions.
 	UserKeyID = ID[userKeyTag]
 	// SubscriptionID names an event webhook subscription.
@@ -289,7 +289,7 @@ func NewServiceProviderID() ServiceProviderID {
 	return NewID[spTag]()
 }
 func NewResourceGrantID() ResourceGrantID { return NewID[resourceGrantTag]() }
-func NewAccessTokenID() AccessTokenID     { return NewID[accessTokenTag]() }
+func NewAPIKeyID() APIKeyID               { return NewID[apiKeyTag]() }
 func NewUserKeyID() UserKeyID             { return NewID[userKeyTag]() }
 func NewSubscriptionID() SubscriptionID   { return NewID[subscriptionTag]() }
 func NewTargetID() TargetID               { return NewID[targetTag]() }
@@ -330,7 +330,7 @@ func ParseServiceProviderID(raw string) (ServiceProviderID, error) {
 func ParseResourceGrantID(raw string) (ResourceGrantID, error) {
 	return ParseID[resourceGrantTag](raw)
 }
-func ParseAccessTokenID(raw string) (AccessTokenID, error)   { return ParseID[accessTokenTag](raw) }
+func ParseAPIKeyID(raw string) (APIKeyID, error)             { return ParseID[apiKeyTag](raw) }
 func ParseUserKeyID(raw string) (UserKeyID, error)           { return ParseID[userKeyTag](raw) }
 func ParseSubscriptionID(raw string) (SubscriptionID, error) { return ParseID[subscriptionTag](raw) }
 func ParseTargetID(raw string) (TargetID, error)             { return ParseID[targetTag](raw) }
@@ -370,7 +370,7 @@ func MustParseServiceProviderID(raw string) ServiceProviderID {
 func MustParseResourceGrantID(raw string) ResourceGrantID {
 	return MustParseID[resourceGrantTag](raw)
 }
-func MustParseAccessTokenID(raw string) AccessTokenID   { return MustParseID[accessTokenTag](raw) }
+func MustParseAPIKeyID(raw string) APIKeyID             { return MustParseID[apiKeyTag](raw) }
 func MustParseUserKeyID(raw string) UserKeyID           { return MustParseID[userKeyTag](raw) }
 func MustParseSubscriptionID(raw string) SubscriptionID { return MustParseID[subscriptionTag](raw) }
 func MustParseTargetID(raw string) TargetID             { return MustParseID[targetTag](raw) }

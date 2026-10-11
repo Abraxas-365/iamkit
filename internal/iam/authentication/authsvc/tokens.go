@@ -47,8 +47,8 @@ func (s *Tokens) Validate(ctx context.Context, raw string, audience string, envi
 	if environment.IsZero() || audience == "" {
 		return out, errx.Unauthorized("invalid credentials or access token")
 	}
-	if strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
-		out, err := s.ValidateAccessToken(ctx, raw)
+	if strings.HasPrefix(raw, identity.APIKeyPrefix) {
+		out, err := s.ValidateAPIKey(ctx, raw)
 		if errx.IsServerError(err) {
 			return authentication.Token{}, err
 		}
@@ -86,9 +86,14 @@ func (s *Tokens) Validate(ctx context.Context, raw string, audience string, envi
 	return out, s.checkOAuth(ctx, raw, out)
 }
 
+// ValidateSelf validates a credential by its own claims (any environment and
+// audience). An API key resolves to its token without an audience or
+// environment check, for any owner kind: callers must refuse the kinds they
+// do not serve (apiauth admits machine keys only; the /identity/v1 self
+// routes and userinfo refuse every key).
 func (s *Tokens) ValidateSelf(ctx context.Context, raw string) (authentication.Token, error) {
-	if strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
-		return s.ValidateAccessToken(ctx, raw)
+	if strings.HasPrefix(raw, identity.APIKeyPrefix) {
+		return s.ValidateAPIKey(ctx, raw)
 	}
 	out, err := s.codec.VerifySelf(ctx, raw)
 	if err != nil {
@@ -168,44 +173,51 @@ func (s *Tokens) MachineAccount(ctx context.Context, account identity.AccountID)
 	return s.Issue(ctx, token, audience)
 }
 
-// ValidateAccessToken resolves a personal access token used as a bearer.
-func (s *Tokens) ValidateAccessToken(ctx context.Context, raw string) (authentication.Token, error) {
-	if !strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
-		return authentication.Token{}, errx.Unauthorized("invalid credentials or access token")
-	}
-	pat, err := s.repository.AccessToken(ctx, s.secrets.Hash(raw))
+// ValidateAPIKey resolves an API key used as a bearer.
+func (s *Tokens) ValidateAPIKey(ctx context.Context, raw string) (authentication.Token, error) {
+	key, err := s.resolveKey(ctx, raw)
 	if err != nil {
 		return authentication.Token{}, err
 	}
-	return pat.Token, nil
+	return key.Token, nil
 }
 
-// ExchangeAccessToken issues an application access token for a personal
-// access token. Its session is shared by the token's exchanges while it
-// lasts (at most config.SessionTTL, never past the token's expiry), so
-// frequent exchanges do not pile up sessions.
-func (s *Tokens) ExchangeAccessToken(ctx context.Context, raw string) (string, error) {
-	if !strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
-		return "", errx.Unauthorized("invalid credentials or access token")
+func (s *Tokens) resolveKey(ctx context.Context, raw string) (authentication.ResolvedAPIKey, error) {
+	if !identity.IsAPIKey(raw) {
+		return authentication.ResolvedAPIKey{}, errx.Unauthorized("invalid credentials or access token")
 	}
-	pat, err := s.repository.AccessToken(ctx, s.secrets.Hash(raw))
+	return s.repository.APIKey(ctx, s.secrets.Hash(raw))
+}
+
+// ExchangeAPIKey issues an application access token for a machine user's
+// API key (user and organization keys cannot be exchanged: they are never
+// IAMKit credentials). Its session is shared by the key's exchanges while
+// it lasts (at most config.SessionTTL, never past the key's expiry), so
+// frequent exchanges do not pile up sessions.
+func (s *Tokens) ExchangeAPIKey(ctx context.Context, raw string) (string, error) {
+	key, err := s.resolveKey(ctx, raw)
 	if err != nil {
 		return "", err
+	}
+	if key.Owner != "machine" {
+		return "", errx.Unauthorized("invalid credentials or access token")
 	}
 	now := time.Now()
 	expires := now.Add(config.SessionTTL)
-	if pat.Expires.Before(expires) {
-		expires = pat.Expires
+	if key.Expires.Before(expires) {
+		expires = key.Expires
 	}
-	session, err := s.repository.AccessTokenSession(ctx, pat, identity.NewSessionID(), now.Add(config.TokenTTL), expires)
+	session, err := s.repository.APIKeySession(ctx, key, identity.NewSessionID(), now.Add(config.TokenTTL), expires)
 	if err != nil {
 		return "", err
 	}
-	token := pat.Token
+	token := key.Token
 	token.Purpose = authentication.PurposeApplication
 	token.SessionID = session
 	token.AuthTime = now.Unix()
-	return s.Issue(ctx, token, pat.Audience)
+	token.APIKey = nil
+	token.ExpiresAt = 0
+	return s.Issue(ctx, token, key.Audience)
 }
 
 // KeyGrant answers a machine user's RFC 7523 JWT-bearer assertion with an

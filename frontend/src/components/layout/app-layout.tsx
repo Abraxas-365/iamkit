@@ -1,7 +1,7 @@
 import { Link, matchPath, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useMemo, useState } from 'react'
 import { useTheme } from 'next-themes'
-import { Activity, AppWindow, Bell, Blocks, Bot, Building2, ChevronRight, FileJson, FileKey, FlaskConical, FolderKanban, Gauge, Home, Globe, KeyRound, LayoutDashboard, Link2, ListChecks, Lock, LogIn, LogOut, Moon, Radio, ScrollText, Server, Settings, Shield, ShieldCheck, Sun, Tags, UserCog, Users, Waypoints, Webhook, Zap } from 'lucide-react'
+import { Activity, AppWindow, Bell, Blocks, Bot, Building2, ChevronRight, FileJson, FileKey, FlaskConical, FolderKanban, Gauge, Home, Globe, KeyRound, KeySquare, LayoutDashboard, Link2, ListChecks, Lock, LogIn, LogOut, Moon, Radio, ScrollText, Server, Settings, Shield, ShieldCheck, SlidersHorizontal, Sun, Tags, UserCog, Users, Waypoints, Webhook, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/lib/auth'
 import { message } from '@/lib/utils'
@@ -17,12 +17,12 @@ import { t } from '@/lib/i18n'
 export interface Named { id: string; name: string }
 type NavItem = readonly [path: string, label: string, icon: typeof Shield]
 const environmentNav: readonly (readonly [group: string, items: readonly NavItem[]])[] = [
-  [t('Users & access'), [['users', t('Users'), Users], ['user-schema', t('User schema'), FileJson], ['organizations', t('Organizations'), Building2], ['roles', t('Roles'), Tags], ['grants', t('Grants'), ShieldCheck]]],
+  [t('Users & access'), [['users', t('Users'), Users], ['user-schema', t('User schema'), FileJson], ['organizations', t('Organizations'), Building2], ['roles', t('Roles'), Tags], ['grants', t('Grants'), ShieldCheck], ['api-keys', t('API keys'), KeySquare]]],
   [t('Applications'), [['applications', t('Applications'), Blocks], ['resources', t('Resources & scopes'), Shield], ['oauth-clients', t('OAuth clients'), Link2], ['saml-apps', t('SAML applications'), AppWindow], ['service-accounts', t('Service accounts'), Bot], ['signing-keys', t('Signing keys'), FileKey]]],
   ['Sign-in', [['hosted-login', t('Hosted login'), LogIn], ['sign-in-policy', t('Sign-in methods'), ListChecks], ['password-policy', t('Password policy'), Lock], ['federation', t('Sign-in providers'), Globe], ['provisioning', t('SCIM provisioning'), Server], ['notifications', t('Notifications'), Bell]]],
   [t('Monitoring'), [['sessions', t('Sessions'), KeyRound], ['audit-events', t('Activity & audit'), Activity], ['logout-deliveries', t('Logout deliveries'), Radio], ['webhooks', t('Webhooks'), Webhook], ['audit-logs', t('Audit logs'), ScrollText], ['log-streams', t('Log streams'), Waypoints]]],
   [t('Extensibility'), [['actions', t('Actions'), Zap]]],
-  [t('Settings'), [['usage', t('Usage and limits'), Gauge], ['features', t('Features (beta)'), FlaskConical]]],
+  [t('Settings'), [['usage', t('Usage and limits'), Gauge], ['api-key-policy', t('API key policy'), SlidersHorizontal], ['features', t('Features (beta)'), FlaskConical]]],
 ]
 const allNav = environmentNav.flatMap(([, items]) => items)
 const subpages: Record<string, [string, string]> = { 'role-assignments': ['roles', t('Assignments')] }

@@ -27,6 +27,8 @@ import EnvironmentHomePage from '@/pages/environment-home'
 import OAuthClientDetailPage from '@/pages/oauth-client-detail'
 import BrandingEditorPage from '@/pages/branding-editor'
 import PasswordPolicyPage from '@/pages/password-policy'
+import APIKeysPage from '@/pages/api-keys'
+import APIKeyPolicyPage from '@/pages/api-key-policy'
 import UserSchemaPage from '@/pages/user-schema'
 import SignInPolicyPage from '@/pages/sign-in-policy'
 import SigningKeysPage from '@/pages/signing-keys'
@@ -63,6 +65,7 @@ export default function App() {
           <Route path="branding" element={<OrganizationBrandingPage />} />
         </Route>
         <Route path="users/:userId" element={<UserDetailPage />} />
+        <Route path="users/:userId/api-keys" element={<UserDetailPage />} />
         <Route path="user-schema" element={<UserSchemaPage />} />
         <Route path="applications/:appId" element={<ApplicationDetailPage />} />
         <Route path="resources/:resourceId" element={<ResourceDetailPage />} />
@@ -75,6 +78,8 @@ export default function App() {
         <Route path="provisioning" element={<ProvisioningPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="hosted-login" element={<HostedLoginPage />} />
+        <Route path="api-keys" element={<APIKeysPage />} />
+        <Route path="api-key-policy" element={<APIKeyPolicyPage />} />
         <Route path="password-policy" element={<PasswordPolicyPage />} />
         <Route path="sign-in-policy" element={<SignInPolicyPage />} />
         <Route path="signing-keys" element={<SigningKeysPage />} />

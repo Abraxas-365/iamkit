@@ -7,8 +7,10 @@ routes. Supply deadlines and never log token-pair values.
   set `Login` instead of `Email` to accept an email or a username.
 - `Refresh(ctx, boundary, refreshToken)`; serialize and store replacements.
 - `MachineToken(ctx, serviceSecret)`; no user refresh token.
-- `ExchangeAccessToken(ctx, personalAccessToken)` trades a machine user's `ik_pat_`
-  token for an access token (no refresh); `Validator` never accepts the raw `ik_pat_`.
+- `ExchangeAPIKey(ctx, apiKey)` trades a machine user's `ik_key_` [API key](../../guides/machines/api-keys.md#machine-keys)
+  for an access token (no refresh); user and organization keys cannot be
+  exchanged, and `Validator` never accepts the raw `ik_key_` (see
+  [validating API keys](#validating-api-keys)).
 - `NewKeyLogin(url, machineUserID, keyID, key)` then `Token(ctx, KeyBoundary{...})`
   signs a machine user in with one of its [keys](../../guides/machines/machine-users.md#keys-jwt-bearer-login)
   (RFC 7523 JWT-bearer grant, fresh one-minute assertion per call, no refresh);
@@ -26,6 +28,16 @@ routes. Supply deadlines and never log token-pair values.
   [sign-up](../../guides/sign-in/signup-and-onboarding.md#self-service-sign-up); the
   account signs in next (errors `apierror.CodeSignupDisabled`,
   `CodeAccountExists`).
+- Self-service API keys (user keys, with the application access token of the
+  person): `me := client.Me(accessToken, environmentID, audience)`, then
+  `me.APIKeys(ctx, limit, offset)` (a `UserAPIKeys` page, `limit` 0 = the
+  server default), `me.APIKeyOptions(ctx)`, `me.CreateAPIKey(ctx,
+  NewUserAPIKey{ResourceID, Name, Permissions, ExpiresIn})` and
+  `me.RevokeAPIKey(ctx, id)` over `/identity/v1/me/api-keys`. Creation needs a
+  sign-in within 10 minutes (else 403 `REAUTHENTICATION_REQUIRED`), an enabled
+  policy (403 `API_KEYS_DISABLED`) and room under the per-user limit (422
+  `API_KEY_LIMIT_REACHED`); the answer's `Value` (`IssuedUserAPIKey`) is shown
+  once. Impersonated tokens may only read.
 - `Profile`, `UpdateProfile`, `Organizations`, `Logout`, `AddMember`.
 - MFA: `Login` and `VerifyChallenge` succeed **without tokens** when a second
   factor is needed — check `MFARequired` before using `AccessToken` (then
@@ -93,3 +105,30 @@ actual audience value; use `url.Values` in direct HTTP integrations.
 The SDK does not provide a safe automatic retry policy for rotating credentials.
 A timeout after a successful server rotation can make the predecessor unsafe to
 reuse. Require reauthentication when the state cannot be reconciled safely.
+
+## Validating API keys
+
+Build the client with the environment and the audience of the resource your
+service protects, then validate per request:
+
+```go
+client := authclient.New(iamkitURL, authclient.WithAudience(environmentID, "https://api.example.com"))
+key, err := client.ValidateAPIKey(ctx, rawKey) // rawKey: the ik_key_… bearer
+```
+
+`ValidateAPIKey(ctx, apiKey)` checks an `ik_key_`
+[API key](../../guides/machines/api-keys.md#validate-keys-in-your-backend)
+online with `POST /identity/v1/introspect`, sending the environment and
+audience from `WithAudience` (without them it fails with `VALIDATION`), and
+returns an `authclient.APIKey`: `ID`, `Name`, `Owner` (`Type` `user`,
+`organization` or `machine`; `ID` is the user, or the organization for an
+organization key; `OrganizationID`), `OrganizationID`, `ResourceID`, the
+**effective** `Permissions` (`HasPermission(p)`) and `ExpiresAt` (zero = never).
+An unknown, revoked, expired or disabled key, a value that is not an API key,
+or an audience other than the key's resource is a `401` `UNAUTHORIZED` error;
+an unreachable IAMKit returns its own error, so never admit the request then.
+`IsAPIKey(value)` tells the shape without a call. Keys have no offline form:
+`Validate` and `ValidateWithKeySet` refuse `ik_key_` strings because they are
+not JWTs. Scope your data by the owner's organization (and user, for user
+keys). The [Fiber and net/http middleware](middleware.md#api-keys) accept keys
+with the `AllowAPIKeys` option.

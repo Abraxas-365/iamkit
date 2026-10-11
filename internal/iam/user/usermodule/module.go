@@ -30,11 +30,6 @@ type Module struct {
 	Commands user.Commands
 	Queries  user.Queries
 	HTTP     *userhttp.Handler
-	// AccessTokenCommands/AccessTokenQueries manage machine users'
-	// personal access tokens; AccessTokens serves them to operators.
-	AccessTokenCommands user.AccessTokenCommands
-	AccessTokenQueries  user.AccessTokenQueries
-	AccessTokens        *userhttp.AccessTokens
 	// KeyCommands/KeyQueries manage machine users' keys (JWT-bearer
 	// login); Keys serves them to operators.
 	KeyCommands user.KeyCommands
@@ -60,7 +55,6 @@ func New(deps Deps) Module {
 	if deps.Quota != nil {
 		service.SetQuota(deps.Quota)
 	}
-	tokens := usersvc.NewAccessTokens(repository, mgmtsecret.Generator{})
 	keys := usersvc.NewKeys(repository, userkeys.RSA{})
 	handler := userhttp.New(service, service, deps.ActorID)
 	var phones user.PhoneCommands
@@ -70,9 +64,7 @@ func New(deps Deps) Module {
 	}
 	return Module{
 		Commands: service, Queries: service, HTTP: handler, Phones: phones,
-		AccessTokenCommands: tokens, AccessTokenQueries: tokens,
-		AccessTokens: userhttp.NewAccessTokens(tokens, tokens, deps.ActorID),
-		KeyCommands:  keys, KeyQueries: keys,
+		KeyCommands: keys, KeyQueries: keys,
 		Keys: userhttp.NewKeys(keys, keys, deps.ActorID),
 	}
 }

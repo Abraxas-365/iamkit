@@ -15,11 +15,13 @@ import { SearchSelect } from '@/components/ui/search-select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, PageHeader, SwitchField, Time } from '@/components/library/patterns'
 import { HistorySection } from './history'
+import { ApiKeyAllowlist } from './resource-api-keys'
 import { rich, t } from '@/lib/i18n'
 
 export interface Resource {
   id: string; name: string; prefix: string; audience: string; permissions: string[]
   owner_organization_id: string | null; require_grant: boolean
+  api_key_permissions?: { user: string[]; organization: string[] }
 }
 
 /** A resource grant (authorization.ResourceGrant); role_ids null = every role. */
@@ -162,6 +164,8 @@ export default function ResourceDetailPage() {
           ] : []} />,
         ])} />
     </div>}
+
+    <ApiKeyAllowlist base={base} resource={resource} canWrite={canWrite} system={system} onSaved={load} />
 
     {!system && <HistorySection path={`${base}/resources/${resource.id}`} refresh={resource} />}
 

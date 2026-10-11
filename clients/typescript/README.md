@@ -21,7 +21,7 @@ const users: Schema<"PaginatedUser"> = data;
 
 - `managementKey` is sent as `X-API-Key` (`/management/v1`).
 - `token` (a string or a function called for every request) is sent as a
-  bearer token: access tokens for `/api/v1` and `/identity/v1`, `ik_pat_`
+  bearer token: access tokens for `/api/v1` and `/identity/v1`, `ik_key_`
   tokens of machine users, SCIM credentials.
 - Failures resolve with `error` (IAMKit's `{"error": {code, message, …}}`
   envelope, or the OAuth/SCIM error shapes on those endpoints); network

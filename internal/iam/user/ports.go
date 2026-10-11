@@ -51,33 +51,6 @@ type Commands interface {
 	DeleteSchema(ctx context.Context, m Mutation) error
 }
 
-// AccessTokenCommands manage machine users' personal access tokens.
-type AccessTokenCommands interface {
-	// CreateAccessToken issues a token for a machine user that is a member
-	// of the organization, for an application resource (audited
-	// user.access_token_created); the secret is returned only here.
-	CreateAccessToken(ctx context.Context, m Mutation, user identity.UserID, input NewAccessToken) (IssuedAccessToken, error)
-	// RevokeAccessToken ends the token and every session exchanged from
-	// it (audited user.access_token_revoked).
-	RevokeAccessToken(ctx context.Context, m Mutation, user identity.UserID, token identity.AccessTokenID) error
-}
-
-// AccessTokenQueries read personal access tokens (never their secrets).
-type AccessTokenQueries interface {
-	AccessTokens(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, page query.Pagination) (query.Paginated[AccessToken], error)
-}
-
-// AccessTokenRepository persists personal access tokens.
-type AccessTokenRepository interface {
-	// CreateAccessToken stores the token after checking, in the same
-	// transaction, that the user is a machine user and a member of the
-	// organization and that the application serves the resource; it audits
-	// m.Action.
-	CreateAccessToken(ctx context.Context, m Mutation, token AccessToken, secretHash []byte) (AccessToken, error)
-	RevokeAccessToken(ctx context.Context, m Mutation, user identity.UserID, token identity.AccessTokenID) error
-	AccessTokens(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, page query.Pagination) (query.Paginated[AccessToken], error)
-}
-
 // KeyCommands manage machine users' keys (RFC 7523 JWT-bearer login).
 type KeyCommands interface {
 	// AddKey stores an uploaded public key or generates a pair, returning

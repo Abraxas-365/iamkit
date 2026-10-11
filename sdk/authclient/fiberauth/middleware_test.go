@@ -3,6 +3,7 @@ package fiberauth
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -71,5 +72,67 @@ func TestErrorResponseFormat(t *testing.T) {
 	}
 	if errObj["code"] != "FORBIDDEN" {
 		t.Fatalf("expected FORBIDDEN code, got %v", errObj["code"])
+	}
+}
+
+func TestAllowAPIKeys(t *testing.T) {
+	tokens := func(context.Context, string) (*authclient.Claims, error) {
+		return &authclient.Claims{Purpose: "application", OrganizationID: "org", Permissions: []string{"read"}}, nil
+	}
+	keys := func(_ context.Context, value string) (authclient.APIKey, error) {
+		if value != "ik_key_good" {
+			return authclient.APIKey{}, context.Canceled
+		}
+		return authclient.APIKey{ID: "k1", OrganizationID: "org", Permissions: []string{"read"}, Owner: authclient.APIKeyOwner{Type: "organization"}}, nil
+	}
+	build := func(options ...Option) *fiber.App {
+		app := fiber.New()
+		app.Use(Authenticate(tokens, options...))
+		app.Get("/", RequireOrganization("org"), RequirePermissions("read"), func(c *fiber.Ctx) error {
+			who := "token"
+			if key := APIKey(c); key != nil {
+				who = key.ID + ":" + Principal(c).Owner().Type
+				if Claims(c) != nil {
+					who = "both"
+				}
+			}
+			return c.SendString(who)
+		})
+		app.Get("/denied", RequirePermissions("write"), func(c *fiber.Ctx) error { return c.SendStatus(204) })
+		app.Get("/other", RequireOrganization("other"), func(c *fiber.Ctx) error { return c.SendStatus(204) })
+		return app
+	}
+	for _, test := range []struct {
+		name, path, token string
+		options           []Option
+		status            int
+		body              string
+	}{
+		{"key allowed", "/", "ik_key_good", []Option{AllowAPIKeys(keys)}, 200, "k1:organization"},
+		{"key refused by validator", "/", "ik_key_bad", []Option{AllowAPIKeys(keys)}, 401, ""},
+		{"key without the option", "/", "ik_key_good", nil, 401, ""},
+		{"key lacking permission", "/denied", "ik_key_good", []Option{AllowAPIKeys(keys)}, 403, ""},
+		{"key of another organization", "/other", "ik_key_good", []Option{AllowAPIKeys(keys)}, 403, ""},
+		{"token still works", "/", "jwt", []Option{AllowAPIKeys(keys)}, 200, "token"},
+		{"token without the option", "/", "jwt", nil, 200, "token"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", test.path, nil)
+			r.Header.Set("Authorization", "Bearer "+test.token)
+			res, err := build(test.options...).Test(r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer res.Body.Close()
+			if res.StatusCode != test.status {
+				t.Fatalf("status = %d", res.StatusCode)
+			}
+			if test.body != "" {
+				raw, _ := io.ReadAll(res.Body)
+				if string(raw) != test.body {
+					t.Fatalf("body = %q", raw)
+				}
+			}
+		})
 	}
 }

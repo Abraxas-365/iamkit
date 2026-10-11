@@ -40,6 +40,10 @@ const (
 	PermAuditLogsRead   = "iam:audit-logs:read"
 	PermAuditLogsWrite  = "iam:audit-logs:write"
 	PermAuditLogsManage = "iam:audit-logs:manage"
+	// API keys of the environment (every owner kind) and the API key
+	// policy; machine user keys also need iam:users:write.
+	PermAPIKeysRead  = "iam:api-keys:read"
+	PermAPIKeysWrite = "iam:api-keys:write"
 )
 
 // Organization-bound permissions. They only open the
@@ -62,6 +66,9 @@ const (
 	PermOrgAuditRead = "iam:org:audit:read"
 	// PermOrgLogStreamsWrite manages the organization's log streams.
 	PermOrgLogStreamsWrite = "iam:org:log-streams:write"
+	// The organization's own API keys and its members' user keys.
+	PermOrgAPIKeysRead  = "iam:org:api-keys:read"
+	PermOrgAPIKeysWrite = "iam:org:api-keys:write"
 	// Resources the organization owns (resources.owner_organization_id)
 	// and their grants to other organizations.
 	PermOrgResourcesRead  = "iam:org:resources:read"
@@ -76,6 +83,7 @@ var OrgPermissions = []string{
 	PermOrgInvitationsWrite, PermOrgDomainsWrite,
 	PermOrgSSOWrite, PermOrgAuditRead, PermOrgLogStreamsWrite,
 	PermOrgResourcesRead, PermOrgResourcesWrite,
+	PermOrgAPIKeysRead, PermOrgAPIKeysWrite,
 }
 
 // IAMResourcePermissions is the canonical list of all built-in IAM resource
@@ -95,6 +103,7 @@ var IAMResourcePermissions = append([]string{
 	PermWebhooksRead, PermWebhooksWrite,
 	PermUsageRead,
 	PermAuditLogsRead, PermAuditLogsWrite, PermAuditLogsManage,
+	PermAPIKeysRead, PermAPIKeysWrite,
 }, OrgPermissions...)
 
 // Built-in roles of the IAM resource (roles.system_role). Every environment

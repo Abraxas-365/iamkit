@@ -1,5 +1,6 @@
 # Glossary
 
+- **API key:** `ik_key_…` secret owned by a user, an organization or a machine user; its permissions are recomputed on every use. See [API keys](../guides/machines/api-keys.md).
 - **Audience:** identifier of the API expected to accept an access token.
 - **Boundary:** environment/org/app/resource context selected for a user session.
 - **Catalog:** exact permission names owned by one resource.

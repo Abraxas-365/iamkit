@@ -69,10 +69,10 @@ func (m *Middleware) Authenticate(c *fiber.Ctx) error {
 		c.SetUserContext(event.WithActor(c.UserContext(), grant.Link.String()))
 		return c.Next()
 	}
-	// Personal access tokens of machine users are the one opaque bearer
-	// accepted here; every other ik_ secret is an API key.
-	if strings.HasPrefix(raw, "ik_") && !strings.HasPrefix(raw, authentication.AccessTokenPrefix) {
-		return errx.Unauthorized("JWT access token required, not an API key")
+	// API keys of machine users are the one opaque bearer accepted here;
+	// every other ik_ secret is not an access token.
+	if strings.HasPrefix(raw, "ik_") && !identity.IsAPIKey(raw) {
+		return errx.Unauthorized("JWT access token required")
 	}
 	token, err := m.validator.ValidateSelf(c.UserContext(), raw)
 	if errx.IsServerError(err) {
@@ -80,6 +80,9 @@ func (m *Middleware) Authenticate(c *fiber.Ctx) error {
 	}
 	if err != nil {
 		return errx.Unauthorized("invalid or expired token")
+	}
+	if token.APIKey != nil && token.APIKey.Owner.Type != "machine" {
+		return errx.Unauthorized("API keys of users and organizations cannot call the IAMKit API")
 	}
 	c.Locals(tokenKey{}, token)
 	c.SetUserContext(event.WithActor(c.UserContext(), token.Subject.String()))

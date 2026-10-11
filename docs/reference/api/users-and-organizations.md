@@ -21,9 +21,9 @@ Lists of users, organizations and members use the
 | `DELETE /users/:id/permanent` | User ID | 204; permanently erases the user and every session, membership, group membership, grant, role assignment, position assignment, external identity, provisioned identity, second factor, recovery code and identity challenge referencing them. Irreversible. |
 | `GET /users/:id/factors` | User ID | 200 `{factors:[{id,kind,confirmed_at,last_used_at,created_at}],recovery_codes_remaining}`; never secrets |
 | `DELETE /users/:id/factors` | User ID | 204; removes every [second factor](../../guides/sign-in/mfa.md) and recovery code (lost device) and clears a lockout; audited `mfa.reset`. 404 when the user has none |
-| `GET /users/:id/access-tokens` | Machine user ID; list parameters (`search` matches the name) | 200 page of `{id,name,organization_id,organization_name,application_id,application_name,resource_id,resource_name,expires_at,last_used_at,revoked_at,created_at}`; never secrets |
-| `POST /users/:id/access-tokens` | `name`, `organization_id` (one the machine user belongs to), `application_id`, `resource_id` (linked to it); optional `expires_in` (`1h`–`8760h` or `never`, default `24h`) | 201 the token plus `token` (`ik_pat_…`, shown once); 404 unknown user; 422 for a human user; 400 without an active membership in the organization or with an unlinked resource; audited `user.access_token_created` |
-| `DELETE /users/:id/access-tokens/:token` | User ID, token ID | 204, also when already revoked; sessions exchanged from it end; audited `user.access_token_revoked` |
+| `GET /users/:id/api-keys` | User ID; list parameters (`search` matches the name), filters of [API keys](#api-keys) | 200 page of the user's [API keys](#api-keys) of any kind (never values) |
+| `POST /users/:id/api-keys` | Machine users only: `name`, `organization_id` (one the machine user belongs to), `application_id`, `resource_id` (linked to it); optional `permissions` (omitted = everything the user holds), `expires_in` (`1h`–`8760h` or `never`, omitted = `never`) | 201 the key plus `value` (`ik_key_…`, shown once); 404 unknown user; 422 for a human user; 400 without an active membership in the organization or with an unlinked resource; audited `api_key.created` |
+| `DELETE /users/:id/api-keys/:key` | User ID, key ID | 204, also when already revoked; sessions exchanged from it end; audited `api_key.revoked` |
 | `GET /users/:id/keys` | Machine user ID; list parameters | 200 page of `{id,user_id,public_key,expires_at,last_used_at,created_at}` ([keys](../../guides/machines/machine-users.md#keys-jwt-bearer-login)) |
 | `POST /users/:id/keys` | Empty body (IAMKit generates an RSA pair), or `public_key` (public RSA ≥ 2048-bit or EC P-256/384/521 JWK); optional `expires_in` (`1h`–`8760h` or `never`, default `8760h`) | 201 the key, plus `private_key` (PKCS #8 PEM, shown once) for a generated pair; 400 private or malformed key; 422 for a human user or a user with 10 keys; audited `user.key_added` |
 | `DELETE /users/:id/keys/:key` | User ID, key ID | 204; sessions opened with it end; 404 unknown key; audited `user.key_removed` |
@@ -248,3 +248,26 @@ creating a resource grant: it must fail. Complete the
 Source: `user/adapters/userhttp/handler.go`, `user/user.go`,
 `organization/adapters/orghttp/{handler,structure,groups,domains}.go`, `organization/adapters/orgdns`, `invitation/adapters/invhttp` and domain types under
 `internal/iam/`.
+
+## API keys
+
+Self-service [API keys](../../guides/machines/api-keys.md) for users and
+organizations, and the environment policy. Also served on `/api/v1` with
+`iam:api-keys:read`/`iam:api-keys:write`. Machine keys are made under
+`/users/:id/api-keys` above.
+
+| Method/path | Input | Success |
+| --- | --- | --- |
+| `GET /api-keys` | List parameters (`search` matches the name); optional `owner_type` (`user`\|`organization`\|`machine`), `organization_id`, `user_id`, `resource_id`, `state` (`active`\|`revoked`\|`expired`) | 200 page of keys |
+| `GET /api-keys/:key` | Key ID | 200 key; 404 unknown |
+| `POST /api-keys` | Organization keys: `organization_id`, `resource_id`, `name`, `permissions` (non-empty, inside the resource's organization allowlist and what the organization reaches), optional `expires_in` (`1h`–`8760h` or `never`, omitted = `never`) | 201 key plus `value` (`ik_key_…`, shown once); 403 `API_KEYS_DISABLED`; 400 `expires_in` over `max_ttl_days`; 422 outside the allowlist or `API_KEY_LIMIT_REACHED`; audited `api_key.created` |
+| `DELETE /api-keys/:key` | Key ID | 204, also when already revoked; sessions exchanged from it end; audited `api_key.revoked` |
+| `GET /api-key-policy` | — | 200 `{user_keys,organization_keys,max_ttl_days,max_per_user,max_per_organization,updated_at}`; the defaults when none is saved |
+| `PUT /api-key-policy` | The same fields without `updated_at` (`max_ttl_days` 1–365 or null, `max_per_user` 1–100, `max_per_organization` 1–500) | 200 policy; audited `api_key_policy.updated` |
+
+A key is `{id, environment_id, owner:{type, user_id?}, organization_id,
+application_id? (machine keys), resource_id, name, permissions (null = a machine
+key's "all"), obfuscated_value, expires_at, expires (false = never), last_used_at,
+revoked_at, created_by:{kind,id}, created_at, state, user_name?, organization_name?,
+application_name?, resource_name?}`. The value is never returned again.
+

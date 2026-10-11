@@ -128,7 +128,7 @@ func Build(a *Analyzer, routes []Route, version string) (map[string]any, []strin
 			"securitySchemes": map[string]any{
 				"managementKey":   map[string]any{"type": "apiKey", "in": "header", "name": "X-API-Key", "description": "Management key (ik_mgmt_…)"},
 				"operatorSession": map[string]any{"type": "apiKey", "in": "cookie", "name": "__Host-iamkit-operator", "description": "Console session; writes also need the X-IAMKit-Console header"},
-				"accessToken":     map[string]any{"type": "http", "scheme": "bearer", "bearerFormat": "JWT", "description": "End-user or service-account access token (or a machine user's ik_pat_ token)"},
+				"accessToken":     map[string]any{"type": "http", "scheme": "bearer", "bearerFormat": "JWT", "description": "End-user or service-account access token (or a machine user's ik_key_ API key)"},
 				"scimToken":       map[string]any{"type": "http", "scheme": "bearer", "description": "SCIM provisioning credential"},
 				"scimKey":         map[string]any{"type": "apiKey", "in": "header", "name": "X-API-Key", "description": "SCIM provisioning credential (kept for compatibility)"},
 			},

@@ -481,3 +481,56 @@ func (a OrgAdmin) SetPasswordPolicy(ctx context.Context, input OrgPasswordRequir
 func (a OrgAdmin) DeletePasswordPolicy(ctx context.Context) error {
 	return a.env.client.Do(ctx, "DELETE", a.path("password-policy"), nil, nil)
 }
+
+// APIKeys lists the organization's keys and its members' user keys, one page
+// (never machine keys); iam:org:api-keys:read. OwnerType, UserID and State
+// filter; OrganizationID is the organization itself.
+func (a OrgAdmin) APIKeys(ctx context.Context, filter APIKeyFilter, page Page) (APIKeyList, error) {
+	filter.OrganizationID = ""
+	var out APIKeyList
+	if err := a.env.client.do(ctx, "GET", a.path("api-keys"), page.Query(filter.Query()), nil, &out); err != nil {
+		return APIKeyList{}, err
+	}
+	if out.Items == nil {
+		out.Items = []APIKey{}
+	}
+	return out, nil
+}
+
+// APIKeyOptions says which resources and permissions the calling admin can
+// give an organization key, and whether the type is enabled
+// (iam:org:api-keys:write).
+func (a OrgAdmin) APIKeyOptions(ctx context.Context) (APIKeyOptions, error) {
+	var out APIKeyOptions
+	return out, a.env.client.Do(ctx, "GET", a.path("api-keys", "options"), nil, &out)
+}
+
+// APIKey reads one key of the organization (iam:org:api-keys:read).
+func (a OrgAdmin) APIKey(ctx context.Context, id string) (APIKey, error) {
+	var out APIKey
+	if err := safeSegment(id); err != nil {
+		return out, err
+	}
+	return out, a.env.client.Do(ctx, "GET", a.path("api-keys", id), nil, &out)
+}
+
+// CreateAPIKey issues an organization key; the value is returned once. The
+// permissions must be ones the admin holds and the resource allows
+// (iam:org:api-keys:write; needs a signed-in admin, not a setup link).
+// OrganizationID is the administered organization.
+func (a OrgAdmin) CreateAPIKey(ctx context.Context, input NewAPIKey) (IssuedAPIKey, error) {
+	var out IssuedAPIKey
+	if input.OrganizationID == "" {
+		input.OrganizationID = a.org
+	}
+	return out, a.env.client.Do(ctx, "POST", a.path("api-keys"), input, &out)
+}
+
+// RevokeAPIKey revokes a key of the organization or of one of its members
+// (idempotent; iam:org:api-keys:write).
+func (a OrgAdmin) RevokeAPIKey(ctx context.Context, id string) error {
+	if err := safeSegment(id); err != nil {
+		return err
+	}
+	return a.env.client.Do(ctx, "DELETE", a.path("api-keys", id), nil, nil)
+}

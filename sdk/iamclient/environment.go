@@ -111,7 +111,7 @@ type Created struct {
 type User struct {
 	ID string `json:"id"`
 	// Kind is "human" or "machine" (no email, password or second factor;
-	// authenticates with personal access tokens only).
+	// authenticates with API keys or JWT keys only).
 	Kind  string `json:"kind,omitempty"`
 	Email string `json:"email"`
 	Name  string `json:"name"`
@@ -328,6 +328,11 @@ type Resource struct {
 	RequireGrant        bool   `json:"require_grant,omitempty"`
 	// Prefix is the permission prefix derived from the audience. Read-only.
 	Prefix string `json:"prefix,omitempty"`
+	// APIKeyPermissions lists, per key owner type, the permissions of the
+	// resource that API keys of that type may carry (subsets of
+	// Permissions; empty = no keys of that type). The IAM resource has none.
+	// Change them with SetResourceAPIKeyPermissions.
+	APIKeyPermissions *APIKeyPermissions `json:"api_key_permissions,omitempty"`
 }
 
 // ResourceAccess sets a resource's owner organization (nil = the
@@ -501,7 +506,7 @@ func (e Environment) RequirePasswordChange(ctx context.Context, id string) error
 
 // CreateMachineUser creates a user of kind "machine": no email, password
 // or second factor. It joins organizations and receives roles and grants
-// like a person and authenticates with personal access tokens.
+// like a person and authenticates with API keys.
 func (e Environment) CreateMachineUser(ctx context.Context, name, homeOrganization string) (Created, error) {
 	body := map[string]string{"kind": "machine", "name": name}
 	if homeOrganization != "" {
@@ -515,61 +520,6 @@ func (e Environment) CreateMachineUser(ctx context.Context, name, homeOrganizati
 // MachineUsers lists the machine users.
 func (e Environment) MachineUsers(ctx context.Context) ([]User, error) {
 	return collect[User](ctx, e.client, e.path("users"), url.Values{"kind": {"machine"}})
-}
-
-// AccessToken is a machine user's personal access token (never its secret).
-type AccessToken struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"user_id"`
-	OrganizationID string     `json:"organization_id"`
-	ApplicationID  string     `json:"application_id"`
-	ResourceID     string     `json:"resource_id"`
-	Name           string     `json:"name"`
-	ExpiresAt      time.Time  `json:"expires_at"`
-	LastUsedAt     *time.Time `json:"last_used_at"`
-	RevokedAt      *time.Time `json:"revoked_at"`
-	CreatedAt      time.Time  `json:"created_at"`
-	// Names are filled when tokens are listed.
-	OrganizationName string `json:"organization_name,omitempty"`
-	ApplicationName  string `json:"application_name,omitempty"`
-	ResourceName     string `json:"resource_name,omitempty"`
-}
-
-// IssuedAccessToken is a new personal access token; Token (ik_pat_…) is
-// returned only here.
-type IssuedAccessToken struct {
-	AccessToken
-	Token string `json:"token"`
-}
-
-// CreateAccessToken asks for a personal access token acting as the machine
-// user in OrganizationID (one it belongs to) for ResourceID of
-// ApplicationID. ExpiresIn is 1h–8760h or "never" (default 24h).
-type CreateAccessToken struct {
-	Name           string `json:"name"`
-	OrganizationID string `json:"organization_id"`
-	ApplicationID  string `json:"application_id"`
-	ResourceID     string `json:"resource_id"`
-	ExpiresIn      string `json:"expires_in,omitempty"`
-}
-
-// CreateAccessToken issues a personal access token for a machine user.
-// Use it as a bearer (live permissions, no session) or trade it for an
-// access JWT with authclient.Client.ExchangeAccessToken.
-func (e Environment) CreateAccessToken(ctx context.Context, user string, input CreateAccessToken) (IssuedAccessToken, error) {
-	var out IssuedAccessToken
-	err := e.operation(ctx, "POST", []string{"users", user, "access-tokens"}, input, &out)
-	return out, err
-}
-
-// AccessTokens lists the first page of a machine user's tokens.
-func (e Environment) AccessTokens(ctx context.Context, user string) ([]AccessToken, error) {
-	return listOp[AccessToken](e, ctx, []string{"users", user, "access-tokens"})
-}
-
-// RevokeAccessToken revokes a token and the sessions exchanged from it.
-func (e Environment) RevokeAccessToken(ctx context.Context, user, token string) error {
-	return e.operation(ctx, "DELETE", []string{"users", user, "access-tokens", token}, nil, nil)
 }
 
 // UserKey is a machine user's public key for the JWT-bearer grant; its ID

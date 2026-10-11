@@ -1,4 +1,5 @@
 import { createIAMKitClient, type IAMKitClient, type IAMKitOptions } from "@iamkit/api";
+import { APIKeyPrefix, MeAPIKeys } from "./apikeys.js";
 import { invalidArgument } from "./errors.js";
 import { Transport, withQuery, type FetchLike } from "./http.js";
 
@@ -23,7 +24,7 @@ export function createManagementClient(options: Omit<IAMKitOptions, "managementK
 /**
  * A typed client for the permission-scoped `/api/v1` and `/scim/v2` routes:
  * token is a user's or service account's access token, a machine user's
- * `ik_pat_` token or a SCIM credential. A function is called per request,
+ * `ik_key_` API key or a SCIM credential. A function is called per request,
  * so it can refresh.
  */
 export function createApiClient(options: Omit<IAMKitOptions, "managementKey" | "token"> & { token: NonNullable<IAMKitOptions["token"]> }): IAMKitClient {
@@ -81,7 +82,7 @@ export interface IdentityClientOptions {
 /**
  * Server-side calls of the identity API (`/identity/v1`): password login
  * for first-party backends (BFF), refresh, logout, the user's profile,
- * service-account and personal-access-token exchanges. Browser sign-in UIs
+ * service-account and machine API key exchanges, and the user's own API keys. Browser sign-in UIs
  * use `@iamkit/js` instead. Failures throw IAMKitError.
  */
 export class IdentityClient {
@@ -139,14 +140,23 @@ export class IdentityClient {
   }
 
   /**
-   * Trades a machine user's personal access token (`ik_pat_`) for a
-   * session-backed access JWT that offline verification accepts.
+   * Trades a machine user's API key (`ik_key_`) for a session-backed access
+   * JWT that offline verification accepts. Only machine keys exchange:
+   * user and organization keys are validate-only.
    */
-  exchangeAccessToken(token: string): Promise<TokenPair> {
-    if (!token.startsWith("ik_pat_")) {
-      return Promise.reject(invalidArgument("personal access token required"));
+  exchangeAPIKey(key: string): Promise<TokenPair> {
+    if (!key.startsWith(APIKeyPrefix)) {
+      return Promise.reject(invalidArgument("API key required"));
     }
-    return this.http.json("/identity/v1/token-exchange", undefined, token);
+    return this.http.json("/identity/v1/token-exchange", undefined, key);
+  }
+
+  /**
+   * The token user's own API keys (self-service). `accessToken` is the
+   * user's token for `audience`; creating needs a fresh sign-in.
+   */
+  me(accessToken: string, environmentId: string, audience: string): MeAPIKeys {
+    return new MeAPIKeys(this.http, accessToken, environmentId, audience);
   }
 }
 

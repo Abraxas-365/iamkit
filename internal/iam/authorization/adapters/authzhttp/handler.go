@@ -26,6 +26,7 @@ func (h *Handler) Register(e fiber.Router) {
 	e.Get("/resources", h.List)
 	e.Get("/resources/:id", h.Find)
 	e.Put("/resources/:id", h.Update)
+	e.Put("/resources/:resource/api-key-permissions", h.UpdateAPIKeyPermissions)
 	e.Post("/application-resources", h.Link)
 	e.Delete("/application-resources/:application/:resource", h.Unlink)
 	e.Get("/applications/:application/resources", h.ListByApplication)
@@ -70,6 +71,23 @@ func (h *Handler) Update(c *fiber.Ctx) error {
 	}
 	m := authorization.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
 	if err := h.commands.UpdateCatalog(c.UserContext(), m, id, input); err != nil {
+		return err
+	}
+	return c.SendStatus(204)
+}
+
+// UpdateAPIKeyPermissions replaces the resource's API key allowlist.
+func (h *Handler) UpdateAPIKeyPermissions(c *fiber.Ctx) error {
+	var input authorization.APIKeyPermissions
+	if err := c.BodyParser(&input); err != nil {
+		return errx.Validation("invalid request")
+	}
+	id, err := identity.ParseResourceID(c.Params("resource"))
+	if err != nil {
+		return errx.Validation("invalid resource id")
+	}
+	m := authorization.Mutation{Environment: env(c), Actor: h.actor(c), Action: c.Method(), Target: c.Path()}
+	if err := h.commands.UpdateAPIKeyPermissions(c.UserContext(), m, id, input); err != nil {
 		return err
 	}
 	return c.SendStatus(204)

@@ -33,12 +33,12 @@ describe("IdentityClient", () => {
     const { fetch, calls } = fakeFetch((call) => (call.url.endsWith("/logout") ? { status: 204 } : { body: { access_token: "at", token_type: "Bearer", expires_in: 60 } }));
     const iam = new IdentityClient({ baseUrl: issuer, fetch });
     await iam.machineToken("ik_svc_x");
-    await iam.exchangeAccessToken("ik_pat_x");
+    await iam.exchangeAPIKey("ik_key_x");
     await iam.logout("at", "e", "aud");
-    expect(calls.map((c) => c.headers.get("authorization"))).toEqual(["Bearer ik_svc_x", "Bearer ik_pat_x", "Bearer at"]);
+    expect(calls.map((c) => c.headers.get("authorization"))).toEqual(["Bearer ik_svc_x", "Bearer ik_key_x", "Bearer at"]);
     expect(calls[0].body).toBe("");
-    await expect(iam.machineToken("ik_pat_x")).rejects.toMatchObject({ code: "VALIDATION" });
-    await expect(iam.exchangeAccessToken("ik_svc_x")).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(iam.machineToken("ik_key_x")).rejects.toMatchObject({ code: "VALIDATION" });
+    await expect(iam.exchangeAPIKey("ik_pat_x")).rejects.toMatchObject({ code: "VALIDATION" });
   });
 
   it("maps IAMKit error envelopes", async () => {

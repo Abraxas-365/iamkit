@@ -122,7 +122,7 @@ export interface JwtVerifierOptions extends ExpectedToken {
  *
  * Offline verification cannot observe revocation before expiry; use
  * createIntrospectionVerifier where logout, suspension or a permission
- * removal must take effect immediately. Personal access tokens (`ik_pat_`)
+ * removal must take effect immediately. API keys (`ik_key_`)
  * are not JWTs: exchange them first or introspect them.
  *
  * You still must compare `organization_id` with the tenant a request

@@ -33,30 +33,52 @@ type Token struct {
 	IssuedAt  int64           `json:"iat"`
 	NotBefore int64           `json:"nbf"`
 	ExpiresAt int64           `json:"exp"`
+	// APIKey describes the key a Purpose api_key token stands for (never
+	// in a JWT: keys are validated, not signed). Subject is the user of
+	// user and machine keys and zero for organization keys.
+	APIKey *APIKeyClaims `json:"api_key,omitempty"`
+}
+
+// APIKeyClaims is what introspection (and SDK ValidateAPIKey) tells an
+// application about a key: who it acts for and its effective permissions
+// now (Token.Permissions holds the same list).
+type APIKeyClaims struct {
+	ID          identity.APIKeyID   `json:"id"`
+	Name        string              `json:"name"`
+	Owner       APIKeyOwner         `json:"owner"`
+	Resource    identity.ResourceID `json:"resource_id"`
+	Permissions []string            `json:"permissions"`
+	// ExpiresAt is unix seconds; 0 for keys that never expire.
+	ExpiresAt int64 `json:"expires_at"`
+}
+
+// APIKeyOwner: Type user, organization or machine; ID is the user id of
+// user and machine keys and the organization id of organization keys.
+type APIKeyOwner struct {
+	Type         string                  `json:"type"`
+	ID           string                  `json:"id,omitempty"`
+	Organization identity.OrganizationID `json:"organization_id"`
 }
 
 // Impersonated reports whether someone other than the user acts in the
 // session (an operator or a service account).
 func (t Token) Impersonated() bool { return !t.ActorID.IsZero() || !t.ActorAccount.IsZero() }
 
-// Token purposes: a user session, a service account, or a machine user's
-// personal access token used directly (no session; the organization is the
-// token's).
+// Token purposes: a user session, a service account, or an API key used
+// directly (no session; Token.APIKey describes it).
 const (
 	PurposeApplication = "application"
 	PurposeMachine     = "machine"
-	PurposeAccessToken = "pat"
+	PurposeAPIKey      = "api_key"
 )
 
-// AccessTokenPrefix starts every personal access token.
-const AccessTokenPrefix = "ik_pat_"
-
-// PersonalAccessToken is a live personal access token: the token it acts
-// as (Purpose pat, the permissions the machine user holds now), the
-// audience of its resource and when it expires.
-type PersonalAccessToken struct {
-	ID       identity.AccessTokenID
+// ResolvedAPIKey is a live API key: the Purpose api_key token it acts as
+// (the permissions it has now), its owner kind (user, organization,
+// machine), the audience of its resource and when it expires.
+type ResolvedAPIKey struct {
+	ID       identity.APIKeyID
 	Token    Token
+	Owner    string
 	Audience string
 	Expires  time.Time
 }

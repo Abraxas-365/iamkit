@@ -23,6 +23,9 @@ import (
 type Client struct {
 	baseURL string
 	http    *http.Client
+	// environment and audience are the boundary ValidateAPIKey sends
+	// (WithAudience).
+	environment, audience string
 }
 
 // Option configures the identity client.
@@ -31,6 +34,13 @@ type Option func(*Client)
 // WithHTTPClient overrides the default http.Client.
 func WithHTTPClient(c *http.Client) Option {
 	return func(cl *Client) { cl.http = c }
+}
+
+// WithAudience sets the environment and the resource audience this client's
+// owner serves. ValidateAPIKey needs both: IAMKit only answers for a key
+// issued for that resource.
+func WithAudience(environment, audience string) Option {
+	return func(cl *Client) { cl.environment, cl.audience = environment, audience }
 }
 
 // New creates an identity client. baseURL is the IAMKit server root
@@ -264,17 +274,17 @@ func (c *Client) MachineToken(ctx context.Context, secret string) (TokenPair, er
 	return out, err
 }
 
-// ExchangeAccessToken trades a machine user's personal access token
-// (ik_pat_) for an access token backed by a session: revoking the personal
-// access token or deactivating the machine user ends it. A personal access
-// token also works directly as a bearer on /api/v1 and introspection, but
-// Validator (local JWT checks) accepts only exchanged tokens.
-func (c *Client) ExchangeAccessToken(ctx context.Context, token string) (TokenPair, error) {
-	if !strings.HasPrefix(token, "ik_pat_") {
-		return TokenPair{}, &apierror.Error{Code: "VALIDATION", Message: "personal access token required", HTTPStatus: 400}
+// ExchangeAPIKey trades a machine user's API key (ik_key_) for an access
+// token backed by a session: revoking the key or deactivating the machine
+// user ends it. Only machine keys can be exchanged; user and organization
+// keys are for ValidateAPIKey. A machine key also works directly as a bearer
+// on /api/v1, but Validator (local JWT checks) accepts only exchanged tokens.
+func (c *Client) ExchangeAPIKey(ctx context.Context, apiKey string) (TokenPair, error) {
+	if !IsAPIKey(apiKey) {
+		return TokenPair{}, &apierror.Error{Code: "VALIDATION", Message: "API key required", HTTPStatus: 400}
 	}
 	var out TokenPair
-	err := c.request(ctx, "/token-exchange", token, nil, &out)
+	err := c.request(ctx, "/token-exchange", apiKey, nil, &out)
 	return out, err
 }
 

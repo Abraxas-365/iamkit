@@ -153,9 +153,12 @@ func (r *Repository) Owners(ctx context.Context, environment identity.Environmen
 	return out, failure(err)
 }
 
+// Member reports whether the user is a person in the organization: machine
+// users are operators' credentials and stay invisible to organization
+// administrators.
 func (r *Repository) Member(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) (bool, error) {
 	var ok bool
-	err := r.db.GetContext(ctx, &ok, `SELECT EXISTS(SELECT 1 FROM memberships WHERE environment_id=$1 AND organization_id=$2 AND user_id=$3)`, environment, organization, user)
+	err := r.db.GetContext(ctx, &ok, `SELECT EXISTS(SELECT 1 FROM memberships m JOIN users u ON u.id=m.user_id AND u.environment_id=m.environment_id WHERE m.environment_id=$1 AND m.organization_id=$2 AND m.user_id=$3 AND u.kind<>'machine')`, environment, organization, user)
 	return ok, failure(err)
 }
 

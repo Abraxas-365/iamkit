@@ -83,14 +83,46 @@ type resourceRow struct {
 	Permissions       pq.StringArray           `db:"permissions"`
 	OwnerOrganization *identity.OrganizationID `db:"owner_organization_id"`
 	RequireGrant      bool                     `db:"require_grant"`
+	KeyUser           pq.StringArray           `db:"api_key_user_permissions"`
+	KeyOrganization   pq.StringArray           `db:"api_key_organization_permissions"`
 }
 
 // resourceColumns are the columns resourceRow scans, for table alias r.
-const resourceColumns = `r.id, r.name, r.prefix, r.audience, r.permissions, r.owner_organization_id, r.require_grant`
+const resourceColumns = `r.id, r.name, r.prefix, r.audience, r.permissions, r.owner_organization_id, r.require_grant, r.api_key_user_permissions, r.api_key_organization_permissions`
 
 func (row resourceRow) toDomain() authorization.Resource {
 	return authorization.Resource{ID: row.ID, Name: row.Name, Prefix: row.Prefix, Audience: row.Audience, Permissions: []string(row.Permissions),
-		OwnerOrganization: row.OwnerOrganization, RequireGrant: row.RequireGrant}
+		OwnerOrganization: row.OwnerOrganization, RequireGrant: row.RequireGrant,
+		APIKeyPermissions: authorization.APIKeyPermissions{User: nonNil(row.KeyUser), Organization: nonNil(row.KeyOrganization)}}
+}
+
+func nonNil(v pq.StringArray) []string {
+	if v == nil {
+		return []string{}
+	}
+	return []string(v)
+}
+
+// UpdateAPIKeyPermissions replaces the allowlist; the CHECK constraints
+// refuse permissions outside the catalog and any on the IAM resource.
+func (r *Repository) UpdateAPIKeyPermissions(ctx context.Context, m authorization.Mutation, id identity.ResourceID, input authorization.APIKeyPermissions) error {
+	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, `UPDATE resources SET api_key_user_permissions=$3, api_key_organization_permissions=$4 WHERE environment_id=$1 AND id=$2`,
+			m.Environment, id, array(input.User), array(input.Organization))
+		if err != nil {
+			var pqErr *pq.Error
+			if errors.As(err, &pqErr) && pqErr.Code == "23514" {
+				return errx.Validation("API key permissions must be permissions of the resource, and none on the IAM resource")
+			}
+			return failure(err)
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return failure(err)
+		} else if n == 0 {
+			return errx.NotFound("resource not found")
+		}
+		return failure(audit(ctx, tx, m))
+	})
 }
 func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, input authorization.Resource) error {
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {

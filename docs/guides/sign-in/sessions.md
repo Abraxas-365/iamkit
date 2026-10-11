@@ -34,8 +34,8 @@ address. Operators see the same two fields in the console
 
 `GET /identity/v1/me/sessions?environment_id=ENV&audience=AUD`, authenticated
 with the user's IAMKit access token (the same token as `GET /me`; service-account
-tokens and personal access tokens used directly get 403; the application token
-a machine user gets by exchanging a personal access token or with a key is an
+tokens and API keys used directly get 403; the application token
+a machine user gets by exchanging an API key or with a JWK key is an
 ordinary session token and manages that machine user's own sessions). It returns the user's **live** sessions (not
 revoked, not expired) across all their organizations and applications in the
 environment, newest first, in the usual paginated envelope (`limit`, `offset`):

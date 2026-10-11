@@ -124,6 +124,9 @@ func (u MemberUpdate) Validate() error {
 type MemberFilter struct {
 	ManagerID identity.UserID
 	Active    *bool
+	// HumansOnly leaves out machine users (organization administrators
+	// never see them).
+	HumansOnly bool
 }
 
 type Membership struct {

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Ban, Bot, Building2, Home, KeyRound, LockOpen, LogOut, Pencil, Plus, RotateCcw, ShieldCheck, Smartphone, Trash2, UserX } from 'lucide-react'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -15,7 +15,7 @@ import { AssignRoleDialog } from '@/components/library/assign-role'
 import { UserState } from '@/components/library/user-state'
 import { Avatar } from '@/components/library/avatar'
 import { MetadataEditor, ProfileAttributes } from '@/components/library/metadata-editor'
-import { AccessTokens } from './machine-tokens'
+import { UserAPIKeys } from './user-api-keys'
 import { UserKeys } from './machine-keys'
 import { HistorySection } from './history'
 import { ImpersonationBadge } from './activity'
@@ -47,6 +47,9 @@ export default function UserDetailPage() {
   const [purge, setPurge] = useState(false)
   const [unlock, setUnlock] = useState(false)
   const [requireChange, setRequireChange] = useState(false)
+  const keys = useRef<HTMLDivElement>(null)
+  const apiKeysRoute = useLocation().pathname.endsWith('/api-keys')
+  useEffect(() => { if (user && apiKeysRoute) keys.current?.scrollIntoView?.({ block: 'start' }) }, [user, apiKeysRoute])
   const load = useCallback(() => { setError(''); api.get<User>(path).then(setUser).catch(e => setError(message(e))) }, [path])
   useEffect(load, [load])
 
@@ -99,11 +102,11 @@ export default function UserDetailPage() {
     <MetadataEditor path={path} metadata={user.metadata} canWrite={canWrite} reload={load} />
 
     <Organizations base={base} console={console} user={user} canWrite={canWrite} reload={load} />
+    <div id="api-keys" ref={keys} className="scroll-mt-4">
+      <UserAPIKeys base={base} console={console} user={{ id: user.id, name: label }} machine={machine} canWrite={canWrite} />
+    </div>
     {machine
-      ? <>
-        <AccessTokens base={base} console={console} user={{ id: user.id, name: label }} canWrite={canWrite} />
-        <UserKeys base={base} user={{ id: user.id, name: label }} canWrite={canWrite} />
-      </>
+      ? <UserKeys base={base} user={{ id: user.id, name: label }} canWrite={canWrite} />
       : <SecondFactors path={path} user={user} canWrite={canWrite} />}
     <Sessions base={base} console={console} user={user} canWrite={canWrite} />
     <HistorySection path={path} refresh={user} />

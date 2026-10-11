@@ -60,10 +60,8 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 		users.Get("/:id/factors", s.APIHandlers.Factors.Factors)
 		users.Delete("/:id/factors", s.APIHandlers.Factors.Reset)
 	}
-	if s.APIHandlers.AccessTokens != nil {
-		users.Get("/:id/access-tokens", s.APIHandlers.AccessTokens.List)
-		users.Post("/:id/access-tokens", s.APIHandlers.AccessTokens.Create)
-		users.Delete("/:id/access-tokens/:token", s.APIHandlers.AccessTokens.Revoke)
+	if h := s.APIHandlers.APIKeys; h != nil {
+		h.UserRoutes(users.Group("/:id/api-keys"))
 	}
 	if s.APIHandlers.UserKeys != nil {
 		users.Get("/:id/keys", s.APIHandlers.UserKeys.List)
@@ -129,6 +127,7 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	res.Get("/resources", s.APIHandlers.Authorization.List)
 	res.Get("/resources/:id", s.APIHandlers.Authorization.Find)
 	res.Put("/resources/:id", s.APIHandlers.Authorization.Update)
+	res.Put("/resources/:resource/api-key-permissions", s.APIHandlers.Authorization.UpdateAPIKeyPermissions)
 	res.Post("/application-resources", s.APIHandlers.Authorization.Link)
 	res.Delete("/application-resources/:application/:resource", s.APIHandlers.Authorization.Unlink)
 	res.Get("/applications/:application/resources", s.APIHandlers.Authorization.ListByApplication)
@@ -203,6 +202,11 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	}
 	if h := s.APIHandlers.Webhooks; h != nil {
 		h.Routes(e.Group("/webhooks", apiauth.ReadWrite(authorization.PermWebhooksRead, authorization.PermWebhooksWrite)))
+	}
+	if h := s.APIHandlers.APIKeys; h != nil {
+		keys := apiauth.ReadWrite(authorization.PermAPIKeysRead, authorization.PermAPIKeysWrite)
+		h.KeyRoutes(e.Group("/api-keys", keys))
+		h.PolicyRoutes(e.Group("/api-key-policy", keys))
 	}
 	if h := s.APIHandlers.LogStreams; h != nil {
 		h.Routes(e.Group("/log-streams", apiauth.ReadWrite(authorization.PermAuditLogsRead, authorization.PermAuditLogsManage)))

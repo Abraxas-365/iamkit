@@ -5,7 +5,20 @@ import "github.com/Abraxas-365/iamkit/sdk/iamclient"
 // Data types of the environment routes. /api/v1 and /management/v1 answer
 // the same shapes on every route they share, so they are iamclient's types.
 type (
-	AccessToken             = iamclient.AccessToken
+	APIKey                  = iamclient.APIKey
+	APIKeyCreator           = iamclient.APIKeyCreator
+	APIKeyFilter            = iamclient.APIKeyFilter
+	APIKeyList              = iamclient.APIKeyList
+	APIKeyOptions           = iamclient.APIKeyOptions
+	APIKeyOptionsResource   = iamclient.APIKeyOptionsResource
+	APIKeyOwner             = iamclient.APIKeyOwner
+	APIKeyPermissions       = iamclient.APIKeyPermissions
+	APIKeyPolicy            = iamclient.APIKeyPolicy
+	APIKeyPolicyInput       = iamclient.APIKeyPolicyInput
+	IssuedAPIKey            = iamclient.IssuedAPIKey
+	NewAPIKey               = iamclient.NewAPIKey
+	Page                    = iamclient.Page
+	Paging                  = iamclient.Paging
 	AuditLogAction          = iamclient.AuditLogAction
 	AuditLogActionInput     = iamclient.AuditLogActionInput
 	AuditLogActionPatch     = iamclient.AuditLogActionPatch
@@ -28,7 +41,6 @@ type (
 	Application             = iamclient.Application
 	ApplicationPatch        = iamclient.ApplicationPatch
 	ClientAuthentication    = iamclient.ClientAuthentication
-	CreateAccessToken       = iamclient.CreateAccessToken
 	CreateUser              = iamclient.CreateUser
 	ImportResult            = iamclient.ImportResult
 	ImportRowError          = iamclient.ImportRowError
@@ -61,7 +73,6 @@ type (
 	GroupRoleFilter         = iamclient.GroupRoleFilter
 	Invitation              = iamclient.Invitation
 	InvitationInput         = iamclient.InvitationInput
-	IssuedAccessToken       = iamclient.IssuedAccessToken
 	IssuedInvitation        = iamclient.IssuedInvitation
 	IssuedUserKey           = iamclient.IssuedUserKey
 	Locale                  = iamclient.Locale
