@@ -16,6 +16,10 @@ type Session struct {
 	Authenticated time.Time  `json:"authenticated_at" db:"authenticated_at"`
 	Expires       time.Time  `json:"expires_at" db:"expires_at"`
 	Revoked       *time.Time `json:"revoked_at" db:"revoked_at"`
+	// IPAddress and UserAgent are what the request that opened the session
+	// said (nil when unknown: no HTTP request, or opened before they were kept).
+	IPAddress *string `json:"ip_address" db:"ip_address"`
+	UserAgent *string `json:"user_agent" db:"user_agent"`
 	// Display labels for the referenced entities; empty when deleted.
 	UserName         string `json:"user_name" db:"user_name"`
 	UserEmail        string `json:"user_email" db:"user_email"`

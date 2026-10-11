@@ -160,6 +160,7 @@
   "hosted.error.sso_not_offered": "La tua organizzazione richiede il single sign-on, che questa applicazione non offre.",
   "hosted.error.sso_email": "Questa email non può accedere a questa applicazione con il single sign-on.",
   "hosted.error.sso_failed": "Il single sign-on non è stato completato. Riprova.",
+  "hosted.error.login_required": "Il tuo provider di identità ha riutilizzato un accesso precedente. Accedi di nuovo per continuare.",
   "hosted.error.credentials": "Email, nome utente o password non corretti.",
   "hosted.error.code": "Il codice non è valido o è scaduto.",
   "hosted.error.webauthn": "Non è stato possibile usare la chiave di sicurezza o la passkey. Riprova o usa un altro metodo.",

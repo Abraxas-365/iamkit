@@ -109,15 +109,6 @@ func (s *Service) client(ctx context.Context, r hosted.Request) (*oauth.Client, 
 	return p.Client, err
 }
 
-// hint is the organization the pending authorization named (zero: none).
-func (s *Service) hint(ctx context.Context, r hosted.Request) (identity.OrganizationID, error) {
-	p, err := s.pendingHosted(ctx, r)
-	if err != nil {
-		return identity.OrganizationID{}, err
-	}
-	return oauth.FormOrganization(p.Form), nil
-}
-
 // pendingHosted is the pending authorization of a hosted login client.
 func (s *Service) pendingHosted(ctx context.Context, r hosted.Request) (oauth.Pending, error) {
 	p, err := s.authorizations.Pending(ctx, r.Ticket, r.Binding)
@@ -346,6 +337,24 @@ func (s *Service) hintedConnection(ctx context.Context, p oauth.Pending, options
 	return id
 }
 
+// upstreamAsk is what a hosted federation start asks of the identity
+// provider (OIDC, Google and Microsoft connections only; the others ignore
+// it): prompt=login when the authorization requires a fresh sign-in
+// (prompt=login or max_age=0), so the provider does not reuse its own
+// session silently, select_account as requested, and the RP's max_age. The
+// callback then checks the provider's auth_time against it.
+func upstreamAsk(p oauth.Pending) federation.Ask {
+	interaction := oauth.FormInteraction(p.Form)
+	var values []string
+	if interaction.Reauthenticate() {
+		values = append(values, oauth.PromptLogin)
+	}
+	if interaction.SelectAccount {
+		values = append(values, oauth.PromptSelectAccount)
+	}
+	return federation.Ask{Prompt: strings.Join(values, " "), MaxAge: interaction.MaxAge}
+}
+
 // Hinted starts the authorize request's connection hint, if usable.
 func (s *Service) Hinted(ctx context.Context, r hosted.Request) (hosted.Route, error) {
 	target, options, p, err := s.offering(ctx, r, func(hosted.SignIn) bool { return true })
@@ -356,7 +365,7 @@ func (s *Service) Hinted(ctx context.Context, r hosted.Request) (hosted.Route, e
 	if id.IsZero() {
 		return hosted.Route{}, nil
 	}
-	start, err := s.federation.StartHosted(ctx, target, id, r.Ticket)
+	start, err := s.federation.StartHosted(ctx, target, id, r.Ticket, upstreamAsk(p))
 	if err != nil {
 		// The hint is only a shortcut: fall back to the normal sign-in.
 		return hosted.Route{}, nil
@@ -372,7 +381,7 @@ func (s *Service) Hinted(ctx context.Context, r hosted.Request) (hosted.Route, e
 // the page says rather than letting a password attempt fail. A client that
 // offers only organization SSO accepts only emails that have it.
 func (s *Service) Identify(ctx context.Context, r hosted.Request, email string) (hosted.Route, error) {
-	target, options, err := s.offered(ctx, r, emailForm)
+	target, options, p, err := s.offering(ctx, r, emailForm)
 	if err != nil {
 		return hosted.Route{}, err
 	}
@@ -406,7 +415,7 @@ func (s *Service) Identify(ctx context.Context, r hosted.Request, email string) 
 	case !d.Required && (options.Password || options.EmailCode):
 		return hosted.Route{Method: federation.MethodPassword, Connection: d.Connection}, nil
 	}
-	start, err := s.federation.StartHosted(ctx, target, *d.Connection, r.Ticket)
+	start, err := s.federation.StartHosted(ctx, target, *d.Connection, r.Ticket, upstreamAsk(p))
 	if err != nil {
 		return hosted.Route{}, err
 	}
@@ -466,7 +475,7 @@ func (s *Service) Reset(ctx context.Context, r hosted.Request, challenge identit
 // connection the email form routed to when the client offers organization
 // SSO (StartHosted checks it is active in the environment).
 func (s *Service) SSO(ctx context.Context, r hosted.Request, connection identity.ConnectionID) (federation.Start, error) {
-	target, options, err := s.offered(ctx, r, func(hosted.SignIn) bool { return true })
+	target, options, p, err := s.offering(ctx, r, func(hosted.SignIn) bool { return true })
 	if err != nil {
 		return federation.Start{}, err
 	}
@@ -478,7 +487,7 @@ func (s *Service) SSO(ctx context.Context, r hosted.Request, connection identity
 	if shared && !options.Shows(connection) || !shared && !options.OrganizationSSO {
 		return federation.Start{}, hosted.ErrMethodUnavailable()
 	}
-	return s.federation.StartHosted(ctx, target, connection, r.Ticket)
+	return s.federation.StartHosted(ctx, target, connection, r.Ticket, upstreamAsk(p))
 }
 
 func (s *Service) Directory(ctx context.Context, r hosted.Request, connection identity.ConnectionID, email, password string) (hosted.Result, error) {
@@ -525,10 +534,11 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 		organizations = only(organizations, login.Chosen)
 	}
 	// An authorization that named its organization signs in there only.
-	hint, err := s.hint(ctx, r)
+	pending, err := s.pendingHosted(ctx, r)
 	if err != nil {
 		return hosted.Result{}, err
 	}
+	hint := oauth.FormOrganization(pending.Form)
 	if !hint.IsZero() {
 		organizations = only(organizations, hint)
 	}
@@ -536,7 +546,10 @@ func (s *Service) step(ctx context.Context, r hosted.Request, target authenticat
 		return hosted.Result{}, hosted.ErrNoAccess()
 	}
 	proven := authentication.HasMFA(verified.AMR)
-	if len(organizations) > 1 {
+	// prompt=select_account shows the chooser even for a single organization,
+	// unless the request or the single sign-on connection already fixed it.
+	choose := oauth.FormInteraction(pending.Form).SelectAccount && hint.IsZero() && verified.Organization.IsZero() && login.Chosen.IsZero()
+	if len(organizations) > 1 || choose {
 		if s.second != nil && !proven && !verified.Federated() {
 			// Before the choice, the environment's rules apply: a user with a
 			// factor the environment accepts proves it once for every

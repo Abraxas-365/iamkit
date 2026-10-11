@@ -134,6 +134,38 @@ iam users create --name Ada --email ada@example.com --username ada
 iam users update $USER --username ""   # remove it
 ```
 
+## External IDs
+
+`external_id` is the identifier your own system (billing, CRM, HR) uses for
+the user, so you can find or sync a user without storing IAMKit's UUID. It is
+trimmed, 1 to 255 characters without control characters, and unique in the
+environment (409 `external_id is taken`; comparison is exact and
+case-sensitive). `""` or JSON `null` removes it; leaving the field out of a
+`PATCH` keeps it. Machine users may have one too.
+
+- Operators and API clients set it on `POST`/`PATCH …/users` (management and
+  `/api/v1`, `iam:users:write`); it is returned in every user view and list,
+  and `GET …/users?external_id=crm-42` returns the one user with that exact
+  value (`?search=` matches it too).
+- Organization administrators can read it and filter their users by it
+  (`…/admin/users?external_id=`), but cannot set, change or clear it: it is
+  operator-owned, and the field is ignored on `…/admin/users`.
+- Changes appear in the user's history (`data.changes.external_id`), like any
+  profile field.
+- It is never released in tokens, UserInfo or `/identity/v1/me`.
+- It is not SCIM's `externalId`: that one belongs to a directory connection
+  (stored per connection with the provisioned identity) and is unrelated to
+  this field. SCIM neither reads nor writes `external_id`.
+
+```sh
+iam users create --name Ada --email ada@example.com --external-id crm-42
+iam users list --external-id crm-42
+iam users update $USER --external-id ""   # remove it
+```
+
+The Go SDKs' `CreateUser`/`UserPatch` take `ExternalID` and
+`UserByExternalID` finds a user by it.
+
 ## Phone numbers
 
 `phone` is a built-in field holding an E.164 number (`+` and 7–15 digits;

@@ -30,6 +30,11 @@ describe("OAuthClient", () => {
       organization_id: "org-1",
       connection_id: "conn-1",
     });
+    const prompted = new URL(client.authorizationUrl({ redirectUri: "https://app.example.com/cb", state: "state-123", nonce: "n", codeChallenge: "c", prompt: ["login", "consent"], maxAge: 0 }));
+    expect(prompted.searchParams.get("prompt")).toBe("login consent");
+    expect(prompted.searchParams.get("max_age")).toBe("0");
+    expect(new URL(client.authorizationUrl({ redirectUri: "https://app.example.com/cb", state: "state-123", nonce: "n", codeChallenge: "c", prompt: "none" })).searchParams.get("prompt")).toBe("none");
+    expect(() => client.authorizationUrl({ redirectUri: "https://app.example.com/cb", state: "state-123", nonce: "n", codeChallenge: "c", maxAge: -1 })).toThrow();
     expect(() => client.authorizationUrl({ redirectUri: "x", state: "short", nonce: "n", codeChallenge: "c" })).toThrow();
     expect(randomToken()).toMatch(/^[A-Za-z0-9_-]{32}$/);
   });

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RowActions } from '@/components/ui/menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, FormDialog, Properties, Time } from '@/components/library/patterns'
+import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, FormDialog, Properties, Time, type Field } from '@/components/library/patterns'
 import { AssignRoleDialog } from '@/components/library/assign-role'
 import { UserState } from '@/components/library/user-state'
 import { Avatar } from '@/components/library/avatar'
@@ -19,13 +19,14 @@ import { AccessTokens } from './machine-tokens'
 import { UserKeys } from './machine-keys'
 import { HistorySection } from './history'
 import { ImpersonationBadge } from './activity'
+import { describeUserAgent } from '@/lib/user-agent'
 import { rich, t } from '@/lib/i18n'
 
-interface User { id: string; kind?: string; name: string; email: string; username?: string; avatar_url?: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; profile?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null; state?: string; last_signed_in_at?: string | null; terms_accepted_at?: string | null; home_organization_id?: string | null; password_change_required?: boolean }
+interface User { id: string; kind?: string; name: string; email: string; username?: string; external_id?: string; avatar_url?: string; active: boolean; email_verified?: boolean; otp_enabled?: boolean; phone?: string; phone_verified?: boolean; metadata?: Record<string, unknown> | null; profile?: Record<string, unknown> | null; failed_logins?: number; locked_until?: string | null; state?: string; last_signed_in_at?: string | null; terms_accepted_at?: string | null; home_organization_id?: string | null; password_change_required?: boolean }
 interface Org { id: string; name: string; active: boolean; membership_active?: boolean }
 interface Factor { id: string; kind: string; name?: string; passkey?: boolean; phone?: string; confirmed_at: string | null; last_used_at: string | null; created_at: string }
 interface Factors { factors: Factor[]; recovery_codes_remaining: number }
-interface Session { id: string; organization_name: string; application_id: string; application_name: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null; impersonated?: boolean; impersonator?: string; impersonation_reason?: string }
+interface Session { id: string; organization_name: string; application_id: string; application_name: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null; ip_address?: string | null; user_agent?: string | null; impersonated?: boolean; impersonator?: string; impersonation_reason?: string }
 
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id), inactive: item.active === false })
 
@@ -53,6 +54,8 @@ export default function UserDetailPage() {
   if (!user) return <div role="status" className="space-y-4"><Skeleton className="h-9 w-64" /><Skeleton className="h-40" /><span className="sr-only">{t('Loading user…')}</span></div>
   const label = user.name || user.email
   const machine = user.kind === 'machine'
+  const externalId = user.external_id ? <span className="font-mono">{user.external_id}</span> : <span className="text-muted-foreground">{t('None')}</span>
+  const externalIdField: Field = { name: 'external_id', label: t('External ID'), optional: true, value: user.external_id ?? '', hint: t('Your own identifier for this user, e.g. a billing or CRM ID. Unique in the environment; never put in tokens. Leave blank to remove it.') }
 
   return <div className="space-y-6">
     <div className="space-y-3">
@@ -78,9 +81,11 @@ export default function UserDetailPage() {
       <Properties items={machine ? [
         [t('Name'), user.name],
         [t('Kind'), t('Machine user: no email, password or second factor')],
+        [t('External ID'), externalId],
         [t('Last token use'), user.last_signed_in_at ? <Time value={user.last_signed_in_at} /> : <span className="text-muted-foreground">{t('Never')}</span>],
       ] : [
         [t('Name'), user.name],
+        [t('External ID'), externalId],
         [t('Username'), user.username ? <span className="font-mono">{user.username}</span> : <span className="text-muted-foreground">{t('None')}</span>],
         [t('Email'), <span className="inline-flex flex-wrap items-center gap-2">{user.email}{user.email_verified ? <Badge variant="secondary" className="bg-success/10 text-success">{t('Verified')}</Badge> : <Badge variant="secondary">{t('Not verified')}</Badge>}</span>],
         [t('Email code sign-in'), user.otp_enabled ? t('Allowed') : t('Off')],
@@ -122,20 +127,23 @@ export default function UserDetailPage() {
 
     {editing && <FormDialog title={t('Edit user')} description={machine ? t('Change the machine user\'s name and picture.') : t('Change the profile and sign-in options.')} fields={machine ? [
       { name: 'name', label: t('Name'), value: user.name },
+      externalIdField,
       { name: 'avatar_url', label: t('Avatar URL'), optional: true, value: user.avatar_url ?? '', hint: t('An https link to a picture.') },
     ] : [
       { name: 'name', label: t('Name'), value: user.name },
+      externalIdField,
       { name: 'username', label: t('Username'), optional: true, value: user.username ?? '', hint: t('Signs in like the email. Lowercase letters, digits, dots, dashes or underscores. Leave blank to remove it.') },
       { name: 'otp_enabled', label: t('Allow sign-in with an email code'), type: 'checkbox', value: !!user.otp_enabled },
       { name: 'phone', label: t('Phone'), optional: true, value: user.phone ?? '', hint: t('International format, e.g. +14155550100. Changing it clears verification; an enrolled SMS factor keeps its number.') },
       { name: 'phone_verified', label: t('Phone number verified'), type: 'checkbox', value: !!user.phone_verified, hint: t('Mark the number as confirmed without texting a code (recorded in the audit log). A new number starts unverified.') },
       { name: 'avatar_url', label: t('Avatar URL'), optional: true, value: user.avatar_url ?? '', hint: t('An https link to their picture. Users can change it themselves, and a social sign-in fills it when empty.') },
     ]} onClose={() => setEditing(false)} submit={async values => {
-      if (machine) { await api.patch(path, { name: values.name, avatar_url: String(values.avatar_url ?? '').trim() }); load(); return }
+      const external_id = String(values.external_id ?? '').trim() || null // null removes it
+      if (machine) { await api.patch(path, { name: values.name, external_id, avatar_url: String(values.avatar_url ?? '').trim() }); load(); return }
       const phone = String(values.phone ?? '').trim()
       const phoneChanged = phone !== (user.phone ?? '')
       const verified = !!values.phone_verified && phone !== ''
-      await api.patch(path, { name: values.name, otp_enabled: values.otp_enabled, phone, ...(verified !== (!phoneChanged && !!user.phone_verified) ? { phone_verified: verified } : {}), avatar_url: String(values.avatar_url ?? '').trim(), username: String(values.username ?? '').trim() }); load()
+      await api.patch(path, { name: values.name, otp_enabled: values.otp_enabled, phone, ...(verified !== (!phoneChanged && !!user.phone_verified) ? { phone_verified: verified } : {}), avatar_url: String(values.avatar_url ?? '').trim(), username: String(values.username ?? '').trim(), external_id }); load()
     }} />}
     {suspend && (user.active
       ? <ConfirmDialog title={t('Suspend {{label}}?', { label })} description={t('They can no longer sign in and their sessions stop refreshing. You can reactivate them later.')} confirmLabel={t('Suspend')} onClose={() => setSuspend(false)} confirm={async () => { await api.post(`${path}/deactivate`); toast.success(t('User suspended')); load() }} />
@@ -260,7 +268,7 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
     <Link to={`${console}/sessions`} className="text-sm text-primary hover:underline">{t('All sessions')}</Link>
   </div>}>
     <DataTable
-      columns={[t('Application'), { header: t('Organization'), hideBelow: 'md' }, { header: t('Signed in'), nowrap: true }, { header: t('Expires'), nowrap: true }, t('Status'), ...(canWrite ? [t('Actions')] : [])]}
+      columns={[t('Application'), { header: t('Organization'), hideBelow: 'md' }, { header: t('IP address'), nowrap: true, hideBelow: 'lg' }, { header: t('Device'), hideBelow: 'lg' }, { header: t('Signed in'), nowrap: true }, { header: t('Expires'), nowrap: true }, t('Status'), ...(canWrite ? [t('Actions')] : [])]}
       loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState icon={<KeyRound />} title={t('No sessions')} description={t('Sessions appear when this user signs in to an application.')} />}
       rows={list.data.map(s => {
@@ -268,6 +276,8 @@ function Sessions({ base, console, user, canWrite }: { base: string; console: st
         return [
           <EntityRef name={s.application_name} id={s.application_id} to={`${console}/applications/${s.application_id}`} secondary={s.resource_name} />,
           s.organization_name || '—',
+          s.ip_address || '—',
+          s.user_agent ? <span title={s.user_agent}>{describeUserAgent(s.user_agent)}</span> : '—',
           <Time value={s.authenticated_at} />,
           <Time value={s.expires_at} />,
           <span className="whitespace-nowrap"><Badge variant="secondary" className={tone}>{label}</Badge><ImpersonationBadge session={s} /></span>,

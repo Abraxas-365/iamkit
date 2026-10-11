@@ -90,3 +90,27 @@ it('lists usernames next to the email', async () => {
   open('users')
   expect(await screen.findByText('alice@example.com · @alice')).toBeTruthy()
 })
+
+it('shows, edits and clears the external ID', async () => {
+  user = { ...user, external_id: 'crm-42' }
+  const u = userEvent.setup()
+  open('users/u1')
+  expect(await screen.findByRole('heading', { name: 'Alice Doe' })).toBeTruthy()
+  expect(screen.getByText('crm-42')).toBeTruthy()
+  await u.click(screen.getAllByRole('button', { name: /^Edit$/ })[0])
+  const field = await screen.findByLabelText(/External ID/)
+  await u.clear(field)
+  await u.type(field, 'crm-43')
+  await u.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(patches.at(-1)?.external_id).toBe('crm-43'))
+  await u.click(screen.getAllByRole('button', { name: /^Edit$/ })[0])
+  await u.clear(await screen.findByLabelText(/External ID/))
+  await u.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(patches.at(-1)?.external_id).toBeNull())
+})
+
+it('lists the external ID next to the email', async () => {
+  user = { ...user, external_id: 'crm-42' }
+  open('users')
+  expect(await screen.findByText('alice@example.com · ID crm-42')).toBeTruthy()
+})

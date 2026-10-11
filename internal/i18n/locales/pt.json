@@ -160,6 +160,7 @@
   "hosted.error.sso_not_offered": "A sua organização exige início de sessão único, que esta aplicação não oferece.",
   "hosted.error.sso_email": "Este e-mail não pode iniciar sessão nesta aplicação com início de sessão único.",
   "hosted.error.sso_failed": "O início de sessão único não foi concluído. Tente novamente.",
+  "hosted.error.login_required": "O seu fornecedor de identidade reutilizou um início de sessão anterior. Inicie sessão novamente para continuar.",
   "hosted.error.credentials": "E-mail, nome de utilizador ou palavra-passe incorretos.",
   "hosted.error.code": "Esse código é inválido ou expirou.",
   "hosted.error.webauthn": "Não foi possível usar a sua chave de segurança ou chave de acesso. Tente novamente ou use outro método.",

@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 )
@@ -83,6 +85,25 @@ func Username(value string) (string, error) {
 	}
 	if !valid {
 		return "", errx.Validation("username must be 3 to 64 letters, digits, dots, dashes or underscores, starting with a letter or digit")
+	}
+	return value, nil
+}
+
+// ExternalIDMaxLength bounds a user's external ID (characters).
+const ExternalIDMaxLength = 255
+
+// ExternalID normalizes a user's optional external ID, the identifier the
+// operator's own system uses for the user: trimmed, 1 to 255 characters,
+// no control characters. "" means none.
+func ExternalID(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if utf8.RuneCountInString(value) > ExternalIDMaxLength {
+		return "", errx.Validation("external_id must be at most 255 characters")
+	}
+	for _, r := range value {
+		if unicode.IsControl(r) {
+			return "", errx.Validation("external_id must not contain control characters")
+		}
 	}
 	return value, nil
 }

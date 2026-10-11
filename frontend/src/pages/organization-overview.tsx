@@ -16,6 +16,7 @@ import { OrganizationPasswordRequirements } from './organization-password'
 import { MetadataEditor } from '@/components/library/metadata-editor'
 import { HistorySection } from './history'
 import { SetupLinksPanel, type SetupTransport } from '@/components/library/setup-links'
+import { DomainJoinPanel, type DomainJoinTransport } from '@/components/library/domain-join'
 import { t } from '@/lib/i18n'
 
 const methods = [
@@ -41,6 +42,11 @@ export function OrganizationOverview() {
     list: signal => api.get(`${path}/setup-links?limit=100`, signal),
     create: body => api.post(`${path}/setup-links`, body),
     revoke: async id => { await api.delete(`${path}/setup-links/${id}`) },
+  }), [path])
+  const domainJoin = useMemo<DomainJoinTransport>(() => ({
+    groups: signal => api.get<{ items: { id: string; name: string }[] }>(`${path}/groups?source=manual&limit=100`, signal).then(r => r.items ?? []),
+    domains: signal => api.get<{ items: { domain: string; verified: boolean }[] }>(`${path}/domains?limit=100`, signal).then(r => r.items ?? []),
+    save: async body => { await api.patch(path, body) },
   }), [path])
 
   async function patch(field: string, body: Record<string, unknown>, done: string) {
@@ -78,6 +84,8 @@ export function OrganizationOverview() {
         {methods.map(([key, label, hint]) => <SwitchField key={key} label={label} hint={hint} checked={org[key]} disabled={!canWrite || !!saving} onCheckedChange={v => patch(key, { [key]: v }, v ? t('{{method}} sign-in allowed', { method: label }) : t('{{method}} sign-in turned off', { method: label }))} />)}
       </div>
     </DetailSection>
+
+    <DomainJoinPanel transport={domainJoin} settings={org} canWrite={canWrite} reload={reload} />
 
     <OrganizationPasswordRequirements organization={org.id} canWrite={canWrite} />
 

@@ -160,6 +160,7 @@
   "hosted.error.sso_not_offered": "Szervezete egyszeri bejelentkezést ír elő, amelyet ez az alkalmazás nem kínál.",
   "hosted.error.sso_email": "Ezzel az e-mail-címmel nem lehet egyszeri bejelentkezéssel belépni ebbe az alkalmazásba.",
   "hosted.error.sso_failed": "Az egyszeri bejelentkezés nem fejeződött be. Próbálja újra.",
+  "hosted.error.login_required": "Az identitásszolgáltató egy korábbi bejelentkezést használt újra. A folytatáshoz jelentkezzen be újra.",
   "hosted.error.credentials": "Hibás e-mail-cím, felhasználónév vagy jelszó.",
   "hosted.error.code": "Ez a kód érvénytelen vagy lejárt.",
   "hosted.error.webauthn": "A biztonsági kulcs vagy jelkulcs nem használható. Próbálja újra, vagy válasszon másik módot.",

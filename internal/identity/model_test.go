@@ -1,6 +1,9 @@
 package identity
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAvatarURL(t *testing.T) {
 	for in, want := range map[string]string{"": "", "  ": "", " https://cdn.example/a.png ": "https://cdn.example/a.png"} {
@@ -115,6 +118,19 @@ func TestLogin(t *testing.T) {
 	}
 	for _, bad := range []string{"", "  ", "a@", "x"} {
 		if _, _, err := Login(bad); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+}
+
+func TestExternalID(t *testing.T) {
+	for in, want := range map[string]string{"": "", "  ": "", " crm-42 ": "crm-42", "Ada/Lovelace:1": "Ada/Lovelace:1", strings.Repeat("é", ExternalIDMaxLength): strings.Repeat("é", ExternalIDMaxLength)} {
+		if got, err := ExternalID(in); err != nil || got != want {
+			t.Errorf("ExternalID(%q) = %q, %v", in, got, err)
+		}
+	}
+	for _, bad := range []string{strings.Repeat("a", ExternalIDMaxLength+1), "a\nb", "a\x00b"} {
+		if _, err := ExternalID(bad); err == nil {
 			t.Errorf("accepted %q", bad)
 		}
 	}

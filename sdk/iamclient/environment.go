@@ -117,6 +117,9 @@ type User struct {
 	Name  string `json:"name"`
 	// Username is the optional second sign-in identifier ("" when none).
 	Username string `json:"username,omitempty"`
+	// ExternalID is the user's identifier in your own system, unique in the
+	// environment ("" when none). Unrelated to SCIM's externalId; never in tokens.
+	ExternalID string `json:"external_id,omitempty"`
 	// AvatarURL is an https URL to the user's picture ("" when none).
 	AvatarURL string `json:"avatar_url,omitempty"`
 	// Phone is the user's number in E.164 ("" when none); PhoneVerified
@@ -164,6 +167,9 @@ type CreateUser struct {
 	// Username is optional: lowercase letters, digits, ".", "_" or "-",
 	// unique in the environment; users may sign in with it.
 	Username string `json:"username,omitempty"`
+	// ExternalID is the user's identifier in your own system (optional, at
+	// most 255 characters, unique in the environment).
+	ExternalID string `json:"external_id,omitempty"`
 	// HomeOrganizationID makes the user a member of that organization
 	// whose administrators may then edit the record (optional).
 	HomeOrganizationID string `json:"home_organization_id,omitempty"`
@@ -189,6 +195,11 @@ type Organization struct {
 	AllowPasskey   bool `json:"allow_passkey,omitempty"`
 	// AllowedFactors narrow the environment's allowed second factors.
 	AllowedFactors []string `json:"allowed_factors,omitempty"`
+	// DomainJoin: users with a verified email on a verified domain of the
+	// organization become members when they sign in or sign up;
+	// DomainJoinGroupID is the group they join.
+	DomainJoin        bool   `json:"domain_join,omitempty"`
+	DomainJoinGroupID string `json:"domain_join_group_id,omitempty"`
 }
 
 // Factor is a user's second factor. Kind is totp, email, sms or webauthn;
@@ -244,6 +255,12 @@ type OrganizationPatch struct {
 	AllowSocial     *bool          `json:"allow_social,omitempty"`
 	AllowPasskey    *bool          `json:"allow_passkey,omitempty"`
 	AllowedFactors  []string       `json:"allowed_factors,omitempty"`
+	// DomainJoin turns auto-join by verified domain on or off: users with a
+	// verified email on a verified domain of the organization become members
+	// when they sign in or sign up. DomainJoinGroupID is the operator-managed
+	// group they join ("" clears it).
+	DomainJoin        *bool   `json:"domain_join,omitempty"`
+	DomainJoinGroupID *string `json:"domain_join_group_id,omitempty"`
 }
 
 // ApplicationPatch changes an application; nil fields are left unchanged.
@@ -383,6 +400,16 @@ func (e Environment) UpdateUser(ctx context.Context, id string, input UserPatch)
 // UsersInState lists the users in state (see UserActive…).
 func (e Environment) UsersInState(ctx context.Context, state string) ([]User, error) {
 	return collect[User](ctx, e.client, e.path("users"), url.Values{"state": {state}})
+}
+
+// UserByExternalID finds the user with that external ID; ok is false when
+// no user has it.
+func (e Environment) UserByExternalID(ctx context.Context, externalID string) (user User, ok bool, err error) {
+	found, err := collect[User](ctx, e.client, e.path("users"), url.Values{"external_id": {externalID}})
+	if err != nil || len(found) == 0 {
+		return User{}, false, err
+	}
+	return found[0], true, nil
 }
 
 func (e Environment) SuspendUser(ctx context.Context, id string) error {

@@ -33,6 +33,9 @@ type Repository interface {
 	List(ctx context.Context, environment identity.EnvironmentID, filter Filter, page query.Pagination) (query.Paginated[Summary], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Organization, error)
 	Update(ctx context.Context, m Mutation, organization identity.OrganizationID, input Update) error
+	// OperatorGroup reports whether group is an operator-managed (non-SCIM)
+	// group of the organization.
+	OperatorGroup(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, group identity.GroupID) (bool, error)
 	AddMember(ctx context.Context, environment identity.EnvironmentID, input Membership) error
 	RemoveMember(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, user identity.UserID) error
 	UpdateMember(ctx context.Context, m Mutation, organization identity.OrganizationID, user identity.UserID, input MemberUpdate) error

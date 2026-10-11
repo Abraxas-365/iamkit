@@ -209,7 +209,7 @@ type Signups interface {
 type Federation interface {
 	Discover(ctx context.Context, environment identity.EnvironmentID, email string) (federation.Discovery, error)
 	EnvironmentConnections(ctx context.Context, environment identity.EnvironmentID) ([]federation.ConnectionSummary, error)
-	StartHosted(ctx context.Context, target authentication.Target, connection identity.ConnectionID, continuation string) (federation.Start, error)
+	StartHosted(ctx context.Context, target authentication.Target, connection identity.ConnectionID, continuation string, ask federation.Ask) (federation.Start, error)
 	// Lookup describes an active connection (not found otherwise).
 	Lookup(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) (federation.Discovery, error)
 	DirectoryHosted(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, email, password string) (authentication.Verified, error)

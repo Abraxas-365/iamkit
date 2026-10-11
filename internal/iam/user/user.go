@@ -19,6 +19,10 @@ type User struct {
 	// Username is an optional second sign-in identifier, unique in the
 	// environment ("" when none).
 	Username string `json:"username" db:"username"`
+	// ExternalID is the identifier of the user in the operator's own system,
+	// unique in the environment ("" when none). It is not a SCIM externalId
+	// and is never released in tokens.
+	ExternalID string `json:"external_id" db:"external_id"`
 	// HomeOrganization owns the user record: its administrators may edit
 	// it (null when none).
 	HomeOrganization *identity.OrganizationID `json:"home_organization_id" db:"home_organization_id"`
@@ -82,11 +86,16 @@ type Filter struct {
 	HomeOrganization identity.OrganizationID
 	// Kind keeps only human or machine users ("" = both).
 	Kind Kind
+	// ExternalID keeps only the user with that external ID ("" = all).
+	ExternalID string
 }
 
 func (f Filter) Validate() error {
 	if !f.Kind.Valid() {
 		return errx.Validation("kind must be human or machine")
+	}
+	if _, err := identity.ExternalID(f.ExternalID); err != nil {
+		return err
 	}
 	if f.State == "" {
 		return nil
@@ -122,6 +131,9 @@ type Create struct {
 	AvatarURL  string `json:"avatar_url"`
 	// Username is optional (see identity.Username).
 	Username string `json:"username"`
+	// ExternalID is the user's identifier in the operator's system
+	// (optional, see identity.ExternalID); machine users may have one.
+	ExternalID string `json:"external_id"`
 	// HomeOrganization is the organization that owns the user record
 	// (optional): its administrators may edit the user. Creating a user
 	// with one also makes the user a member of it.
@@ -155,6 +167,9 @@ func (c Create) Validate() error {
 	if _, err := identity.Username(c.Username); err != nil {
 		return err
 	}
+	if _, err := identity.ExternalID(c.ExternalID); err != nil {
+		return err
+	}
 	_, err := identity.AvatarURL(c.AvatarURL)
 	return err
 }
@@ -177,6 +192,33 @@ type Update struct {
 	AvatarURL *string `json:"avatar_url"`
 	// Username sets the username ("" removes it).
 	Username *string `json:"username"`
+	// ExternalID sets the external ID; JSON null or "" removes it, an
+	// absent field keeps it.
+	ExternalID *string `json:"external_id"`
+}
+
+// UnmarshalJSON reads an Update; `"external_id": null` clears the external
+// ID (like ""), which a plain pointer could not tell from an absent field.
+func (u *Update) UnmarshalJSON(raw []byte) error {
+	type plain Update
+	if err := json.Unmarshal(raw, (*plain)(u)); err != nil {
+		return err
+	}
+	if u.ExternalID == nil && ExternalIDNull(raw) {
+		empty := ""
+		u.ExternalID = &empty
+	}
+	return nil
+}
+
+// ExternalIDNull reports whether the JSON object sets external_id to null.
+func ExternalIDNull(raw []byte) bool {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil {
+		return false
+	}
+	value, ok := fields["external_id"]
+	return ok && strings.TrimSpace(string(value)) == "null"
 }
 
 // Normalize brings the phone number to E.164 when it is valid; metadata
@@ -202,6 +244,11 @@ func (u Update) Normalize() Update {
 			u.Username = &username
 		}
 	}
+	if u.ExternalID != nil {
+		if external, err := identity.ExternalID(*u.ExternalID); err == nil {
+			u.ExternalID = &external
+		}
+	}
 	return u
 }
 
@@ -221,6 +268,11 @@ func (u Update) Validate() error {
 	}
 	if u.Username != nil {
 		if _, err := identity.Username(*u.Username); err != nil {
+			return err
+		}
+	}
+	if u.ExternalID != nil {
+		if _, err := identity.ExternalID(*u.ExternalID); err != nil {
 			return err
 		}
 	}

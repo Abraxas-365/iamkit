@@ -15,7 +15,7 @@ limited to their organization, without operator access or an environment-wide
    | Permission | Allows |
    | --- | --- |
    | `iam:org:read` | Read the organization, its domains and SSO connections |
-   | `iam:org:settings:write` | Change the name, MFA policy and sign-in methods |
+   | `iam:org:settings:write` | Change the name, MFA policy, sign-in methods and [domain join](domain-join.md) |
    | `iam:org:members:read` | List members, home users, invitations |
    | `iam:org:members:write` | Remove members, set a member's SSO bypass |
    | `iam:org:users:write` | Create home users; edit, suspend, reactivate and unlock them |

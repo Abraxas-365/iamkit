@@ -13,8 +13,9 @@ const (
 	UserDeleted     = "user.deleted"
 	UserLocked      = "user.locked"
 	UserUnlocked    = "user.unlocked"
-	// UserSessionsRevoked: an operator signed the user out everywhere
-	// (data.count sessions ended).
+	// UserSessionsRevoked: an operator signed the user out everywhere, or
+	// the user ended their other sessions (actor = the user); data.count
+	// sessions ended.
 	UserSessionsRevoked = "user.sessions_revoked"
 	// UserPasswordChangeRequired: the next password sign-in must choose a
 	// new password.

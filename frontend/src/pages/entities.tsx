@@ -27,7 +27,7 @@ import { rich, t } from '@/lib/i18n'
 type Kind = 'users' | 'organizations' | 'applications' | 'resources' | 'roles' | 'grants'
 
 interface Entity {
-  id: string; kind?: string; name?: string; email?: string; username?: string; avatar_url?: string; active?: boolean; state?: string; prefix?: string; audience?: string;
+  id: string; kind?: string; name?: string; email?: string; username?: string; external_id?: string; avatar_url?: string; active?: boolean; state?: string; prefix?: string; audience?: string;
   permissions?: string[]; redirect_uris?: string[]; resource_id?: string; resource_name?: string;
   organization_id?: string; organization_name?: string; user_id?: string; user_name?: string;
   otp_enabled?: boolean; metadata?: Record<string, unknown>; mfa_required?: boolean; mfa_for_federated?: boolean;
@@ -42,6 +42,7 @@ const descriptions: Record<Kind, string> = {
   grants: t('Direct resource permissions granted to users within an organization.'),
 }
 const usernameField: Field = { name: 'username', label: t('Username'), optional: true, hint: t('Lets them sign in with a name instead of their email. Lowercase letters, digits, dots, dashes or underscores; unique in the environment.') }
+const externalIdField: Field = { name: 'external_id', label: t('External ID'), optional: true, hint: t('Your own identifier for this user, e.g. a billing or CRM ID. Unique in the environment; never put in tokens.') }
 const avatarField: Field = { name: 'avatar_url', label: t('Avatar URL'), optional: true, hint: t('An https link to their picture. IAMKit stores the link, not the image.') }
 const searches: Record<Kind, string> = { users: t('Search users…'), organizations: t('Search organizations…'), applications: t('Search applications…'), resources: t('Search resources…'), roles: t('Search roles…'), grants: t('Search grants…') }
 const titles: Record<Kind, string> = { users: t('Users'), organizations: t('Organizations'), applications: t('Applications'), resources: t('Resources & scopes'), roles: t('Roles'), grants: t('Grants') }
@@ -74,7 +75,7 @@ function fieldsFor(kind: Kind, _base: string, row?: Entity): Field[] {
   const name: Field = { name: 'name', label: t('Name'), value: row?.name }
   const permissionTags: Field = { name: 'permissions', label: t('Permissions'), type: 'tags', optional: true, tags: row?.permissions ?? [], prefix: row?.prefix, hint: row?.prefix ? t('Type an action and press Enter. Auto-prefixed as {{prefix}}:action.', { prefix: row.prefix }) : t('Define the prefix first — permissions will use it as a namespace.') }
   switch (kind) {
-    case 'users': return row ? [name, { name: 'active', label: t('Active'), type: 'checkbox', value: row.active }, { name: 'otp_enabled', label: t('Enable one-time password login'), type: 'checkbox', value: row.otp_enabled }, { name: 'metadata', label: t('Metadata (JSON)'), optional: true, value: row.metadata ? JSON.stringify(row.metadata) : '', hint: t('Arbitrary JSON object, e.g. {"team":"billing"}') }] : [name, { name: 'email', label: t('Email'), type: 'email' }, { name: 'password', label: t('Initial password'), type: 'password', optional: true, hint: t('Leave blank for OTP-only or OAuth login. If set, must be 12–72 characters long.') }, { name: 'otp_enabled', label: t('Enable one-time password login'), type: 'checkbox' }, usernameField, avatarField]
+    case 'users': return row ? [name, { name: 'active', label: t('Active'), type: 'checkbox', value: row.active }, { name: 'otp_enabled', label: t('Enable one-time password login'), type: 'checkbox', value: row.otp_enabled }, { name: 'metadata', label: t('Metadata (JSON)'), optional: true, value: row.metadata ? JSON.stringify(row.metadata) : '', hint: t('Arbitrary JSON object, e.g. {"team":"billing"}') }] : [name, { name: 'email', label: t('Email'), type: 'email' }, { name: 'password', label: t('Initial password'), type: 'password', optional: true, hint: t('Leave blank for OTP-only or OAuth login. If set, must be 12–72 characters long.') }, { name: 'otp_enabled', label: t('Enable one-time password login'), type: 'checkbox' }, usernameField, externalIdField, avatarField]
     case 'organizations': return row ? [name, { name: 'active', label: t('Active'), type: 'checkbox', value: row.active }, { name: 'mfa_required', label: t('Require a second factor'), type: 'checkbox', value: row.mfa_required, hint: t('Password and email-code sign-ins need an authenticator app; members without one enroll while signing in.') }, { name: 'mfa_for_federated', label: t('Also require it for SSO sign-ins'), type: 'checkbox', value: row.mfa_for_federated, hint: t('By default the identity provider is trusted to have done its own MFA.') }, { name: 'metadata', label: t('Metadata (JSON)'), optional: true, value: row.metadata ? JSON.stringify(row.metadata) : '', hint: t('Arbitrary JSON object.') }] : [name]
     case 'applications': return [name, { name: 'redirect_uris', label: t('Redirect URIs'), type: 'tags', optional: true, tags: row?.redirect_uris ?? [], hint: t('Type a redirect URI and press Enter.') }, ...(row ? [{ name: 'active', label: t('Active'), type: 'checkbox' as const, value: row.active }] : [])]
     case 'resources': {
@@ -253,7 +254,7 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
             : [{ header: t('User') }, { header: t('Resource / Permissions') }]
   const cells = (row: Entity): ReactNode[] => {
     switch (kind) {
-      case 'users': return [<span className="flex min-w-0 items-center gap-3"><Avatar src={row.avatar_url} name={row.name || row.email} />{row.kind === 'machine' ? name(row, <span className="flex items-center gap-2 text-xs text-muted-foreground"><Badge variant="outline" className="gap-1"><Bot className="size-3" /> {t('Machine')}</Badge><CopyText value={row.id} short label={t('Copy user ID')} /></span>) : name(row, row.username ? `${row.email} · @${row.username}` : row.email)}</span>, <UserState state={row.state} active={!!row.active} />]
+      case 'users': return [<span className="flex min-w-0 items-center gap-3"><Avatar src={row.avatar_url} name={row.name || row.email} />{row.kind === 'machine' ? name(row, <span className="flex items-center gap-2 text-xs text-muted-foreground"><Badge variant="outline" className="gap-1"><Bot className="size-3" /> {t('Machine')}</Badge><CopyText value={row.id} short label={t('Copy user ID')} /></span>) : name(row, [row.email, row.username && `@${row.username}`, row.external_id && `ID ${row.external_id}`].filter(Boolean).join(' · '))}</span>, <UserState state={row.state} active={!!row.active} />]
       case 'organizations': return [name(row), <Status active={row.active !== false} />]
       case 'applications': return [name(row), <RedirectList uris={row.redirect_uris ?? null} />, <Status active={!!row.active} />]
       case 'resources': return [name(row, <span className="block truncate text-xs text-muted-foreground">{row.audience}</span>), <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs">{row.prefix}</code>, <span className="break-all text-sm">{row.audience}</span>, permissions(row)]
@@ -315,6 +316,7 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
       }
       if (edit === 'new') {
         if (kind === 'users' && !String(values.username ?? '').trim()) delete data.username
+        if (kind === 'users' && !String(values.external_id ?? '').trim()) delete data.external_id
         const created = await api.post<{ id?: string }>(path, data)
         list.reload()
         // Users and organizations are configured on their own page.

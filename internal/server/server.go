@@ -328,6 +328,7 @@ func (s *Server) App() *fiber.App {
 	app := fiber.New(s.config())
 	app.Use(observe)
 	app.Use(recover.New())
+	app.Use(clientInfo)
 	s.limiters = 0
 
 	rateLimit := s.RateLimitPerMinute
@@ -397,6 +398,10 @@ func (s *Server) App() *fiber.App {
 	auth.Get("/me", s.Tokens.Profile)
 	auth.Patch("/me", s.Tokens.UpdateProfile)
 	auth.Get("/organizations", s.Tokens.Organizations)
+	sessionsLimit := s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }})
+	auth.Get("/me/sessions", sessionsLimit, s.Tokens.Sessions)
+	auth.Post("/me/sessions/revoke-others", sessionsLimit, s.Tokens.RevokeOtherSessions)
+	auth.Delete("/me/sessions/:id", sessionsLimit, s.Tokens.RevokeSession)
 	s.Users.RegisterSelf(auth, s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}),
 		s.limit(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}))
 	auth.Post("/introspect", s.Tokens.Introspect)

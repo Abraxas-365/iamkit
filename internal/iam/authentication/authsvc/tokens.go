@@ -10,6 +10,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 	"github.com/google/uuid"
 )
 
@@ -285,4 +286,52 @@ func (s *Tokens) AddMember(ctx context.Context, token authentication.Token, user
 		return errx.Validation("user_id is required")
 	}
 	return s.repository.AddMember(ctx, token, user)
+}
+
+// own checks that the token is an application session token with a subject
+// and a session for the self-service session routes: service-account
+// ("machine") tokens and personal access tokens used directly carry no
+// session and are refused. Tokens a machine user obtained by exchanging a
+// personal access token or with a key are ordinary application session
+// tokens (the token does not say users.kind), so they pass and manage the
+// machine user's own sessions, like any user's.
+func own(token authentication.Token) error {
+	if token.Purpose != authentication.PurposeApplication || token.Subject.IsZero() || token.SessionID.IsZero() {
+		return errx.Forbidden("a user access token is required")
+	}
+	return nil
+}
+
+// Sessions lists the user's live sessions; impersonated tokens may read.
+func (s *Tokens) Sessions(ctx context.Context, token authentication.Token, page query.Pagination) (query.Paginated[authentication.UserSession], error) {
+	if err := own(token); err != nil {
+		return query.Paginated[authentication.UserSession]{}, err
+	}
+	return s.repository.ListSessions(ctx, token, page.Normalize())
+}
+
+// RevokeSession ends one of the user's sessions; impersonated tokens are
+// read-only.
+func (s *Tokens) RevokeSession(ctx context.Context, token authentication.Token, session identity.SessionID) error {
+	if err := own(token); err != nil {
+		return err
+	}
+	if token.Impersonated() {
+		return errx.Forbidden("impersonated sessions cannot end sessions")
+	}
+	if session.IsZero() {
+		return errx.NotFound("resource not found")
+	}
+	return s.repository.RevokeUserSession(ctx, token, session)
+}
+
+// RevokeOtherSessions ends every session of the user but the token's.
+func (s *Tokens) RevokeOtherSessions(ctx context.Context, token authentication.Token) (int, error) {
+	if err := own(token); err != nil {
+		return 0, err
+	}
+	if token.Impersonated() {
+		return 0, errx.Forbidden("impersonated sessions cannot end sessions")
+	}
+	return s.repository.RevokeOtherUserSessions(ctx, token)
 }

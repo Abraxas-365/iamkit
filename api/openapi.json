@@ -529,6 +529,17 @@
         ],
         "type": "object"
       },
+      "AuthenticationSessionsRevoked": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "type": "object"
+      },
       "Authorization": {
         "properties": {
           "application_id": {
@@ -2065,6 +2076,15 @@
           "jwks_uri": {
             "type": "string"
           },
+          "prompt_values_supported": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "response_types_supported": {
             "items": {
               "type": "string"
@@ -2152,6 +2172,7 @@
           "introspection_endpoint_auth_methods_supported",
           "issuer",
           "jwks_uri",
+          "prompt_values_supported",
           "response_types_supported",
           "revocation_endpoint",
           "revocation_endpoint_auth_methods_supported",
@@ -4437,6 +4458,13 @@
               "null"
             ]
           },
+          "domain_join": {
+            "type": "boolean"
+          },
+          "domain_join_group_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
           "id": {
             "description": "UUID (empty when unset)",
             "type": "string"
@@ -4466,6 +4494,8 @@
           "allow_password",
           "allow_social",
           "allowed_factors",
+          "domain_join",
+          "domain_join_group_id",
           "id",
           "metadata",
           "mfa_for_federated",
@@ -4629,6 +4659,19 @@
             },
             "type": [
               "array",
+              "null"
+            ]
+          },
+          "domain_join": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "domain_join_group_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -5315,6 +5358,27 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/User"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object"
+      },
+      "PaginatedUserSession": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UserSession"
             },
             "type": [
               "array",
@@ -6929,6 +6993,12 @@
           "impersonator": {
             "type": "string"
           },
+          "ip_address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "organization_id": {
             "description": "UUID (empty when unset)",
             "type": "string"
@@ -6945,6 +7015,12 @@
           },
           "revoked_at": {
             "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_agent": {
             "type": [
               "string",
               "null"
@@ -6970,15 +7046,60 @@
           "impersonated",
           "impersonation_reason",
           "impersonator",
+          "ip_address",
           "organization_id",
           "organization_name",
           "resource_id",
           "resource_name",
           "revoked_at",
+          "user_agent",
           "user_email",
           "user_id",
           "user_name"
         ],
+        "type": "object"
+      },
+      "SessionApplication": {
+        "properties": {
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "SessionOrganization": {
+        "properties": {
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "SessionSelfInput": {
+        "properties": {
+          "audience": {
+            "type": "string"
+          },
+          "environment_id": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "SessionsRevoked": {
@@ -8409,6 +8530,9 @@
           "email_verified": {
             "type": "boolean"
           },
+          "external_id": {
+            "type": "string"
+          },
           "failed_logins": {
             "type": "integer"
           },
@@ -8490,6 +8614,7 @@
           "avatar_url",
           "email",
           "email_verified",
+          "external_id",
           "failed_logins",
           "home_organization_id",
           "id",
@@ -8513,6 +8638,9 @@
             "type": "string"
           },
           "email": {
+            "type": "string"
+          },
+          "external_id": {
             "type": "string"
           },
           "home_organization_id": {
@@ -8588,6 +8716,81 @@
         },
         "type": "object"
       },
+      "UserSession": {
+        "properties": {
+          "amr": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "application": {
+            "$ref": "#/components/schemas/SessionApplication"
+          },
+          "authenticated_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "impersonated": {
+            "type": "boolean"
+          },
+          "ip_address": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "oauth_client_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organization": {
+            "$ref": "#/components/schemas/SessionOrganization"
+          },
+          "user_agent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "amr",
+          "application",
+          "authenticated_at",
+          "created_at",
+          "current",
+          "expires_at",
+          "id",
+          "impersonated",
+          "ip_address",
+          "oauth_client_id",
+          "organization",
+          "user_agent"
+        ],
+        "type": "object"
+      },
       "UserSummary": {
         "properties": {
           "active": {
@@ -8597,6 +8800,9 @@
             "type": "string"
           },
           "email": {
+            "type": "string"
+          },
+          "external_id": {
             "type": "string"
           },
           "home_organization_id": {
@@ -8634,6 +8840,7 @@
           "active",
           "avatar_url",
           "email",
+          "external_id",
           "home_organization_id",
           "id",
           "kind",
@@ -8653,6 +8860,12 @@
             ]
           },
           "avatar_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "external_id": {
             "type": [
               "string",
               "null"
@@ -14616,6 +14829,13 @@
             "in": "path",
             "name": "organization",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "external_id",
             "schema": {
               "type": "string"
             }
@@ -20604,6 +20824,13 @@
           },
           {
             "in": "query",
+            "name": "external_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "home_organization_id",
             "schema": {
               "type": "string"
@@ -25873,6 +26100,211 @@
           }
         },
         "summary": "UpdateOwnProfile changes x-iamkit-self: write properties; the body is {\"environment_id\",\"audience\",\"profile\":{...}}.",
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
+    "/identity/v1/me/sessions": {
+      "get": {
+        "operationId": "getIdentityMeSessions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedUserSession"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "Sessions lists the caller's live sessions, newest first.",
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
+    "/identity/v1/me/sessions/revoke-others": {
+      "post": {
+        "operationId": "postIdentityMeSessionsRevokeOthers",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionSelfInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationSessionsRevoked"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "RevokeOtherSessions ends every session of the caller but the current one.",
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
+    "/identity/v1/me/sessions/{id}": {
+      "delete": {
+        "operationId": "deleteIdentityMeSessionsbyId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "RevokeSession ends one of the caller's sessions (the current one too).",
         "tags": [
           "Identity API"
         ]
@@ -42373,6 +42805,13 @@
           },
           {
             "in": "query",
+            "name": "external_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "home_organization_id",
             "schema": {
               "type": "string"
@@ -46245,49 +46684,56 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "application_id": {
-                      "description": "UUID (empty when unset)",
-                      "type": "string"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Completion"
                     },
-                    "audience": {
-                      "type": "string"
-                    },
-                    "authorization_ticket": {
-                      "type": "string"
-                    },
-                    "client_id": {
-                      "description": "UUID (empty when unset)",
-                      "type": "string"
-                    },
-                    "environment_id": {
-                      "description": "UUID (empty when unset)",
-                      "type": "string"
-                    },
-                    "resource_id": {
-                      "description": "UUID (empty when unset)",
-                      "type": "string"
-                    },
-                    "scopes": {
-                      "items": {
-                        "type": "string"
+                    {
+                      "properties": {
+                        "application_id": {
+                          "description": "UUID (empty when unset)",
+                          "type": "string"
+                        },
+                        "audience": {
+                          "type": "string"
+                        },
+                        "authorization_ticket": {
+                          "type": "string"
+                        },
+                        "client_id": {
+                          "description": "UUID (empty when unset)",
+                          "type": "string"
+                        },
+                        "environment_id": {
+                          "description": "UUID (empty when unset)",
+                          "type": "string"
+                        },
+                        "resource_id": {
+                          "description": "UUID (empty when unset)",
+                          "type": "string"
+                        },
+                        "scopes": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": [
+                            "array",
+                            "null"
+                          ]
+                        }
                       },
-                      "type": [
-                        "array",
-                        "null"
-                      ]
+                      "required": [
+                        "application_id",
+                        "audience",
+                        "authorization_ticket",
+                        "client_id",
+                        "environment_id",
+                        "resource_id",
+                        "scopes"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "application_id",
-                    "audience",
-                    "authorization_ticket",
-                    "client_id",
-                    "environment_id",
-                    "resource_id",
-                    "scopes"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -46295,6 +46741,9 @@
           },
           "303": {
             "description": "Redirect"
+          },
+          "default": {
+            "description": "Success"
           }
         },
         "tags": [

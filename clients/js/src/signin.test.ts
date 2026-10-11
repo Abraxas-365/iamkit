@@ -112,6 +112,13 @@ describe("SignIn", () => {
     await expect(iam.authorize("client_id=cl")).rejects.toMatchObject({ code: "HOSTED_LOGIN" });
   });
 
+  it("turns a prompt=none answer into LOGIN_REQUIRED with the redirect", async () => {
+    const redirect = "https://app.example.com/cb?error=login_required&state=s";
+    const f = fake({ "GET /oauth/authorize": () => json(200, { redirect_to: redirect }) });
+    const iam = createSignIn({ baseUrl: "https://id.example.com", fetch: f.fetch });
+    await expect(iam.authorize({ client_id: "cl", prompt: "none" })).rejects.toMatchObject({ code: "LOGIN_REQUIRED", details: { redirect_to: redirect } });
+  });
+
   it("runs single sign-on back to the UI with PKCE", async () => {
     const f = fake({
       "POST /identity/v1/federation/start": () => json(200, { authorization_url: "https://idp.example.com/authorize?x=1" }),

@@ -6,6 +6,7 @@ import (
 
 	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
 type Commands interface {
@@ -94,10 +95,19 @@ type SessionCommands interface {
 	Logout(ctx context.Context, token Token) error
 	UpdateProfile(ctx context.Context, token Token, input ProfileUpdate) error
 	AddMember(ctx context.Context, token Token, user identity.UserID) error
+	// RevokeSession ends one of the token user's sessions (the current one
+	// too); unknown or not theirs is 404, an impersonated token 403. The
+	// session's children end with it and back-channel logout follows.
+	RevokeSession(ctx context.Context, token Token, session identity.SessionID) error
+	// RevokeOtherSessions ends every live session of the token user but
+	// the token's own (impersonated token: 403) and counts them.
+	RevokeOtherSessions(ctx context.Context, token Token) (int, error)
 }
 type SessionQueries interface {
 	Profile(ctx context.Context, token Token) (Profile, error)
 	Organizations(ctx context.Context, token Token) ([]Organization, error)
+	// Sessions lists the token user's live sessions, newest first.
+	Sessions(ctx context.Context, token Token, page query.Pagination) (query.Paginated[UserSession], error)
 }
 
 type Delivery interface {
@@ -466,6 +476,15 @@ type Transaction interface {
 	// OrganizationMethods are the sign-in methods the organization allows;
 	// Unauthorized (like a wrong password) for an unknown organization.
 	OrganizationMethods(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID) (Methods, error)
+	// JoinByDomain makes the user a member of the active organization that
+	// turned on domain_join and verified the domain of the user's email, when
+	// the user is an active human with a verified email and has no
+	// membership row there yet (a removed or deactivated membership stays
+	// as it is, so an explicit removal is respected). A group set as the
+	// organization's domain_join_group_id is joined with it. Records
+	// membership.created (source domain_join) and group.members_changed
+	// with the user as actor; a no-op for everyone else.
+	JoinByDomain(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) error
 	// AccessibleOrganizations lists active organizations where the user is an
 	// active member with grants on the target resource of an active
 	// application linked to it, with the methods each allows.
@@ -518,4 +537,14 @@ type TokenRepository interface {
 	Organizations(ctx context.Context, token Token) ([]Organization, error)
 	UpdateProfile(ctx context.Context, token Token, input ProfileUpdate) error
 	AddMember(ctx context.Context, token Token, user identity.UserID) error
+	// ListSessions: the live (not revoked, not expired) root sessions of
+	// the token's user in its environment, newest first.
+	ListSessions(ctx context.Context, token Token, page query.Pagination) (query.Paginated[UserSession], error)
+	// RevokeUserSession ends one live root session of the token's user,
+	// audited with the user as actor; any other id is 404. Its token
+	// exchange children end with it (trigger).
+	RevokeUserSession(ctx context.Context, token Token, session identity.SessionID) error
+	// RevokeOtherUserSessions ends the user's live root sessions except
+	// the token's own (a child token stands for its parent) and counts them.
+	RevokeOtherUserSessions(ctx context.Context, token Token) (int, error)
 }

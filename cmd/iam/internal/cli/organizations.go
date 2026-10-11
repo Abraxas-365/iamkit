@@ -84,8 +84,8 @@ func orgsCreateCmd() *cobra.Command {
 }
 
 func orgsUpdateCmd() *cobra.Command {
-	var name string
-	var password, emailCode, social, passkey bool
+	var name, joinGroup string
+	var password, emailCode, social, passkey, domainJoin bool
 	var factors []string
 	cmd := &cobra.Command{
 		Use:   "update ORG_ID",
@@ -93,8 +93,12 @@ func orgsUpdateCmd() *cobra.Command {
 		Long: `Update an organization. --allow-password, --allow-email-code,
 --allow-social and --allow-passkey narrow the sign-in methods the environment allows for this
 organization (they never widen it; see "iam sign-in-policy").
---allowed-factors narrows the environment's allowed second factors.`,
-		Example: `  iam organizations update ORG_ID --allow-password=false
+--allowed-factors narrows the environment's allowed second factors.
+--domain-join makes users with a verified email on one of the organization's
+verified domains members when they sign in or sign up (no SSO needed);
+--domain-join-group is the operator-managed group they join ("" clears it).`,
+		Example: `  iam organizations update ORG_ID --domain-join --domain-join-group GROUP_ID
+  iam organizations update ORG_ID --allow-password=false
   iam organizations update ORG_ID --allowed-factors totp,webauthn`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -113,6 +117,12 @@ organization (they never widen it; see "iam sign-in-policy").
 			if f.Changed("allowed-factors") {
 				body["allowed_factors"] = factors
 			}
+			if f.Changed("domain-join") {
+				body["domain_join"] = domainJoin
+			}
+			if f.Changed("domain-join-group") {
+				body["domain_join_group_id"] = joinGroup
+			}
 			_, err := c.patch(envPath()+"/organizations/"+args[0], body)
 			if err != nil {
 				return err
@@ -127,6 +137,8 @@ organization (they never widen it; see "iam sign-in-policy").
 	f.BoolVar(&emailCode, "allow-email-code", true, "Allow email-code sign-in")
 	f.BoolVar(&social, "allow-social", true, "Allow environment (social) connections")
 	f.BoolVar(&passkey, "allow-passkey", true, "Allow passkey sign-in")
+	f.BoolVar(&domainJoin, "domain-join", false, "Auto-join users with a verified email on a verified domain of the organization")
+	f.StringVar(&joinGroup, "domain-join-group", "", "Group domain-joined members receive (\"\" clears it)")
 	f.StringSliceVar(&factors, "allowed-factors", nil, "Second factors members may use, within the environment's: totp, webauthn, sms, email")
 	return cmd
 }

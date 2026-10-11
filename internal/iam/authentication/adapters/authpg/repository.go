@@ -131,6 +131,66 @@ func (t *Transaction) OrganizationMethods(ctx context.Context, environment ident
 	err := t.tx.GetContext(ctx, &out, `SELECT allow_password,allow_email_code,allow_social,allow_passkey AND 'webauthn'=ANY(allowed_factors) AS allow_passkey FROM organizations WHERE environment_id=$1 AND id=$2`, environment, organization)
 	return out, credentialError(err)
 }
+func (t *Transaction) JoinByDomain(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) error {
+	return joinByDomain(ctx, t.tx, environment, user)
+}
+
+// joinByDomain is Transaction.JoinByDomain on any transaction, shared with
+// the sign-up completion.
+func joinByDomain(ctx context.Context, tx *sqlx.Tx, environment identity.EnvironmentID, user identity.UserID) error {
+	var email string
+	err := tx.GetContext(ctx, &email, `SELECT email FROM users WHERE environment_id=$1 AND id=$2 AND active AND kind='human' AND email_verified AND email IS NOT NULL`, environment, user)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return failure(err)
+	}
+	domain := identity.EmailDomain(email)
+	if domain == "" {
+		return nil
+	}
+	// A domain belongs to one organization per environment, so at most one
+	// row; ON CONFLICT leaves existing (also inactive) memberships alone.
+	var joined []struct {
+		Organization identity.OrganizationID `db:"organization_id"`
+		Group        identity.GroupID        `db:"domain_join_group_id"`
+	}
+	err = tx.SelectContext(ctx, &joined, `WITH added AS (
+		INSERT INTO memberships(environment_id,organization_id,user_id)
+		SELECT o.environment_id,o.id,$2 FROM organizations o
+		JOIN organization_domains d ON d.organization_id=o.id AND d.environment_id=o.environment_id
+		WHERE o.environment_id=$1 AND o.active AND o.domain_join AND d.domain=$3 AND d.verified_at IS NOT NULL
+		ON CONFLICT (organization_id,user_id) DO NOTHING RETURNING organization_id)
+		SELECT a.organization_id,o.domain_join_group_id FROM added a JOIN organizations o ON o.id=a.organization_id AND o.environment_id=$1`, environment, user, domain)
+	if err != nil {
+		return failure(err)
+	}
+	for _, j := range joined {
+		if err = eventpg.Emit(ctx, tx, environment, user.String(), event.MembershipCreated, event.Subject{Kind: "user", ID: user.String()},
+			map[string]any{"organization_id": j.Organization.String(), "user_id": user.String(), "source": "domain_join"}); err != nil {
+			return err
+		}
+		if j.Group.IsZero() {
+			continue
+		}
+		var added bool
+		err = tx.GetContext(ctx, &added, `WITH g AS (INSERT INTO group_members(group_id,environment_id,organization_id,user_id)
+			SELECT id,environment_id,organization_id,$4 FROM groups WHERE id=$1 AND environment_id=$2 AND organization_id=$3 AND connection_id IS NULL
+			ON CONFLICT DO NOTHING RETURNING 1) SELECT EXISTS(SELECT 1 FROM g)`, j.Group, environment, j.Organization, user)
+		if err != nil {
+			return failure(err)
+		}
+		if !added {
+			continue
+		}
+		if err = eventpg.Emit(ctx, tx, environment, user.String(), event.GroupMembersChanged, event.Subject{Kind: "group", ID: j.Group.String()},
+			map[string]any{"organization_id": j.Organization.String(), "user_id": user.String(), "source": "domain_join", "change": "added"}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 func (t *Transaction) AccessibleOrganizations(ctx context.Context, target authentication.Target, user identity.UserID) ([]authentication.Organization, error) {
 	out := []authentication.Organization{}
 	err := t.tx.SelectContext(ctx, &out, `SELECT o.id,o.name,m.org_unit_id,m.manager_id,o.allow_password,o.allow_email_code,o.allow_social,o.allow_passkey AND 'webauthn'=ANY(o.allowed_factors) AS allow_passkey FROM memberships m
@@ -158,7 +218,8 @@ func (t *Transaction) Resolve(ctx context.Context, b authentication.Context, use
 	return Resolve(ctx, t.tx, b, user)
 }
 func (t *Transaction) CreateSession(ctx context.Context, b authentication.Context, user identity.UserID, id identity.SessionID, authenticated, expires time.Time, amr []string) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,amr,authenticated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, b.EnvironmentID, b.OrganizationID, user, b.ApplicationID, b.ResourceID, expires, pq.StringArray(amr), authenticated)
+	clientIP, clientAgent := identity.ClientInfoFrom(ctx).Args()
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,amr,authenticated_at,ip_address,user_agent) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`, id, b.EnvironmentID, b.OrganizationID, user, b.ApplicationID, b.ResourceID, expires, pq.StringArray(amr), authenticated, clientIP, clientAgent)
 	if err != nil {
 		return failure(err)
 	}

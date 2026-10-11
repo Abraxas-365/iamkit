@@ -34,6 +34,7 @@ func (r *Repository) Sessions(ctx context.Context, environment identity.Environm
 	}
 	out := []management.Session{}
 	sel := fmt.Sprintf(`SELECT s.id,s.user_id,s.organization_id,s.application_id,s.resource_id,s.authenticated_at,s.expires_at,s.revoked_at,
+		host(s.ip_address) AS ip_address, s.user_agent,
 		COALESCE(u.name,'') AS user_name, COALESCE(u.email,'') AS user_email, COALESCE(o.name,'') AS organization_name,
 		COALESCE(a.name,'') AS application_name, COALESCE(r.name,'') AS resource_name,
 		s.impersonation_reason IS NOT NULL AS impersonated, COALESCE(op.email, sa.name, '') AS impersonator,

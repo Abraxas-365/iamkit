@@ -160,6 +160,7 @@
   "hosted.error.sso_not_offered": "Kuruluşunuz, bu uygulamanın sunmadığı çoklu oturum açmayı gerektiriyor.",
   "hosted.error.sso_email": "Bu e-posta ile bu uygulamaya çoklu oturum açma kullanarak giriş yapılamaz.",
   "hosted.error.sso_failed": "Çoklu oturum açma tamamlanmadı. Tekrar deneyin.",
+  "hosted.error.login_required": "Kimlik sağlayıcınız önceki bir oturum açmayı yeniden kullandı. Devam etmek için tekrar oturum açın.",
   "hosted.error.credentials": "E-posta, kullanıcı adı veya şifre hatalı.",
   "hosted.error.code": "Bu kod geçersiz veya süresi dolmuş.",
   "hosted.error.webauthn": "Güvenlik anahtarınız veya geçiş anahtarınız kullanılamadı. Tekrar deneyin veya başka bir yöntem kullanın.",

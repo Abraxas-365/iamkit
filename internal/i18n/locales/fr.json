@@ -160,6 +160,7 @@
   "hosted.error.sso_not_offered": "Votre organisation exige l’authentification unique, que cette application ne propose pas.",
   "hosted.error.sso_email": "Cette adresse e-mail ne peut pas se connecter à cette application par authentification unique.",
   "hosted.error.sso_failed": "L’authentification unique n’a pas abouti. Réessayez.",
+  "hosted.error.login_required": "Votre fournisseur d'identité a réutilisé une connexion antérieure. Reconnectez-vous pour continuer.",
   "hosted.error.credentials": "Adresse e-mail, nom d’utilisateur ou mot de passe incorrect.",
   "hosted.error.code": "Ce code n’est pas valide ou a expiré.",
   "hosted.error.webauthn": "Votre clé de sécurité ou clé d’accès n’a pas pu être utilisée. Réessayez ou utilisez une autre méthode.",

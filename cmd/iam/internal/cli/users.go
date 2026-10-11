@@ -103,7 +103,7 @@ func usersRequirePasswordChangeCmd() *cobra.Command {
 
 func usersListCmd() *cobra.Command {
 	var limit, offset int
-	var search, state, home string
+	var search, state, home, externalID string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List users",
@@ -125,12 +125,19 @@ func usersListCmd() *cobra.Command {
 				}
 				q += sep + "home_organization_id=" + url.QueryEscape(home)
 			}
+			if externalID != "" {
+				sep := "?"
+				if q != "" {
+					sep = "&"
+				}
+				q += sep + "external_id=" + url.QueryEscape(externalID)
+			}
 			data, err := c.get(envPath() + "/users" + q)
 			if err != nil {
 				return err
 			}
-			p.table(data, []string{"ID", "NAME", "EMAIL", "STATE"}, func(m map[string]any) []string {
-				return []string{str(m, "id"), str(m, "name"), str(m, "email"), str(m, "state")}
+			p.table(data, []string{"ID", "NAME", "EMAIL", "EXTERNAL ID", "STATE"}, func(m map[string]any) []string {
+				return []string{str(m, "id"), str(m, "name"), str(m, "email"), str(m, "external_id"), str(m, "state")}
 			})
 			return nil
 		},
@@ -140,6 +147,7 @@ func usersListCmd() *cobra.Command {
 	cmd.Flags().StringVar(&search, "search", "", "Search query")
 	cmd.Flags().StringVar(&state, "state", "", "Only users in this state: suspended, locked, initial, inactive, active")
 	cmd.Flags().StringVar(&home, "home-organization", "", "Only users whose record belongs to this organization")
+	cmd.Flags().StringVar(&externalID, "external-id", "", "Only the user with this external ID (exact match)")
 	return cmd
 }
 
@@ -162,7 +170,7 @@ func usersGetCmd() *cobra.Command {
 }
 
 func usersCreateCmd() *cobra.Command {
-	var name, email, password, avatar, username, home string
+	var name, email, password, avatar, username, home, externalID string
 	var otpEnabled bool
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -183,6 +191,9 @@ func usersCreateCmd() *cobra.Command {
 			if username != "" {
 				body["username"] = username
 			}
+			if externalID != "" {
+				body["external_id"] = externalID
+			}
 			if home != "" {
 				body["home_organization_id"] = home
 			}
@@ -200,6 +211,7 @@ func usersCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&otpEnabled, "otp", false, "Enable OTP")
 	cmd.Flags().StringVar(&avatar, "avatar-url", "", "Avatar image, an https URL")
 	cmd.Flags().StringVar(&username, "username", "", "Username to sign in with besides the email (optional)")
+	cmd.Flags().StringVar(&externalID, "external-id", "", "Identifier of the user in your own system (optional, unique in the environment)")
 	cmd.Flags().StringVar(&home, "home-organization", "", "Organization that owns the record; the user joins it and its administrators may edit the user")
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("email")
@@ -210,7 +222,7 @@ func usersUpdateCmd() *cobra.Command {
 	var name string
 	var active string
 	var otpEnabled string
-	var phone, phoneVerified, avatar, username, home string
+	var phone, phoneVerified, avatar, username, home, externalID string
 	cmd := &cobra.Command{
 		Use:   "update USER_ID",
 		Short: "Update a user",
@@ -240,6 +252,13 @@ func usersUpdateCmd() *cobra.Command {
 			if cmd.Flags().Changed("username") {
 				body["username"] = username
 			}
+			if cmd.Flags().Changed("external-id") {
+				if externalID == "" {
+					body["external_id"] = nil
+				} else {
+					body["external_id"] = externalID
+				}
+			}
 			if cmd.Flags().Changed("home-organization") {
 				body["home_organization_id"] = home
 			}
@@ -258,6 +277,7 @@ func usersUpdateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&phoneVerified, "phone-verified", "", "Mark the phone number verified: true or false (audited)")
 	cmd.Flags().StringVar(&avatar, "avatar-url", "", `Avatar image, an https URL ("" removes it)`)
 	cmd.Flags().StringVar(&username, "username", "", `Username ("" removes it)`)
+	cmd.Flags().StringVar(&externalID, "external-id", "", `Identifier of the user in your own system ("" removes it)`)
 	cmd.Flags().StringVar(&home, "home-organization", "", `Organization that owns the record, one the user belongs to ("" clears it)`)
 	return cmd
 }

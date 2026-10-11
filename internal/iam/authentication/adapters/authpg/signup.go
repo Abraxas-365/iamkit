@@ -106,6 +106,10 @@ func (t *SignupTransaction) Join(ctx context.Context, j authentication.Joining) 
 	if err = eventpg.UserCreated(ctx, t.tx, j.Environment, j.User.String(), j.User, j.Organization, "signup"); err != nil {
 		return err
 	}
+	// The verified address may also be a domain another organization captures.
+	if err = joinByDomain(ctx, t.tx, j.Environment, j.User); err != nil {
+		return err
+	}
 	if !j.Group.IsZero() {
 		if _, err = t.tx.ExecContext(ctx, `INSERT INTO group_members(group_id,environment_id,organization_id,user_id)
 			SELECT id,environment_id,organization_id,$4 FROM groups WHERE id=$1 AND environment_id=$2 AND organization_id=$3 AND connection_id IS NULL

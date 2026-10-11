@@ -163,8 +163,17 @@ func (s *Service) Organizations(ctx context.Context, target authentication.Targe
 		return nil, err
 	}
 	defer tx.Rollback()
+	// The hosted journeys list organizations right after the first factor:
+	// organizations capturing the user's verified domain join first, so they
+	// appear in the chooser.
+	if err = tx.JoinByDomain(ctx, target.Environment, verified.User); err != nil {
+		return nil, err
+	}
 	all, err := tx.AccessibleOrganizations(ctx, target, verified.User)
 	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
 	method := verified.PolicyMethod()

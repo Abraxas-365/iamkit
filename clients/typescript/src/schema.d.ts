@@ -2675,6 +2675,57 @@ export interface paths {
         patch: operations["patchIdentityMeProfile"];
         trace?: never;
     };
+    "/identity/v1/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sessions lists the caller's live sessions, newest first. */
+        get: operations["getIdentityMeSessions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity/v1/me/sessions/revoke-others": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** RevokeOtherSessions ends every session of the caller but the current one. */
+        post: operations["postIdentityMeSessionsRevokeOthers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity/v1/me/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** RevokeSession ends one of the caller's sessions (the current one too). */
+        delete: operations["deleteIdentityMeSessionsbyId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/identity/v1/memberships": {
         parameters: {
             query?: never;
@@ -6057,6 +6108,9 @@ export interface components {
             /** @description UUID (empty when unset) */
             org_unit_id: string | null;
         };
+        AuthenticationSessionsRevoked: {
+            count: number;
+        };
         Authorization: {
             /** @description UUID (empty when unset) */
             application_id: string;
@@ -6447,6 +6501,7 @@ export interface components {
             introspection_endpoint_auth_methods_supported: string[] | null;
             issuer: string;
             jwks_uri: string;
+            prompt_values_supported: string[] | null;
             response_types_supported: string[] | null;
             revocation_endpoint: string;
             revocation_endpoint_auth_methods_supported: string[] | null;
@@ -7090,6 +7145,9 @@ export interface components {
             allow_password: boolean;
             allow_social: boolean;
             allowed_factors: string[] | null;
+            domain_join: boolean;
+            /** @description UUID (empty when unset) */
+            domain_join_group_id: string;
             /** @description UUID (empty when unset) */
             id: string;
             metadata: unknown | null;
@@ -7130,6 +7188,9 @@ export interface components {
             allow_password?: boolean | null;
             allow_social?: boolean | null;
             allowed_factors?: string[] | null;
+            domain_join?: boolean | null;
+            /** @description UUID (empty when unset) */
+            domain_join_group_id?: string | null;
             metadata?: unknown | null;
             mfa_for_federated?: boolean | null;
             mfa_required?: boolean | null;
@@ -7262,6 +7323,10 @@ export interface components {
         };
         PaginatedUser: {
             items: components["schemas"]["User"][] | null;
+            page: components["schemas"]["Page"];
+        };
+        PaginatedUserSession: {
+            items: components["schemas"]["UserSession"][] | null;
             page: components["schemas"]["Page"];
         };
         Palette: {
@@ -7724,6 +7789,7 @@ export interface components {
             impersonated: boolean;
             impersonation_reason: string;
             impersonator: string;
+            ip_address: string | null;
             /** @description UUID (empty when unset) */
             organization_id: string;
             organization_name: string;
@@ -7732,10 +7798,25 @@ export interface components {
             resource_name: string;
             /** Format: date-time */
             revoked_at: string | null;
+            user_agent: string | null;
             user_email: string;
             /** @description UUID (empty when unset) */
             user_id: string;
             user_name: string;
+        };
+        SessionApplication: {
+            /** @description UUID (empty when unset) */
+            id: string;
+            name: string;
+        };
+        SessionOrganization: {
+            /** @description UUID (empty when unset) */
+            id: string;
+            name: string;
+        };
+        SessionSelfInput: {
+            audience?: string;
+            environment_id?: string;
         };
         SessionsRevoked: {
             revoked: number;
@@ -8123,6 +8204,7 @@ export interface components {
             avatar_url: string;
             email: string;
             email_verified: boolean;
+            external_id: string;
             failed_logins: number;
             /** @description UUID (empty when unset) */
             home_organization_id: string | null;
@@ -8148,6 +8230,7 @@ export interface components {
         UserCreateInput: {
             avatar_url?: string;
             email?: string;
+            external_id?: string;
             /** @description UUID (empty when unset) */
             home_organization_id?: string;
             kind?: string;
@@ -8171,10 +8254,30 @@ export interface components {
             name?: string;
             username?: string;
         };
+        UserSession: {
+            amr: string[] | null;
+            application: components["schemas"]["SessionApplication"];
+            /** Format: date-time */
+            authenticated_at: string;
+            /** Format: date-time */
+            created_at: string;
+            current: boolean;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            impersonated: boolean;
+            ip_address: string | null;
+            /** @description UUID (empty when unset) */
+            oauth_client_id: string | null;
+            organization: components["schemas"]["SessionOrganization"];
+            user_agent: string | null;
+        };
         UserSummary: {
             active: boolean;
             avatar_url: string;
             email: string;
+            external_id: string;
             /** @description UUID (empty when unset) */
             home_organization_id: string | null;
             /** @description UUID (empty when unset) */
@@ -8189,6 +8292,7 @@ export interface components {
         UserUpdateInput: {
             active?: boolean | null;
             avatar_url?: string | null;
+            external_id?: string | null;
             /** @description UUID (empty when unset) */
             home_organization_id?: string | null;
             metadata?: unknown | null;
@@ -11760,6 +11864,7 @@ export interface operations {
     getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationAdminUsers: {
         parameters: {
             query?: {
+                external_id?: string;
                 limit?: number;
                 offset?: number;
                 search?: string;
@@ -15469,6 +15574,7 @@ export interface operations {
     getApiEnvironmentsbyEnvironmentUsers: {
         parameters: {
             query?: {
+                external_id?: string;
                 home_organization_id?: string;
                 kind?: string;
                 limit?: number;
@@ -18981,6 +19087,139 @@ export interface operations {
                         } | null;
                     };
                 };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getIdentityMeSessions: {
+        parameters: {
+            query?: {
+                audience?: string;
+                environment_id?: string;
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedUserSession"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postIdentityMeSessionsRevokeOthers: {
+        parameters: {
+            query?: {
+                audience?: string;
+                environment_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SessionSelfInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthenticationSessionsRevoked"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteIdentityMeSessionsbyId: {
+        parameters: {
+            query?: {
+                audience?: string;
+                environment_id?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Client error */
             "4XX": {
@@ -28967,6 +29206,7 @@ export interface operations {
     getManagementEnvironmentsbyEnvironmentUsers: {
         parameters: {
             query?: {
+                external_id?: string;
                 home_organization_id?: string;
                 kind?: string;
                 limit?: number;
@@ -31463,7 +31703,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
+                    "application/json": components["schemas"]["Completion"] | {
                         /** @description UUID (empty when unset) */
                         application_id: string;
                         audience: string;
@@ -31480,6 +31720,13 @@ export interface operations {
             };
             /** @description Redirect */
             303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Success */
+            default: {
                 headers: {
                     [name: string]: unknown;
                 };

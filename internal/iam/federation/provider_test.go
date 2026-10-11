@@ -8,7 +8,9 @@ import (
 	"encoding/pem"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
@@ -474,5 +476,85 @@ func TestLDAPConnection(t *testing.T) {
 	secret := "s"
 	if _, err := (ConnectionUpdate{Options: &unbound, ClientSecret: &secret}).Apply(c); err == nil {
 		t.Fatal("secret on an anonymous connection accepted")
+	}
+}
+
+func TestJoinPrompt(t *testing.T) {
+	conn := func(provider string, own string) Connection {
+		return Connection{Provider: provider, Options: Options{Prompt: own}}
+	}
+	for _, tc := range []struct {
+		name      string
+		connected Connection
+		requested string
+		want      string
+	}{
+		{"oidc nothing", conn(ProviderOIDC, ""), "", ""},
+		{"oidc request only", conn(ProviderOIDC, ""), "login", "login"},
+		{"oidc both", conn(ProviderOIDC, PromptSelectAccount), "login", "select_account login"},
+		{"oidc duplicate", conn(ProviderOIDC, PromptLogin), "login", "login"},
+		{"microsoft", conn(ProviderMicrosoft, ""), "login select_account", "login select_account"},
+		{"google has no login", conn(ProviderGoogle, ""), "login select_account", "select_account"},
+		{"github ignores it", conn(ProviderGitHub, ""), "login", ""},
+		{"saml ignores it", conn(ProviderSAML, ""), "login", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := JoinPrompt(tc.connected, tc.requested); got != tc.want {
+				t.Fatalf("JoinPrompt = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCheckAuthTime(t *testing.T) {
+	now := time.Now()
+	started := now.Add(-10 * time.Second)
+	age := func(n int64) *int64 { return &n }
+	for _, tc := range []struct {
+		name  string
+		state State
+		auth  time.Time
+		fails bool
+	}{
+		{"no ask", State{Started: started}, now.Add(-24 * time.Hour), false},
+		{"no auth_time is accepted", State{Started: started, Reauth: true, MaxAge: age(0)}, time.Time{}, false},
+		{"reauth, signed in for this start", State{Started: started, Reauth: true}, now.Add(-5 * time.Second), false},
+		{"reauth, within skew", State{Started: started, Reauth: true}, started.Add(-30 * time.Second), false},
+		{"reauth, reused session", State{Started: started, Reauth: true}, now.Add(-time.Hour), true},
+		{"max_age 300, recent", State{Started: started, MaxAge: age(300)}, now.Add(-200 * time.Second), false},
+		{"max_age 300, older", State{Started: started, MaxAge: age(300)}, now.Add(-10 * time.Minute), true},
+		{"max_age 300, slightly over, within skew", State{Started: started, MaxAge: age(300)}, now.Add(-330 * time.Second), false},
+		{"max_age 0 is reauth", State{Started: started, Reauth: true, MaxAge: age(0)}, now.Add(-time.Hour), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.state.CheckAuthTime(tc.auth, now)
+			if (err != nil) != tc.fails {
+				t.Fatalf("CheckAuthTime = %v, want failure %v", err, tc.fails)
+			}
+			var e *errx.Error
+			if err != nil && (!errx.As(err, &e) || e.Code != CodeLoginRequired) {
+				t.Fatalf("error = %v, want code %s", err, CodeLoginRequired)
+			}
+		})
+	}
+}
+
+func TestAskReauth(t *testing.T) {
+	zero, sixty := int64(0), int64(60)
+	for ask, want := range map[string]bool{"": false, "select_account": false, "login": true, "select_account login": true} {
+		if got := (Ask{Prompt: ask}).Reauth(); got != want {
+			t.Errorf("prompt %q: %v", ask, got)
+		}
+	}
+	if !(Ask{MaxAge: &zero}).Reauth() || (Ask{MaxAge: &sixty}).Reauth() {
+		t.Error("max_age=0 reauthenticates, max_age=60 does not")
+	}
+}
+
+func TestTakesPrompt(t *testing.T) {
+	for provider, want := range map[string]bool{ProviderOIDC: true, ProviderGoogle: true, ProviderMicrosoft: true, ProviderGitHub: false, ProviderSAML: false, ProviderLDAP: false, ProviderOAuth2: false, ProviderApple: false} {
+		if got := (Connection{Provider: provider}).TakesPrompt(); got != want {
+			t.Errorf("%s: %v", provider, got)
+		}
 	}
 }

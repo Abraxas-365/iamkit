@@ -159,6 +159,7 @@
   "hosted.error.sso_not_offered": "Your organization requires single sign-on, which this application does not offer.",
   "hosted.error.sso_email": "This email cannot sign in to this application with single sign-on.",
   "hosted.error.sso_failed": "Single sign-on did not complete. Try again.",
+  "hosted.error.login_required": "Your identity provider reused an earlier sign-in. Sign in again to continue.",
   "hosted.error.credentials": "Incorrect email, username or password.",
   "hosted.error.code": "That code is not valid or has expired.",
   "hosted.error.webauthn": "Your security key or passkey could not be used. Try again or use another method.",

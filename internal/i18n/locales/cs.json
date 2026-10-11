@@ -161,6 +161,7 @@
   "hosted.error.sso_not_offered": "Vaše organizace vyžaduje jednotné přihlášení, které tato aplikace nenabízí.",
   "hosted.error.sso_email": "S tímto e-mailem se do této aplikace nelze přihlásit jednotným přihlášením.",
   "hosted.error.sso_failed": "Jednotné přihlášení nebylo dokončeno. Zkuste to znovu.",
+  "hosted.error.login_required": "Váš poskytovatel identity znovu použil dřívější přihlášení. Přihlaste se znovu a pokračujte.",
   "hosted.error.credentials": "Nesprávný e-mail, uživatelské jméno nebo heslo.",
   "hosted.error.code": "Tento kód je neplatný nebo vypršel.",
   "hosted.error.webauthn": "Bezpečnostní nebo přístupový klíč nešlo použít. Zkuste to znovu nebo zvolte jinou metodu.",

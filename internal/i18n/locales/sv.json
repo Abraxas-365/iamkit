@@ -160,6 +160,7 @@
   "hosted.error.sso_not_offered": "Din organisation kräver enkel inloggning, som det här programmet inte erbjuder.",
   "hosted.error.sso_email": "Den här e-postadressen kan inte logga in i programmet med enkel inloggning.",
   "hosted.error.sso_failed": "Den enkla inloggningen slutfördes inte. Försök igen.",
+  "hosted.error.login_required": "Din identitetsleverantör återanvände en tidigare inloggning. Logga in igen för att fortsätta.",
   "hosted.error.credentials": "Fel e-postadress, användarnamn eller lösenord.",
   "hosted.error.code": "Koden är ogiltig eller har gått ut.",
   "hosted.error.webauthn": "Det gick inte att använda din säkerhetsnyckel eller nyckel. Försök igen eller välj en annan metod.",

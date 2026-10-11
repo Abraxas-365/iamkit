@@ -159,6 +159,7 @@
   "hosted.error.sso_not_offered": "你的組織要求使用單一登入，但此應用程式不支援。",
   "hosted.error.sso_email": "此電子郵件無法透過單一登入登入此應用程式。",
   "hosted.error.sso_failed": "單一登入未完成，請再試一次。",
+  "hosted.error.login_required": "你的身分提供者重複使用了先前的登入。請重新登入以繼續。",
   "hosted.error.credentials": "電子郵件、使用者名稱或密碼錯誤。",
   "hosted.error.code": "此驗證碼無效或已失效。",
   "hosted.error.webauthn": "無法使用你的安全金鑰或通行金鑰。請再試一次或選擇其他方式。",

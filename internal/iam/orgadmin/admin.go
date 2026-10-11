@@ -103,13 +103,18 @@ type Settings struct {
 	AllowSocial     *bool    `json:"allow_social"`
 	AllowPasskey    *bool    `json:"allow_passkey"`
 	AllowedFactors  []string `json:"allowed_factors"`
+	// DomainJoin and DomainJoinGroup: see organization.Organization. The
+	// group's roles must be ones the administrator may assign themselves
+	// (orgadminsvc.UpdateSettings), as for an invitation into a group.
+	DomainJoin      *bool             `json:"domain_join"`
+	DomainJoinGroup *identity.GroupID `json:"domain_join_group_id"`
 }
 
 // Update is the organization update the settings make.
 func (s Settings) Update() organization.Update {
 	return organization.Update{Name: s.Name, MFARequired: s.MFARequired, MFAForFederated: s.MFAForFederated,
 		AllowPassword: s.AllowPassword, AllowEmailCode: s.AllowEmailCode, AllowSocial: s.AllowSocial,
-		AllowPasskey: s.AllowPasskey, AllowedFactors: s.AllowedFactors}
+		AllowPasskey: s.AllowPasskey, AllowedFactors: s.AllowedFactors, DomainJoin: s.DomainJoin, DomainJoinGroup: s.DomainJoinGroup}
 }
 
 func (s Settings) Validate() error { return s.Update().Validate() }
@@ -130,8 +135,8 @@ func (n NewUser) Create(organization identity.OrganizationID) user.Create {
 
 func (n NewUser) Validate() error { return n.Create(identity.OrganizationID{}).Validate() }
 
-// UserChange edits a home user's record; metadata, the home organization
-// and second-factor settings stay with operators.
+// UserChange edits a home user's record; metadata, the external ID, the home
+// organization and second-factor settings stay with operators.
 type UserChange struct {
 	Name      *string `json:"name"`
 	Phone     *string `json:"phone"`

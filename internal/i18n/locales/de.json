@@ -160,6 +160,7 @@
   "hosted.error.sso_not_offered": "Deine Organisation verlangt Single Sign-On, das diese Anwendung nicht anbietet.",
   "hosted.error.sso_email": "Mit dieser E-Mail-Adresse ist keine Anmeldung per Single Sign-On bei dieser Anwendung möglich.",
   "hosted.error.sso_failed": "Das Single Sign-On wurde nicht abgeschlossen. Versuche es erneut.",
+  "hosted.error.login_required": "Dein Identitätsanbieter hat eine frühere Anmeldung wiederverwendet. Melde dich erneut an, um fortzufahren.",
   "hosted.error.credentials": "E-Mail-Adresse, Benutzername oder Passwort ist falsch.",
   "hosted.error.code": "Dieser Code ist ungültig oder abgelaufen.",
   "hosted.error.webauthn": "Dein Sicherheitsschlüssel oder Passkey konnte nicht verwendet werden. Versuche es erneut oder wähle eine andere Methode.",

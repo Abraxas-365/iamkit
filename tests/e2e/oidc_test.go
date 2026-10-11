@@ -115,7 +115,9 @@ func oidcJourney(t *testing.T, app *App, call func(string, string, string, any, 
 	request("POST", "/oauth/token", "application/x-www-form-urlencoded", form.Encode(), "", nil, 400)
 	refreshForm.Set("refresh_token", second["refresh_token"].(string))
 	request("POST", "/oauth/token", "application/x-www-form-urlencoded", refreshForm.Encode(), "", nil, 400)
-	q.Set("prompt", "login")
+	// prompt is validated (the supported values are tested in
+	// TestAuthorizePromptAndMaxAge).
+	q.Set("prompt", "create")
 	request("GET", "/oauth/authorize?"+q.Encode(), "", "", "", nil, 400)
 	q.Del("prompt")
 	// fosite's reason reaches the caller instead of a bare refusal.

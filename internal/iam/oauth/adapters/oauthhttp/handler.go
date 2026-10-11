@@ -246,6 +246,12 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	if !ar.GetRequestedScopes().Has("openid") {
 		return errx.Validation("openid scope required")
 	}
+	if interaction, _ := oauth.ParseInteraction(q); interaction.None {
+		// No browser session survives between authorize requests, so a
+		// request that forbids interaction can never be answered silently
+		// (OIDC Core 3.1.2.6): tell the client, at its registered redirect.
+		return h.loginRequired(c, p, ar, wantsJSON(c))
+	}
 	ticket, binding, err := h.flows.Start(c.UserContext(), client, q.Encode())
 	if err != nil {
 		return err
@@ -256,6 +262,25 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 		return c.Redirect("/hosted/login?"+url.Values{"ticket": {ticket}}.Encode(), fiber.StatusSeeOther)
 	}
 	return c.JSON(fiber.Map{"authorization_ticket": ticket, "client_id": client.ID, "environment_id": client.Environment, "application_id": client.Application, "resource_id": client.Resource, "audience": client.Audience, "scopes": ar.GetRequestedScopes()})
+}
+
+// loginRequired answers a prompt=none request with the login_required error
+// at the client's redirect URI (state included). A script that asked for
+// JSON (a custom sign-in UI fetching the authorization) cannot read the
+// redirect, so it gets the target as a Completion, like /authorize/complete.
+func (h *Handler) loginRequired(c *fiber.Ctx, p fosite.OAuth2Provider, ar fosite.AuthorizeRequester, asJSON bool) error {
+	w := httptest.NewRecorder()
+	p.WriteAuthorizeError(c.UserContext(), w, ar, fosite.ErrLoginRequired.WithHint("prompt=none was requested but no session can be reused: the user must sign in."))
+	if err := response(c, w); err != nil {
+		return err
+	}
+	location := c.GetRespHeader(fiber.HeaderLocation)
+	if !asJSON || location == "" {
+		return nil
+	}
+	c.Response().Header.Del(fiber.HeaderLocation)
+	c.Response().ResetBody()
+	return c.Status(fiber.StatusOK).JSON(Completion{RedirectTo: location})
 }
 
 // authorizeClientError answers an authorization request whose client_id is
@@ -339,6 +364,7 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 	var session *oauthfosite.Session
 	var device *oauth.Client
 	var refused error
+	var stale bool
 	err := h.flows.Complete(c.UserContext(), ticket, c.Cookies("__Host-iamkit-authorization"), approve, func(row oauth.Ticket, tx oauth.Authorization) error {
 		var client *oauth.Client
 		var err error
@@ -379,7 +405,19 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		if err != nil {
 			return err
 		}
-		session = h.session(client, access, info, row.Requested)
+		// auth_time is whole seconds (authsvc.NewSession); compare the
+		// request at the same precision, or a sign-in made for it would
+		// look older than it.
+		requested := row.Requested.Truncate(time.Second)
+		if oauth.FormInteraction(row.Form).Reauthenticate() && info.Authenticated.Before(requested) {
+			// prompt=login / max_age=0: the sign-in must have happened for
+			// this request. A hosted login always did; a custom UI may bring
+			// a token from before it. (fosite checks prompt=login and
+			// max_age>0 itself, from the session's auth_time.)
+			stale = true
+			return nil
+		}
+		session = h.session(client, access, info, requested)
 		addClaims(session, h.customClaims(c.UserContext(), client.Environment, access.User, ar.GetGrantedScopes()))
 		// A token hook refusing is answered to the client like any other
 		// authorization error (access_denied with the target's message);
@@ -397,6 +435,10 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		return h.deviceApproved(c, device)
 	}
 	w := httptest.NewRecorder()
+	if stale {
+		p.WriteAuthorizeError(c.UserContext(), w, ar, fosite.ErrLoginRequired.WithHint("the sign-in is older than this authorization request: sign in again."))
+		return response(c, w)
+	}
 	if refused != nil {
 		p.WriteAuthorizeError(c.UserContext(), w, ar, hookError(refused))
 		return response(c, w)

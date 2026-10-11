@@ -231,6 +231,8 @@ func (hashSecrets) Hash(raw string) []byte { return []byte("h:" + raw) }
 type fakeFederation struct {
 	discovery   federation.Discovery
 	started     []authentication.Target
+	prompts     []string
+	asks        []federation.Ask
 	connections []federation.ConnectionSummary
 	directory   []string
 	lookup      *federation.Discovery
@@ -256,8 +258,10 @@ func (f *fakeFederation) Lookup(context.Context, identity.EnvironmentID, identit
 func (f *fakeFederation) EnvironmentConnections(context.Context, identity.EnvironmentID) ([]federation.ConnectionSummary, error) {
 	return f.connections, nil
 }
-func (f *fakeFederation) StartHosted(_ context.Context, t authentication.Target, _ identity.ConnectionID, continuation string) (federation.Start, error) {
+func (f *fakeFederation) StartHosted(_ context.Context, t authentication.Target, _ identity.ConnectionID, continuation string, ask federation.Ask) (federation.Start, error) {
 	f.started = append(f.started, t)
+	f.prompts = append(f.prompts, ask.Prompt)
+	f.asks = append(f.asks, ask)
 	return federation.Start{URL: "https://idp.example/authorize", Binding: "b"}, nil
 }
 
@@ -917,5 +921,80 @@ func TestHostedSecurityKey(t *testing.T) {
 	out, err = s.SecondFactor(context.Background(), request, authentication.Proof{Session: options.Session, Credential: []byte(`{"ok":true}`)})
 	if err != nil || out.Login == nil || len(auth.issued) != 1 {
 		t.Fatalf("security key signs in: %+v %v", out, err)
+	}
+}
+
+// prompt=select_account shows the chooser even with one organization, unless
+// the request named the organization; prompt=login and max_age=0 ask the
+// identity provider to re-authenticate.
+func TestHostedPromptInteraction(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		form       string
+		wantChoice bool
+	}{
+		{"plain", "client_id=x", false},
+		{"login", "client_id=x&prompt=login", false},
+		{"select account", "client_id=x&prompt=select_account", true},
+		{"select account with hint", "client_id=x&prompt=select_account&organization_id=" + orgA.String(), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, auth, repo, _ := setup(orgA)
+			s.authorizations = fakeAuthorizations{hosted: true, form: tc.form}
+			out, err := s.Password(context.Background(), request, "a@example.com", "right")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantChoice {
+				if out.Login != nil || len(out.Organizations) != 1 || len(auth.issued) != 0 || len(repo.saved) != 1 {
+					t.Fatalf("want the chooser, got %+v", out)
+				}
+				if out, err = s.Choose(context.Background(), request, orgA); err != nil || out.Login == nil {
+					t.Fatalf("choose: %+v %v", out, err)
+				}
+				return
+			}
+			if out.Login == nil || len(out.Organizations) != 0 {
+				t.Fatalf("want a login, got %+v", out)
+			}
+		})
+	}
+}
+
+func ptr(n int64) *int64 { return &n }
+
+func TestHostedUpstreamPrompt(t *testing.T) {
+	for form, want := range map[string]string{
+		"client_id=x":                             "",
+		"client_id=x&prompt=consent":              "",
+		"client_id=x&prompt=login":                "login",
+		"client_id=x&max_age=0":                   "login",
+		"client_id=x&max_age=60":                  "",
+		"client_id=x&prompt=select_account":       "select_account",
+		"client_id=x&prompt=login+select_account": "login select_account",
+	} {
+		if got := upstreamAsk(oauth.Pending{Form: form}).Prompt; got != want {
+			t.Fatalf("%q: got %q, want %q", form, got, want)
+		}
+	}
+	// max_age is forwarded as the RP sent it.
+	for form, want := range map[string]*int64{"client_id=x": nil, "client_id=x&max_age=60": ptr(60), "client_id=x&max_age=0": ptr(0)} {
+		got := upstreamAsk(oauth.Pending{Form: form}).MaxAge
+		if (got == nil) != (want == nil) || got != nil && *got != *want {
+			t.Fatalf("%q: max_age %v, want %v", form, got, want)
+		}
+	}
+	connection := identity.NewConnectionID()
+	s, _, _, fed := setup(orgA)
+	s.authorizations = fakeAuthorizations{hosted: true, form: "client_id=x&prompt=login"}
+	fed.discovery = federation.Discovery{Method: federation.MethodSSO, Organization: &orgA, Connection: &connection, Required: true}
+	if _, err := s.Identify(context.Background(), request, "a@example.com"); err != nil || len(fed.prompts) != 1 || fed.prompts[0] != "login" {
+		t.Fatalf("SSO start prompts = %v, %v", fed.prompts, err)
+	}
+	// max_age>0 reaches the start without a login prompt.
+	fed.asks = nil
+	s.authorizations = fakeAuthorizations{hosted: true, form: "client_id=x&max_age=300"}
+	if _, err := s.Identify(context.Background(), request, "a@example.com"); err != nil || len(fed.asks) != 1 || fed.asks[0].Prompt != "" || fed.asks[0].MaxAge == nil || *fed.asks[0].MaxAge != 300 {
+		t.Fatalf("SSO start asks = %+v, %v", fed.asks, err)
 	}
 }

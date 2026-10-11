@@ -8,7 +8,8 @@ backups, credential rotation and incident response before rollout.
 
 - Identify the exact image digest/commit, database version and migration state.
 - Choose a stable HTTPS `JWT_ISSUER`. Changing it changes token trust.
-- Use a dedicated PostgreSQL database and least-privileged network access.
+- Use a dedicated PostgreSQL database (**PostgreSQL 15 or later**; the Compose
+  files and CI run 16) and least-privileged network access.
 - Generate/store an RSA signing key (2048+ bits) and stable OAuth HMAC secret.
 - Mount the key read-only for the non-root container user; back it up separately.
 - Configure only trusted CORS origins, provider bindings and delivery endpoints.

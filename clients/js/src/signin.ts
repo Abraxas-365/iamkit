@@ -30,7 +30,7 @@ export type MFAPending = Extract<SignInAnswer, { mfa_token: string }>;
 export type SignInResult = { status: "signed_in"; tokens: Tokens } | { status: "mfa_required"; mfa: MFAPending };
 
 /** What `GET /oauth/authorize` answers a client without hosted login. */
-export type AuthorizationStart = Json<"getOauthAuthorize", 200>;
+export type AuthorizationStart = Extract<Json<"getOauthAuthorize", 200>, { authorization_ticket: string }>;
 
 /**
  * Where a session is issued: the environment, organization, application
@@ -114,6 +114,11 @@ export class SignIn {
    * Pass the `connection_id` (and `organization_id`) an IdP-initiated login
    * sent to your sign-in endpoint to start that connection's sign-in (a hint:
    * `Authorization.connection_id` tells whether it was usable).
+   * A request with `prompt=none` cannot be answered without signing in:
+   * IAMKit keeps no session between authorize requests, so this throws an
+   * `IAMKitError` with code `LOGIN_REQUIRED` whose `details.redirect_to` is
+   * the client's redirect URI carrying `error=login_required` and the
+   * `state`, for the application to navigate to.
    */
   async authorize(query: string | URLSearchParams | Record<string, string>): Promise<AuthorizationStart> {
     const search = new URLSearchParams(query as Record<string, string>).toString();
@@ -128,6 +133,10 @@ export class SignIn {
     const body = await response.json().catch(() => undefined);
     if (!response.ok) {
       throw toError(response.status, body);
+    }
+    const redirect = (body as { redirect_to?: unknown } | undefined)?.redirect_to;
+    if (typeof redirect === "string") {
+      throw new IAMKitError(response.status, "LOGIN_REQUIRED", "prompt=none cannot be answered without signing in", { redirect_to: redirect });
     }
     return body as AuthorizationStart;
   }

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -90,6 +91,78 @@ var (
 	appleID  = regexp.MustCompile(`^[A-Z0-9]{10}$`)
 )
 
+// TakesPrompt reports whether the connection's provider understands the
+// OIDC prompt and max_age parameters and sends auth_time: OIDC, Google and
+// Microsoft connections. Others (SAML, GitHub, OAuth 2.0, LDAP, ...) cannot
+// be asked to authenticate again.
+func (c Connection) TakesPrompt() bool {
+	switch c.Provider {
+	case ProviderOIDC, ProviderGoogle, ProviderMicrosoft:
+		return true
+	}
+	return false
+}
+
+// JoinPrompt is the prompt a sign-in sends to the connection's provider: the
+// connection's own Options.Prompt plus the values an authorization asked for
+// (space-separated, duplicates dropped). Only OIDC, Google and Microsoft
+// connections take a prompt; Google has no login value, so it only gets
+// select_account.
+func JoinPrompt(c Connection, requested string) string {
+	if !c.TakesPrompt() {
+		return c.Options.Prompt
+	}
+	values := strings.Fields(c.Options.Prompt)
+	for _, value := range strings.Fields(requested) {
+		if c.Provider == ProviderGoogle && value == PromptLogin || slices.Contains(values, value) {
+			continue
+		}
+		values = append(values, value)
+	}
+	return strings.Join(values, " ")
+}
+
+// AuthTimeSkew is the clock difference tolerated between an identity
+// provider and IAMKit when judging an ID token's auth_time.
+const AuthTimeSkew = time.Minute
+
+// Ask is what an authorization request asks of the upstream identity
+// provider of a hosted sign-in: the OIDC prompt values to forward (login
+// only when the user must authenticate again) and the RP's max_age.
+type Ask struct {
+	Prompt string
+	// MaxAge is the RP's max_age in seconds; nil when it sent none.
+	MaxAge *int64
+}
+
+// Reauth reports whether the provider must have authenticated the user
+// during this sign-in (prompt=login or max_age=0).
+func (a Ask) Reauth() bool {
+	return slices.Contains(strings.Fields(a.Prompt), PromptLogin) || a.MaxAge != nil && *a.MaxAge == 0
+}
+
+// CheckAuthTime judges the auth_time of the provider's ID token (zero when
+// it sent none, which is accepted: IAMKit then relies on the provider
+// having honoured prompt and max_age) against what the start asked for.
+// State.Started is when the upstream redirect was made.
+func (s State) CheckAuthTime(authTime, now time.Time) error {
+	if authTime.IsZero() {
+		return nil
+	}
+	tooOld := s.Reauth && authTime.Before(s.Started.Add(-AuthTimeSkew)) ||
+		s.MaxAge != nil && *s.MaxAge > 0 && now.Sub(authTime) > time.Duration(*s.MaxAge)*time.Second+AuthTimeSkew
+	if !tooOld {
+		return nil
+	}
+	e := errx.Unauthorized("the identity provider reused an earlier sign-in: sign in again to continue")
+	e.Code = CodeLoginRequired
+	return e
+}
+
+// CodeLoginRequired is the error code of a sign-in the provider answered
+// with an authentication older than the authorization request allows.
+const CodeLoginRequired = "LOGIN_REQUIRED"
+
 // Options are the non-secret settings of a preset.
 type Options struct {
 	// Tenant is the Microsoft tenant policy (common, organizations,
@@ -103,6 +176,10 @@ type Options struct {
 	// account, login asks for the credentials again. "" lets the provider
 	// reuse its session silently.
 	Prompt string `json:"prompt,omitempty"`
+	// MaxAge is the max_age of the authorization being served, sent to
+	// OIDC, Google and Microsoft providers. It is request-scoped (set by
+	// StartHosted), never stored or shown.
+	MaxAge *int64 `json:"-"`
 	// Domains restricts a Google connection to Google Workspace accounts of
 	// these domains (the ID token's hd claim); empty accepts any account.
 	Domains []string `json:"domains,omitempty"`

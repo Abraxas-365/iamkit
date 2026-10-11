@@ -10,6 +10,7 @@ import { PaginationBar } from '@/components/ui/pagination-bar'
 import { Avatar } from '@/components/library/avatar'
 import { UserState } from '@/components/library/user-state'
 import { ConfirmDialog, CopyField, DataTable, DetailSection, EmptyState, ErrorState, FormDialog, PageHeader, Status, SwitchField, Time } from '@/components/library/patterns'
+import { DomainJoinPanel, type DomainJoinTransport } from '@/components/library/domain-join'
 import { describeAction } from '@/pages/activity'
 import { CreateConnectionDialog, providerLabel, type ConnectionTransport } from '@/pages/federation-connection-form'
 import { OrganizationPasswordRequirements, type PasswordRequirements, type RequirementsStore } from '@/pages/organization-password'
@@ -21,9 +22,9 @@ import { rich, t } from '@/lib/i18n'
 
 // Wire shapes of /organizations/:organization/admin (see
 // docs/guides/organizations/organization-administration.md).
-interface Organization { id: string; name: string; mfa_required: boolean; mfa_for_federated: boolean; allow_password: boolean; allow_email_code: boolean; allow_social: boolean; allow_passkey: boolean }
+interface Organization { id: string; name: string; mfa_required: boolean; mfa_for_federated: boolean; allow_password: boolean; allow_email_code: boolean; allow_social: boolean; allow_passkey: boolean; domain_join?: boolean; domain_join_group_id?: string }
 interface Member { user_id: string; user_name: string; user_email: string; active: boolean; sso_bypass: boolean }
-interface User { id: string; name: string; email: string; username: string; avatar_url: string; state: string; active: boolean; phone: string }
+interface User { id: string; name: string; email: string; username: string; external_id?: string; avatar_url: string; state: string; active: boolean; phone: string }
 interface Role { id: string; name: string; resource_id: string; resource_name: string; permissions: string[]; system_role?: string }
 interface Assignment { role_id: string; role_name: string; resource_name: string }
 interface Invitation { id: string; email: string; inviter: string; status: string; expires_at: string; created_at: string }
@@ -184,7 +185,7 @@ export function UsersPage() {
     <DataTable columns={[t('User'), { header: t('State'), hideBelow: 'sm' }, t('Actions')]} loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState icon={<UserPlus />} title={t('No users of your own yet')} description={t('Users you create here belong to your organization.')} />}
       rows={list.data.map(u => [
-        <span className="flex min-w-0 items-center gap-3"><Avatar src={u.avatar_url} name={u.name} className="size-8" /><span className="min-w-0"><span className="block font-medium">{u.name || u.email}</span><span className="block truncate text-xs text-muted-foreground">{u.email}{u.username && ` · @${u.username}`}</span></span></span>,
+        <span className="flex min-w-0 items-center gap-3"><Avatar src={u.avatar_url} name={u.name} className="size-8" /><span className="min-w-0"><span className="block font-medium">{u.name || u.email}</span><span className="block truncate text-xs text-muted-foreground">{u.email}{u.username && ` · @${u.username}`}{u.external_id && ` · ${t('External ID')} ${u.external_id}`}</span></span></span>,
         <UserState state={u.state} active={u.active} />,
         write ? <RowActions label={t('Actions for {{email}}', { email: u.email })} actions={[
           { label: t('Edit'), onSelect: () => setEditing(u) },
@@ -241,9 +242,24 @@ export function RolesPage() {
   </>
 }
 
-export function DomainsPage() {
+/** DomainJoin is the auto-join setting under the domains; setup links manage
+ * domains only, so it is left out of their sessions. */
+function DomainJoin() {
   const { client, can } = useAdmin()
+  const org = useResource<Organization>('')
+  const transport = useMemo<DomainJoinTransport>(() => ({
+    groups: signal => client.get<Page<{ id: string; name: string }>>('/groups?limit=100', signal).then(r => r.items ?? []),
+    domains: signal => client.get<Page<{ domain: string; verified: boolean }>>('/domains?limit=100', signal).then(r => r.items ?? []),
+    save: async body => { await client.patch('', body) },
+  }), [client])
+  if (!org.data) return null
+  return <DomainJoinPanel transport={transport} settings={org.data} canWrite={can('iam:org:settings:write')} reload={org.reload} />
+}
+
+export function DomainsPage() {
+  const { client, can, setup } = useAdmin()
   const list = usePortalList<Domain>('/domains')
+
   const [adding, setAdding] = useState(false)
   const [removing, setRemoving] = useState<Domain | null>(null)
   const write = can('iam:org:domains:write')
@@ -264,6 +280,7 @@ export function DomainsPage() {
       fields={[{ name: 'domain', label: t('Domain'), hint: t('For example acme.com') }]} submit={async d => { await client.post('/domains', { domain: d.domain }); list.reload() }} />}
     {removing && <ConfirmDialog title={t('Remove {{domain}}?', { domain: removing.domain })} description={t('Its users are no longer routed to your SSO by email.')} confirmLabel={t('Remove')} onClose={() => setRemoving(null)}
       confirm={async () => { await client.delete(`/domains/${removing.id}`); toast.success(t('Domain removed')); list.reload() }} />}
+    {!setup && can('iam:org:read') && <DomainJoin />}
   </>
 }
 

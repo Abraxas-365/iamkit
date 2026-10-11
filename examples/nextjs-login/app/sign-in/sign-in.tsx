@@ -33,7 +33,14 @@ function Ticketed({ organizationId, params }: { organizationId?: string; params:
         window.history.replaceState(null, "", url);
         setTicket(start.authorization_ticket);
       },
-      (err: Error) => setError(err.message),
+      (err: Error & { code?: string; details?: { redirect_to?: string } }) => {
+        // prompt=none: no session to reuse, send the app back with login_required.
+        if (err.code === "LOGIN_REQUIRED" && err.details?.redirect_to) {
+          window.location.assign(err.details.redirect_to);
+          return;
+        }
+        setError(err.message);
+      },
     );
   }, [iam, params, ticket]);
 

@@ -86,7 +86,32 @@ func (s *Service) UpdateSettings(ctx context.Context, p orgadmin.Principal, inpu
 	if err := input.Validate(); err != nil {
 		return err
 	}
+	if err := s.domainJoinAssignable(ctx, p, input); err != nil {
+		return err
+	}
 	return s.d.Organizations.Update(ctx, orgMutation(p), p.Organization, input.Update())
+}
+
+// domainJoinAssignable applies the invitation anti-escalation rule to domain
+// capture: everyone who joins by domain receives the group's roles, so
+// turning it on (or choosing the group) needs the administrator to be able
+// to assign all of them. Turning it off, or clearing the group, never does.
+func (s *Service) domainJoinAssignable(ctx context.Context, p orgadmin.Principal, input orgadmin.Settings) error {
+	group := identity.GroupID{}
+	switch {
+	case input.DomainJoinGroup != nil:
+		group = *input.DomainJoinGroup
+	case input.DomainJoin != nil && *input.DomainJoin:
+		current, err := s.d.OrganizationViews.Find(ctx, p.Environment, p.Organization)
+		if err != nil {
+			return err
+		}
+		group = current.DomainJoinGroup
+	}
+	if group.IsZero() {
+		return nil
+	}
+	return s.rolesAssignable(ctx, p, nil, []identity.GroupID{group})
 }
 
 // Members

@@ -1,7 +1,9 @@
 # Database and migrations
 
 IAMKit embeds SQL migrations in the binary/image and applies them at startup.
-`iamkit migrate` applies them without serving HTTP. Use a dedicated managed schema;
+`iamkit migrate` applies them without serving HTTP. **PostgreSQL 15 or later** is
+required (migrations use `ON DELETE SET NULL (column)`, added in 15); the
+bundled Compose files and the end-to-end tests run PostgreSQL 16. Use a dedicated managed schema;
 initialization refuses an unmanaged non-empty database. Applied migration
 checksums detect changed migration content.
 

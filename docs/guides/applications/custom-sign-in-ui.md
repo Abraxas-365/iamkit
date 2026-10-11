@@ -164,6 +164,12 @@ if (result.status === "signed_in") {
 // else result.mfa: verify with iam.mfa.verify(result.mfa.mfa_token, code)
 ```
 
+A request with `prompt=none` has no session to reuse: `authorize` throws
+`LOGIN_REQUIRED` with `details.redirect_to`, the client's redirect URI carrying
+`error=login_required` and the `state`; navigate there. With `prompt=login` or
+`max_age=0`, complete with a token from a sign-in made after `authorize`
+(see [`prompt` and `max_age`](oauth-oidc.md#prompt-and-max_age)).
+
 See the package READMEs for every call and error code.
 
 ## Verify

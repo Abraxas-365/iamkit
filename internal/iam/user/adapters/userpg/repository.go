@@ -39,6 +39,12 @@ func usernameTaken(err error) bool {
 	return errors.As(err, &pg) && pg.Code == "23505" && pg.Constraint == "users_environment_username"
 }
 
+// externalIDTaken reports a duplicate external ID in the environment.
+func externalIDTaken(err error) bool {
+	var pg *pq.Error
+	return errors.As(err, &pg) && pg.Code == "23505" && pg.Constraint == "users_environment_external_id"
+}
+
 // emailTaken reports a duplicate email in the environment.
 func emailTaken(err error) bool {
 	var pg *pq.Error
@@ -60,9 +66,12 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 		return id, failure(err, "create user")
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,otp_enabled,avatar_url,username,home_organization_id,kind) VALUES($1,$2,nullif($3,''),$4,$5,$6,$7,nullif($8,''),$9,$10)`, id, environment, input.Email, input.Name, hash, input.OTPEnabled, input.AvatarURL, input.Username, input.HomeOrganization, kind(input.Kind))
+	_, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,otp_enabled,avatar_url,username,home_organization_id,kind,external_id) VALUES($1,$2,nullif($3,''),$4,$5,$6,$7,nullif($8,''),$9,$10,nullif($11,''))`, id, environment, input.Email, input.Name, hash, input.OTPEnabled, input.AvatarURL, input.Username, input.HomeOrganization, kind(input.Kind), input.ExternalID)
 	if usernameTaken(err) {
 		return id, errx.Conflict("username is taken")
+	}
+	if externalIDTaken(err) {
+		return id, errx.Conflict("external_id is taken")
 	}
 	if emailTaken(err) {
 		return id, errx.Conflict("email is taken")
@@ -113,7 +122,7 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 	n := 1
 	if like := query.EscapeLike(page.Search); like != "" {
 		n++
-		base += fmt.Sprintf(" AND (u.name ILIKE $%d OR u.email ILIKE $%d OR u.username ILIKE $%d)", n, n, n)
+		base += fmt.Sprintf(" AND (u.name ILIKE $%d OR u.email ILIKE $%d OR u.username ILIKE $%d OR u.external_id ILIKE $%d)", n, n, n, n)
 		args = append(args, like)
 	}
 	if filter.State != "" {
@@ -131,12 +140,17 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		base += fmt.Sprintf(" AND u.kind=$%d", n)
 		args = append(args, string(filter.Kind))
 	}
+	if filter.ExternalID != "" {
+		n++
+		base += fmt.Sprintf(" AND u.external_id=$%d", n)
+		args = append(args, filter.ExternalID)
+	}
 	var total int
 	if err := r.db.GetContext(ctx, &total, "SELECT count(*) "+base, args...); err != nil {
 		return query.Paginated[user.User]{}, failure(err, "list users")
 	}
 	rows := []user.User{}
-	err := r.db.SelectContext(ctx, &rows, fmt.Sprintf("SELECT u.id,u.kind,coalesce(u.email,'') AS email,u.name,coalesce(u.username,'') AS username,u.home_organization_id,u.avatar_url,u.active,%s AS state,u.last_signed_in_at %s ORDER BY u.name, u.id LIMIT %d OFFSET %d", stateSQL, base, page.Limit, page.Offset), args...)
+	err := r.db.SelectContext(ctx, &rows, fmt.Sprintf("SELECT u.id,u.kind,coalesce(u.email,'') AS email,u.name,coalesce(u.username,'') AS username,coalesce(u.external_id,'') AS external_id,u.home_organization_id,u.avatar_url,u.active,%s AS state,u.last_signed_in_at %s ORDER BY u.name, u.id LIMIT %d OFFSET %d", stateSQL, base, page.Limit, page.Offset), args...)
 	if err != nil {
 		return query.Paginated[user.User]{}, failure(err, "list users")
 	}
@@ -144,7 +158,7 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 }
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.UserID) (user.User, error) {
 	var row user.User
-	err := r.db.GetContext(ctx, &row, `SELECT u.id,u.kind,coalesce(u.email,'') AS email,u.name,coalesce(u.username,'') AS username,u.home_organization_id,u.avatar_url,u.active,u.email_verified,u.otp_enabled,u.phone,u.phone_verified,u.metadata,u.profile,u.failed_logins,CASE WHEN u.locked_until>now() THEN u.locked_until END AS locked_until,`+stateSQL+` AS state,u.last_signed_in_at,u.terms_accepted_at,u.password_change_required FROM users u WHERE u.environment_id=$1 AND u.id=$2`, environment, id)
+	err := r.db.GetContext(ctx, &row, `SELECT u.id,u.kind,coalesce(u.email,'') AS email,u.name,coalesce(u.username,'') AS username,coalesce(u.external_id,'') AS external_id,u.home_organization_id,u.avatar_url,u.active,u.email_verified,u.otp_enabled,u.phone,u.phone_verified,u.metadata,u.profile,u.failed_logins,CASE WHEN u.locked_until>now() THEN u.locked_until END AS locked_until,`+stateSQL+` AS state,u.last_signed_in_at,u.terms_accepted_at,u.password_change_required FROM users u WHERE u.environment_id=$1 AND u.id=$2`, environment, id)
 	return row, failure(err, "find user")
 }
 
@@ -260,11 +274,15 @@ func (r *Repository) Update(ctx context.Context, m user.Mutation, id identity.Us
 		phone_verified=CASE WHEN $12::boolean IS NOT NULL THEN $12::boolean WHEN $7::text IS NULL OR $7::text=phone THEN phone_verified ELSE false END,phone=coalesce($7::text,phone),
 		avatar_url=coalesce($8::text,avatar_url),
 		username=CASE WHEN $9::text IS NULL THEN username ELSE nullif($9::text,'') END,
+		external_id=CASE WHEN $13::text IS NULL THEN external_id ELSE nullif($13::text,'') END,
 		home_organization_id=CASE WHEN $10::boolean THEN $11::uuid ELSE home_organization_id END
 		WHERE environment_id=$1 AND id=$2`, m.Environment, id, input.Name, input.Active, metadata, input.OTPEnabled, input.Phone, input.AvatarURL, input.Username,
-		input.HomeOrganization != nil, home, input.PhoneVerified)
+		input.HomeOrganization != nil, home, input.PhoneVerified, input.ExternalID)
 	if usernameTaken(err) {
 		return errx.Conflict("username is taken")
+	}
+	if externalIDTaken(err) {
+		return errx.Conflict("external_id is taken")
 	}
 	if phoneUnverifiable(err) {
 		return errx.Validation("phone_verified requires a phone number")

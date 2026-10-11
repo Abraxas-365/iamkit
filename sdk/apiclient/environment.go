@@ -98,6 +98,16 @@ func (e Environment) UpdateUser(ctx context.Context, id string, input UserPatch)
 	return e.client.Do(ctx, "PATCH", e.path("users", id), input, nil)
 }
 
+// UserByExternalID finds the user with that external ID; ok is false when
+// no user has it. Requires iam:users:read.
+func (e Environment) UserByExternalID(ctx context.Context, externalID string) (user User, ok bool, err error) {
+	found, err := list[User](ctx, e.client, e.path("users"), url.Values{"external_id": {externalID}})
+	if err != nil || len(found) == 0 {
+		return User{}, false, err
+	}
+	return found[0], true, nil
+}
+
 func (e Environment) SuspendUser(ctx context.Context, id string) error {
 	return e.client.Do(ctx, "DELETE", e.path("users", id), nil, nil)
 }

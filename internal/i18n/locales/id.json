@@ -159,6 +159,7 @@
   "hosted.error.sso_not_offered": "Organisasi Anda mewajibkan sistem masuk tunggal, yang tidak disediakan aplikasi ini.",
   "hosted.error.sso_email": "Email ini tidak dapat masuk ke aplikasi ini dengan sistem masuk tunggal.",
   "hosted.error.sso_failed": "Sistem masuk tunggal tidak selesai. Coba lagi.",
+  "hosted.error.login_required": "Penyedia identitas Anda menggunakan kembali proses masuk sebelumnya. Masuk lagi untuk melanjutkan.",
   "hosted.error.credentials": "Email, nama pengguna, atau kata sandi salah.",
   "hosted.error.code": "Kode ini tidak valid atau telah kedaluwarsa.",
   "hosted.error.webauthn": "Kunci keamanan atau kunci sandi Anda tidak dapat digunakan. Coba lagi atau pilih metode lain.",

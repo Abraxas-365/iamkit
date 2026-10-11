@@ -185,7 +185,7 @@ func (h *Handler) removeMember(c *fiber.Ctx) error {
 }
 
 func (h *Handler) users(c *fiber.Ctx) error {
-	out, err := h.queries.Users(c.UserContext(), principal(c), user.Filter{State: user.State(c.Query("state"))}, httpx.PaginationFromCtx(c))
+	out, err := h.queries.Users(c.UserContext(), principal(c), user.Filter{State: user.State(c.Query("state")), ExternalID: c.Query("external_id")}, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

@@ -30,6 +30,13 @@ type testTransaction struct {
 	audited     []string
 	// methods the boundary organization allows (nil: all)
 	methods *authentication.Methods
+	// users domain join was asked about
+	joined []identity.UserID
+}
+
+func (t *testTransaction) JoinByDomain(_ context.Context, _ identity.EnvironmentID, user identity.UserID) error {
+	t.joined = append(t.joined, user)
+	return nil
 }
 
 func (t *testTransaction) OrganizationMethods(context.Context, identity.EnvironmentID, identity.OrganizationID) (authentication.Methods, error) {

@@ -13,6 +13,7 @@ export interface Organization {
   mfa_required: boolean; mfa_for_federated: boolean
   allow_password: boolean; allow_email_code: boolean; allow_social: boolean; allow_passkey: boolean
   allowed_factors?: string[]
+  domain_join?: boolean; domain_join_group_id?: string
 }
 
 interface OrgContext { org: Organization; reload: () => void }

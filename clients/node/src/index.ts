@@ -29,6 +29,7 @@ export {
   createPKCE,
   randomToken,
   type AuthorizeOptions,
+  type Prompt,
   type ClientAuth,
   type DeviceAuthorization,
   type ExchangedToken,

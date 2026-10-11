@@ -51,9 +51,48 @@ without a user use [service accounts](../machines/service-accounts.md) and
    access token for API authorization.
 
 The interaction must remain browser-bound over HTTPS. Do not try to complete a
-stolen ticket from a server without the binding. `prompt` and `max_age` are rejected,
-not silently accepted as fresh-authentication guarantees. Request `offline_access`
+stolen ticket from a server without the binding. Request `offline_access`
 when refresh is needed and manage refresh rotation/replay carefully.
+
+### `prompt` and `max_age`
+
+IAMKit keeps no browser session between authorize requests: every authorization
+runs a full sign-in, so the ID token's `auth_time` is always the sign-in made
+for that request (it is present in every ID token, which is what OIDC requires
+when `max_age` is sent). `prompt` is a space-separated list and is case
+sensitive; discovery lists the values in `prompt_values_supported`.
+
+| Value | Behaviour |
+| --- | --- |
+| `login` | Accepted. The user always signs in again. A custom sign-in UI that completes the authorization with a token issued before the authorize request is answered with `error=login_required`. With a federation connection of type OIDC, Google or Microsoft the provider is also asked for `prompt=login` (Google has no such value and only gets `select_account`), so it does not reuse its own session. Other connection types sign in as usual. See [Upstream providers](#upstream-providers) for what is checked when the user comes back. |
+| `consent` | Accepted and a no-op: IAMKit has no consent screen. |
+| `select_account` | Accepted. The hosted pages show the organization chooser even when the user belongs to a single organization (unless the request names the organization with `organization_id`, or an organization SSO connection fixes it). OIDC, Google and Microsoft providers are asked for `prompt=select_account` too. |
+| `none` | There is never a session to reuse, so the browser is redirected to the client's `redirect_uri` with `error=login_required`, the `state` and an `error_description` (OIDC Core 3.1.2.6), without a ticket or sign-in page. This only happens after the client and redirect URI are validated. A custom sign-in UI that calls `/oauth/authorize` with `Accept: application/json` gets `{"redirect_to": "..."}` instead of a redirect it cannot read (`@iamkit/js` throws `LOGIN_REQUIRED` with `details.redirect_to`). |
+
+`none` combined with any other value, and an unknown value, are `invalid_request`
+(HTTP 400 before any redirect). `max_age` must be a non-negative integer of seconds,
+otherwise `invalid_request`; any value is satisfied because the sign-in is made for
+the request, and `max_age=0` behaves like `prompt=login`. The device authorization
+flow and the other endpoints do not read these parameters.
+
+#### Upstream providers
+
+When the hosted sign-in goes through a federation connection, IAMKit cannot
+make the provider's own session fresh by itself, so it asks and then checks:
+
+- `max_age` is forwarded to connections of type OIDC, Google and Microsoft
+  (together with `prompt=login` for `prompt=login` and `max_age=0`). SAML,
+  LDAP, GitHub and other OAuth 2.0 connections never receive it.
+- When the user returns, IAMKit reads the `auth_time` claim of the provider's
+  ID token. For `prompt=login` or `max_age=0` the provider's sign-in must be
+  no older than the moment the request started; for `max_age=N` it must be at
+  most `N` seconds old. A minute of clock skew is allowed. Otherwise the sign-in
+  is refused (`LOGIN_REQUIRED`, 401) and the hosted page asks the user to sign
+  in again.
+- A provider that sends no `auth_time` cannot be checked, so the sign-in is
+  accepted. Providers that ignore `prompt=login` or `max_age` and omit
+  `auth_time` therefore may still reuse their session; connection types
+  that never receive the parameters are not checked either.
 
 ## Read the user, check tokens, sign out
 

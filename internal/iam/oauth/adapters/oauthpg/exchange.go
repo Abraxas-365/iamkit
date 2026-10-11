@@ -64,7 +64,8 @@ func (r *Repository) ExchangeSession(ctx context.Context, client *oauth.Client, 
 		err = tx.GetContext(ctx, &session, `SELECT id FROM sessions WHERE parent_session_id=$1 AND resource_id=$2 AND revoked_at IS NULL`, rootID, target)
 		if errors.Is(err, sql.ErrNoRows) {
 			session = id
-			_, err = tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,amr,authenticated_at,parent_session_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, client.Environment, subject.OrganizationID, subject.Subject, client.Application, target, root.Expires, root.AMR, root.Authenticated, rootID)
+			clientIP, clientAgent := identity.ClientInfoFrom(ctx).Args()
+			_, err = tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,amr,authenticated_at,parent_session_id,ip_address,user_agent) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, id, client.Environment, subject.OrganizationID, subject.Subject, client.Application, target, root.Expires, root.AMR, root.Authenticated, rootID, clientIP, clientAgent)
 			if err == nil {
 				err = eventpg.AuditWith(ctx, tx, client.Environment, client.ID.String(), "oauth.token_exchanged", id.String(),
 					map[string]any{"user_id": subject.Subject.String(), "oauth_client_id": client.ID.String(), "resource_id": target.String(), "parent_session_id": rootID.String()})
@@ -115,6 +116,8 @@ func (r *Repository) ImpersonationSession(ctx context.Context, input oauth.Imper
 	if err != nil {
 		return out, oauth.ExchangeError(oauth.ExchangeInvalidRequest, "the user has no access to the service account's resource in that organization")
 	}
+	// ip_address and user_agent stay NULL: they would be the service
+	// account's, and the impersonated user lists their sessions.
 	if _, err = tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,actor_account_id,impersonation_reason) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, account.Environment, input.Organization, input.User, account.Application, account.Resource, expires, input.Account, input.Reason); err != nil {
 		return out, failure(err)
 	}

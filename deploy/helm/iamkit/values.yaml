@@ -1,5 +1,6 @@
 # IAMKit Helm values. PostgreSQL is not part of the chart: point
-# database.existingSecret at a Secret holding DATABASE_URL.
+# database.existingSecret at a Secret holding DATABASE_URL. PostgreSQL 15 or
+# later is required.
 
 image:
   repository: ghcr.io/abraxas-365/iamkit

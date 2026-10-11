@@ -41,6 +41,8 @@ func (r *Repository) Create(ctx context.Context, t impersonation.Target) (authen
 	if err != nil {
 		return access, err
 	}
+	// ip_address and user_agent stay NULL: they would be the administrator's,
+	// and the impersonated user lists their sessions.
 	_, err = tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,actor_id,impersonation_reason) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, t.Session, t.Context.EnvironmentID, t.Context.OrganizationID, t.User, t.Context.ApplicationID, t.Context.ResourceID, t.Expires, t.Actor, t.Reason)
 	if err != nil {
 		return access, failure(err)

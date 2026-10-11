@@ -45,6 +45,7 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	if err != nil {
 		return identity.UserID{}, err
 	}
+	input.ExternalID, _ = identity.ExternalID(input.ExternalID) // validated
 	if input.Kind == user.KindMachine {
 		input.AvatarURL, _ = identity.AvatarURL(input.AvatarURL) // validated
 		return s.repository.Create(ctx, environment, input, "")
@@ -89,6 +90,7 @@ func (s *Service) List(ctx context.Context, environment identity.EnvironmentID, 
 	if err := filter.Validate(); err != nil {
 		return query.Paginated[user.User]{}, err
 	}
+	filter.ExternalID, _ = identity.ExternalID(filter.ExternalID) // validated
 	return s.repository.List(ctx, environment, filter, page)
 }
 func (s *Service) Find(ctx context.Context, environment identity.EnvironmentID, id identity.UserID) (user.User, error) {

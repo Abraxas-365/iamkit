@@ -10,10 +10,10 @@ Lists of users, organizations and members use the
 
 | Method/path | Input | Success |
 | --- | --- | --- |
-| `POST /users` | `name`, `email`; optional `password`, `otp_enabled`, `avatar_url`, `username`, `home_organization_id` (also adds the membership). `kind: "machine"` creates a [machine user](../../guides/machines/machine-users.md): `name` and optional `avatar_url`/`home_organization_id` only | 201 `{id}`; 409 `email is taken` or `username is taken` |
-| `GET /users` | List parameters (`search` matches name, email and username); optional `state`, `home_organization_id`, `kind` (`human`\|`machine`) | 200 page of users (each with `kind`) |
+| `POST /users` | `name`, `email`; optional `password`, `otp_enabled`, `avatar_url`, `username`, `external_id`, `home_organization_id` (also adds the membership). `kind: "machine"` creates a [machine user](../../guides/machines/machine-users.md): `name` and optional `avatar_url`/`external_id`/`home_organization_id` only | 201 `{id}`; 409 `email is taken`, `username is taken` or `external_id is taken` |
+| `GET /users` | List parameters (`search` matches name, email and username); optional `state`, `home_organization_id`, `kind` (`human`\|`machine`), `external_id` (exact match) | 200 page of users (each with `kind`) |
 | `GET /users/:id` | User ID | 200 user |
-| `PATCH /users/:id` | Optional `name`, `active`, `otp_enabled`, `metadata`, `phone` (E.164, `""` clears; a changed number is unverified), `phone_verified` (explicit, audited `user.phone_verified_set`; `true` needs a number, else 400), `avatar_url` (`""` removes), `username` (`""` removes), `home_organization_id` (an organization the user belongs to; `""` clears) | 204; 409 `username is taken` |
+| `PATCH /users/:id` | Optional `name`, `active`, `otp_enabled`, `metadata`, `phone` (E.164, `""` clears; a changed number is unverified), `phone_verified` (explicit, audited `user.phone_verified_set`; `true` needs a number, else 400), `avatar_url` (`""` removes), `username` (`""` removes), `external_id` (`""` or `null` removes; absent keeps), `home_organization_id` (an organization the user belongs to; `""` clears) | 204; 409 `username is taken` or `external_id is taken` |
 | `DELETE /users/:id` | User ID | 204; suspend, not erase (same as `POST …/deactivate`) |
 | `POST /users/:id/deactivate` | User ID | 204; suspends the user (`active=false`): sessions end, nothing signs in; audited `user.deactivated` |
 | `POST /users/:id/reactivate` | User ID | 204; lifts a suspension; audited `user.reactivated` |
@@ -35,7 +35,7 @@ Lists of users, organizations and members use the
 | `PUT /user-schema` | `schema` (JSON Schema 2020-12, top-level `type: object`, local `$ref` only, ≤ 64 KiB) | 200 `{schema,version,updated_at,non_conforming}`; audited `user.schema_updated` |
 | `DELETE /user-schema` | — | 204; audited `user.schema_deleted` |
 
-List items contain only `id,email,name,username,home_organization_id,avatar_url,active,state,last_signed_in_at`. Use `GET /users/:id` for
+List items contain only `id,email,name,username,external_id,home_organization_id,avatar_url,active,state,last_signed_in_at`. Use `GET /users/:id` for
 `email_verified,otp_enabled,phone,phone_verified,metadata,profile` and the password lockout state
 (`failed_logins`, `locked_until` — null when not locked) and `terms_accepted_at` (when a
 [sign-up](../../guides/sign-in/signup-and-onboarding.md#terms-acceptance) accepted the terms) as well; missing list fields are not evidence
@@ -44,7 +44,7 @@ Non-empty passwords must follow the environment's
 [password policy](../../guides/sign-in/password-policy.md) (default 12–72 bytes; 400
 `PASSWORD_POLICY` with `details.rule`). Name cannot be
 blank. `avatar_url` is an `https://` URL of at most 2048 characters without
-credentials ([avatars](../../guides/organizations/user-profiles.md#avatars)). `username` is optional: 3–64 lowercase letters, digits, `.`, `_`, `-` (never `@`), unique in the environment; it is lowercased (`""` when none; [usernames](../../guides/organizations/user-profiles.md#usernames)). Email is normalized by the service. Metadata is a JSON object, not an encoded JSON
+credentials ([avatars](../../guides/organizations/user-profiles.md#avatars)). `username` is optional: 3–64 lowercase letters, digits, `.`, `_`, `-` (never `@`), unique in the environment; it is lowercased (`""` when none; [usernames](../../guides/organizations/user-profiles.md#usernames)). `external_id` is optional: your own identifier for the user, trimmed, at most 255 characters, unique in the environment, not a SCIM `externalId` and never in tokens (`""` when none; [external IDs](../../guides/organizations/user-profiles.md#external-ids)). Email is normalized by the service. Metadata is a JSON object, not an encoded JSON
 string: at most 64 keys matching `^[a-zA-Z0-9_.-]{1,64}$`, 4 KiB per value,
 32 KiB in total — `PATCH` replaces it whole, the `/metadata/:key` routes change
 one key (see [metadata and profiles](../../guides/organizations/user-profiles.md)). Password is not a user PATCH field; use the challenge reset workflow.
@@ -85,7 +85,7 @@ just the account.
 | `GET /organizations` | List parameters; optional `user_id` (only organizations the user belongs to) | 200 page of `{id,name,active}` |
 | `GET /organizations/:id` | Organization ID | 200 organization |
 | `GET,PUT,DELETE /organizations/:id/metadata/:key` | Like the user metadata routes (same limits) | 200 value / 204; audited `organization.metadata_set` / `organization.metadata_deleted` |
-| `PATCH /organizations/:id` | Update fields: `name`, `metadata`, `mfa_required`, `mfa_for_federated`, `allowed_factors` ([MFA policy](../../guides/sign-in/mfa.md#policy)), `allow_password`, `allow_email_code`, `allow_social`, `allow_passkey` ([sign-in methods](../../guides/sign-in/sign-in-methods.md#three-layers)) | 204 |
+| `PATCH /organizations/:id` | Update fields: `name`, `metadata`, `mfa_required`, `mfa_for_federated`, `allowed_factors` ([MFA policy](../../guides/sign-in/mfa.md#policy)), `allow_password`, `allow_email_code`, `allow_social`, `allow_passkey` ([sign-in methods](../../guides/sign-in/sign-in-methods.md#three-layers)), `domain_join`, `domain_join_group_id` ([join by verified domain](../../guides/organizations/domain-join.md); the group must be an operator-managed group of the organization, `""` clears it) | 204 |
 | `POST /memberships` | `organization_id`, `user_id` | 201 |
 | `GET /organizations/:organization/members` | Organization ID | 200 page |
 | `PATCH /organizations/:organization/members/:user` | `sso_bypass` | 204; 400 for an empty patch |

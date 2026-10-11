@@ -208,6 +208,11 @@ func (s *Service) SocialAllowed(ctx context.Context, boundary authentication.Con
 // tx before the session (so a refused session keeps the old one), or once
 // the second factor passed.
 func (s *Service) signIn(ctx context.Context, tx authentication.Transaction, boundary authentication.Context, user identity.UserID, method string, federated bool, passwordHash string) (authentication.Result, error) {
+	// Domain capture runs where every headless method converges and before
+	// access is resolved, so a just-joined organization counts at once.
+	if err := tx.JoinByDomain(ctx, boundary.EnvironmentID, user); err != nil {
+		return authentication.Result{}, err
+	}
 	amr := authentication.FirstFactorAMR(method)
 	// A passkey verified the user on the key: it is multi-factor already.
 	if s.second != nil && !authentication.HasMFA(amr) {

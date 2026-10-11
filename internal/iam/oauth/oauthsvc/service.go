@@ -307,9 +307,6 @@ func ValidateAuthorization(issuer string, client *oauth.Client, query map[string
 		}
 		return v[0]
 	}
-	if get("prompt") != "" || get("max_age") != "" {
-		return errx.Validation("prompt and max_age are not supported by the headless authorization interaction")
-	}
 	for key, v := range query {
 		if len(v) != 1 || key == "request" || key == "request_uri" {
 			return errx.Validation("invalid authorization request")
@@ -319,6 +316,9 @@ func ValidateAuthorization(issuer string, client *oauth.Client, query map[string
 		return errx.Validation("code, exact redirect, S256, state and nonce required")
 	}
 	if _, err := oauth.ConnectionHint(query); err != nil {
+		return err
+	}
+	if _, err := oauth.ParseInteraction(query); err != nil {
 		return err
 	}
 	_, err := oauth.OrganizationHint(query)

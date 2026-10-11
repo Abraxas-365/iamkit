@@ -146,9 +146,23 @@ export interface AuthorizeOptions {
    * sends to your sign-in endpoint). Ignored when the client cannot use it.
    */
   connectionId?: string;
+  /**
+   * OIDC `prompt`: `login` (and `consent`, `select_account`) are accepted;
+   * `none` makes IAMKit answer at once with `error=login_required`, since it
+   * keeps no session between authorize requests. `none` cannot be combined.
+   */
+  prompt?: Prompt | Prompt[];
+  /**
+   * OIDC `max_age` in seconds. Every authorization signs in afresh, so any
+   * value is met; the ID token's `auth_time` tells when. `0` is `prompt=login`.
+   */
+  maxAge?: number;
   /** Extra query parameters (e.g. `ui_locales`). */
   extra?: Record<string, string>;
 }
+
+/** The `prompt` values IAMKit accepts (discovery `prompt_values_supported`). */
+export type Prompt = "none" | "login" | "consent" | "select_account";
 
 /** Creates a PKCE verifier (43 characters) and its S256 challenge. */
 export function createPKCE(): PKCE {
@@ -209,6 +223,15 @@ export class OAuthClient {
     }
     if (options.connectionId) {
       query.set("connection_id", options.connectionId);
+    }
+    if (options.prompt !== undefined) {
+      query.set("prompt", ([] as string[]).concat(options.prompt).join(" "));
+    }
+    if (options.maxAge !== undefined) {
+      if (!Number.isInteger(options.maxAge) || options.maxAge < 0) {
+        throw invalidArgument("maxAge must be a non-negative integer number of seconds");
+      }
+      query.set("max_age", String(options.maxAge));
     }
     return `${this.http.baseUrl}/oauth/authorize?${query}`;
   }

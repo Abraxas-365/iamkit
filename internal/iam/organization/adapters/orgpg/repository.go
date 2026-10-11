@@ -81,13 +81,15 @@ func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentI
 		AllowSocial     bool                    `db:"allow_social"`
 		AllowPasskey    bool                    `db:"allow_passkey"`
 		AllowedFactors  pq.StringArray          `db:"allowed_factors"`
+		DomainJoin      bool                    `db:"domain_join"`
+		DomainJoinGroup identity.GroupID        `db:"domain_join_group_id"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT id,name,active,metadata,mfa_required,mfa_for_federated,allow_password,allow_email_code,allow_social,allow_passkey,allowed_factors FROM organizations WHERE environment_id=$1 AND id=$2`, environment, id)
+	err := r.db.GetContext(ctx, &row, `SELECT id,name,active,metadata,mfa_required,mfa_for_federated,allow_password,allow_email_code,allow_social,allow_passkey,allowed_factors,domain_join,domain_join_group_id FROM organizations WHERE environment_id=$1 AND id=$2`, environment, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return organization.Organization{}, errx.NotFound("resource not found")
 	}
 	return organization.Organization{ID: row.ID, Name: row.Name, Active: row.Active, Metadata: json.RawMessage(row.Metadata), MFARequired: row.MFARequired, MFAForFederated: row.MFAForFederated,
-		AllowPassword: row.AllowPassword, AllowEmailCode: row.AllowEmailCode, AllowSocial: row.AllowSocial, AllowPasskey: row.AllowPasskey, AllowedFactors: []string(row.AllowedFactors)}, failure(err)
+		AllowPassword: row.AllowPassword, AllowEmailCode: row.AllowEmailCode, AllowSocial: row.AllowSocial, AllowPasskey: row.AllowPasskey, AllowedFactors: []string(row.AllowedFactors), DomainJoin: row.DomainJoin, DomainJoinGroup: row.DomainJoinGroup}, failure(err)
 }
 func (r *Repository) UpdateMember(ctx context.Context, m organization.Mutation, org identity.OrganizationID, user identity.UserID, input organization.MemberUpdate) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
@@ -125,10 +127,17 @@ func (r *Repository) Update(ctx context.Context, m organization.Mutation, id ide
 	if input.AllowedFactors != nil {
 		factors = pq.Array(input.AllowedFactors)
 	}
+	// A zero group ID is NULL (Value), which clears the column.
+	var group identity.GroupID
+	if input.DomainJoinGroup != nil {
+		group = *input.DomainJoinGroup
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE organizations SET name=coalesce($3,name),active=coalesce($4,active),metadata=coalesce($5::jsonb,metadata),mfa_required=coalesce($6,mfa_required),mfa_for_federated=coalesce($7,mfa_for_federated),
 		allow_password=coalesce($8,allow_password),allow_email_code=coalesce($9,allow_email_code),allow_social=coalesce($10,allow_social),allowed_factors=coalesce($11::text[],allowed_factors),
-		allow_passkey=coalesce($12,allow_passkey) WHERE environment_id=$1 AND id=$2`,
-		m.Environment, id, input.Name, input.Active, metadata, input.MFARequired, input.MFAForFederated, input.AllowPassword, input.AllowEmailCode, input.AllowSocial, factors, input.AllowPasskey)
+		allow_passkey=coalesce($12,allow_passkey),domain_join=coalesce($13,domain_join),
+		domain_join_group_id=CASE WHEN $14::boolean THEN $15::uuid ELSE domain_join_group_id END WHERE environment_id=$1 AND id=$2`,
+		m.Environment, id, input.Name, input.Active, metadata, input.MFARequired, input.MFAForFederated, input.AllowPassword, input.AllowEmailCode, input.AllowSocial, factors, input.AllowPasskey,
+		input.DomainJoin, input.DomainJoinGroup != nil, group)
 	if err != nil {
 		return conflict(err)
 	}
@@ -143,6 +152,11 @@ func (r *Repository) Update(ctx context.Context, m organization.Mutation, id ide
 		return failure(err)
 	}
 	return failure(tx.Commit())
+}
+func (r *Repository) OperatorGroup(ctx context.Context, environment identity.EnvironmentID, org identity.OrganizationID, group identity.GroupID) (bool, error) {
+	var ok bool
+	err := r.db.GetContext(ctx, &ok, `SELECT EXISTS(SELECT 1 FROM groups WHERE id=$1 AND environment_id=$2 AND organization_id=$3 AND connection_id IS NULL)`, group, environment, org)
+	return ok, failure(err)
 }
 func (r *Repository) AddMember(ctx context.Context, environment identity.EnvironmentID, input organization.Membership) error {
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {

@@ -43,6 +43,9 @@ Base: `/identity/v1`. JSON bodies use `Content-Type: application/json`.
 | `PATCH /me/profile` | Same token; `environment_id`, `audience`, `profile` (merge patch of `x-iamkit-self: write` attributes) | 200 `{profile}`; 403 for any other attribute or without a schema |
 | `GET /organizations` | Bearer user token; query `environment_id`, `audience` | 200 organization array |
 | `POST /memberships` | Bearer user token; `environment_id`, `audience`, `user_id` | 201; requires `iam:members:write` |
+| `GET /me/sessions` | Bearer user token (impersonated tokens may read); query `environment_id`, `audience`, `limit`, `offset` | 200 paginated `{items,page}` of the caller's live root sessions, newest first: `id,current,organization{id,name},application{id,name},oauth_client_id,created_at,authenticated_at,expires_at,amr,ip_address,user_agent,impersonated`; see [sessions](../../guides/sign-in/sessions.md) |
+| `DELETE /me/sessions/:id` | Bearer user token (not impersonated); query `environment_id`, `audience` | 204 (also for the current session); 404 unknown or not the caller's; 403 impersonated; audited `session.revoke_own` |
+| `POST /me/sessions/revoke-others` | Same token; query or body `environment_id`, `audience` | 200 `{count}`: every other live session ended; audited `session.revoke_others` |
 | `GET /me/factors` | Bearer user token; query `environment_id`, `audience` | 200 `{factors,recovery_codes_remaining}` |
 | `POST /me/factors/totp` | Bearer user token; `environment_id`, `audience` | 201 `{factor_id,secret,otpauth_uri}` |
 | `POST /me/factors/email` | Bearer user token; `environment_id`, `audience` | 202 `{factor,destination,expires_at}` |

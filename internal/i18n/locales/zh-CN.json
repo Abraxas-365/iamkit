@@ -159,6 +159,7 @@
   "hosted.error.sso_not_offered": "你的组织要求使用单点登录，但此应用不支持。",
   "hosted.error.sso_email": "此邮箱无法通过单点登录登录此应用。",
   "hosted.error.sso_failed": "单点登录未完成，请重试。",
+  "hosted.error.login_required": "你的身份提供方复用了之前的登录。请重新登录以继续。",
   "hosted.error.credentials": "邮箱、用户名或密码错误。",
   "hosted.error.code": "此验证码无效或已过期。",
   "hosted.error.webauthn": "无法使用你的安全密钥或通行密钥。请重试或选择其他方式。",

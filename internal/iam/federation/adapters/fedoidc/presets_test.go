@@ -578,3 +578,39 @@ func TestOAuth2GroupsPath(t *testing.T) {
 		t.Fatalf("absent: %+v %v", claims.Groups, err)
 	}
 }
+
+func TestMaxAgeAndAuthTime(t *testing.T) {
+	idp := newIdP(t)
+	age := int64(300)
+	c := connection(federation.ProviderGoogle, federation.Options{}, "secret")
+	if q := authorizeURL(t, idp.provider(), c); q.Has("max_age") {
+		t.Fatalf("max_age sent without a request: %v", q)
+	}
+	c.Options.MaxAge = &age
+	if q := authorizeURL(t, idp.provider(), c); q.Get("max_age") != "300" {
+		t.Fatalf("max_age not forwarded: %v", q)
+	}
+	zero := int64(0)
+	c.Options.MaxAge = &zero
+	if q := authorizeURL(t, idp.provider(), c); q.Get("max_age") != "0" {
+		t.Fatalf("max_age=0 not forwarded: %v", q)
+	}
+	// Connections that take no prompt never send it.
+	gh := connection(federation.ProviderGitHub, federation.Options{}, "secret")
+	gh.Options.MaxAge = &age
+	if q := authorizeURL(t, idp.provider(), gh); q.Has("max_age") {
+		t.Fatalf("max_age sent to GitHub: %v", q)
+	}
+
+	idp.issuer = "https://accounts.google.com"
+	signed := time.Now().Add(-time.Hour).Unix()
+	idp.claims = jwt.MapClaims{"sub": "g-1", "nonce": "nonce-1", "email": "ann@gmail.com", "email_verified": true, "auth_time": signed}
+	claims, err := idp.provider().Verify(context.Background(), c, "code", "nonce-1", "v")
+	if err != nil || claims.AuthTime.Unix() != signed {
+		t.Fatalf("auth_time = %v, %v", claims.AuthTime, err)
+	}
+	idp.claims = jwt.MapClaims{"sub": "g-1", "nonce": "nonce-1", "email": "ann@gmail.com", "email_verified": true}
+	if claims, err = idp.provider().Verify(context.Background(), c, "code", "nonce-1", "v"); err != nil || !claims.AuthTime.IsZero() {
+		t.Fatalf("absent auth_time: %v, %v", claims.AuthTime, err)
+	}
+}

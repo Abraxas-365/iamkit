@@ -52,7 +52,8 @@ IAMKit separates **administration** from **authentication**:
   and environment/application/resource boundaries, then checks permissions and
   matches the token's organization to the requested tenant. A successful login
   is not permission to call every API or access another tenant's data.
-- **IAMKit** stores identities, memberships, grants and sessions in PostgreSQL.
+- **IAMKit** stores identities, memberships, grants and sessions in PostgreSQL
+  (15 or later).
   The Docker image includes a built-in **operator management console** (React SPA)
   served at the root URL — no separate frontend deployment needed. The console
   source lives in [`frontend/`](frontend/README.md). An opt-in

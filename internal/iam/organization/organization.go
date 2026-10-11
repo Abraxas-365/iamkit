@@ -29,6 +29,13 @@ type Organization struct {
 	// AllowedFactors narrow the environment's allowed second factors
 	// (default all: the environment decides).
 	AllowedFactors []string `json:"allowed_factors"`
+	// DomainJoin makes a human user with a verified email on one of the
+	// organization's verified domains a member when they sign in or sign up
+	// (without SSO); DomainJoinGroup, when set, is the operator-managed
+	// group they join, which is what gives them roles. A removed or
+	// deactivated member is never added again.
+	DomainJoin      bool             `json:"domain_join"`
+	DomainJoinGroup identity.GroupID `json:"domain_join_group_id"`
 }
 type Summary struct {
 	ID     identity.OrganizationID `json:"id" db:"id"`
@@ -56,6 +63,11 @@ type Update struct {
 	AllowSocial     *bool           `json:"allow_social"`
 	AllowPasskey    *bool           `json:"allow_passkey"`
 	AllowedFactors  []string        `json:"allowed_factors"`
+	DomainJoin      *bool           `json:"domain_join"`
+	// DomainJoinGroup sets the group domain-joined members receive; a
+	// non-nil zero ID clears it. The service checks it is an operator-managed
+	// group of the organization (not a SCIM one).
+	DomainJoinGroup *identity.GroupID `json:"domain_join_group_id"`
 }
 
 func (u Update) Validate() error {

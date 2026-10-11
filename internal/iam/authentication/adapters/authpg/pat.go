@@ -75,7 +75,8 @@ func (r *Repository) AccessTokenSession(ctx context.Context, t authentication.Pe
 	if !errors.Is(err, sql.ErrNoRows) {
 		return identity.SessionID{}, failure(err)
 	}
-	_, err = r.db.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,access_token_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-		session, t.Token.EnvironmentID, t.Token.OrganizationID, t.Token.Subject, t.Token.ApplicationID, t.Token.ResourceID, expires, t.ID)
+	clientIP, clientAgent := identity.ClientInfoFrom(ctx).Args()
+	_, err = r.db.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,access_token_id,ip_address,user_agent) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		session, t.Token.EnvironmentID, t.Token.OrganizationID, t.Token.Subject, t.Token.ApplicationID, t.Token.ResourceID, expires, t.ID, clientIP, clientAgent)
 	return session, failure(err)
 }

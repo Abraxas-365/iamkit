@@ -1,7 +1,9 @@
 package server
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/identity"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
@@ -44,5 +46,34 @@ func TestTrustedProxies(t *testing.T) {
 	other := &Server{TrustedProxies: []string{"10.0.0.0/8"}}
 	if got := ip(other, "203.0.113.7"); got != "0.0.0.0 http" {
 		t.Fatalf("untrusted peer = %q, want socket address and no forwarded proto", got)
+	}
+}
+
+// TestClientInfoMiddleware: the request context carries the address Fiber
+// resolved (trusted proxies honoured) and the truncated User-Agent.
+func TestClientInfoMiddleware(t *testing.T) {
+	get := func(s *Server, forwarded string) identity.ClientInfo {
+		t.Helper()
+		app := fiber.New(s.config())
+		var got identity.ClientInfo
+		app.Use(clientInfo)
+		app.Get("/", func(c *fiber.Ctx) error { got = identity.ClientInfoFrom(c.UserContext()); return nil })
+		r := httptest.NewRequest("GET", "/", nil)
+		r.Header.Set("User-Agent", strings.Repeat("a", 600))
+		if forwarded != "" {
+			r.Header.Set("X-Forwarded-For", forwarded)
+		}
+		res, err := app.Test(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		return got
+	}
+	if got := get(&Server{}, "203.0.113.7"); got.IP != "0.0.0.0" || len(got.UserAgent) != identity.MaxUserAgent {
+		t.Fatalf("untrusted = %+v", got)
+	}
+	if got := get(&Server{TrustedProxies: []string{"0.0.0.0/8"}}, "203.0.113.7"); got.IP != "203.0.113.7" {
+		t.Fatalf("trusted = %+v", got)
 	}
 }

@@ -30,8 +30,12 @@ type Flows interface {
 	Start(ctx context.Context, boundary authentication.Context, connection identity.ConnectionID, back Return) (Start, error)
 	// StartHosted starts a login for the hosted pages: the organization is
 	// the connection's own, or chosen after the callback for environment
-	// connections. continuation is the authorization ticket to resume.
-	StartHosted(ctx context.Context, target authentication.Target, connection identity.ConnectionID, continuation string) (Start, error)
+	// connections. continuation is the authorization ticket to resume;
+	// ask is what the authorization asked for: the OIDC prompt (login,
+	// select_account) and max_age, sent to OIDC, Google and Microsoft
+	// providers (the prompt on top of the connection's own Options.Prompt);
+	// the callback then checks the ID token's auth_time against them.
+	StartHosted(ctx context.Context, target authentication.Target, connection identity.ConnectionID, continuation string, ask Ask) (Start, error)
 	Callback(ctx context.Context, code, state, binding string) (Outcome, error)
 	// Redeem signs in with the result a callback handed to a custom
 	// sign-in UI (Return), given the verifier of the start's challenge: a

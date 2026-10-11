@@ -63,7 +63,7 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Handler) List(c *fiber.Ctx) error {
-	filter := user.Filter{State: user.State(c.Query("state")), Kind: user.Kind(c.Query("kind"))}
+	filter := user.Filter{State: user.State(c.Query("state")), Kind: user.Kind(c.Query("kind")), ExternalID: c.Query("external_id")}
 	if raw := c.Query("home_organization_id"); raw != "" {
 		org, err := identity.ParseOrganizationID(raw)
 		if err != nil {
@@ -81,6 +81,7 @@ func (h *Handler) List(c *fiber.Ctx) error {
 		Email            string                   `json:"email"`
 		Name             string                   `json:"name"`
 		Username         string                   `json:"username"`
+		ExternalID       string                   `json:"external_id"`
 		HomeOrganization *identity.OrganizationID `json:"home_organization_id"`
 		AvatarURL        string                   `json:"avatar_url"`
 		Active           bool                     `json:"active"`
@@ -89,7 +90,7 @@ func (h *Handler) List(c *fiber.Ctx) error {
 	}
 	out := make([]summary, 0, len(users.Items))
 	for _, u := range users.Items {
-		out = append(out, summary{u.ID, u.Kind, u.Email, u.Name, u.Username, u.HomeOrganization, u.AvatarURL, u.Active, u.State, u.LastSignedInAt})
+		out = append(out, summary{u.ID, u.Kind, u.Email, u.Name, u.Username, u.ExternalID, u.HomeOrganization, u.AvatarURL, u.Active, u.State, u.LastSignedInAt})
 	}
 	return c.JSON(query.Paginated[summary]{Items: out, Page: users.Page})
 }

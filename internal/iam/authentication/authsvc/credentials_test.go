@@ -101,3 +101,21 @@ func TestAddMember(t *testing.T) {
 		})
 	}
 }
+
+// Domain join runs only for a user whose credential was verified: a wrong
+// password must never create a membership.
+func TestLoginJoinsByDomainOnlyAfterTheCredential(t *testing.T) {
+	user := identity.MustParseUserID("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")
+	wrong := &testTransaction{user: user}
+	_, _ = New(testRepository{wrong}, testPasswords{mismatch: true}, testSecrets{}, nil).Login(context.Background(), testBoundary(), "user@example.com", "password", "")
+	if len(wrong.joined) != 0 {
+		t.Fatalf("joined after a wrong password: %v", wrong.joined)
+	}
+	right := &testTransaction{user: user}
+	if _, err := New(testRepository{right}, testPasswords{}, testSecrets{}, nil).Login(context.Background(), testBoundary(), "user@example.com", "password", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(right.joined) != 1 || right.joined[0] != user {
+		t.Fatalf("joined = %v", right.joined)
+	}
+}

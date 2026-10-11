@@ -461,6 +461,8 @@ type Claims struct {
 	// stops being acceptable; the service records it against replays.
 	Assertion        string
 	AssertionExpires time.Time
+	// AuthTime is the ID token's auth_time (zero when absent).
+	AuthTime time.Time
 }
 
 // Admit decides whether an unlinked provider identity may be provisioned just
@@ -595,6 +597,12 @@ type State struct {
 	Continuation string
 	// Return sends a headless callback back to a custom sign-in UI.
 	Return Return
+	// Reauth and MaxAge are what the authorization asked of the provider
+	// (see Ask): the callback refuses an ID token whose auth_time is older.
+	Reauth bool
+	MaxAge *int64
+	// Started is when the state was saved (set by the repository).
+	Started time.Time
 }
 type Start struct{ URL, Binding string }
 

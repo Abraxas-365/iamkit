@@ -29,7 +29,9 @@ at your DNS provider and click **Check DNS now**. A domain belongs to one
 organization per environment. Verified domains let SCIM adopt only members on
 the organization's own domains, and power the organization's
 [single sign-on](../enterprise/federation.md#organization-sso): email discovery,
-just-in-time provisioning and enforcement.
+just-in-time provisioning and enforcement. They can also make people with a
+verified email on them members automatically: see
+[join by verified domain](domain-join.md).
 
 To bring people in, use Members → Invitations (or
 `POST /organizations/:organization/invitations`) with the roles and groups they

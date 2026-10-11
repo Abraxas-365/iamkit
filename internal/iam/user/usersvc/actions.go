@@ -19,19 +19,21 @@ type createRequest struct {
 	Email            string                  `json:"email,omitempty"`
 	Name             string                  `json:"name"`
 	Username         string                  `json:"username,omitempty"`
+	ExternalID       string                  `json:"external_id,omitempty"`
 	AvatarURL        string                  `json:"avatar_url,omitempty"`
 	HomeOrganization identity.OrganizationID `json:"home_organization_id,omitzero"`
 }
 
 // updateRequest is what request:user.update sees.
 type updateRequest struct {
-	ID        identity.UserID `json:"id"`
-	Name      *string         `json:"name,omitempty"`
-	Active    *bool           `json:"active,omitempty"`
-	AvatarURL *string         `json:"avatar_url,omitempty"`
-	Username  *string         `json:"username,omitempty"`
-	Phone     *string         `json:"phone,omitempty"`
-	Metadata  json.RawMessage `json:"metadata,omitempty"`
+	ID         identity.UserID `json:"id"`
+	Name       *string         `json:"name,omitempty"`
+	Active     *bool           `json:"active,omitempty"`
+	AvatarURL  *string         `json:"avatar_url,omitempty"`
+	Username   *string         `json:"username,omitempty"`
+	ExternalID *string         `json:"external_id,omitempty"`
+	Phone      *string         `json:"phone,omitempty"`
+	Metadata   json.RawMessage `json:"metadata,omitempty"`
 }
 
 // beforeCreate runs request:user.create; a patch is checked like the
@@ -41,7 +43,7 @@ func (s *Service) beforeCreate(ctx context.Context, environment identity.Environ
 		return input, nil
 	}
 	result, err := s.actions.Run(ctx, environment, action.UserCreate, func() action.Input {
-		body, _ := json.Marshal(createRequest{Kind: input.Kind, Email: input.Email, Name: input.Name, Username: input.Username, AvatarURL: input.AvatarURL, HomeOrganization: input.HomeOrganization})
+		body, _ := json.Marshal(createRequest{Kind: input.Kind, Email: input.Email, Name: input.Name, Username: input.Username, ExternalID: input.ExternalID, AvatarURL: input.AvatarURL, HomeOrganization: input.HomeOrganization})
 		return action.Input{Request: body}
 	})
 	if err != nil || len(result.Patch) == 0 {
@@ -68,7 +70,7 @@ func (s *Service) beforeUpdate(ctx context.Context, environment identity.Environ
 		return input, nil
 	}
 	result, err := s.actions.Run(ctx, environment, action.UserUpdate, func() action.Input {
-		body, _ := json.Marshal(updateRequest{ID: id, Name: input.Name, Active: input.Active, AvatarURL: input.AvatarURL, Username: input.Username, Phone: input.Phone, Metadata: input.Metadata})
+		body, _ := json.Marshal(updateRequest{ID: id, Name: input.Name, Active: input.Active, AvatarURL: input.AvatarURL, Username: input.Username, ExternalID: input.ExternalID, Phone: input.Phone, Metadata: input.Metadata})
 		return action.Input{User: &action.UserInput{ID: &id}, Request: body}
 	})
 	if err != nil || len(result.Patch) == 0 {

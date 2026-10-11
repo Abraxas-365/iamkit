@@ -43,3 +43,24 @@ func TestUserStateEndpoints(t *testing.T) {
 		t.Fatalf("calls:\n%s", strings.Join(calls, "\n"))
 	}
 }
+
+func TestUserByExternalID(t *testing.T) {
+	var gotQuery string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.Query().Get("external_id")
+		if gotQuery == "crm-42" {
+			w.Write([]byte(`{"items":[{"id":"u1","email":"a@b.com","name":"A","external_id":"crm-42","active":true}],"page":{"total":1,"limit":20,"offset":0}}`))
+			return
+		}
+		w.Write([]byte(`{"items":[],"page":{"total":0,"limit":20,"offset":0}}`))
+	}))
+	defer srv.Close()
+	env := New(srv.URL, "ik_mgmt_test").Environment("env-1")
+	found, ok, err := env.UserByExternalID(context.Background(), "crm-42")
+	if err != nil || !ok || found.ID != "u1" || found.ExternalID != "crm-42" || gotQuery != "crm-42" {
+		t.Fatalf("found = %+v %v %v query=%q", found, ok, err, gotQuery)
+	}
+	if _, ok, err = env.UserByExternalID(context.Background(), "nope"); err != nil || ok {
+		t.Fatalf("unknown = %v %v", ok, err)
+	}
+}

@@ -48,6 +48,11 @@ type OrgSettings struct {
 	AllowSocial     *bool    `json:"allow_social,omitempty"`
 	AllowPasskey    *bool    `json:"allow_passkey,omitempty"`
 	AllowedFactors  []string `json:"allowed_factors,omitempty"`
+	// DomainJoin turns auto-join by verified domain on or off;
+	// DomainJoinGroupID is the operator-managed group joiners receive ("" clears
+	// it). The group's roles must be ones the caller may assign.
+	DomainJoin        *bool   `json:"domain_join,omitempty"`
+	DomainJoinGroupID *string `json:"domain_join_group_id,omitempty"`
 }
 
 // AdminOrganization is the organization as its administrators see it.
@@ -62,6 +67,10 @@ type AdminOrganization struct {
 	AllowSocial     bool     `json:"allow_social"`
 	AllowPasskey    bool     `json:"allow_passkey"`
 	AllowedFactors  []string `json:"allowed_factors"`
+	// DomainJoin: members join by verified email domain; DomainJoinGroupID is
+	// the group they receive.
+	DomainJoin        bool   `json:"domain_join"`
+	DomainJoinGroupID string `json:"domain_join_group_id"`
 }
 
 // OrgMember is a member of the organization.
@@ -79,6 +88,7 @@ type OrgUser struct {
 	Email              string `json:"email"`
 	Name               string `json:"name"`
 	Username           string `json:"username,omitempty"`
+	ExternalID         string `json:"external_id,omitempty"`
 	AvatarURL          string `json:"avatar_url,omitempty"`
 	Active             bool   `json:"active"`
 	State              string `json:"state,omitempty"`

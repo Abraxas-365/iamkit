@@ -29,6 +29,8 @@ type Discovery struct {
 	ScopesSupported                                 []string `json:"scopes_supported"`
 	ClaimsSupported                                 []string `json:"claims_supported"`
 	CodeChallengeMethodsSupported                   []string `json:"code_challenge_methods_supported"`
+	// PromptValuesSupported: the authorize request's prompt values.
+	PromptValuesSupported []string `json:"prompt_values_supported"`
 	// OpenID Connect Back-Channel Logout 1.0: logout tokens carry sid.
 	BackchannelLogoutSupported        bool `json:"backchannel_logout_supported"`
 	BackchannelLogoutSessionSupported bool `json:"backchannel_logout_session_supported"`
@@ -60,6 +62,7 @@ func NewDiscovery(issuer string) Discovery {
 		ScopesSupported:                                 []string{"openid", "profile", "email", "phone", "offline_access"},
 		ClaimsSupported:                                 []string{"sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "amr", "sid", "name", "picture", "preferred_username", "email", "email_verified", "phone_number", "phone_number_verified", "environment_id", "organization_id"},
 		CodeChallengeMethodsSupported:                   []string{"S256"},
+		PromptValuesSupported:                           PromptValues(),
 		BackchannelLogoutSupported:                      true,
 		BackchannelLogoutSessionSupported:               true,
 		DeviceAuthorizationEndpoint:                     issuer + "/oauth/device_authorization",

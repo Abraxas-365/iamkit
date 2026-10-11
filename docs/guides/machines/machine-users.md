@@ -35,7 +35,8 @@ curl -X POST "$IAMKIT_URL/management/v1/environments/$ENV/users" \
 the user can never receive a password, second factor, sign-in code, linked
 identity or SCIM record (enforced in the database too). SCIM never lists or
 removes machine users. Filter lists with `?kind=machine` (`human` for people).
-Add memberships, roles and grants as for any user.
+A machine user may carry an [`external_id`](../organizations/user-profiles.md#external-ids)
+(your integration's own key for it). Add memberships, roles and grants as for any user.
 
 CLI: `iam machine-users create --name billing-sync --home-organization ORG_UUID`,
 `iam machine-users list`.

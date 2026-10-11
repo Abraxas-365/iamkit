@@ -37,7 +37,7 @@ client (organization SSO offered, `connection_ids` allowlist, the organization
 hint); an unusable hint shows the ordinary sign-in. Clients reached through
 [IdP-initiated SAML](../../guides/enterprise/saml.md#idp-initiated-login) use
 it from their `initiate_login_uri`.
-No implicit or password grant is advertised. `prompt`/`max_age` are unsupported.
+No implicit or password grant is advertised. `prompt` (`none`, `login`, `consent`, `select_account`, listed in `prompt_values_supported`) and `max_age` are supported at `/oauth/authorize`; see [OAuth and OIDC](../../guides/applications/oauth-oidc.md#prompt-and-max_age).
 
 Discovery advertises `userinfo_endpoint`, `introspection_endpoint`,
 `end_session_endpoint`, `revocation_endpoint`, `claims_supported`,

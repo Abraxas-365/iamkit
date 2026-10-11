@@ -93,8 +93,9 @@ func (r *Repository) KeySession(ctx context.Context, g authentication.KeyGrant, 
 		out.Session, out.Authenticated = existing.ID, existing.Authenticated
 	case errors.Is(err, sql.ErrNoRows):
 		now := time.Now().UTC().Truncate(time.Second)
-		if _, err = tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,amr,authenticated_at,user_key_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-			session, b.EnvironmentID, b.OrganizationID, g.Key.User, b.ApplicationID, b.ResourceID, expires, pq.StringArray{authentication.AMRKey}, now, g.Key.ID); err != nil {
+		clientIP, clientAgent := identity.ClientInfoFrom(ctx).Args()
+		if _, err = tx.ExecContext(ctx, `INSERT INTO sessions(id,environment_id,organization_id,user_id,application_id,resource_id,expires_at,amr,authenticated_at,user_key_id,ip_address,user_agent) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+			session, b.EnvironmentID, b.OrganizationID, g.Key.User, b.ApplicationID, b.ResourceID, expires, pq.StringArray{authentication.AMRKey}, now, g.Key.ID, clientIP, clientAgent); err != nil {
 			return authentication.KeySession{}, failure(err)
 		}
 		out.Session, out.Authenticated = session, now

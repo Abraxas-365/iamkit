@@ -174,6 +174,11 @@ func TestTokenExchangeImpersonation(t *testing.T) {
 	if err := e.DB.Get(&reason, `SELECT impersonation_reason FROM sessions WHERE id=$1 AND actor_account_id=$2`, claims["sid"], id); err != nil || reason != "support ticket 1234" {
 		t.Fatalf("session reason = %q %v", reason, err)
 	}
+	// The account's address and agent are not recorded on the user's session.
+	var recorded int
+	if err := e.DB.Get(&recorded, `SELECT count(*) FROM sessions WHERE id=$1 AND (ip_address IS NOT NULL OR user_agent IS NOT NULL)`, claims["sid"]); err != nil || recorded != 0 {
+		t.Fatalf("service-account impersonation recorded client info: %d %v", recorded, err)
+	}
 	if e.audited("oauth.impersonated", claims["sid"].(string)) != 1 {
 		t.Fatal("impersonation not audited")
 	}

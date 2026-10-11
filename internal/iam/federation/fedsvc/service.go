@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -338,7 +339,7 @@ func (s *Service) returnable(ctx context.Context, b authentication.Context, back
 	return nil
 }
 
-func (s *Service) StartHosted(ctx context.Context, target authentication.Target, id identity.ConnectionID, continuation string) (federation.Start, error) {
+func (s *Service) StartHosted(ctx context.Context, target authentication.Target, id identity.ConnectionID, continuation string, ask federation.Ask) (federation.Start, error) {
 	if target.Environment.IsZero() || target.Application.IsZero() || target.Resource.IsZero() || continuation == "" {
 		return federation.Start{}, errx.Validation("invalid federation context")
 	}
@@ -346,9 +347,15 @@ func (s *Service) StartHosted(ctx context.Context, target authentication.Target,
 	if err != nil {
 		return federation.Start{}, err
 	}
+	connection.Options.Prompt = federation.JoinPrompt(connection, ask.Prompt)
 	// Organization connections fix the organization now; environment
 	// connections leave it to the hosted organization choice.
-	return s.start(ctx, connection, federation.State{Connection: id, Boundary: target.Boundary(connection.Organization), Continuation: continuation})
+	row := federation.State{Connection: id, Boundary: target.Boundary(connection.Organization), Continuation: continuation}
+	if connection.TakesPrompt() {
+		connection.Options.MaxAge = ask.MaxAge
+		row.MaxAge, row.Reauth = ask.MaxAge, ask.Reauth()
+	}
+	return s.start(ctx, connection, row)
 }
 
 func (s *Service) connection(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
@@ -414,6 +421,10 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 	}
 	claims, err := s.provider.Verify(ctx, connection, code, row.Nonce, row.Verifier)
 	if err != nil {
+		return out, err
+	}
+	// prompt=login / max_age: the provider may have ignored them.
+	if err = row.CheckAuthTime(claims.AuthTime, time.Now()); err != nil {
 		return out, err
 	}
 	// The policy may have changed since the start: refuse before a social

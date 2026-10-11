@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -156,7 +157,7 @@ func (r *Repository) SaveState(ctx context.Context, hash []byte, s federation.St
 	if s.Continuation != "" {
 		continuation = &s.Continuation
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,expires_at,return_to,return_challenge) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+make_interval(secs => $11),$12,$13)`, hash, s.Connection, s.Boundary.EnvironmentID, s.Boundary.OrganizationID, s.Boundary.ApplicationID, s.Boundary.ResourceID, s.Binding, s.Nonce, s.Verifier, continuation, config.FederationStateTTL.Seconds(), null(s.Return.To), null(s.Return.Challenge))
+	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,expires_at,return_to,return_challenge,reauth,max_age) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+make_interval(secs => $11),$12,$13,$14,$15)`, hash, s.Connection, s.Boundary.EnvironmentID, s.Boundary.OrganizationID, s.Boundary.ApplicationID, s.Boundary.ResourceID, s.Binding, s.Nonce, s.Verifier, continuation, config.FederationStateTTL.Seconds(), null(s.Return.To), null(s.Return.Challenge), s.Reauth, s.MaxAge)
 	return conflict(err)
 }
 func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (federation.State, error) {
@@ -178,8 +179,11 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 		Continuation sql.NullString          `db:"continuation"`
 		ReturnTo     sql.NullString          `db:"return_to"`
 		Challenge    sql.NullString          `db:"return_challenge"`
+		Reauth       bool                    `db:"reauth"`
+		MaxAge       sql.NullInt64           `db:"max_age"`
+		Started      time.Time               `db:"started_at"`
 	}
-	err = tx.GetContext(ctx, &row, `SELECT connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,return_to,return_challenge FROM federation_states WHERE secret_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, hash)
+	err = tx.GetContext(ctx, &row, `SELECT connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,return_to,return_challenge,reauth,max_age,started_at FROM federation_states WHERE secret_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, hash)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, failure(err)
 	}
@@ -189,7 +193,10 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 	if _, err = tx.ExecContext(ctx, `UPDATE federation_states SET consumed_at=now(), continuation=NULL WHERE secret_hash=$1`, hash); err != nil {
 		return out, failure(err)
 	}
-	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier, Continuation: row.Continuation.String, Return: federation.Return{To: row.ReturnTo.String, Challenge: row.Challenge.String}}
+	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier, Continuation: row.Continuation.String, Return: federation.Return{To: row.ReturnTo.String, Challenge: row.Challenge.String}, Reauth: row.Reauth, Started: row.Started}
+	if row.MaxAge.Valid {
+		out.MaxAge = &row.MaxAge.Int64
+	}
 	return out, failure(tx.Commit())
 }
 func (r *Repository) LinkedUser(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, subject string, groups []string) (authentication.Transaction, federation.Account, error) {

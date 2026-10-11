@@ -309,6 +309,7 @@ var (
 		hosted.CodeOrganizationChosen: "hosted.error.organization_chosen",
 		hosted.CodeFactorRequired:     "hosted.error.factor_required",
 		hosted.CodeNoAccess:           "hosted.error.no_access",
+		federation.CodeLoginRequired:  "hosted.error.login_required",
 		"FACTOR_NOT_ALLOWED":          "hosted.error.factor_not_allowed",
 		"LOGIN_EXPIRED":               "hosted.error.login_expired",
 		hosted.CodeAttemptsUsed:       "hosted.error.attempts_used",

@@ -239,6 +239,9 @@ func (p Provider) Authorize(ctx context.Context, c federation.Connection, state,
 	if c.Options.Prompt != "" {
 		options = append(options, oauth2.SetAuthURLParam("prompt", c.Options.Prompt))
 	}
+	if c.Options.MaxAge != nil && c.TakesPrompt() {
+		options = append(options, oauth2.SetAuthURLParam("max_age", strconv.FormatInt(*c.Options.MaxAge, 10)))
+	}
 	return s.config.AuthCodeURL(state, options...), nil
 }
 
@@ -280,6 +283,7 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, code, non
 		Tenant        string `json:"tid"`
 		DomainOwner   any    `json:"xms_edov"`
 		HostedDomain  string `json:"hd"`
+		AuthTime      *int64 `json:"auth_time"`
 	}
 	if err = verified.Claims(&claims); err != nil {
 		return federation.Claims{}, errx.Unauthorized("invalid provider identity")
@@ -288,7 +292,11 @@ func (p Provider) Verify(ctx context.Context, c federation.Connection, code, non
 	if err != nil {
 		return federation.Claims{}, errx.Unauthorized("invalid provider identity")
 	}
-	out := federation.Claims{Groups: groups, Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name, Picture: claims.Picture, Issuer: c.Issuer}
+	var authTime time.Time
+	if claims.AuthTime != nil && *claims.AuthTime > 0 {
+		authTime = time.Unix(*claims.AuthTime, 0)
+	}
+	out := federation.Claims{AuthTime: authTime, Groups: groups, Subject: verified.Subject, Email: claims.Email, EmailVerified: flag(claims.EmailVerified), Name: claims.Name, Picture: claims.Picture, Issuer: c.Issuer}
 	if c.Provider == federation.ProviderGoogle {
 		out.HostedDomain = claims.HostedDomain
 		if !c.Options.AcceptsHostedDomain(claims.HostedDomain) {

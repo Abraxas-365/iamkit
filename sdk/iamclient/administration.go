@@ -28,6 +28,9 @@ type UserPatch struct {
 	AvatarURL *string `json:"avatar_url,omitempty"`
 	// Username sets the username ("" removes it).
 	Username *string `json:"username,omitempty"`
+	// ExternalID sets the user's identifier in your own system ("" removes
+	// it); nil keeps it.
+	ExternalID *string `json:"external_id,omitempty"`
 	// HomeOrganizationID moves the record to another organization the
 	// user belongs to ("" clears it).
 	HomeOrganizationID *string `json:"home_organization_id,omitempty"`
@@ -495,6 +498,9 @@ type Session struct {
 	AuthenticatedAt  time.Time  `json:"authenticated_at"`
 	ExpiresAt        time.Time  `json:"expires_at"`
 	RevokedAt        *time.Time `json:"revoked_at"`
+	// IPAddress and UserAgent are where the session was opened from (nil when unknown).
+	IPAddress *string `json:"ip_address"`
+	UserAgent *string `json:"user_agent"`
 	// Impersonated sessions name the Impersonator and the reason.
 	Impersonated        bool   `json:"impersonated"`
 	Impersonator        string `json:"impersonator"`

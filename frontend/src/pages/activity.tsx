@@ -15,7 +15,7 @@ import { PaginationBar } from '@/components/ui/pagination-bar'
 import { ConfirmDialog, CopyText, DataTable, EmptyState, EntityRef, PageHeader, Time, selectClass } from '@/components/library/patterns'
 import { language, t } from '@/lib/i18n'
 
-interface Session { id: string; user_id: string; user_name: string; user_email: string; organization_id: string; organization_name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null; impersonated?: boolean; impersonator?: string; impersonation_reason?: string }
+interface Session { id: string; user_id: string; user_name: string; user_email: string; organization_id: string; organization_name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null; ip_address?: string | null; user_agent?: string | null; impersonated?: boolean; impersonator?: string; impersonation_reason?: string }
 interface IAMEvent { id: number; type: string; actor: { kind: string; id: string }; subject: { kind: string; id: string }; organization_id?: string; data?: Record<string, unknown>; occurred_at: string }
 interface EventPage { items: IAMEvent[]; next: number }
 interface AuditEvent { id: string; actor_id: string; actor_label: string; actor_kind?: string; action: string; target_id: string; target_label?: string; created_at: string }
@@ -52,6 +52,7 @@ const named: Record<string, string> = {
   impersonate: t('Impersonated a user'), 'org_setup_link.used': t('Setup link opened'),
   'user.signup': t('User signed up'), 'user.deactivated': t('Deactivated a user'), 'user.reactivated': t('Reactivated user'),
   'user.locked': t('User locked after failed sign-ins'), 'user.unlocked': t('Unlocked a user'),
+  'session.revoke_own': t('Ended one of their own sessions'), 'session.revoke_others': t('Ended their other sessions'),
   'user.sessions_revoked': t('Signed a user out everywhere'), 'user.password_change_required': t('Required a password change'),
   'user.profile_updated': t('Updated a user profile'), 'user.metadata_set': t('Set user metadata'), 'user.metadata_deleted': t('Removed user metadata'),
   'user.phone_verified': t('Phone number verified'), 'user.phone_verified_set': t('Changed whether a phone number is verified'), 'user.phone_removed': t('Phone number removed'),

@@ -54,6 +54,18 @@ func (s *Service) Update(ctx context.Context, mutation organization.Mutation, id
 	if err := input.Validate(); err != nil {
 		return err
 	}
+	// The domain-join group hands its roles to every user who joins by
+	// domain, so it must be one operators manage (a directory owns SCIM
+	// groups) and belong to this organization.
+	if input.DomainJoinGroup != nil && !input.DomainJoinGroup.IsZero() {
+		ok, err := s.repository.OperatorGroup(ctx, mutation.Environment, id, *input.DomainJoinGroup)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errx.Validation("domain_join_group_id must be an operator-managed group of the organization (not a SCIM group)")
+		}
+	}
 	return s.repository.Update(ctx, mutation, id, input)
 }
 func (s *Service) AddMember(ctx context.Context, environment identity.EnvironmentID, input organization.Membership) error {
