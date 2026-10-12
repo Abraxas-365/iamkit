@@ -84,7 +84,7 @@ mail-provider retries within the code validity window. Do not invent a payload
 field or retry guarantee in an integration.
 
 The URL must have a host and no userinfo/fragment, and use HTTPS (HTTP only for
-localhost/127.0.0.1). Environment webhooks are only connected to on public
+`localhost` or `127.0.0.1`). Environment webhooks are only connected to on public
 addresses (private, loopback and link-local are refused after DNS resolution,
 reported as `webhook address is not allowed`); only the global
 `EMAIL_WEBHOOK_URL` may reach a private or local receiver, unless the

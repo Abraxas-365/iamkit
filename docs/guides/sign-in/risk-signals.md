@@ -56,7 +56,7 @@ Console: the environment's **Security** page, **Risk policy** tab (restrictions 
 `iam:security:read` / `iam:security:write`):
 
 ```sh
-curl -X PUT -H "Authorization: Bearer $IAMKIT_KEY" -H "Content-Type: application/json" \
+curl --fail --silent --show-error -X PUT -H "X-API-Key: $IAMKIT_KEY" -H "Content-Type: application/json" \
   "$IAMKIT/management/v1/environments/$ENV/risk-policy" -d '{
     "actions": {
       "ip_velocity": "log",
@@ -103,7 +103,7 @@ Restrictions are allow and deny lists, checked **before any credential**:
 | `email_domain` | A domain (`example.com`, IDNs in punycode) | The email's domain (after the last `@`) and its subdomains: the typed email before any credential, then the account's own email once the user is known — so a username, passkey or code sign-in of an account on that domain is refused too |
 
 ```sh
-curl -X POST -H "Authorization: Bearer $IAMKIT_KEY" -H "Content-Type: application/json" \
+curl --fail --silent --show-error -X POST -H "X-API-Key: $IAMKIT_KEY" -H "Content-Type: application/json" \
   "$IAMKIT/management/v1/environments/$ENV/risk-restrictions" \
   -d '{"kind":"ip","value":"203.0.113.0/24","action":"deny","note":"scanner"}'
 iam risk restrictions list
@@ -219,7 +219,7 @@ sign-in. Unknown logins are stored only as a keyed hash (HMAC-SHA256 per
 environment), never as text.
 
 ```sh
-curl -H "Authorization: Bearer $IAMKIT_KEY" \
+curl --fail --silent --show-error -H "X-API-Key: $IAMKIT_KEY" \
   "$IAMKIT/management/v1/environments/$ENV/sign-in-attempts?outcome=blocked&country=RU&limit=50"
 iam risk attempts list --outcome blocked
 iam risk attempts get <id>

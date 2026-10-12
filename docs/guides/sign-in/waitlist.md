@@ -11,8 +11,16 @@ Read that page first for the sign-up flow itself.
 ## Turn it on
 
 Console: **Sign-in methods → Self sign-up**. Turn on **Allow sign-up**, then
-**Waitlist** (the switch stays disabled until sign-up is allowed). Two optional
-settings appear:
+**Waitlist** (the switch stays disabled until sign-up is allowed). The console
+also requires the organization that new accounts join and optionally their
+default group.
+
+The screenshot uses fictional demonstration data. It shows waitlist **off**;
+turn it on only after choosing its approval and sign-up-link policy.
+
+![Self sign-up settings showing allow sign-up on, the required new-account organization and default group, and waitlist off](../../assets/screenshots/sign-in-policy-waitlist.png)
+
+Two optional settings appear:
 
 | Field | Meaning |
 | --- | --- |
@@ -56,7 +64,7 @@ access*) is empty and tells you how to enable it.
 `POST /identity/v1/signup` answers 202 with a `status`:
 
 ```json
-{"challenge_id": "…", "status": "waitlisted", "message": "…", "expires_in": 600}
+{"challenge_id": "…", "status": "waitlisted", "message": "…", "expires_in": 300}
 ```
 
 - `code_sent`: the usual flow, a verification code was emailed.
@@ -123,7 +131,7 @@ no events. Pruning a rejected entry lets that address join again.
 | SDKs | Go `iamclient` (`ListWaitlist`, `ApproveWaitlistEntry`, `ApproveWaitlist`, `RejectWaitlistEntry`, `DeleteWaitlistEntry`), `@iamkit/node` `waitlist`, Python `iam.waitlist` |
 
 ```sh
-curl -H "Authorization: Bearer $KEY" \
+curl --fail --silent --show-error -H "X-API-Key: $KEY" \
   "https://IAMKIT_HOST/management/v1/environments/ENV_UUID/waitlist?status=pending&limit=50"
 ```
 

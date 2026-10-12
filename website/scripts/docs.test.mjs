@@ -30,6 +30,22 @@ test('curated sidebar lists every document exactly once', async () => {
   assert.deepEqual([...new Set(listed)].sort(), allSlugs().sort())
   assert.equal(listed.length, new Set(listed).size, 'a document appears twice in the sidebar')
 })
+test('navigation separates SDKs from the API and exposes product entry points', async () => {
+  const { sidebar } = await import('../src/sidebar.mjs')
+  const labels = sidebar.filter(item => item.items).map(item => item.label)
+  assert.deepEqual(labels.slice(0, 6), [
+    'Get started', 'Integrate your application', 'Authentication',
+    'Enterprise connections', 'Users and organizations', 'Authorization',
+  ])
+  const sdks = sidebar.find(item => item.label === 'SDKs and tools')
+  for (const slug of ['docs/reference/sdk', 'docs/reference/sdk/node', 'docs/reference/sdk/python', 'docs/reference/sdk/react-widgets']) {
+    assert.ok(sidebarSlugs(sdks.items).includes(slug), `SDK not discoverable: ${slug}`)
+  }
+  for (const source of ['sign-in', 'enterprise', 'organizations', 'authorization', 'platform']) {
+    const hub = path.join(docsRoot, 'guides', source, 'index.md')
+    assert.ok(metadata(hub).description.length > 0, `missing hub introduction: ${source}`)
+  }
+})
 test('fails on missing source files rather than publishing broken links', () => {
   assert.throws(() => resolveLink('../missing.md', overview), /Broken source link/)
 })

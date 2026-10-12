@@ -84,10 +84,14 @@ A comparison of approach, not a performance benchmark or feature-parity claim.
 | **Who builds the UI?** | Your choice: brandable hosted sign-in pages (23 languages), your own UI with the JS/React SDKs, or fully headless APIs. | You do, but each component has its own integration surface. | Keycloak provides hosted login/registration pages you configure and theme. |
 | **How does access control work?** | Resources have permission catalogs. You assign permissions to users via roles or direct grants, scoped to an organization. | Add Keto for relationship-based authorization, or roll your own. | Roles and policy-based authorization built into the platform. |
 | **Best for** | A shared identity layer for B2B apps and multi-service systems, with tenant-aware access and control over the sign-in experience. | Teams that want to pick and compose identity building blocks for a custom architecture. | Teams that want a battle-tested platform with broad enterprise protocol support (SAML, LDAP/AD) and minimal custom UI work. |
-| **Main trade-off** | Younger project. No Kerberos, SAML single logout or IdP-initiated SAML yet. | You pick the pieces and own the glue — more architectural decisions upfront. | You work within Keycloak's realm/client/flow model — flexibility comes through configuration, not code. |
+| **Main trade-off** | Younger project. No Kerberos; verify enterprise interoperability against your provider and chosen protocol settings. | You pick the pieces and own the glue — more architectural decisions upfront. | You work within Keycloak's realm/client/flow model — flexibility comes through configuration, not code. |
 
 All three support SSO via OIDC. Choose based on your requirements: if you need
-Kerberos or SAML single logout today, evaluate Keycloak. If you want fully
+Kerberos, evaluate Keycloak. IAMKit supports
+[IdP-initiated SAML federation](docs/guides/enterprise/saml.md#idp-initiated-login)
+and opt-in [single logout for SAML applications](docs/guides/applications/saml-apps.md#single-logout-slo);
+these have explicit setup requirements, not blanket provider-parity guarantees.
+If you want fully
 modular, independent components, evaluate Ory. If you want one binary that
 covers identity, access control and multi-tenant boundaries — whether for a
 single product or as a shared identity layer across services — IAMKit is built

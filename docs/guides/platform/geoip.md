@@ -30,8 +30,10 @@ the running deployment has:
 ```
 
 `source` is `mmdb`, `header` or `none`; `error` appears when a database file
-cannot be read. If both sources are configured the database wins and the header is
-the fallback for addresses it does not know.
+cannot be read. If both sources are configured the database is used when it can locate the
+address; otherwise the trusted header is the fallback. `risk/status` reports
+`source: "mmdb"` while a readable database is loaded (and includes `header`
+when configured), or `source: "header"` when the header is the active source.
 
 ## MaxMind GeoLite2
 
@@ -97,7 +99,9 @@ helm upgrade --install iamkit … --set geoip.enabled=true --set geoip.existingS
 The chart sets `IAMKIT_GEOIP_DB` to `/geoip/<geoip.editionId>.mmdb`
 (`GeoLite2-City` by default). For header mode set `geoip.header=CF-IPCountry`
 together with `trustedProxies`; the chart refuses to render the header without
-them. See [Kubernetes (Helm)](../../operations/deployment.md#kubernetes-helm).
+them. Confirm the effective source in `GET …/risk/status` before enabling a
+country restriction or `impossible_travel`; `countries` and `travel` must both
+be `true` for the latter. See [Kubernetes (Helm)](../../operations/deployment.md#kubernetes-helm).
 Anything else (a baked image, a volume you manage, an init container) works as
 long as `IAMKIT_GEOIP_DB` names a readable file.
 

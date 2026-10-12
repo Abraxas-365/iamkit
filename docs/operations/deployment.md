@@ -88,14 +88,17 @@ too. If the proxy network's subnet overlaps one of the host's, set
 
 `deploy/compose/smoke.sh <variant> <image>` starts a variant on free local
 ports with internal certificates and checks HTTPS health, the redirect, HSTS,
-the issuer, the client address, Redis, the collector and a restart; CI runs
-it for both variants.
+the issuer, the observed forwarded client address, Redis, the collector and a
+restart; it removes only its disposable Compose project. CI runs it for both
+variants. Run it only on a host where Docker is permitted and the supplied image
+is disposable for test use.
 
 ## Kubernetes (Helm)
 
-The chart `deploy/helm/iamkit` (published as `oci://ghcr.io/abraxas-365/charts/iamkit`
-with each release) deploys IAMKit only: bring PostgreSQL (and optionally Redis)
-and create the Secrets first.
+The chart `deploy/helm/iamkit` deploys IAMKit only: bring PostgreSQL (and
+optionally Redis) and create the Secrets first. The chart is released as an OCI
+artifact by the release workflow; verify the intended chart version and digest
+in your approved registry before installing rather than assuming availability.
 
 ```sh
 kubectl create secret generic iamkit \

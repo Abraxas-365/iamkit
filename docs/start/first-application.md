@@ -1,11 +1,18 @@
 # Your first application
 
-**Outcome:** provision InvoiceCloud, sign Alice in and reject login to another
-tenant. Complete [Docker quickstart](docker-quickstart.md) first. Requires bash,
-curl, jq, a trusted shell and a disposable workspace. `IAMKIT_URL` and `MGMT`
-must already be set. Do not use shell tracing.
+Create a small tenant-aware example: provision InvoiceCloud, sign Alice in to
+Acme, and confirm she cannot sign in to a second organization. This is a
+throwaway onboarding exercise, not a production provisioning recipe.
 
-## Run the onboarding example
+## Before you begin
+
+Complete [Docker quickstart](docker-quickstart.md). You need bash, curl, jq, a
+trusted shell, and a disposable workspace. `IAMKIT_URL` and `MGMT` must already
+be set. Do not use shell tracing.
+
+<a id="run-the-onboarding-example"></a>
+
+## 1. Run the onboarding example
 
 ```sh
 read -r -s -p 'Demo password (12–72 bytes): ' DEMO_PASSWORD
@@ -18,16 +25,20 @@ unset DEMO_PASSWORD
 The script captures real IDs rather than asking you to copy UUID placeholders.
 It creates a project/environment, Acme and a second organization, Web App,
 Invoices API, the application-resource binding, Alice, her Acme membership and
-an `invoices:read` direct grant. It then logs in, introspects the token and checks
-that login into the other organization fails. Expected final output reports all
-checks passed; secrets are written only to the private output file.
+an `invoices:read` direct grant. It then logs in, introspects the token, and
+checks that login into the other organization fails.
+
+**Check:** the final output reports that every check passed. Secrets are written
+only to the private output file.
 
 Requests are **not a single transaction**. If one fails, previously created
 entities remain. Inspect the failure and existing state instead of blindly
 rerunning in a production workspace. This tutorial deliberately creates a new
 project on each run and refuses to overwrite its output file.
 
-## What each step establishes
+<a id="what-each-step-establishes"></a>
+
+## 2. Understand what the example created
 
 | Step | Why it matters |
 | --- | --- |
@@ -43,10 +54,12 @@ A password alone is insufficient. Removing the membership or grant must prevent
 new access; online introspection observes changes while offline JWT validation
 cannot see them before expiry.
 
-Next run the [protected API example](protect-an-api.md), which separately
-verifies tenant isolation when serving API requests, not merely during login.
-See [signup orchestration](../guides/sign-in/signup-and-onboarding.md) for application-owned
-onboarding and [scoped IAM](../reference/api/scoped-iam.md) for server automation.
+## Next steps
+
+Run the [protected API example](protect-an-api.md) to verify tenant isolation
+when serving API requests, not merely during login. For application-owned
+onboarding, see [signup orchestration](../guides/sign-in/signup-and-onboarding.md);
+for server automation, see [scoped IAM](../reference/api/scoped-iam.md).
 
 ## Cleanup
 

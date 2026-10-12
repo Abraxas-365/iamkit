@@ -7,7 +7,8 @@ kinds of connection:
 - **Organization connections** (`organization_id` set) are enterprise SSO for
   one tenant, e.g. Acme's Entra ID or Okta. They add email discovery,
   just-in-time (JIT) provisioning, a default group and optional enforcement.
-  The client secret is stored encrypted.
+  OIDC/OAuth client secrets and LDAP bind passwords, when supplied, are stored
+  encrypted; SAML has no client secret.
 - **Environment connections** (no `organization_id`) serve every
   organization: [social login](social-login.md) with Google, Microsoft,
   GitHub or Apple, optionally with sign-up and linking by verified email, or
@@ -25,6 +26,11 @@ provider speaks SAML 2.0 use a `saml` connection instead — see
 Active Directory use an `ldap` connection — see [LDAP](ldap.md). Presets work for both kinds, e.g. an
 organization's Google Workspace or Entra tenant.
 
+For an organization connection, verify a domain first, create or choose an
+operator-managed group only if JIT users need initial roles, and keep
+`enforcement: "optional"` until a real sign-in succeeds. In the console this is
+**Sign-in providers → Organization SSO**.
+
 Prerequisite for both: the exact callback
 `${JWT_ISSUER}/identity/v1/federation/callback` (`callback_url` on the
 connection detail) registered at the provider with a server-side client
@@ -32,7 +38,8 @@ secret, and for `oidc` an HTTPS issuer.
 
 ## Organization SSO
 
-1. Set `IAMKIT_ENCRYPTION_KEY` (see [configuration](../../reference/configuration.md#encryption-key)).
+1. Set `IAMKIT_ENCRYPTION_KEY` when this connection stores a client secret;
+   SAML needs no client secret (see [configuration](../../reference/configuration.md#encryption-key)).
 2. Verify at least one domain of the organization (Members → Domains, or
    [domain API](../../reference/api/users-and-organizations.md#domains)). JIT and
    enforcement act only on emails in the organization's verified domains.
@@ -49,6 +56,11 @@ secret, and for `oidc` an HTTPS issuer.
    `jit_provisioning` defaults to `true`; `enforcement` defaults to `optional`.
    The secret is never returned; detail shows `secret_source: "sealed"`.
 5. Test a login, then optionally `PATCH` `{"enforcement":"enforced"}`.
+
+Existing users must already belong to the organization for an organization
+connection to link them by email. Before switching enforcement on, verify the
+domain, make a test member able to reach the linked application/resource, and
+confirm that the chosen default or mapped group grants only the intended roles.
 
 ### Discovery
 

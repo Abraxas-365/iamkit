@@ -187,10 +187,16 @@ record's own fields plus:
   `POST …/enable` resumes it with a fresh 24-hour retry window for the backlog.
   Records that waited on a disabled stream for more than 7 days are marked
   `failed` (`last_error`: the stream was disabled for too long) and can still be
-  retried. Finished deliveries are kept 7 days.
+  retried. An operator-set `active: false` pauses delivery **and** stops new
+  records being queued until it is enabled again. Finished deliveries are kept
+  7 days.
 - Requests go only to public addresses, never follow redirects and cap the
   response they read. For development, `IAMKIT_ALLOW_PRIVATE_DELIVERY` lifts the
   address guard (also for S3 endpoints).
 
 Stream changes are audited as the events `log_stream.created`, `.updated`,
-`.deleted`, `.secret_rotated`, `.delivery_retried` and `.disabled`.
+`.deleted`, `.secret_rotated`, `.delivery_retried` and `.disabled`. **Before
+production cutover:** use the `test` route, verify the destination accepts its
+format and authentication, then inspect `…/deliveries` after sending a known
+event or app audit event; keep receiver-side deduplication because delivery is
+at least once.

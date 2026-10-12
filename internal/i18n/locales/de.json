@@ -123,7 +123,7 @@
   "hosted.test.none": "not sent",
   "hosted.title.test_start": "Test-Anmeldung",
   "hosted.test.start_intro": "Eine Test-Anmeldung für eine Single-Sign-on-Verbindung ist bereit.",
-  "hosted.test.start_note": "Sie werden zum Identitätsanbieter weitergeleitet. Es wird nichts erstellt: keine Sitzung, kein Benutzer, keine Verknüpfung. Fahren Sie nur fort, wenn Sie diesen Test angefordert haben.",
+  "hosted.test.start_note": "Du wirst zum Identitätsanbieter weitergeleitet. Es wird nichts erstellt: keine Sitzung, kein Benutzer, keine Verknüpfung. Fahre nur fort, wenn du diesen Test angefordert hast.",
   "hosted.test.start_button": "Test-Anmeldung starten",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",
   "hosted.title.sign_out_failed": "Abmeldung fehlgeschlagen",

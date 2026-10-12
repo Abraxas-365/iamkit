@@ -10,6 +10,11 @@
 4. Test rejection of the predecessor and expected access with replacement.
 5. Investigate audit/application/platform logs without copying secrets into tickets.
 
+For owner recovery, use the compatible-image `iamkit recover-owner` procedure
+below only after approving its side effects: it revokes the selected active
+owner's management keys and console sessions, clears the password, and enables
+that owner's password break-glass access.
+
 Offline JWT consumers may accept a previously issued token until expiry. For
 urgent containment use online validation or temporarily block affected traffic.
 Signing-key compromise requires a coordinated trust-key change and cache handling;
@@ -36,9 +41,10 @@ proof every existing session has ended.
 
 Requires trusted database/host access, not a public recovery endpoint. Recovery
 requires the email of an **existing active owner**. It revokes that owner's keys
-and console sessions in the workspace and clears their password; warn affected
-automation consumers before proceeding. Other operators are unaffected. Record
-the workspace UUID, then execute the compatible image's CLI:
+and console sessions in the workspace, clears their password, and enables that
+owner's password break-glass access; warn affected automation consumers before
+proceeding. Other operators are unaffected. Record the workspace UUID, then
+execute the compatible image's CLI:
 
 ```sh
 iamkit recover-owner --email owner@example.com --workspace WORKSPACE_UUID \

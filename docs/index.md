@@ -1,66 +1,64 @@
 # IAMKit documentation
 
-Self-host authentication and tenant-aware authorization while your application
-owns onboarding, UI and business data. Start with one working application, then
-add the sign-in methods and operational controls you need.
+Build sign-in, manage customer organizations and protect your APIs with
+self-hosted identity and tenant-aware authorization. Your application keeps its
+business data and user experience; IAMKit manages identities and scoped access.
 
-## Start here
+## Get started
 
-1. [Overview and responsibilities](start/overview.md): what IAMKit does and what stays yours.
-2. [Run IAMKit with Docker](start/docker-quickstart.md)
-3. [Provision your first application](start/first-application.md)
-4. [Protect an API and reject cross-tenant access](start/protect-an-api.md)
-5. [Set up the management console](start/management-console.md)
+Connect one application before adding more sign-in methods or enterprise features.
 
-Then read the [concepts](concepts/identity-model.md): the
-[identity hierarchy](concepts/identity-model.md),
-[credentials and boundaries](concepts/credentials-and-boundaries.md),
-[authorization](concepts/authorization.md) and
-[sessions and tokens](concepts/sessions-and-tokens.md). The
-[glossary](concepts/glossary.md) defines the terms.
+1. **[Run IAMKit](start/docker-quickstart.md).** Start the server and open the management console.
+2. **[Create your first application](start/first-application.md).** Set up an organization, a user and an API resource, then issue a scoped token.
+3. **[Protect your API](start/protect-an-api.md).** Verify that token and reject requests from the wrong organization.
 
-## Guides by goal
+Already running IAMKit? [Choose your integration](guides/applications/application-integration.md):
+use [hosted sign-in](guides/applications/hosted-login.md), build a
+[custom sign-in UI](guides/applications/custom-sign-in-ui.md), or start from an
+[example app](examples/README.md).
 
-| I want to… | Read |
-| --- | --- |
-| Choose how people sign in | [Sign-in methods](guides/sign-in/sign-in-methods.md), [passwords](guides/sign-in/passwords.md), [email codes](guides/sign-in/email-otp.md), [multi-factor and passkeys](guides/sign-in/mfa.md), [bot protection](guides/sign-in/bot-protection.md), [risk signals](guides/sign-in/risk-signals.md), [password policy](guides/sign-in/password-policy.md), [signup](guides/sign-in/signup-and-onboarding.md), [waitlist](guides/sign-in/waitlist.md), [users' sessions](guides/sign-in/sessions.md) |
-| Connect my application | [Integration architecture](guides/applications/application-integration.md), [OAuth/OIDC clients](guides/applications/oauth-oidc.md), [hosted login](guides/applications/hosted-login.md), [custom sign-in UI](guides/applications/custom-sign-in-ui.md), [signing keys](guides/applications/signing-keys.md), [IAMKit as a SAML IdP](guides/applications/saml-apps.md), [permissions as code](guides/applications/permissions-as-code.md) |
-| Let customers bring their identity provider | [OIDC federation](guides/enterprise/federation.md), [social login](guides/enterprise/social-login.md), [SAML](guides/enterprise/saml.md), [LDAP / Active Directory](guides/enterprise/ldap.md), [SCIM provisioning](guides/enterprise/scim-provisioning.md) |
-| Model tenants and people | [Organizations](guides/organizations/organizations.md), [customer-side administration](guides/organizations/organization-administration.md), [user profiles](guides/organizations/user-profiles.md), [impersonation](guides/organizations/impersonation.md) |
-| Migrate users from another provider | [Importing users with their passwords](guides/migration/importing-users.md), then [Auth0](guides/migration/from-auth0.md), [Firebase](guides/migration/from-firebase.md), [Clerk](guides/migration/from-clerk.md), [Amazon Cognito](guides/migration/from-cognito.md) or [Supabase](guides/migration/from-supabase.md) |
-| Authenticate services | [Service accounts](guides/machines/service-accounts.md), [machine users](guides/machines/machine-users.md), [API keys](guides/machines/api-keys.md) |
-| Extend and tune the platform | [Actions](guides/platform/actions.md), [app audit logs](guides/audit-logs.md), [email delivery](guides/platform/email-delivery.md), [feature flags](guides/platform/feature-flags.md), [GeoIP](guides/platform/geoip.md), [log streams](guides/platform/log-streams.md), [usage and limits](guides/platform/usage-limits.md) |
+## Build with IAMKit
 
-Runnable code is in the [examples](examples/README.md).
+### [Authentication](guides/sign-in/index.md)
 
-## Reference
+Add passwords, email codes, passkeys, social login and multi-factor authentication.
+Control sign-up, enable a waitlist, and protect public forms from abuse.
 
-- **HTTP API:** [overview and families](reference/api/index.md), including the
-  [OpenAPI document](reference/api/openapi.md).
-- **Go SDK:** [overview](reference/sdk/go.md), [middleware](reference/sdk/middleware.md),
-  [authentication](reference/sdk/authentication.md), [management](reference/sdk/management.md)
-  and [SCIM](reference/sdk/scim.md).
-- **Node.js SDK:** [`@iamkit/node`](reference/sdk/node.md) — token verification,
-  Express/Connect middleware, OAuth client, webhooks and actions.
-- **Python SDK:** [`iamkit`](reference/sdk/python.md) — token verification, FastAPI/Flask/Django
-  guards, OAuth client, webhooks and actions, and a management client.
-- **React account widgets:** [`@iamkit/react`](reference/sdk/react-widgets.md) — profile,
-  security, sessions, API keys and organization switcher for signed-in users.
-- **Platform:** [configuration](reference/configuration.md), [CLI](reference/cli.md),
-  [token claims](reference/token-claims.md), [errors and pagination](reference/errors-and-pagination.md).
-- **Events:** [event log](reference/events.md), [event webhooks](reference/event-webhooks.md)
-  and the [email webhook contract](reference/email-webhooks.md).
+### [Enterprise connections](guides/enterprise/index.md)
 
-## Operate
+Connect your customers' SAML or OpenID Connect identity providers, integrate an
+LDAP directory, and provision people and groups through SCIM.
 
-| Stage | Read |
-| --- | --- |
-| Deploy | [Deployment](operations/deployment.md), [TLS, proxy and CORS](operations/reverse-proxy.md), [secrets and keys](operations/secrets-and-keys.md), [database and migrations](operations/database-and-migrations.md) |
-| Run | [Observability](operations/observability.md), [scaling and abuse](operations/scaling-and-abuse.md), [upgrades and rollback](operations/upgrades-and-rollback.md), [backup and restore](operations/backup-and-restore.md) |
-| Prepare and respond | [Launch checklist](operations/launch-checklist.md), [incident response](operations/incident-response.md), [troubleshooting](operations/troubleshooting.md) |
+### [Users and organizations](guides/organizations/index.md)
 
-## Contribute
+Model customer organizations, memberships and profiles. Let customer
+administrators manage their own people and SSO without operator access.
 
-[Architecture](contributing/architecture.md) · [Local development](contributing/local-development.md) ·
-[Testing](contributing/testing.md) · [Releases](contributing/releases.md) ·
-[Validation record](contributing/validation.md)
+### [Authorization](guides/authorization/index.md)
+
+Define API resources, roles and permissions. Enforce tenant boundaries in your
+backend and keep permission definitions alongside your application code.
+
+### [Events and extensibility](guides/platform/index.md)
+
+React to identity events, run actions during authentication, record application
+audit logs, and stream activity to your operational tools.
+
+## Resources and tools
+
+- **[SDKs](reference/sdk/index.md)** — choose a browser, React, Go, Node.js or Python integration.
+- **[API reference](reference/api/index.md)** — authentication, endpoint families and the [OpenAPI schema](reference/api/openapi.md).
+- **[CLI](reference/cli.md)** — configure and manage IAMKit from your terminal.
+- **[Migrate users](guides/migration/importing-users.md)** — bring existing identities and supported password hashes from another provider.
+- **[Identity model](concepts/identity-model.md)** and **[glossary](concepts/glossary.md)** — understand environments, organizations, applications and resources.
+
+## Deploy and operate
+
+Choose a [deployment](operations/deployment.md), configure
+[TLS and your reverse proxy](operations/reverse-proxy.md), and review the
+[launch checklist](operations/launch-checklist.md) before production.
+Use [observability](operations/observability.md) and
+[troubleshooting](operations/troubleshooting.md) to diagnose integration issues.
+
+Working on IAMKit itself? See [contributing](contributing/local-development.md)
+and the [architecture](contributing/architecture.md).

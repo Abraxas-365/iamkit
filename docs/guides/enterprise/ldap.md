@@ -61,7 +61,7 @@ Options:
 | `attributes.subject` | Attribute with a stable user ID. Default: `objectGUID`, then `entryUUID`, else the entry DN. Binary values are hex-encoded. |
 | `attributes.email` | Attribute with the email. Default: `mail`, then `userPrincipalName`, else the typed email. |
 | `attributes.name` | Attribute with the display name. Default: `displayName`, then `cn`. |
-| `attributes.groups` | Multi-valued attribute with the user's groups (values are group DNs with `memberOf`), for [group mapping](federation.md#group-mapping). Default: `memberOf`. Directories without `memberOf` need the overlay enabled; nested groups are not expanded. |
+| `attributes.groups` | Multi-valued attribute with the user's groups (values are group DNs with `memberOf`), for [group mapping](federation.md#group-mapping). Default: `memberOf`. Directories without `memberOf` need the overlay enabled; IAMKit reads the attribute as supplied and does not expand nested groups. |
 
 The connection's `issuer` is the normalized server (`ldaps://dc1.acme.com:636`)
 and its `client_id` the lowercased base DN.
@@ -100,8 +100,8 @@ IAMKit, for each attempt:
 
 A wrong password, an unknown user and an ambiguous filter all answer the same
 401. An unreachable directory, a refused certificate or a failed service
-account bind answer 502. The route is limited to 10 attempts per minute per IP;
-the directory's own lockout policy also applies.
+account bind answer 502. The directory's own lockout policy also applies; apply
+an edge rate limit appropriate to your directory before exposing this endpoint.
 
 ## Updating
 
@@ -122,8 +122,11 @@ iam federation update $CONN --ldap-url ldaps://dc1.acme.com --user-base-dn "OU=P
 - No directory sync: users appear on first sign-in (JIT) or through
   [SCIM](scim-provisioning.md); disabling an account in the directory stops
   its next sign-in, but live sessions end only when revoked.
-- Group membership is not read from the directory; use the connection's
-  default group or SCIM groups.
+- IAMKit reads only the configured group attribute from the user entry; it
+  does not expand nested groups or synchronize the directory. Use
+  [group mapping](federation.md#group-mapping) for selected operator-managed
+  groups, the connection's default group, or SCIM groups for directory-owned
+  membership.
 
 ## Verify
 

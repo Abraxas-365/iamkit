@@ -21,8 +21,11 @@ Within an environment:
   verified through a TXT record (or force-verified by an operator). Verified
   domains prove the organization owns an email domain; SCIM adoption can be
   restricted to them.
-- **Federation connection:** approved external OIDC issuer/client credentials.
-  External subject links resolve to local users; matching email is not a link.
+- **Federation connection:** configured external OIDC, OAuth 2.0, SAML or LDAP
+  identity provider. Verified identities resolve to local users through saved
+  links. Email linking and account creation require the connection's explicit
+  `link_email`, `signup` or `jit_provisioning` settings; matching email alone is
+  not universal permission to link or provision.
 - **Service account:** machine identity bound to an app/resource and permissions.
 
 There is also a built-in **IAM resource**, prefix `iam`, audience

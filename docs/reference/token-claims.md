@@ -45,8 +45,14 @@ validation cannot observe revocation before expiry.
 `POST /identity/v1/introspect` checks current state and returns `active` with
 claims when valid. Its expected environment/audience must come from trusted API
 configuration; still compare application/resource/organization and permissions.
-See [protected API](../start/protect-an-api.md). OAuth resource servers can
-use RFC 7662 `POST /oauth/introspect` instead ([protocol reference](api/oauth-oidc.md)).
+See [protected API](../start/protect-an-api.md). OAuth resource servers can use
+RFC 7662 `POST /oauth/introspect` instead ([protocol reference](api/oauth-oidc.md)).
+
+Opaque OAuth access tokens (`ory_at_…`) are not JWTs. The OAuth token endpoint
+can accept one as the subject of a resource token exchange, but resource servers
+resolve it through the confidential-client `/oauth/introspect` endpoint (or use
+`/oauth/userinfo` for OpenID Connect); they must not send it to `/api/v1` or
+`/identity/v1`.
 
 ## API key validation
 

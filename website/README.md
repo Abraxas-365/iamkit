@@ -31,7 +31,15 @@ rebuild after changes. Development mode does not provide the production search i
   Titles come from each page's H1. `npm test` fails when a document under
   `../docs` is missing from the sidebar or listed twice, so add new pages there.
   Folder layout: `start`, `concepts`, `guides/<topic>`, `reference`,
-  `operations`, `examples`, `contributing`.
+  `operations`, `examples`, `contributing`. Navigation groups follow reader
+  tasks, not this folder layout; SDK runtimes are separate from API reference.
+- The docs home leads with the working integration journey. Topic `index.md`
+  pages introduce authentication, enterprise connections, users/organizations,
+  authorization and extensibility; `reference/sdk/index.md` helps choose a client.
+  Keep these concise and link to existing contracts rather than duplicating them.
+- Quickstarts use an outcome-focused opening, prerequisites, numbered actions,
+  expected checks and next steps. Preserve published URLs and existing anchors
+  when changing section titles. Source Markdown must remain readable on GitHub.
 - Only the existing English content is included. Dark/light/auto selection uses
   Starlight's accessible theme control. The existing integration SVG stays dark
   in either theme; it is not a newly generated theme-aware illustration.

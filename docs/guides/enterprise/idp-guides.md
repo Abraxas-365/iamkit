@@ -6,6 +6,12 @@ portal as a **guided setup** wizard (**Guided setup** in the console,
 **Guided SSO setup** in the portal); the old create form stays reachable there
 as **Advanced**. The wizard and this page say the same thing.
 
+![Organization SSO guided-setup dialog, showing provider choices](../../assets/screenshots/organization-sso-guided-setup.png)
+
+*In the console, select **Organizations**, select the organization, then open
+**SSO** → **Add SSO connection** → **Guided setup**. The available demo settings
+can vary by deployment.*
+
 Menu names are those of each vendor's admin console at the time of writing and
 vendors rename them: when a path differs, look for the setting by its name.
 
@@ -20,12 +26,15 @@ vendors rename them: when a path differs, look for the setting by its name.
 3. **Paste the IdP's values back**: the metadata URL or XML for SAML (saved
    with `PATCH`), the issuer, client ID and client secret for OIDC.
 4. **Test.** [Test connection](#test-connection) opens a new tab that signs in
-   at the IdP and shows what IAMKit received. Nothing is created.
+   at the IdP and shows what IAMKit received. It creates no user, session or
+   account link and runs no action; the test result and event are recorded.
 5. **Enable**, choosing whether the connection is optional or
    [enforced](federation.md#organization-sso) (members of the organization can
    then only sign in with it; test it first).
 
-Nothing signs in through a draft or a connection you have not enabled.
+Normal user sign-in requires an enabled, non-draft connection. **Test
+connection** is the deliberate exception: it can test a disabled connection or
+a draft with metadata without creating an IAMKit session.
 
 ## SAML 2.0
 

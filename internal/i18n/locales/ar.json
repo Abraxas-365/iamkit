@@ -124,7 +124,7 @@
   "hosted.test.none": "not sent",
   "hosted.title.test_start": "تسجيل دخول تجريبي",
   "hosted.test.start_intro": "تسجيل دخول تجريبي لاتصال تسجيل الدخول الموحّد جاهز.",
-  "hosted.test.start_note": "ستتم إحالتك إلى مزوّد الهوية. لن يتم إنشاء أي شيء: لا جلسة ولا مستخدم ولا ربط. تابع فقط إذا كنت قد طلبت هذا الاختبار.",
+  "hosted.test.start_note": "ستتم إعادة توجيهك إلى مزوّد الهوية. لن يتم إنشاء أي شيء: لا جلسة ولا مستخدم ولا ربط. تابع فقط إذا كنت قد طلبت هذا الاختبار.",
   "hosted.test.start_button": "بدء تسجيل الدخول التجريبي",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",
   "hosted.title.sign_out_failed": "تعذّر تسجيل الخروج",

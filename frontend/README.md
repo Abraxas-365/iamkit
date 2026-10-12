@@ -10,34 +10,30 @@ the theme toggle preserves your preference. No Next.js, SSR, or BFF.
 IAM-specific forms, searchable entity selectors, authorization, and routing remain
 local. Dialogs retain scroll limits and page headers wrap on small screens.
 
-## Included in this first slice
+## Console capabilities
 
-- Operator password login, cookie-session verification, logout, and password changes.
-- Responsive sidebar, light/dark theme, workspace overview.
-- Project/environment creation, selection, and URL-scoped navigation.
-- Users: list/create, edit name/status, suspend.
-- Organizations: list/create/rename, add memberships.
-- Applications: list/create/edit, deactivate, link resources.
-- Resources: list/create/edit scope catalogs (audience is immutable).
-- Roles: list/create/edit/delete, assign to organization members.
-- Grants: list/upsert/edit permissions/delete. Editing cannot change the recipient.
-- End-user sessions: list/revoke; audit events: list.
-- Management API keys: create, show secret once, list/revoke.
+The console covers workspace operators and keys, projects/environments, users
+and memberships, organizations and groups, resources/roles/grants, OAuth clients,
+service accounts, SAML applications, federation and SCIM connections, and sessions.
+It also exposes hosted-login branding/texts, sign-in and password policies, MFA,
+waitlist, risk/CAPTCHA, email/SMS delivery, events/webhooks, actions, application
+audit logs, log streams, signing keys, feature flags and usage limits.
 
-Actions follow the backend role rules. Viewer environment mutations are hidden;
-the server remains the authorization boundary. The API currently caps users/orgs
-at 100 and sessions/audit events at 1,000; search filters only loaded records.
-There is no invented pagination or fabricated dashboard data.
+Use [the management-console guide](../docs/start/management-console.md) for first
+sign-in and [the documentation](../docs/index.md) for each feature's prerequisites.
+Several features require explicit enablement or deployment secrets; a visible
+screen does not mean the feature is configured.
 
-Not yet included: federation/OAuth/SCIM/service-account screens, operator delegation,
-organization charts, membership removal, role unassignment, or user metadata/OTP
-editing. Several of these need additional backend read contracts for a complete UI.
+Actions follow backend operator-role rules. Viewer mutations are hidden in the
+UI, but the server is the authorization boundary. Paginated lists use backend
+search and database totals, normally 50 records per page; standard API pagination
+accepts at most 100 per request. Pagination is not a cap on the total dataset.
 
 ## Local setup
 
 1. Follow the [root setup guide](../README.md#get-started) to start the database,
-   apply migrations (including `012_operator_sessions`), bootstrap an owner, and
-   start the Go API. The default API address is `http://localhost:8080`.
+   let IAMKit apply its embedded migrations, bootstrap an owner, and start the
+   Go API. The default API address is `http://localhost:8080`.
 2. Set an operator password from a **trusted terminal**, using the bootstrap
    management key. Never paste the management key into the console or store it in
    a `VITE_*` environment variable. For example, with `MGMT` already set securely:
@@ -93,7 +89,8 @@ All API calls use relative `/management/v1` URLs and same-origin cookies. The
 `__Host-iamkit-operator` cookie is Secure, HttpOnly, SameSite=Strict, Path=/, and
 expires after one hour. The client verifies `/me` after login and redirects to login
 on expired sessions; there is no refresh endpoint and no auth token in localStorage.
-Only the theme preference is persisted in localStorage.
+Only UI preferences (theme and locale), not management credentials, are persisted
+in localStorage.
 
 Login and cookie-authenticated mutations send `X-IAMKit-Console: 1`. The backend
 requires this header and rejects cross-site fetch metadata. Do **not** configure
@@ -113,8 +110,10 @@ local development only.
 and console sessions, and clears their password. Re-establish console credentials
 after recovery; see the [incident runbook](../docs/operations/incident-response.md).
 Password login assumes one active workspace membership per operator;
-multi-workspace selection is not implemented. Operator MFA and distributed rate
-limiting are not implemented; use appropriate ingress and operator-access controls.
+multi-workspace selection is not implemented. Operator MFA is not implemented;
+use operator SSO with the provider's MFA policy where appropriate. Optional
+`REDIS_URL` shares rate-limit state across replicas; without it limits are
+process-local. Keep ingress and operator-access controls in either deployment.
 
 ## Validation
 
@@ -162,5 +161,6 @@ src/
   lib/                  API client, auth context, i18n, utilities
   locales/              console catalogs (en.json generated, es.json, …)
   pages/                workspace and environment management screens
-  index.css             FreeRouter design tokens (dark default + light)
+  theme.css             shared IAMKit light/dark design tokens (dark default)
+  index.css             console styles and token imports
 ```

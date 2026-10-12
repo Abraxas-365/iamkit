@@ -8,6 +8,12 @@ API-family boundaries and typed-list response compatibility notes.
 go get github.com/Abraxas-365/iamkit/sdk
 ```
 
+Code blocks are focused usage fragments: supply a real `context.Context`, IDs
+returned by your installation and a configured HTTP client. Some snippets omit
+error handling for space; production code must check each error before reading a
+result or issuing the next mutation. The complete, executable onboarding path is
+[Your first application](../docs/start/first-application.md).
+
 ## Architecture
 
 ```
@@ -111,17 +117,19 @@ org, _ := env.CreateOrganization(ctx, "Acme Corp")
 env.AddMember(ctx, iamclient.Membership{
     OrganizationID: org.ID,
     UserID:         user.ID,
-    Role:           "admin",
 })
+
+// Membership alone gives no application permissions; grant access below.
 
 // 4. Create an application + resource
 app, _ := env.CreateApplication(ctx, iamclient.Application{
     Name: "Dashboard",
 })
 res, _ := env.CreateResource(ctx, iamclient.Resource{
-    Name:        "Billing API",
-    Audience:    "billing.myapp.com",
-    Permissions: []string{"invoices:read", "invoices:write", "payments:create"},
+    Name:        "Invoices API",
+    Prefix:      "invoices",
+    Audience:    "https://api.example.com/invoices",
+    Permissions: []string{"invoices:read", "invoices:write"},
 })
 
 // 5. Bind resource to application
@@ -192,10 +200,13 @@ env.UnassignPosition(ctx, "org-id", asgn.ID)
 ```go
 resources, _ := env.Resources(ctx)
 res, _ := env.Resource(ctx, "res-id")
-env.UpdateResource(ctx, "res-id", iamclient.Resource{...})
+env.UpdateResource(ctx, "res-id", iamclient.ResourcePatch{
+    Name: "Invoices API", Permissions: []string{"invoices:read", "invoices:write"},
+})
 apps, _ := env.Applications(ctx)
 app, _ := env.Application(ctx, "app-id")
-env.UpdateApplication(ctx, "app-id", iamclient.Application{...})
+newName := "Dashboard"
+env.UpdateApplication(ctx, "app-id", iamclient.ApplicationPatch{Name: &newName})
 env.BindResource(ctx, "app-id", "res-id")
 env.UnbindResource(ctx, "app-id", "res-id")
 appRes, _ := env.ApplicationResources(ctx, "app-id")
@@ -208,10 +219,12 @@ appRes, _ := env.ApplicationResources(ctx, "app-id")
 role, _ := env.CreateRole(ctx, iamclient.Role{
     Name:        "Billing Admin",
     ResourceID:  "res-id",
-    Permissions: []string{"invoices:read", "invoices:write", "payments:create"},
+    Permissions: []string{"invoices:read", "invoices:write"},
 })
 roles, _ := env.Roles(ctx)
-env.UpdateRole(ctx, role.ID, iamclient.Role{...})
+env.UpdateRole(ctx, role.ID, iamclient.Role{
+    Name: "Invoice reader", ResourceID: "res-id", Permissions: []string{"invoices:read"},
+})
 env.DeleteRole(ctx, role.ID)
 
 // Role assignments
@@ -224,7 +237,10 @@ assignments, _ := env.RoleAssignments(ctx)
 env.UnassignRole(ctx, iamclient.RoleAssignment{RoleID: role.ID, OrganizationID: "org-id", UserID: "user-id"})
 
 // Direct grants
-grant, _ := env.PutGrant(ctx, iamclient.Grant{...})
+grant, _ := env.PutGrant(ctx, iamclient.Grant{
+    OrganizationID: "org-id", UserID: "user-id", ResourceID: "res-id",
+    Permissions: []string{"invoices:read"},
+})
 grants, _ := env.Grants(ctx)
 g, _ := env.Grant(ctx, "grant-id")
 env.DeleteGrant(ctx, "grant-id")
@@ -265,7 +281,7 @@ fed, _ := env.CreateFederation(ctx, iamclient.Federation{
     Name:      "Google",
     Issuer:    "https://accounts.google.com",
     ClientID:  "google-client-id",
-    SecretEnv: "GOOGLE_CLIENT_SECRET",
+    SecretEnv: "IAMKIT_PROVIDER_GOOGLE",
 })
 connections, _ := env.FederationConnections(ctx)
 conn, _ := env.FederationConnection(ctx, fed.ID)
@@ -562,7 +578,8 @@ func invoicesHandler(w http.ResponseWriter, r *http.Request) {
 ### OAuth2 / PKCE
 
 ```go
-oauth := authclient.NewOAuth("http://localhost:8080", "client-id", "client-secret",
+// Public clients have no client secret; a Go/native app may still use PKCE.
+oauth := authclient.NewOAuth("http://localhost:8080", "client-id", "",
     authclient.WithOAuthHTTPClient(myHTTPClient),
 )
 
@@ -603,7 +620,9 @@ user, _ = client.Get(ctx, user.ID)
 list, _ := client.List(ctx, `userName eq "alice@example.com"`, 1, 10)
 
 // Update
-user, _ = client.Replace(ctx, user.ID, scimclient.User{...})
+user, _ = client.Replace(ctx, user.ID, scimclient.User{
+    UserName: "alice@example.com", DisplayName: "Alice Smith", Active: true,
+})
 user, _ = client.Patch(ctx, user.ID, []scimclient.Operation{
     {Op: "replace", Path: "displayName", Value: "Alice Smith"},
 })

@@ -4,7 +4,41 @@ This record distinguishes repository checks from deployment acceptance. Commands
 and source review apply to this working-tree documentation revision, not an
 unpublished registry artifact or third-party account.
 
-## Confirmed locally
+## Current documentation review — 2026-10-12
+
+The documentation was checked against the phase-8 source baseline `649647a`,
+including reader-facing repository and SDK READMEs. Corrections cover credential
+boundaries, SDK examples, federation/LDAP behavior, SAML logout, configuration,
+worker jobs and operational instructions. Source review is not a guarantee of
+third-party provider interoperability.
+
+Confirmed in this review:
+
+- All 114 reader-facing Markdown files pass local link/anchor and hygiene checks;
+  dependency/build directories and agent rule files are excluded.
+- The backend test suite (`GOWORK=off go test ./...`) passes, including architecture
+  and generated OpenAPI checks. Database E2E tests are opt-in and were not enabled
+  by that command.
+- The nested Go SDK tests and vet pass. Protected-API handler unit tests pass.
+- A fresh Docker source build and the disposable onboarding/restart smoke pass.
+- The protected-API example was also tested against a separate disposable IAMKit
+  instance: an allowed tenant request returned 200, a wrong-tenant request 403,
+  and a request without a bearer token 401. Only a scratch-copy listener was
+  adjusted for Docker networking; repository code and shared services were not
+  changed. All resources created for that test were removed.
+- Website tests, Astro check/build and the rendered-link check pass: 105 HTML
+  pages, zero broken local links, anchors or assets. Astro retains an unrelated
+  video-script type hint and existing optional-collection/sitemap build notices.
+- Five screenshots were captured from the current live console/hosted pages on a
+  disposable seeded stack, using fictional data. They show navigation and forms,
+  not completed provider configuration, issued secrets or production settings.
+  Browser checks confirm that the images load without horizontal overflow at
+  desktop/mobile widths in light/dark themes, and mobile sidebar navigation works.
+
+## Earlier locally confirmed checks
+
+The following entries record earlier validation. They are not all re-executed
+by the current editorial review:
 
 - Backend Docker image built as `iamkit-docs-validation:local`.
 - Disposable Docker smoke test exited 0: non-root signing-key mount, fresh schema,
@@ -17,7 +51,8 @@ unpublished registry artifact or third-party account.
   wrong tenant, missing permission and wrong purpose rejection using a stub
   introspector. This is not a live HTTP integration test.
 - Root and nested SDK `make test` and `make vet` exited 0.
-- Local links/anchors/SVG/hygiene checks and shell syntax checks exited 0.
+- Local links/anchors across human-facing Markdown files, SVG/hygiene checks and
+  shell syntax checks exited 0.
 - Reviewer checked operational commands/security contracts against source;
   owner-recovery side effects and explicit restore archive were corrected.
 - Final source-contract review identified scoped API environment-check bypass
@@ -29,10 +64,10 @@ unpublished registry artifact or third-party account.
 ## Reproducible checks
 
 [Testing commands](testing.md) and `.github/workflows/docs.yml` maintain local
-links/anchors, SVG parsing, basic documentation hygiene, shell syntax, example
-compilation and disposable Docker smoke coverage. Hosted CI results are separate
-from local execution. The private-key marker check is intentionally narrow, not
-a complete secret scan.
+links/anchors across human-facing Markdown files, SVG parsing, basic documentation
+hygiene, shell syntax, example compilation and disposable Docker smoke coverage.
+Hosted CI results are separate from local execution. The private-key marker check
+is intentionally narrow, not a complete secret scan.
 
 ## Acceptance still requiring a target environment
 
@@ -57,5 +92,5 @@ Typed SDK list helpers need live page-envelope compatibility work; see
 not silent compatibility assumptions in documentation.
 
 Use the [launch checklist](../operations/launch-checklist.md) to record evidence
-for your deployment.
-are deliberately not marked complete by this documentation pass.
+for your deployment. These deployment-acceptance items are deliberately not
+marked complete by this documentation pass.

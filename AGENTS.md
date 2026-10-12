@@ -881,6 +881,22 @@ depend only on `identity`, `query`, `errx`, `cache`, and stdlib.
 
 ---
 
+## Documentation website
+
+- `docs/**/*.md` is the single source for GitHub and the Astro/Starlight site;
+  preserve existing page URLs and inbound anchors when editing headings.
+- `website/src/sidebar.mjs` groups pages by reader task; every document appears
+  exactly once (`website/scripts/docs.test.mjs`). Product entry points live in
+  `docs/guides/{sign-in,enterprise,organizations,authorization,platform}/index.md`;
+  `docs/reference/sdk/index.md` selects runtimes, separate from API reference.
+- Quickstarts explain the outcome, prerequisites, numbered actions, expected
+  checks and next steps. Keep endpoint contracts in reference pages; never
+  invent supported methods or copy another product's claims.
+- Preserve `frontend/src/theme.css` and the Starlight semantic mapping in
+  `website/src/styles/theme.css`; editorial/navigation edits do not redesign them.
+- Gates: root `python3 scripts/check_docs.py`; in `website`, `npm test`,
+  `npm run check`, `npm run build`, then `npm run check:links`.
+
 ## What NOT to Change
 
 - **Don't add a `Validate()` to repository/adapter code** — they don't validate.

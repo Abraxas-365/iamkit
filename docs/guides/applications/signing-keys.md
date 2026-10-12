@@ -61,8 +61,8 @@ in [secrets and keys](../../operations/secrets-and-keys.md#signing-key-change).
 
 ## Replicas and caching
 
-Replicas share the key table. Each caches the published keys for 30 seconds and
-reloads at once (at most once per second) on an unknown `kid`, so a key
+Replicas share the key table. The repository-side public-key cache refreshes
+every 30 seconds and at most once a second on an unknown `kid`, so a key
 activated on one replica is honoured everywhere. If an active key cannot be
 opened (for example `IAMKIT_ENCRYPTION_KEY` changed without keeping the old key
 in `IAMKIT_ENCRYPTION_KEYS_OLD`), that environment refuses to sign rather than

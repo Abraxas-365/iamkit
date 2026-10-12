@@ -155,7 +155,7 @@ seconds up to one hour) for up to 8 attempts; a SAML LogoutResponse of
 as delivered. After the last failure IAMKit records `saml.logout_failed`
 (actor system). Delivery dials only public addresses
 (`IAMKIT_ALLOW_PRIVATE_DELIVERY` for development) and follows no redirects;
-finished rows are pruned after 30 days by `saml_logout_prune`. Both jobs run
+finished rows are pruned after 7 days by `saml_logout_prune`. Both jobs run
 with the `saml_idp` feature.
 
 Signatures are verified with RSA or ECDSA **SHA-256/384/512**. **SHA-1 is
@@ -165,13 +165,13 @@ rate limited like SSO. Metadata advertises the `SingleLogoutService`
 (HTTP-Redirect and HTTP-POST); the back channel is outbound only, so no SOAP
 endpoint is listed.
 
-## Not supported (yet)
+## Not supported
 
-IdP-initiated sign-in (IAMKit as the identity provider; the opposite
-direction, SAML login *to* IAMKit, supports it — see
-[SAML single sign-on](../enterprise/saml.md#idp-initiated-login)), single
-logout (SLO), encrypted assertions and the HTTP-Artifact binding. Deleting a SAML application does not end sessions
-already open in it.
+IAMKit does not support IdP-initiated sign-in when it is the identity provider
+(the opposite direction, SAML login *to* IAMKit, does support it — see [SAML
+single sign-on](../enterprise/saml.md#idp-initiated-login)), encrypted
+assertions, or the HTTP-Artifact binding. Deleting a SAML application does not
+end sessions already open in it.
 
 ## Manage
 

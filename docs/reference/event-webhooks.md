@@ -13,9 +13,12 @@ endpoint as they happen. Nothing is sent until you add a subscription.
   is delivered or given up. Deduplicate on `webhook-id` (or the event `id`).
 - **Signed** per [Standard Webhooks](https://www.standardwebhooks.com) with a
   per-subscription secret, rotatable with a 24-hour overlap.
-- Endpoints must use `https` (plain `http` only for `localhost`) and resolve
-  to public addresses; private ranges are refused at delivery time
+- Endpoints must use `https` (plain `http` only for `localhost`, `127.0.0.1` or
+  `::1`) and resolve to public addresses; private ranges are refused at delivery time
   (`IAMKIT_ALLOW_PRIVATE_DELIVERY` lifts this for development only).
+
+Then send a known event and verify the receiver records the expected payload,
+including the signature, before subscribing to production event families.
 
 ## The request
 

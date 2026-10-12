@@ -58,7 +58,7 @@ keeps the stored one.
 API (management, or `/api/v1` with `iam:security:write`):
 
 ```sh
-curl -X PUT -H "Authorization: Bearer $IAMKIT_KEY" -H "Content-Type: application/json" \
+curl --fail --silent --show-error -X PUT -H "X-API-Key: $IAMKIT_KEY" -H "Content-Type: application/json" \
   "$IAMKIT/management/v1/environments/$ENV/captcha" -d '{
     "provider": "turnstile",
     "site_key": "<site key>",

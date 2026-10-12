@@ -127,7 +127,7 @@ Lists the organizations the user may use and marks the current one. Takes
 
 ## Re-authentication
 
-Changing sensitive data needs a sign-in no older than a few minutes. IAMKit
+Changing sensitive data needs a sign-in no older than 10 minutes. IAMKit
 then answers 403 `REAUTHENTICATION_REQUIRED`; every widget and hook catches it,
 calls `onReauthenticate()` (from the provider or the widget) and shows the
 message. Implement it by sending the user through a new authorization with

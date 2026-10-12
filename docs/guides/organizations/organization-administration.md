@@ -24,7 +24,8 @@ limited to their organization, without operator access or an environment-wide
    | `iam:org:invitations:write` | Invite, resend and revoke invitations |
    | `iam:org:domains:write` | Add, verify and remove domains |
    | `iam:org:sso:write` | Create, change and disable the organization's SSO connections, and issue and revoke its SCIM directory tokens |
-   | `iam:org:audit:read` | Read the organization's audit events |
+   | `iam:org:audit:read` | Read the organization's audit events and audit-log events; this permission (or log-stream write) also reads its log streams |
+   | `iam:org:log-streams:write` | Create and manage the organization's audit-log streams |
    | `iam:org:resources:read` | List the resources the organization owns, their grants, and the grants it received |
    | `iam:org:resources:write` | Grant the organization's own resources to other organizations |
    | `iam:org:api-keys:read` | List the organization's [API keys](../machines/api-keys.md) and its members' user keys |
@@ -39,7 +40,7 @@ limited to their organization, without operator access or an environment-wide
    | Organization owner (`org_owner`) | All `iam:org:*` |
    | Organization viewer (`org_viewer`) | `iam:org:read`, `iam:org:members:read`, `iam:org:roles:read` |
    | User manager (`org_user_manager`) | Read, members read/write, users write, roles read/assign, invitations write |
-   | Settings manager (`org_settings_manager`) | Read, settings write, domains write, SSO write |
+   | Settings manager (`org_settings_manager`) | Read, settings write, domains write, SSO write (assign `iam:org:log-streams:write` separately to manage log streams) |
    | Resource manager (`org_resource_manager`) | Read, resources read/write |
 
    You may also create your own IAM-resource roles with any subset of the
@@ -77,6 +78,11 @@ iam org-admin-portal disable
 (Console: **Hosted login → Organization admin portal**; API:
 `GET`/`PUT`/`DELETE /management/v1/environments/:environment/org-admin-portal`,
 audited `org_admin_portal.enabled` / `org_admin_portal.disabled`.)
+
+The portal is **off per environment** until an operator enables it. Before
+sharing its URL, create or choose an IAM-resource role with the required
+`iam:org:*` permissions and assign it to an administrator in the target
+organization.
 
 - **Sign-in.** Turning it on registers IAMKit's own public OAuth client
   (hosted login, authorization code + PKCE, refresh tokens) on the IAM

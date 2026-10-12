@@ -52,8 +52,8 @@ To see IAMKit's emails without sending real mail, run a mail catcher such as
 (environment configurations refuse private addresses unless
 [`IAMKIT_ALLOW_PRIVATE_DELIVERY`](#local-development-environment-delivery-settings)
 is set). IAMKit always verifies
-the server certificate and uses plaintext only for `localhost`/loopback hosts,
-so the catcher must be reachable on loopback:
+the server certificate and permits plaintext only for a local
+`localhost`/loopback mail catcher, so the catcher must be reachable on loopback:
 
 - IAMKit on the host: `docker run -p 1025:1025 -p 8025:8025 axllent/mailpit`,
   then `EMAIL_PROVIDER=smtp EMAIL_FROM=no-reply@localhost.test SMTP_HOST=127.0.0.1 SMTP_PORT=1025`.
@@ -135,8 +135,8 @@ the API is `/management/v1/environments/ENV_UUID/delivery`:
   [`IAMKIT_ENCRYPTION_KEY`](../../reference/configuration.md#encryption-key); without
   it, storing one returns 422. The webhook token is write-only too and is
   stored encrypted when the key is set (in plaintext without it).
-  Plaintext SMTP is not configurable (only a `localhost`/loopback mail catcher
-  that offers no STARTTLS is used without TLS, for local development).
+  Plaintext SMTP is not configurable (only a local `localhost`/loopback mail
+  catcher that offers no STARTTLS is used without TLS, for development).
 
   Optional `invitation_url` (HTTPS) is the page an invitation email links to,
   where the invited person accepts: a new person creates an account, an existing
@@ -278,8 +278,8 @@ can be changed too (it saves `display_name`); the CLI has
 
 ## Containment
 
-Webhook URLs require HTTPS (HTTP only on localhost/127.0.0.1), without userinfo
-or fragment. Environment webhooks, SMTP hosts and the Resend API are reached only
+Webhook URLs require HTTPS (HTTP only on `localhost` or `127.0.0.1`), without
+userinfo or fragment. Environment webhooks, SMTP hosts and the Resend API are reached only
 on public addresses: private, loopback and link-local addresses are refused when
 connecting (after DNS resolution), reported as `webhook address is not allowed`
 or `email provider address is not allowed`. So an environment webhook on
@@ -300,10 +300,11 @@ reported as `delivery: "failed"` and does not undo the invitation.
 A non-2xx response or network failure rejects delivery; do not return success
 before your service has accepted responsibility for sending.
 
-**Verify:** request OTP for an enabled test user, receive mail, complete once and
-confirm replay fails. Simulate an unavailable provider and verify no secret
-appears in logs. Monitor delivery rejection/latency and mailbox provider failures
-(bounces, spam placement) separately.
+**Verify:** use **Sign-in → Notifications** (or `POST /delivery/test`) to send a
+test, then request an OTP for an enabled test user, receive mail, complete it
+once and confirm replay fails. Simulate an unavailable provider and verify no
+secret appears in logs. Monitor delivery rejection/latency and mailbox provider
+failures (bounces, spam placement) separately.
 
 ### Deliverability checklist (SMTP, Resend)
 

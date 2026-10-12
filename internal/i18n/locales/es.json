@@ -122,8 +122,8 @@
   "hosted.test.attributes": "Atributos recibidos",
   "hosted.test.none": "no enviado",
   "hosted.title.test_start": "Prueba de inicio de sesión",
-  "hosted.test.start_intro": "Hay una prueba de inicio de sesión lista para una conexión de inicio de sesión único.",
-  "hosted.test.start_note": "Serás enviado al proveedor de identidad. No se crea nada: ni sesión, ni usuario, ni vínculo. Continúa solo si solicitaste esta prueba.",
+  "hosted.test.start_intro": "Hay una prueba de inicio de sesión preparada para una conexión de inicio de sesión único.",
+  "hosted.test.start_note": "Serás redirigido al proveedor de identidad. No se crea nada: ni sesión, ni usuario ni vínculo. Continúa solo si solicitaste esta prueba.",
   "hosted.test.start_button": "Iniciar la prueba de inicio de sesión",
   "hosted.test.no_session": "Esto fue una prueba: no se creó ninguna sesión, usuario ni identidad vinculada. Puedes cerrar esta pestaña.",
 

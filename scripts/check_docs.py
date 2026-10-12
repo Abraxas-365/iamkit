@@ -2,6 +2,7 @@
 """Check repository documentation without network access or third-party packages."""
 from collections import Counter
 from pathlib import Path
+import os
 import re
 import sys
 from urllib.parse import unquote, urlsplit
@@ -30,15 +31,28 @@ def headings(text):
     return result
 
 
+# Dependency/build directories and agent instructions are not reader docs.
+EXCLUDED_DIRS = {".git", "node_modules", "dist", ".astro", ".venv", "venv", "__pycache__"}
+AGENT_FILES = {"AGENTS.md", "CLAUDE.md", "copilot-instructions.md"}
+
+
+def documentation_files(root):
+    files = []
+    for directory, dirs, names in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in EXCLUDED_DIRS and not d.startswith("."))
+        for name in sorted(names):
+            if name.endswith(".md") and name not in AGENT_FILES:
+                files.append(Path(directory) / name)
+    return sorted(files)
+
+
 def main():
-    files = sorted((ROOT / "docs").rglob("*.md"))
-    for p in ("README.md", "SECURITY.md", "sdk/README.md", "frontend/README.md"):
-        candidate = ROOT / p
-        if candidate.exists():
-            files.append(candidate)
+    files = documentation_files(ROOT)
     errors = []
     for path in files:
         text = path.read_text()
+        if re.search(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", text):
+            errors.append(f"{path.relative_to(ROOT)}: private key material")
         for number, line in enumerate(text.splitlines(), 1):
             if line.rstrip() != line:
                 errors.append(f"{path.relative_to(ROOT)}:{number}: trailing whitespace")
@@ -65,7 +79,7 @@ def main():
                 ET.parse(path)
             except ET.ParseError as exc:
                 errors.append(f"{path.relative_to(ROOT)}: invalid SVG: {exc}")
-        if path.suffix in (".md", ".sh", ".go", ".js", ".json", ".svg"):
+        if path.suffix in (".sh", ".go", ".js", ".json", ".svg"):
             if re.search(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", path.read_text()):
                 errors.append(f"{path.relative_to(ROOT)}: private key material")
     if errors:

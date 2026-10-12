@@ -1,8 +1,14 @@
 # Docker quickstart
 
-**Outcome:** a healthy IAMKit backend and a private management credential. Run
-commands from the repository root on a trusted workstation. Requires Docker
-Compose v2, OpenSSL, curl and jq. The image builds Go inside Docker.
+Set up a local IAMKit backend, verify it is healthy, and create the private
+management credential used by the next quickstart. Run every command from the
+repository root on a trusted workstation.
+
+## Before you begin
+
+You need Docker Compose v2, OpenSSL, curl, and jq. The image builds Go inside
+Docker, so no local Go installation is required. Keep generated credentials on
+this workstation and do not enable shell tracing.
 
 ## 1. Configure the stack
 
@@ -52,7 +58,8 @@ docker compose --env-file .env.docker -f docker-compose.production.yml up -d --w
 curl --fail --silent --show-error http://localhost:8080/health
 ```
 
-Expected: `{"status":"healthy","service":"iamkit","workers":"running","cache":"none"}`. Startup applies embedded
+**Check:** the health endpoint returns a JSON response with `"status":"healthy"`;
+the other fields can vary with your enabled services. Startup applies embedded
 migrations. Use an empty database; do not point this tutorial at an existing
 application schema. Data lives in the Compose named volume, not in the image.
 
@@ -75,10 +82,11 @@ curl --fail --silent --show-error "$IAMKIT_URL/management/v1/me" \
   -H "X-API-Key: $MGMT"
 ```
 
-Expected: a principal containing `workspace_id`, `operator_id` and `role: "owner"`.
-Bootstrap is a one-time operation. The CLI refuses existing output files and an
-already initialized workspace. Its credential expires in 24 hours. Store it in a
-secret manager and rotate it before expiry; do not print it or enable shell tracing.
+**Check:** the response identifies a principal with `workspace_id`, `operator_id`,
+and `role: "owner"`. Bootstrap is a one-time operation. The CLI refuses existing
+output files and an already initialized workspace. Its credential expires in 24
+hours. Store it in a secret manager and rotate it before expiry; do not print it
+or enable shell tracing.
 
 After secure storage, delete the temporary container copy:
 
@@ -87,8 +95,10 @@ docker compose --env-file .env.docker -f docker-compose.production.yml exec iamk
   rm /tmp/iamkit-bootstrap/owner.json
 ```
 
-Next: [create your first application](first-application.md). To configure operator
-password login, follow [management console](management-console.md).
+## Next steps
+
+Continue with [your first application](first-application.md). To configure
+operator password login instead, follow [management console](management-console.md).
 
 ## Restart and stop
 

@@ -1,27 +1,36 @@
 # Integrate your application
 
+Your application owns business data and onboarding policy; IAMKit owns identity
+state and scoped sessions. Your API enforces access to that data. Choose how to
+connect sign-in before deciding which screens to build.
+
 ![Trust boundaries](../../assets/application-integration.svg)
 
-Your browser owns forms; your backend owns signup/tenant policy; IAMKit owns
-identity state and scoped sessions; your API enforces access to business data.
-The diagram's management-key path is one integration option. The current backend
-also exposes [permission-scoped IAM endpoints](../../reference/api/scoped-iam.md) for
-service-account/user JWTs, limited to the token's environment and IAM permissions.
+## Choose your integration
+
+| Your goal | Integration |
+| --- | --- |
+| Ship sign-in without building authentication forms | [Hosted sign-in](hosted-login.md), using OAuth authorization code + PKCE |
+| Own the authentication UI | [Custom sign-in UI](custom-sign-in-ui.md), with the browser client or React components |
+| Connect a standards-based client | [OAuth and OpenID Connect](oauth-oidc.md) or [SAML applications](saml-apps.md) |
+
+For browser apps, decide whether the browser will receive tokens or a backend
+for frontend (BFF) will keep them server-side. The choice affects token storage,
+not the permissions your API must check.
 
 ## Recommended sequence
 
-1. Operator creates an environment, app, API resource/catalog and binding.
-2. Operator provisions the trusted backend's management credential. It carries
-   workspace authority: expose only policy-checked onboarding actions, not a
-   generic management proxy. The scoped alternative is blocked as noted above.
-3. Browser submits signup to your backend. Backend validates invitation/tenant
-   policy and provisions user, membership and default grant.
-4. Browser/BFF signs in with a complete environment/org/app/resource boundary.
-5. API validates the access token, requested organization and required permissions.
-6. Client rotates refresh tokens serially and clears local state on logout.
+1. [Provision an application](../../start/first-application.md): create an environment, organization, API resource and application-resource binding.
+2. Choose [onboarding](../sign-in/signup-and-onboarding.md). Self-service sign-up is opt-in and uses the configured sign-up organization; use invitations or backend provisioning when your application decides eligibility or tenant placement.
+3. Configure [hosted sign-in](hosted-login.md) or a [custom UI](custom-sign-in-ui.md). Use authorization code + PKCE for an OAuth integration.
+4. [Protect your API](../../start/protect-an-api.md): validate the token's audience, organization and permissions, then scope data queries to that organization.
+5. Test both allowed and denied access, session refresh and logout.
 
-There is no public IAMKit signup endpoint. Do not expose a generic management
-proxy or trust organization/role choices supplied by a public signup form.
+Administrative onboarding calls belong on your backend. A management key carries
+workspace authority; a [scoped IAM token](../../reference/api/scoped-iam.md)
+limits calls to its environment and IAM permissions. Neither belongs in a public
+sign-up form. Expose policy-checked operations, not a generic management proxy,
+and do not trust organization or role choices supplied by the browser.
 
 ## Browser versus BFF
 
@@ -32,9 +41,13 @@ Neither approach makes CORS an authorization control. Same-origin proxying is
 simpler for cookie-bound federation/OAuth; credentialed cross-origin access must
 use a tightly controlled allowlist.
 
-Provider callbacks currently issue JSON tokens, not an automatic redirect to an
-arbitrary app URL. Design your HTTPS callback/BFF handoff explicitly and preserve
-the browser-binding cookie. Never put tokens in query strings.
+For a custom browser UI, use the [federation return flow](../enterprise/federation.md)
+with `return_to` and a PKCE challenge: IAMKit redirects with a one-time result
+handle, which your client redeems. Hosted OAuth sign-in instead returns an
+authorization code to the registered callback. Preserve the browser-binding
+cookie and never put access or refresh tokens in query strings.
 
-Follow [onboarding](../sign-in/signup-and-onboarding.md), [password login](../sign-in/passwords.md),
-[OTP](../sign-in/email-otp.md), [federation](../enterprise/federation.md) and [protect an API](../../start/protect-an-api.md).
+## Next steps
+
+Build [hosted sign-in](hosted-login.md) or a [custom UI](custom-sign-in-ui.md),
+then test your backend with [protect an API](../../start/protect-an-api.md).

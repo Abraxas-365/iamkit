@@ -1,8 +1,8 @@
 # CLI reference
 
-The container entrypoint is `iamkit`. The CLI connects to `DATABASE_URL` before
-handling commands; a reachable configured database is required even for command
-parsing. Errors go to stderr and exit nonzero.
+The container entrypoint is `iamkit`. It validates command syntax before opening
+the database; `migrate`, `bootstrap`, `recover-owner`, and normal server startup
+then require a reachable `DATABASE_URL`. Errors go to stderr and exit nonzero.
 
 | Command | Effect |
 | --- | --- |
@@ -22,10 +22,11 @@ are exclusively created with mode 0600 and contain `management_key`. Credentials
 expire in 24h. Protect the file and verify it through `GET /management/v1/me` with
 `X-API-Key`. Never use a publicly mounted directory or overwrite an old file.
 
-Recovery requires an existing active owner and revokes their workspace management
-keys and console sessions, then clears their password. Warn affected automation
-consumers and re-establish the password for console login. Other operators'
-credentials are unaffected.
+Recovery requires an existing active owner. It revokes that owner's workspace
+management keys and console sessions, clears their password, **and enables that
+owner's password break-glass access**; it then writes a new temporary management
+key. Warn affected automation consumers and set a new password for console login.
+Other operators' credentials are unaffected.
 
 The explicit CLI does not set an operator password and ignores
 `IAMKIT_BOOTSTRAP_PASSWORD` (it warns when that variable is set); set it through management
@@ -44,11 +45,14 @@ Do not use process restarts as migration rollback. See
 ## `iam users import`
 
 `iam` is the management CLI (separate from the `iamkit` server entrypoint above;
-configure it with `iam configure`, `IAMKIT_URL`/`IAMKIT_KEY`/`IAMKIT_ENVIRONMENT`
-or `--url`/`--key`/`--environment`). `iam users import FILE` moves users from
-another system into the environment through `POST …/users/import` without
-asking anyone to reset a password. `FILE` can be `-` for stdin. See the
-migration guide [Importing users](../guides/migration/importing-users.md) for end-to-end walkthroughs.
+build it with `make build-cli` or obtain its release archive). Configure it with
+`iam configure`, `IAMKIT_URL`/`IAMKIT_KEY`/`IAMKIT_ENVIRONMENT` or
+`--url`/`--key`/`--environment`; `IAMKIT_PROFILE` (or `--profile`) selects a
+saved profile. `iam users import FILE` moves users from another system into the
+environment through `POST …/users/import` without asking anyone to reset a
+password. `FILE` can be `-` for stdin. See the migration guide
+[Importing users](../guides/migration/importing-users.md) for end-to-end
+walkthroughs.
 
 Password hashes in a supported format (bcrypt, argon2i/argon2id, pbkdf2 in PHC,
 passlib or Django form, Firebase scrypt) are stored as they are and verified at

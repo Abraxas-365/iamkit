@@ -18,7 +18,8 @@ result in the target topology; do not infer it from the presence of documentatio
 - [ ] Refresh replay and concurrent refresh behavior understood by app clients.
 - [ ] Mail/provider/SCIM flows tested for every integration actually enabled.
 - [ ] `IAMKIT_ALLOW_PRIVATE_DELIVERY` unset or `false` (it is development-only;
-  the server logs a warning at startup when it is on).
+  the server logs a warning at startup when it is on). The switch also permits
+  log-stream/S3 and SAML back-channel-log-out destinations on private networks.
 - [ ] API tenant filtering and impersonation policy reviewed in business code.
 - [ ] Shared ingress abuse controls, capacity tests and alerts in place.
 - [ ] Upgrade/rollback compatibility and recovery objectives recorded.

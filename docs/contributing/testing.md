@@ -19,11 +19,12 @@ key access, explicit bootstrap, provisioning, password login, introspection,
 cross-tenant login rejection and restart. It is not a TLS/provider/restore test.
 The Go example's compilation does not prove a live API integration by itself.
 
-`check_docs.py` checks local Markdown links/heading anchors, SVG XML, trailing
-whitespace and accidental PEM private keys in documentation. This narrow secret
-check is not a substitute for a repository/history secret scanner. External URLs
-are not fetched, so provider documentation and registry availability need separate
-verification. See [validation record](validation.md).
+`check_docs.py` checks local Markdown links/heading anchors across human-facing
+Markdown files, SVG XML, trailing whitespace and accidental PEM private keys in
+documentation. This narrow secret check is not a substitute for a
+repository/history secret scanner. External URLs are not fetched, so provider
+documentation and registry availability need separate verification. See
+[validation record](validation.md).
 
 `make test-e2e` starts one disposable PostgreSQL container (testcontainers),
 applies every migration to a template database and gives each test its own

@@ -23,6 +23,7 @@ jobs:
           python-version: '3.x'
       - name: Check local documentation contracts
         run: |
+          python3 -m unittest discover -s scripts -p 'test_check_docs.py'
           python3 scripts/check_docs.py
           bash -n docs/examples/onboarding/run.sh docs/examples/deployment/smoke.sh
           git diff --check

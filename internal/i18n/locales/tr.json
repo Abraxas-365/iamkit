@@ -122,7 +122,7 @@
   "hosted.test.attributes": "Attributes received",
   "hosted.test.none": "not sent",
   "hosted.title.test_start": "Test girişi",
-  "hosted.test.start_intro": "Bir çoklu oturum açma bağlantısı için test girişi hazır.",
+  "hosted.test.start_intro": "Bir tek oturum açma bağlantısı için test girişi hazır.",
   "hosted.test.start_note": "Kimlik sağlayıcıya yönlendirileceksiniz. Hiçbir şey oluşturulmaz: oturum, kullanıcı veya bağlantı yok. Yalnızca bu testi siz istediyseniz devam edin.",
   "hosted.test.start_button": "Test girişini başlat",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",

@@ -12,8 +12,9 @@ PostgreSQL. Your application owns the product experience and onboarding policy.
 | --- | --- |
 | Create users and assign business access | Your backend → management API, using `X-API-Key: ik_mgmt_…` |
 | Sign users in with a password or email code | Your login UI → identity API (or through your BFF) |
-| Sign users in with Google/Microsoft | An approved OIDC federation connection and explicit local user link |
-| Let an OAuth client obtain IAMKit tokens | IAMKit's OAuth server; your login/consent interaction |
+| Sign users in with a social provider | An approved federation connection; explicitly configure linking or signup |
+| Sign a customer's workforce in | Organization SSO through SAML, OIDC or LDAP; choose linking or JIT provisioning |
+| Let an OAuth client obtain IAMKit tokens | IAMKit's OAuth server; hosted sign-in or your custom login interaction |
 | Authenticate a worker to your business API | Service account and machine token |
 | Synchronize an organization's directory | SCIM provisioning connection |
 

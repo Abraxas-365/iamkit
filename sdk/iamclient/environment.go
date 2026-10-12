@@ -326,7 +326,8 @@ type Resource struct {
 	// organizations holding a ResourceGrant. Set both with SetResourceAccess.
 	OwnerOrganizationID string `json:"owner_organization_id,omitempty"`
 	RequireGrant        bool   `json:"require_grant,omitempty"`
-	// Prefix is the permission prefix derived from the audience. Read-only.
+	// Prefix is required at creation and immutable afterwards. Every
+	// permission must start with Prefix + ":"; it is not derived from Audience.
 	Prefix string `json:"prefix,omitempty"`
 	// APIKeyPermissions lists, per key owner type, the permissions of the
 	// resource that API keys of that type may carry (subsets of

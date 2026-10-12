@@ -1,8 +1,9 @@
 # Errors and pagination
 
-Ordinary API failures use a JSON `error` object with `code`, `message`, `type`
-and `http_status`. Treat HTTP status as the transport result and code as a
-machine-readable classification; do not branch on English messages. Internal
+Ordinary API failures use an outer `error` object with `code`, `message`,
+`type`, optional `details`, and `http_status`. Treat the HTTP status as the
+transport result and `code` as a machine-readable classification; do not branch
+on English messages. Internal
 errors must not be surfaced as stack traces or secret payloads. A few client
 errors add a `details` object: `PASSWORD_POLICY` (400, a new password breaks the
 [password policy](../guides/sign-in/password-policy.md)) carries `rule`

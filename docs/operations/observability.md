@@ -10,19 +10,30 @@ falls back to the database (see [Redis](scaling-and-abuse.md#redis-optional)).
 
 ## Background jobs
 
-The server binary also runs background jobs (back-channel logout delivery and
-pruning; `event_prune`, which deletes [events](../reference/events.md) past
-`IAMKIT_EVENT_RETENTION`; `event_webhook` and `event_webhook_maintenance`,
-which send [event webhooks](../reference/event-webhooks.md) and disable
-failing subscriptions; `action_call_prune`; `waitlist_prune`, which deletes completed and rejected [waitlist](../guides/sign-in/waitlist.md#retention) entries past `IAMKIT_WAITLIST_RETENTION`; `audit_log_prune`, which deletes
-[app audit log](../guides/audit-logs.md#retention) events past `IAMKIT_AUDIT_LOG_RETENTION`; `usage_rollup` and `usage_prune`,
-which add sign-ins and created users to the [daily usage](../guides/platform/usage-limits.md#usage)
-and prune it). Each replica also writes its in-memory usage counters every
-30 seconds and at shutdown, whether or not it runs workers. Every replica runs them by default; they claim database rows with
-`FOR UPDATE SKIP LOCKED`, so replicas never process the same row. Set
-`IAMKIT_WORKERS=false` on API-only replicas — at least one replica must keep
-them on, or back-channel logout notifications and event webhooks stay queued. On `SIGTERM` jobs
-stop with the server; an interrupted delivery is retried by the next round.
+The server binary also runs background jobs (OAuth back-channel logout delivery
+and pruning; SAML back-channel logout delivery and pruning when the `saml_idp`
+feature is enabled; `event_prune`, which deletes
+[events](../reference/events.md) past `IAMKIT_EVENT_RETENTION`; `event_webhook`
+and `event_webhook_maintenance`, which send
+[event webhooks](../reference/event-webhooks.md) and disable failing
+subscriptions; `log_stream_delivery` and `log_stream_maintenance`, which send
+[log streams](../guides/platform/log-streams.md); `action_call_prune`;
+`waitlist_prune`, which deletes completed and rejected
+[waitlist](../guides/sign-in/waitlist.md#retention) entries past
+`IAMKIT_WAITLIST_RETENTION`; `audit_log_prune`, which deletes
+[app audit log](../guides/audit-logs.md#retention) events past
+`IAMKIT_AUDIT_LOG_RETENTION`; `sign_in_attempt_prune` and `captcha_pass_prune`;
+`federation_logout_prune` and `federation_draft_prune`; and `usage_rollup` and
+`usage_prune`, which add sign-ins and created users to the
+[daily usage](../guides/platform/usage-limits.md#usage) and prune it). Each
+replica also writes its in-memory usage counters every 30 seconds and at
+shutdown, whether or not it runs workers. Every replica runs the jobs by
+default; delivery jobs claim database rows with `FOR UPDATE SKIP LOCKED`, so
+replicas do not process the same claimed delivery. Set `IAMKIT_WORKERS=false`
+on API-only replicas — at least one replica must keep workers on, or queued
+work such as logout notifications, webhooks, retention and usage rollups will
+not advance. On `SIGTERM` jobs stop with the server; an interrupted delivery is
+retried by a later round.
 
 ## Request logs and request ids
 
@@ -78,6 +89,7 @@ enumerations — never emails, user or tenant ids, or raw paths.
 | `http.server.request.duration` | histogram, s | `http.request.method`, `http.route`, `http.response.status_code` |
 | `iamkit.sign_ins` | counter | `method` (`pwd`, `email`, `fed`, `hwk`, `other`), `result` (`success`, `failure`), `mfa` |
 | `iamkit.mfa.failures` | counter | — |
+| `iamkit.password.rehashes` | counter | — |
 | `iamkit.oauth.token_requests` | counter | `grant_type` (known grants, else `other`), `result` |
 | `iamkit.delivery.attempts`, `iamkit.delivery.duration` | counter, histogram s | `channel` (`email`, `sms`), `source` (`environment`, `global`, `none`), `purpose`, `result` |
 | `iamkit.logout.deliveries` | counter | `result` (`delivered`, `retried`, `failed`) |
@@ -106,8 +118,10 @@ A starter Grafana dashboard for the Prometheus listener is in
   (`http_server_request_duration_seconds` by `http_route` and status).
 - Sign-in failure ratio and MFA failures (credential stuffing, broken IdP).
 - Email/SMS delivery failures by source; back-channel logout failures.
-- Background job lag (`iamkit_worker_lag_seconds`) and failed rounds: a growing
-  lag means no replica runs workers or the jobs cannot keep up.
+- Background-job lag (`iamkit_worker_lag_seconds`) and failed rounds: a growing
+  lag means workers cannot keep up. It is emitted for OAuth logout, event-webhook
+  and log-stream delivery; also watch failed rounds for the other maintenance
+  jobs.
 - PostgreSQL connectivity, storage growth, connection/lock pressure and backup age
   (pool metrics show waits for connections).
 - Credential/provider-secret expiry and failed token exchanges.

@@ -1,15 +1,19 @@
 # Protect an API
 
-Authenticating a user and authorizing an invoice request are different checks.
-Validate issuer, signature/online trust, audience, environment, application,
-resource, token purpose, organization and exact permissions. Never accept an ID
-token as an API access token or choose expected boundaries from untrusted claims.
+Use IAMKit's trusted token checks to protect a tenant-scoped invoice endpoint.
+This example accepts Alice's Acme request and rejects the same token for another
+organization.
 
-## Run the Go example
+## Before you begin
 
-Complete [first application](first-application.md). The example uses the
-local Go SDK module and online introspection, binding expected values from trusted
-configuration. Go 1.26.6 is required by this checkout.
+Complete [your first application](first-application.md). You need Go 1.26.6,
+jq, and the `.dev-secrets/invoicecloud.json` output from that example. The local
+Go SDK example uses online introspection and binds expected values from trusted
+configuration.
+
+<a id="run-the-go-example"></a>
+
+## 1. Run the Go example
 
 ```sh
 export IAMKIT_URL=http://localhost:8080 JWT_ISSUER=http://localhost:8080
@@ -22,7 +26,9 @@ go mod tidy
 go run .
 ```
 
-From another terminal at the repository root:
+## 2. Call the protected endpoint
+
+Keep `go run .` running. From another terminal at the repository root:
 
 ```sh
 TOKEN=$(jq -r .access_token .dev-secrets/invoicecloud.json)
@@ -32,14 +38,26 @@ curl --fail "http://127.0.0.1:8090/organizations/$ORG/invoices" -H "Authorizatio
 curl -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:8090/organizations/$OTHER/invoices" -H "Authorization: Bearer $TOKEN"
 ```
 
-Expected: first request 200 with an empty invoice collection, second request 403.
-A missing/expired token produces 401. This API deliberately has no invoice storage;
-real database queries must also constrain `organization_id` to the validated tenant.
+**Check:** the first request returns 200 with an empty invoice collection; the
+second prints 403. A missing or expired token produces 401. This API deliberately
+has no invoice storage; real database queries must also constrain
+`organization_id` to the validated tenant.
 
-## Online versus offline
+<a id="online-versus-offline"></a>
 
-Online introspection checks current session, account and grant state; if IAMKit is
-unreachable, fail closed. Do not silently fall back to decoding JWT payloads.
+## 3. Choose your validation strategy
+
+Authenticating a user and authorizing an invoice request are separate checks:
+validate issuer, signature or online trust, audience, environment, application,
+resource, token purpose, organization, and exact permissions. Never accept an ID
+token as an API access token or choose expected boundaries from untrusted claims.
+
+### Online introspection
+
+Online introspection checks current session, account, and grant state; if IAMKit
+is unreachable, fail closed. Do not silently fall back to decoding JWT payloads.
+
+### Offline validation
 Offline validation uses the issuer's trusted JWKS (`authclient.NewKeySet` +
 `ValidateWithKeySet` follow [key rotations](../guides/applications/signing-keys.md)) and validates RS256,
 expiry and expected boundaries. It avoids a network request per API call but
@@ -58,6 +76,13 @@ claims.
 Impersonated tokens include `actor_id`; restrict sensitive actions if your policy
 requires. Machine tokens have no organization or user session: give them separate
 routes/policies rather than pretending they are tenant-user tokens.
+
+## Next steps
+
+Continue with [application integration](../guides/applications/application-integration.md)
+to choose hosted or custom sign-in. For other runtimes, use the
+[SDK guide](../reference/sdk/index.md); for troubleshooting token failures, see
+[errors and pagination](../reference/errors-and-pagination.md).
 
 Source: [example](../examples/go-api/main.go), `sdk/authclient/validator.go`,
 `sdk/authclient/fiberauth/middleware.go` and `sdk/authclient/httpauth/middleware.go`.

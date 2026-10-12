@@ -54,12 +54,12 @@ that is not a JSON object). Then:
 - `interrupt_on_error: false` (default) — the flow goes on **without that
   target's changes**.
 
-Either way the call is logged and an `action.failed` event is written
+A failed or skipped call is logged and emits an `action.failed` event
 (`data.condition`, `outcome`, `error`, `interrupted`), so an
 [event webhook](../../reference/event-webhooks.md) on `action.failed` can page
 you. After 5 failures in a row a target is skipped for 30 seconds (outcome
-`skipped`, treated as a failure) so a broken endpoint does not slow every
-sign-in.
+`skipped`); skipped calls are logged and emit `action.failed`, but they do not
+add another breaker failure.
 
 Targets run in order. A denial stops at once; claims and patches merge,
 a later target's value winning over an earlier one's for the same name.
@@ -96,8 +96,8 @@ per [Standard Webhooks](https://www.standardwebhooks.com) like
 [event webhooks](../../reference/event-webhooks.md#verifying-the-signature): verify
 `webhook-signature` with the target's `whsec_` secret before trusting the
 body. Rotating the secret keeps the previous one signing (both signatures
-sent) for 24 hours. Endpoints must use `https` (`http` only for `localhost`)
-and resolve to public addresses.
+sent) for 24 hours. Endpoints must use `https` (`http` only for loopback:
+`localhost`, `127.0.0.1` or `::1`) and resolve to public addresses.
 
 ## The answer
 
@@ -171,7 +171,9 @@ sign-in already proved the inbox (an email code), is multi-factor (a passkey) or
 will ask for a second factor, when the user has no verified email, and when it
 was already answered (`risk.challenged`): a second `challenge` never loops. The
 client sees the usual `mfa_required` answer with `reason: "risk_challenge"`.
-Where no challenge can be parked the sign-in fails with 403 `RISK_CHALLENGE`.
+If an email challenge cannot be started because the user has no verified email,
+the sign-in continues; other failures to start it fail the sign-in rather than
+silently bypassing it.
 
 ## Set it up
 
@@ -243,7 +245,10 @@ app.post("/iam/actions", express.raw({ type: "application/json" }), (req, res) =
 
 Keep receivers fast: sign-in waits for them. Answer from a cache or local
 data where you can, and choose `interrupt_on_error` only for checks that
-must hold (a denylist), not for enrichment (extra claims).
+must hold (a denylist), not for enrichment (extra claims). Before binding a
+production target, use its **Test** control (or `POST …/action-targets/:id/test`),
+then confirm the result in the recent calls list; retain the returned secret in
+your receiver's secret store before leaving the create/rotate response.
 
 ## API
 

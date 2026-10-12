@@ -33,8 +33,9 @@ must carry an organization and a session; `machine` tokens must carry neither;
 any other purpose is refused. Other algorithms (including `none` and HMAC) are
 refused before any key is used. Failures raise `IAMKitError` 401 `UNAUTHORIZED`;
 a JWKS that cannot be fetched is 503 `JWKS_UNAVAILABLE`, which the integrations
-answer as 503 rather than 401. API keys (`ik_key_`) and opaque OAuth tokens are
-not JWTs: validate or introspect them.
+answer as 503 rather than 401. API keys (`ik_key_`) and opaque OAuth tokens
+(`ory_at_`) are not JWTs: validate API keys through their validator, and resolve
+opaque OAuth tokens through a confidential OAuth client's introspection endpoint.
 
 The `KeySet` behind the verifier caches the JWKS for 10 minutes and refetches on
 an unknown `kid` at most once every 30 seconds, so a flood of forged `kid`s

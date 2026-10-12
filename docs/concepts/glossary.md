@@ -7,7 +7,8 @@
 - **Connection:** configured federation or provisioning integration, with distinct
   credential and identity-mapping semantics for each protocol.
 - **Environment:** isolated identity and application data namespace.
-- **Federation:** external OIDC identity proof mapped to an existing local user.
+- **Federation:** verified identity from an external OIDC, OAuth 2.0, SAML or LDAP
+  provider, resolved to a local user under the connection's linking/provisioning policy.
 - **Grant:** permissions for an organization member on a resource.
 - **IAM resource:** built-in resource whose explicit permissions gate `/api/v1`.
 - **Introspection:** online check of current token/session/access state.

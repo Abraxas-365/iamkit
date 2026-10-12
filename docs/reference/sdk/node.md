@@ -31,8 +31,9 @@ configuration. `application` tokens must carry an organization and a session;
 `machine` tokens must carry neither; any other purpose is refused. Failures
 reject with `IAMKitError` 401 `UNAUTHORIZED`; a JWKS that cannot be fetched is
 503 `JWKS_UNAVAILABLE`, which `authenticate` answers as 503 rather than 401.
-API keys (`ik_key_`) and opaque OAuth tokens (`ory_at_`) are not JWTs: validate,
-exchange or introspect them.
+API keys (`ik_key_`) and opaque OAuth tokens (`ory_at_`) are not JWTs: validate
+API keys with `createAPIKeyValidator`/`validateAPIKey`, and resolve opaque OAuth
+tokens through a confidential OAuth client's introspection endpoint.
 
 `requireOrganization` takes a fixed ID or a function reading the requested
 organization from the request; the token's `organization_id` must match, so a

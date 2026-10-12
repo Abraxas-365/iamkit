@@ -61,6 +61,26 @@ disappears from it; to bring them back, invite the same email again (the dialog
 says it reactivates them). They start fresh: a new key, no password, no SSO
 links. `iam operators list` still shows disabled operators.
 
+## Open your environment
+
+Before configuring application sign-in:
+
+1. Open your IAMKit root URL over trusted HTTPS and sign in as an operator.
+2. Choose **Projects**, open your project, and select its environment. If you have
+   not created one yet, use [your first application](first-application.md).
+3. Confirm the environment name before changing users, policies or connections.
+   The environment sidebar appears only after you select an environment.
+
+The following screen uses fictional demonstration data. Your names, counts and
+setup status will differ; they are not defaults to reproduce.
+
+![Environment home showing the project and environment selectors and completed setup checklist](../assets/screenshots/environment-overview.png)
+
+**Check:** the page and URL identify the intended environment, and its Users,
+Organizations and Applications sections are accessible. A viewer can read data
+but cannot perform operator mutations. Do not confuse the operator console with
+the separate [customer organization portal](../guides/organizations/organization-administration.md).
+
 ## How the embed works
 
 The Dockerfile has three stages:
@@ -71,9 +91,10 @@ The Dockerfile has three stages:
 3. **Runtime stage** — a minimal Alpine image with just the binary
 
 The server serves static assets (JS, CSS, fonts) directly from the embedded
-filesystem. Any GET request that doesn't match an API route (`/management/`,
-`/identity/`, `/api/`, `/scim/`, `/health`, `/.well-known/`) falls back to
-`index.html` for client-side routing.
+filesystem. Non-API GET/HEAD requests fall back to `index.html` for client-side
+routing. API and protocol paths (`/management/`, `/identity/`, `/api/`, `/scim/`,
+`/hosted/`, `/oauth/`, `/saml/`, `/health`, `/.well-known/`) never use that fallback;
+unknown endpoints return their normal errors rather than the console.
 
 When the frontend is not embedded (e.g. a plain `go build` without running the
 Node build first), the server runs in API-only mode — no SPA is served.

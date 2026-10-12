@@ -95,9 +95,12 @@ per logical event (an order id, a UUID).
 Without `after` it reads newest first and `next` is the `before` of the following
 page (`0` when the log is exhausted); with `after` (`0` = the beginning) it reads
 oldest first, a feed, and `next` is the `after` to continue with. `limit` defaults
-to 50, at most 200. A feed reader should stay a few seconds behind the newest
-event: an event whose emit committed late can carry a lower `seq` than one
-already read, and `after` would skip it. The log streams below have no such gap.
+to 50, at most 200.
+
+The app-audit feed is keyed by an independently assigned sequence, so an event
+whose transaction commits late can have a lower `seq` than one already read; stay
+a few seconds behind or deduplicate when consuming it. [Log streams](platform/log-streams.md)
+are queued in the writing transaction and do not need that polling gap.
 
 | Filter | Matches |
 | --- | --- |

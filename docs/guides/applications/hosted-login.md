@@ -1,14 +1,20 @@
 # Hosted login pages
 
-IAMKit can render the sign-in UI itself for an OAuth client, so your app only
-needs a standard OIDC library: redirect to `/oauth/authorize`, receive the code
-at your callback, exchange it at `/oauth/token`. Without hosted login, the
-[headless flow](oauth-oidc.md) returns an authorization ticket and your UI signs
-the user in.
+Let IAMKit run the OAuth sign-in pages while your application keeps a standard
+OIDC integration: redirect to `/oauth/authorize`, receive the code at your
+callback, and exchange it at `/oauth/token`. Hosted login is opt-in **per OAuth
+client**; headless clients are unaffected.
 
-Hosted login is opt-in **per OAuth client**. Headless clients are unaffected.
+## Before you begin
 
-## Enable
+You need an OAuth client, a registered callback, and management access to its
+environment. If your application renders its own UI instead, use the
+[headless flow](oauth-oidc.md), which returns an authorization ticket for your
+UI to complete the sign-in.
+
+<a id="enable"></a>
+
+## 1. Enable hosted login
 
 Create the client with `hosted_login: true`, or switch an existing one:
 
@@ -21,11 +27,26 @@ curl -X PATCH "$IAMKIT/management/v1/environments/$ENV/oauth-clients/$CLIENT" \
 In the console: **OAuth clients → Use hosted pages**. SDK:
 `env.UpdateOAuthClient(ctx, id, iamclient.OAuthClientPatch{HostedLogin: &yes})`.
 
-Now `GET /oauth/authorize` answers `303` to `/hosted/login?ticket=…` and sets
-the same browser-binding cookie as the headless flow. The ticket is valid for
-10 minutes and useless without that cookie.
+The console creates a hosted-login client with its application, resource,
+redirect URI, and client type together. The screen uses fictional data; labels
+and available settings can differ by deployment.
 
-## What the user sees
+![Create OAuth client dialog with hosted sign-in page selected](../../assets/screenshots/oauth-client-configuration.png)
+
+**Check:** `GET /oauth/authorize` now answers `303` to
+`/hosted/login?ticket=…` and sets the same browser-binding cookie as the
+headless flow. The ticket is valid for 10 minutes and is useless without that
+cookie.
+
+<a id="what-the-user-sees"></a>
+
+## 2. Understand the user journey
+
+The first hosted screen asks for an email or username and, when enabled, offers
+a passkey. It is illustrative: your branding, methods, and visible links follow
+the client and environment configuration.
+
+![Hosted sign-in page with email or username field and passkey option](../../assets/screenshots/hosted-sign-in-identify.png)
 
 1. **Email.** IAMKit runs [discovery](../enterprise/federation.md) for the address:
    - an organization that **enforces** SSO for the email's verified domain
@@ -57,7 +78,9 @@ the same browser-binding cookie as the headless flow. The ticket is valid for
 No session exists until the organization is known. The verified login waiting
 for the choice is bound to the ticket and single-use.
 
-## Branding
+<a id="branding"></a>
+
+## 3. Brand the pages
 
 The **Hosted login** console page lists the environment's *default style* and
 the OAuth clients with hosted login. Each style opens in an editor with a live
@@ -188,8 +211,8 @@ messages, device and invitation pages — can be reworded per language
 environment, one OAuth client or one organization:
 
 ```bash
-curl -X PUT "$IAM/management/v1/environments/$ENV/login-settings/texts/en" \
-  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+curl --fail --silent --show-error -X PUT "$IAM/management/v1/environments/$ENV/login-settings/texts/en" \
+  -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
   -d '{"texts":{"hosted.title.sign_in":"Welcome back","hosted.form.continue":"Next"}}'
 ```
 
@@ -236,8 +259,8 @@ An organization can override parts of the style for its own users
 (console: Organizations → the organization → Branding):
 
 ```bash
-curl -X PUT "$IAM/management/v1/environments/$ENV/login-settings/organizations/$ORG" \
-  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+curl --fail --silent --show-error -X PUT "$IAM/management/v1/environments/$ENV/login-settings/organizations/$ORG" \
+  -H "X-API-Key: $KEY" -H 'Content-Type: application/json' \
   -d '{"display_name":"Acme Corp","logo_url":"https://cdn.acme.example/logo.png","accent_color":"#aa0000"}'
 ```
 
@@ -309,7 +332,9 @@ Every change is recorded in the environment's audit events. Free-form CSS is
 deliberately not supported: every value is a closed format placed in the
 pages' nonce-protected style block.
 
-## Sign-in methods
+<a id="sign-in-methods"></a>
+
+## 4. Choose the available sign-in methods
 
 By default every client offers everything: password, email code,
 organization SSO and every active social connection. To narrow it (for
@@ -359,6 +384,14 @@ They narrow the environment's and the organization's
 environment turns off is hidden on every client (and "Forgot password?"
 disappears when the environment turns reset off), and the organization
 chooser leaves out organizations that refuse the method used.
+
+## Next steps
+
+Verify the redirect and one-time code exchange with your application callback.
+Then configure the sections you need: [branding](#branding), [sign-in
+methods](#sign-in-methods), [invitations](#invitations), or [device
+approval](#device-approval). For the full browser-facing safeguards, see
+[security properties](#security-properties).
 
 ## Invitations
 

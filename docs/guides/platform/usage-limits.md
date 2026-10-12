@@ -16,12 +16,20 @@ limits, nothing changes: every limit is unlimited by default.
 | `emails_per_day` | Emails sent, per UTC day (codes, invitations, verification) | 429 `QUOTA_EXCEEDED` on code requests (`POST /identity/v1/challenges`, sign-up, email factor codes) for any address; invitations are still created with `delivery: failed` |
 | `sms_per_day` | SMS sent, per UTC day | 429 `QUOTA_EXCEEDED` |
 | `audit_events_per_minute` | [App audit log](../audit-logs.md) events accepted, per minute | 429 `QUOTA_EXCEEDED` on `POST …/audit-logs/events` |
-| `action_calls_per_minute` | [Action](actions.md) target calls, per minute | The call is skipped like an open breaker (`action.failed`, outcome `skipped`); the flow fails only for `interrupt_on_error` targets |
+| `action_calls_per_minute` | [Action](actions.md) target calls | The call is skipped like an open breaker (`action.failed`, outcome `skipped`); an `interrupt_on_error` target makes the flow fail |
 
 Errors carry `details.limit` and `details.max`:
 
 ```json
-{"error":{"type":"BUSINESS","code":"QUOTA_EXCEEDED","message":"the environment reached its users_max limit","details":{"limit":"users_max","max":5000}}}
+{
+  "error": {
+    "code": "QUOTA_EXCEEDED",
+    "message": "the environment reached its users_max limit",
+    "type": "BUSINESS",
+    "http_status": 422,
+    "details": {"limit": "users_max", "max": 5000}
+  }
+}
 ```
 
 Totals are checked with a count before each create, so concurrent creates
@@ -49,7 +57,8 @@ An environment's own limit applies when it is lower than the deployment
 cap (the effective value is the smaller one); a higher one has no effect.
 Only workspace owners change them; changes are audited as the
 [event](../../reference/events.md) `limits.updated` (`data.limits`: the limits set)
-and apply within 30 seconds on other replicas.
+and apply within 30 seconds on other replicas. After changing a cap, read `GET
+/limits` and compare `effective` before relying on it.
 
 Console: **Settings → Usage and limits**. Owners edit the limits; an empty
 field leaves the limit to the deployment.
@@ -92,8 +101,8 @@ curl -H "Authorization: Bearer $IAMKIT_KEY" "$IAMKIT/management/v1/environments/
 
 `GET /usage?days=` (1–366, default 30, today included) answers `days`
 (oldest first, `{day, metrics}` with every metric), `totals` over the range
-and `now`: users, organizations and applications that exist, with `max`
-(`null` = unlimited). It is also served at `/api/v1/environments/:environment/usage`
+and `now`, an array of `{name, count, max}` totals for the users,
+organizations and applications that exist (`max: null` = unlimited). It is also served at `/api/v1/environments/:environment/usage`
 with the `iam:usage:read` permission.
 
 CLI: `iam usage --days 7`. SDK: `Usage(ctx, days)`.

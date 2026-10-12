@@ -4,10 +4,16 @@ Server-side IAMKit SDK for Python (≥ 3.10), sync and async over `httpx`: verif
 routes (FastAPI, Flask, Django), run OAuth flows as a confidential client, sign machine users in with keys,
 verify webhooks and actions, validate API keys and call the management API.
 
+From this repository's `clients/python/` directory (the package is not yet
+published to PyPI):
+
 ```sh
-pip install iamkit               # not published to PyPI yet: install from this directory
-pip install "iamkit[fastapi]"    # or [flask], [django]
+python -m pip install .
+python -m pip install '.[fastapi]'    # or '.[flask]', '.[django]'
 ```
+
+For editable local development, use `python -m pip install -e .` or the
+`uv sync` workflow below.
 
 | Area | API |
 | --- | --- |
