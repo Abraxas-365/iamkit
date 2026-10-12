@@ -42,7 +42,7 @@ export function metadata(file) {
 }
 
 // Preserve GitHub-friendly source links; only their rendered website URLs change.
-export function resolveLink(url, file) {
+export function resolveLink(url, file, base = '/') {
   if (/^(?:[a-z][a-z\d+.-]*:|\/|#)/i.test(url)) return url
   const split = url.search(/[?#]/)
   const pathname = split === -1 ? url : url.slice(0, split)
@@ -51,20 +51,20 @@ export function resolveLink(url, file) {
   const relative = path.relative(root, target).split(path.sep).join('/')
   if (relative.startsWith('../') || !existsSync(target)) throw new Error(`Broken source link in ${file}: ${url}`)
   if (target.startsWith(docsRoot + path.sep) && target.endsWith('.md')) {
-    return `/${docId(path.relative(docsRoot, target))}/${suffix}`
+    return `${base.replace(/\/$/, '')}/${docId(path.relative(docsRoot, target))}/${suffix}`
   }
   const kind = statSync(target).isDirectory() ? 'tree' : 'blob'
   return `${repository}/${kind}/main/${relative}${suffix}`
 }
 
-export function remarkDocs() {
+export function remarkDocs({ base = '/' } = {}) {
   return (tree, file) => {
     if (!file.path?.startsWith(docsRoot + path.sep)) return
     // Starlight renders the title as #_top; avoid a duplicate H1.
     const heading = tree.children.find(node => node.type === 'heading' && node.depth === 1)
     if (heading) tree.children.splice(tree.children.indexOf(heading), 1)
     visit(tree, node => {
-      if (node.type === 'link' || node.type === 'definition') node.url = resolveLink(node.url, file.path)
+      if (node.type === 'link' || node.type === 'definition') node.url = resolveLink(node.url, file.path, base)
       // Images are left relative so Astro fingerprints the existing docs/assets SVGs.
     })
   }

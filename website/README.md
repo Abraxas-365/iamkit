@@ -57,12 +57,39 @@ npm run check:links
 From the repository root also run `python3 scripts/check_docs.py`. Shared theme
 changes should pass the console's build, lint and tests.
 
-No production domain or deployment is configured. The build skips sitemap
-creation until `site` is set; Starlight also logs warnings for its empty optional
-i18n collection and default 404 fallback. An API explorer, translations and
-publishing workflow are not included. The landing combines actual product captures
-with explicitly conceptual architecture/federation diagrams; it makes no
-unverified performance or certification claims.
+## GitHub Pages publication
+
+The public project site is <https://abraxas-365.github.io/iamkit/>; documentation
+is under <https://abraxas-365.github.io/iamkit/docs/>. No custom domain is required.
+`.github/workflows/pages.yml` validates the sources and builds the static site
+on relevant pushes to `main`, then publishes through GitHub Actions Pages.
+Pull requests run the build checks but never deploy. Pages must use **GitHub
+Actions** as its source in repository settings.
+
+The build reads `SITE_URL` (public origin) and `SITE_BASE_PATH` (mount path).
+Local development defaults to `/`; a production-like build and preview uses:
+
+```sh
+export SITE_URL=https://abraxas-365.github.io
+export SITE_BASE_PATH=/iamkit/
+npm test
+npm run check
+npm run build
+npm run check:links
+npm run preview
+```
+
+Open <http://127.0.0.1:4321/iamkit/>. Keep the same base for build, link checking
+and preview. Manual landing links, rendered Markdown, Starlight navigation,
+assets and search must all retain the base; the rendered checker rejects links
+that escape it. `SITE_URL` enables the sitemap and canonical URLs. A future
+custom domain requires changing these build values and configuring Pages/DNS.
+Only the static landing/documentation is published, never the IAMKit backend.
+
+Starlight still logs notices for its empty optional i18n collection and default
+404 fallback. An API explorer and translations are not included. The landing
+combines actual product captures with explicitly conceptual architecture/federation
+diagrams; it makes no unverified performance or certification claims.
 
 ## Product captures
 

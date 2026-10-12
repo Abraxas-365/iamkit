@@ -24,6 +24,13 @@ test('rewrites document links while preserving anchors and external URLs', () =>
   assert.equal(resolveLink('../../README.md#provenance--license', overview), `${repository}/blob/main/README.md#provenance--license`)
   assert.equal(resolveLink('../examples/', overview), `${repository}/tree/main/docs/examples`)
 })
+test('project-site links include the base without changing fragments or GitHub targets', () => {
+  assert.equal(resolveLink('../concepts/authorization.md?view=full#permissions', overview, '/iamkit/'), '/iamkit/docs/concepts/authorization/?view=full#permissions')
+  assert.equal(resolveLink('../index.md', overview, '/iamkit/'), '/iamkit/docs/')
+  assert.equal(resolveLink('#choose-your-integration', overview, '/iamkit/'), '#choose-your-integration')
+  assert.equal(resolveLink('https://example.com/a.md', overview, '/iamkit/'), 'https://example.com/a.md')
+  assert.equal(resolveLink('../../README.md', overview, '/iamkit/'), `${repository}/blob/main/README.md`)
+})
 test('curated sidebar lists every document exactly once', async () => {
   const { sidebar } = await import('../src/sidebar.mjs')
   const listed = sidebarSlugs(sidebar)
