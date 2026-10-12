@@ -1,0 +1,80 @@
+name: Tests
+
+# The Go unit tests, the Go end-to-end suite (tests/e2e, PostgreSQL in
+# testcontainers, every exchange checked against api/openapi.json) and the
+# console's own checks. The browser and parity suites live in docs.yml.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  GOWORK: 'off'
+
+jobs:
+  go-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l cmd internal tests sdk)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt needed:"; echo "$unformatted"; exit 1
+          fi
+      - name: go vet
+        run: |
+          go vet ./...
+          (cd sdk && go vet ./...)
+      - name: Unit tests
+        run: |
+          go test -count=1 ./internal/... ./cmd/...
+          (cd sdk && go test -count=1 ./...)
+
+  go-e2e:
+    # Four independent shards: each starts its own PostgreSQL container and a
+    # private database per test. scripts/e2e_shard.sh deals the tests out.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: End-to-end tests (shard ${{ matrix.shard }}/4)
+        run: bash scripts/e2e_shard.sh ${{ matrix.shard }} 4 -v
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Lint and translations
+        run: npm run lint
+      - name: Typecheck and build
+        run: npm run build
+      - name: Unit and accessibility tests
+        run: npm test

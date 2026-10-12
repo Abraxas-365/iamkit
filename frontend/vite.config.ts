@@ -8,7 +8,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
-  test: { setupFiles: ['./src/test-setup.ts'] },
+  // jsdom page tests run in parallel; 5 s (the default) is too tight on a shared CI runner.
+  test: { setupFiles: ['./src/test-setup.ts'], testTimeout: 20_000 },
   // Fonts stay files: the org-admin portal's CSP (server/spa.go) allows
   // font-src 'self' only, so an inlined data: font would be blocked.
   build: { assetsInlineLimit: file => (file.endsWith('.woff2') ? false : undefined) },
