@@ -164,8 +164,9 @@ test("sign-up with a verified email lands in the sign-up organization", async ({
   const before = await mailCount();
   await page.getByRole("button", { name: "Create account" }).click();
   const mail = await lastMail(email, "email_verification", before);
-  await page.getByLabel("Code").fill(mail.code!);
-  await page.getByRole("button", { name: "Verify" }).click();
+  await expect(page.locator('[data-iamkit="root"]')).toHaveAttribute("data-step", "signup_verify");
+  await page.getByLabel("Code", { exact: true }).fill(mail.code!);
+  await page.getByRole("button", { name: "Verify", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
   await expect(page.getByTestId("organization")).toHaveText(fixture.organization);
 });
