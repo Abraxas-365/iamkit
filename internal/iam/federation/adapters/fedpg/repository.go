@@ -63,11 +63,12 @@ type connectionRow struct {
 	SignupOrganization identity.OrganizationID `db:"signup_organization_id"`
 	SignupGroup        identity.GroupID        `db:"signup_group_id"`
 	UpdateProfile      bool                    `db:"update_profile"`
+	Draft              bool                    `db:"draft"`
 }
 
 func (r connectionRow) connection() federation.Connection {
 	return federation.Connection{ID: r.ID, Environment: r.Environment, Organization: r.Organization, Name: r.Name, Issuer: r.Issuer, Client: r.Client, SecretEnv: r.SecretEnv.String, Sealed: r.Sealed.String, JIT: r.JIT, JITGroup: r.JITGroup, Enforcement: r.Enforcement,
-		Provider: r.Provider, Options: federation.Options(r.Options), Signup: r.Signup, LinkEmail: r.LinkEmail, SignupOrganization: r.SignupOrganization, SignupGroup: r.SignupGroup, UpdateProfile: r.UpdateProfile}
+		Provider: r.Provider, Options: federation.Options(r.Options), Signup: r.Signup, LinkEmail: r.LinkEmail, SignupOrganization: r.SignupOrganization, SignupGroup: r.SignupGroup, UpdateProfile: r.UpdateProfile, Draft: r.Draft}
 }
 
 func null(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }
@@ -82,8 +83,8 @@ func (r *Repository) Create(ctx context.Context, m federation.Mutation, c federa
 		return failure(err)
 	}
 	defer tx.Rollback()
-	if _, err = tx.ExecContext(ctx, `INSERT INTO federation_connections(id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id,update_profile) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
-		c.ID, c.Environment, c.Organization, c.Name, c.Issuer, c.Client, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, c.Provider, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup, c.UpdateProfile); err != nil {
+	if _, err = tx.ExecContext(ctx, `INSERT INTO federation_connections(id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id,update_profile,active,draft) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
+		c.ID, c.Environment, c.Organization, c.Name, c.Issuer, c.Client, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, c.Provider, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup, c.UpdateProfile, !c.Draft, c.Draft); err != nil {
 		return conflict(err)
 	}
 	if len(c.GroupMappings) > 0 {
@@ -99,12 +100,20 @@ func (r *Repository) Create(ctx context.Context, m federation.Mutation, c federa
 }
 
 // auditConnection records the connection write; when its group mappings
-// changed the event's data carries the new set.
+// changed the event's data carries the new set, and a draft says so
+// (data.draft).
 func auditConnection(ctx context.Context, tx *sqlx.Tx, m federation.Mutation, c federation.Connection, mapped bool) error {
-	if !mapped {
+	if !mapped && !c.Draft {
 		return audit(ctx, tx, m)
 	}
-	return failure(eventpg.AuditWith(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, mappingData(c)))
+	data := map[string]any{}
+	if mapped {
+		data = mappingData(c)
+	}
+	if c.Draft {
+		data["draft"] = true
+	}
+	return failure(eventpg.AuditWith(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, data))
 }
 
 // Update rewrites the mutable settings of an active connection. When the
@@ -115,8 +124,11 @@ func (r *Repository) Update(ctx context.Context, m federation.Mutation, c federa
 		return failure(err)
 	}
 	defer tx.Rollback()
-	res, err := tx.ExecContext(ctx, `UPDATE federation_connections SET name=$3,secret_env=$4,secret_sealed=$5,jit_provisioning=$6,jit_group_id=$7,enforcement=$8,options=$9,signup=$10,link_email=$11,signup_organization_id=$12,signup_group_id=$13,update_profile=$14 WHERE id=$1 AND environment_id=$2 AND active`,
-		c.ID, c.Environment, c.Name, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup, c.UpdateProfile)
+	// A draft is inactive but editable; its issuer and client ID are the
+	// SP entity ID until the identity provider's metadata names the real
+	// issuer (a non-draft's never change: the service refuses it).
+	res, err := tx.ExecContext(ctx, `UPDATE federation_connections SET name=$3,secret_env=$4,secret_sealed=$5,jit_provisioning=$6,jit_group_id=$7,enforcement=$8,options=$9,signup=$10,link_email=$11,signup_organization_id=$12,signup_group_id=$13,update_profile=$14,issuer=$15,client_id=$16 WHERE id=$1 AND environment_id=$2 AND (active OR draft)`,
+		c.ID, c.Environment, c.Name, null(c.SecretEnv), null(c.Sealed), c.JIT, c.JITGroup, c.Enforcement, options(c.Options), c.Signup, c.LinkEmail, c.SignupOrganization, c.SignupGroup, c.UpdateProfile, c.Issuer, c.Client)
 	if err != nil {
 		return conflict(err)
 	}
@@ -135,7 +147,25 @@ func (r *Repository) Update(ctx context.Context, m federation.Mutation, c federa
 	return failure(tx.Commit())
 }
 
-const connectionColumns = `id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id,update_profile`
+const connectionColumns = `id,environment_id,organization_id,name,issuer,client_id,secret_env,secret_sealed,jit_provisioning,jit_group_id,enforcement,provider,options,signup,link_email,signup_organization_id,signup_group_id,update_profile,draft`
+
+// FindAny returns the connection whether or not it is active (a draft, a
+// disabled connection): only the test connection flow reads it that way.
+func (r *Repository) FindAny(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
+	var row connectionRow
+	err := r.db.GetContext(ctx, &row, `SELECT `+connectionColumns+` FROM federation_connections WHERE id=$1 AND environment_id=$2`, id, environment)
+	if errors.Is(err, sql.ErrNoRows) {
+		return federation.Connection{}, errx.NotFound("federation connection not found")
+	}
+	if err != nil {
+		return federation.Connection{}, failure(err)
+	}
+	c := row.connection()
+	if c.GroupMappings, err = mappings(ctx, r.db, environment, id); err != nil {
+		return federation.Connection{}, err
+	}
+	return c, nil
+}
 
 func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
 	var row connectionRow
@@ -157,7 +187,7 @@ func (r *Repository) SaveState(ctx context.Context, hash []byte, s federation.St
 	if s.Continuation != "" {
 		continuation = &s.Continuation
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,expires_at,return_to,return_challenge,reauth,max_age) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+make_interval(secs => $11),$12,$13,$14,$15)`, hash, s.Connection, s.Boundary.EnvironmentID, s.Boundary.OrganizationID, s.Boundary.ApplicationID, s.Boundary.ResourceID, s.Binding, s.Nonce, s.Verifier, continuation, config.FederationStateTTL.Seconds(), null(s.Return.To), null(s.Return.Challenge), s.Reauth, s.MaxAge)
+	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_states(secret_hash,connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,expires_at,return_to,return_challenge,reauth,max_age,test,test_actor) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+make_interval(secs => $11),$12,$13,$14,$15,$16,$17)`, hash, s.Connection, s.Boundary.EnvironmentID, s.Boundary.OrganizationID, s.Boundary.ApplicationID, s.Boundary.ResourceID, s.Binding, s.Nonce, s.Verifier, continuation, config.FederationStateTTL.Seconds(), null(s.Return.To), null(s.Return.Challenge), s.Reauth, s.MaxAge, s.Test, s.TestActor)
 	return conflict(err)
 }
 func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (federation.State, error) {
@@ -182,8 +212,10 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 		Reauth       bool                    `db:"reauth"`
 		MaxAge       sql.NullInt64           `db:"max_age"`
 		Started      time.Time               `db:"started_at"`
+		Test         bool                    `db:"test"`
+		TestActor    string                  `db:"test_actor"`
 	}
-	err = tx.GetContext(ctx, &row, `SELECT connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,return_to,return_challenge,reauth,max_age,started_at FROM federation_states WHERE secret_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, hash)
+	err = tx.GetContext(ctx, &row, `SELECT connection_id,environment_id,organization_id,application_id,resource_id,binding_hash,nonce,verifier,continuation,return_to,return_challenge,reauth,max_age,started_at,test,test_actor FROM federation_states WHERE secret_hash=$1 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, hash)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return out, failure(err)
 	}
@@ -193,7 +225,7 @@ func (r *Repository) ConsumeState(ctx context.Context, hash, binding []byte) (fe
 	if _, err = tx.ExecContext(ctx, `UPDATE federation_states SET consumed_at=now(), continuation=NULL WHERE secret_hash=$1`, hash); err != nil {
 		return out, failure(err)
 	}
-	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier, Continuation: row.Continuation.String, Return: federation.Return{To: row.ReturnTo.String, Challenge: row.Challenge.String}, Reauth: row.Reauth, Started: row.Started}
+	out = federation.State{Connection: row.Connection, Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, Binding: row.Binding, Nonce: row.Nonce, Verifier: row.Verifier, Continuation: row.Continuation.String, Return: federation.Return{To: row.ReturnTo.String, Challenge: row.Challenge.String}, Reauth: row.Reauth, Started: row.Started, Test: row.Test, TestActor: row.TestActor}
 	if row.MaxAge.Valid {
 		out.MaxAge = &row.MaxAge.Int64
 	}
@@ -285,7 +317,9 @@ func (r *Repository) Enable(ctx context.Context, m federation.Mutation, c federa
 		}
 	}
 	// Only SAML options change (metadata fetched again); the rest are kept.
-	res, err := tx.ExecContext(ctx, `UPDATE federation_connections SET active=true, options=CASE WHEN provider='saml' THEN $3 ELSE options END WHERE id=$1 AND environment_id=$2 AND NOT active`, c.ID, c.Environment, options(c.Options))
+	// A draft leaves its draft state here, with the issuer the metadata
+	// named (its client ID, the SP entity ID, is already set).
+	res, err := tx.ExecContext(ctx, `UPDATE federation_connections SET active=true, draft=false, issuer=$4, options=CASE WHEN provider='saml' THEN $3 ELSE options END WHERE id=$1 AND environment_id=$2 AND NOT active`, c.ID, c.Environment, options(c.Options), c.Issuer)
 	if err != nil {
 		return conflict(err)
 	}
@@ -324,7 +358,7 @@ func (r *Repository) List(ctx context.Context, environment identity.EnvironmentI
 		return query.Paginated[federation.ConnectionView]{}, failure(err)
 	}
 	out := []federation.ConnectionView{}
-	sel := fmt.Sprintf(`SELECT c.id, c.organization_id, COALESCE((SELECT o.name FROM organizations o WHERE o.id=c.organization_id AND o.environment_id=c.environment_id),'') AS organization_name, c.name, c.provider, c.issuer, c.client_id, c.active, c.jit_provisioning, c.enforcement, c.signup, c.link_email, c.update_profile,
+	sel := fmt.Sprintf(`SELECT c.id, c.organization_id, COALESCE((SELECT o.name FROM organizations o WHERE o.id=c.organization_id AND o.environment_id=c.environment_id),'') AS organization_name, c.name, c.provider, c.issuer, c.client_id, c.active, c.draft, c.jit_provisioning, c.enforcement, c.signup, c.link_email, c.update_profile,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
 		%s ORDER BY c.name LIMIT %d OFFSET %d`, base, page.Limit, page.Offset)
 	if err := r.db.SelectContext(ctx, &out, sel, args...); err != nil {
@@ -339,7 +373,7 @@ func (r *Repository) FindDetail(ctx context.Context, environment identity.Enviro
 	}
 	err := r.db.GetContext(ctx, &row, `SELECT c.id, c.organization_id, COALESCE((SELECT o.name FROM organizations o WHERE o.id=c.organization_id AND o.environment_id=c.environment_id),'') AS organization_name, c.name, c.provider, c.options, c.issuer, c.client_id, COALESCE(c.secret_env,'') AS secret_env,
 		CASE WHEN c.provider='saml' OR (c.provider='ldap' AND c.secret_sealed IS NULL) THEN 'none' WHEN c.secret_sealed IS NULL THEN 'env' ELSE 'sealed' END AS secret_source,
-		c.active, c.jit_provisioning, c.jit_group_id, c.enforcement, c.signup, c.link_email, c.signup_organization_id, c.signup_group_id, c.update_profile, c.created_at,
+		c.active, c.draft, c.jit_provisioning, c.jit_group_id, c.enforcement, c.signup, c.link_email, c.signup_organization_id, c.signup_group_id, c.update_profile, c.created_at,
 		(SELECT COUNT(*) FROM external_identities x WHERE x.connection_id=c.id) AS linked
 		FROM federation_connections c WHERE c.id=$1 AND c.environment_id=$2`, id, environment)
 	if errors.Is(err, sql.ErrNoRows) {

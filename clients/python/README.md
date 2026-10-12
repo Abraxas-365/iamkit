@@ -15,7 +15,7 @@ pip install "iamkit[fastapi]"    # or [flask], [django]
 | OAuth / OIDC | `OAuthClient` (authorize URL + PKCE, code, refresh, revoke, UserInfo, introspection, client_credentials, private_key_jwt, token exchange, impersonation, device flow), `create_pkce`, `random_token`, `discover`, `verify_id_token`, `verify_logout_token` |
 | Machine users | `KeyLogin` (RFC 7523 JWT-bearer grant), API keys via `APIKeyValidator` |
 | Webhooks and actions | `verify_webhook`, `verify_action`, `ActionResponse`, `deny`, `Conditions` |
-| Management | `IAMKit` / `AsyncIAMKit`: `users`, `organizations`, `roles`, `api_keys`, `events`, `webhooks`, `audit_logs`, `risk`, generic `request()`, `paginate` |
+| Management | `IAMKit` / `AsyncIAMKit`: `users`, `organizations`, `roles`, `api_keys`, `events`, `webhooks`, `audit_logs`, `risk`, `waitlist`, generic `request()`, `paginate` |
 | Frameworks | `iamkit.integrations.fastapi.require_token`, `iamkit.integrations.flask.IAMKitFlask`, `iamkit.integrations.django.IAMKitMiddleware` |
 | Errors | `IAMKitError` (`status`, `code`, `message`, `details`) |
 

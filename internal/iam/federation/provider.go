@@ -333,9 +333,10 @@ func validAttributes(a *AttributeMapping) error {
 	return nil
 }
 
-// validSAML checks the options of a SAML connection.
-func validSAML(o Options) error {
-	if o.MetadataURL == "" && o.MetadataXML == "" {
+// validSAML checks the options of a SAML connection; only a draft may
+// have neither metadata_url nor metadata_xml.
+func validSAML(o Options, draft bool) error {
+	if o.MetadataURL == "" && o.MetadataXML == "" && !draft {
 		return errx.Validation("options.metadata_url or options.metadata_xml is required")
 	}
 	if o.MetadataURL != "" {
@@ -523,6 +524,12 @@ func (o Options) Normalized() Options {
 // validOptions checks the options a provider takes; other providers take
 // none.
 func validOptions(provider string, o Options) error {
+	return validOptionsFor(provider, o, false)
+}
+
+// validOptionsFor is validOptions for a connection that may be a draft: a
+// SAML draft is the only one allowed to have no identity provider metadata.
+func validOptionsFor(provider string, o Options, draft bool) error {
 	microsoft := o.Tenant != "" || len(o.Tenants) > 0
 	apple := o.Team != "" || o.Key != ""
 	google := len(o.Domains) > 0
@@ -581,7 +588,7 @@ func validOptions(provider string, o Options) error {
 			return err
 		}
 	case ProviderSAML:
-		if err := validSAML(o); err != nil {
+		if err := validSAML(o, draft); err != nil {
 			return err
 		}
 	case ProviderLDAP:

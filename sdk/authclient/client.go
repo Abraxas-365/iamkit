@@ -174,7 +174,16 @@ type Challenge struct {
 	ID        string `json:"challenge_id"`
 	Message   string `json:"message"`
 	ExpiresIn int    `json:"expires_in"`
+	// Status is set by Signup only: SignupCodeSent or SignupWaitlisted.
+	Status string `json:"status,omitempty"`
 }
+
+// Signup statuses (Challenge.Status). With SignupWaitlisted no code was
+// sent and the challenge ID is a placeholder.
+const (
+	SignupCodeSent   = "code_sent"
+	SignupWaitlisted = "waitlisted"
+)
 
 type ChallengeVerification struct {
 	LoginContext
@@ -618,6 +627,10 @@ type SignupRequest struct {
 	// CaptchaToken and DeviceID: see Signals.
 	CaptchaToken string `json:"captcha_token,omitempty"`
 	DeviceID     string `json:"device_id,omitempty"`
+	// WaitlistToken is the approval token from the link a waitlist
+	// approval emailed (?waitlist=<token>); it skips the waitlist, and the
+	// email must be the approved one.
+	WaitlistToken string `json:"waitlist_token,omitempty"`
 }
 
 // SignedUp is the account a completed sign-up created.
@@ -629,8 +642,12 @@ type SignedUp struct {
 
 // Signup emails a code confirming the address. The answer is the same
 // whether or not the email already has an account (then nothing is sent).
+// With the environment's waitlist on, the answer has Status
+// SignupWaitlisted instead: the address was listed (or already is), no
+// code was sent and the challenge ID is not usable; an operator's
+// approval emails a link carrying the token for SignupRequest.WaitlistToken.
 // Errors: apierror.CodeSignupDisabled (403), CodePasswordPolicy (400),
-// SSO_REQUIRED (403).
+// SSO_REQUIRED (403), apierror.CodeWaitlistTokenInvalid (400).
 func (c *Client) Signup(ctx context.Context, input SignupRequest) (Challenge, error) {
 	var out Challenge
 	err := c.request(ctx, "/signup", "", input, &out)

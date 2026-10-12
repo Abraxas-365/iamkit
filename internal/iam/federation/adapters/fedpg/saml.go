@@ -26,7 +26,7 @@ func (r *Repository) ParkAssertion(ctx context.Context, state, handle []byte, re
 	defer tx.Rollback()
 	var expires time.Time
 	err = tx.GetContext(ctx, &expires, `SELECT s.expires_at FROM federation_states s
-		JOIN federation_connections c ON c.id=s.connection_id AND c.environment_id=s.environment_id AND c.active AND c.provider='saml'
+		JOIN federation_connections c ON c.id=s.connection_id AND c.environment_id=s.environment_id AND (c.active OR s.test) AND c.provider='saml'
 		WHERE s.secret_hash=$1 AND s.consumed_at IS NULL AND s.expires_at>now() FOR UPDATE OF s`, state)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errx.Unauthorized("invalid or expired SAML RelayState")

@@ -14,6 +14,10 @@ required). They have no client ID or secret: IAMKit reads the IdP's metadata.
 For the opposite direction — IAMKit as the identity provider of SAML
 applications — see [SAML applications](../applications/saml-apps.md).
 
+Step-by-step setup for Okta, Microsoft Entra ID, Google Workspace, OneLogin,
+JumpCloud, ADFS and PingFederate, a guided wizard, draft connections and
+**Test connection** are in [Identity provider setup guides](idp-guides.md).
+
 ## Prerequisites
 
 - An HTTPS `JWT_ISSUER`: the SP endpoints live under it.

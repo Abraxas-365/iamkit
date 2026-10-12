@@ -93,6 +93,10 @@ type Module struct {
 	// Passkeys is passkey sign-in; nil when Deps.Passkeys is.
 	Passkeys   authentication.PasskeyCommands
 	SignupHTTP *authhttp.SignupHandler
+	// Waitlist is the operator's side of the sign-up waitlist.
+	WaitlistCommands authentication.WaitlistCommands
+	WaitlistQueries  authentication.WaitlistQueries
+	WaitlistHTTP     *authhttp.WaitlistHandler
 	// SMS is the environment's SMS provider (second-factor texts).
 	SMS        authentication.SMSCommands
 	SMSQueries authentication.SMSQueries
@@ -152,6 +156,7 @@ func New(deps Deps) Module {
 	signIns := authsvc.NewSignInPolicies(authpg.NewSignInPolicyRepository(deps.DB))
 	service.SetSignInPolicies(signIns)
 	service.SetSignups(repo)
+	waitlists := authsvc.NewWaitlists(repo, authsecret.Generator{}, service)
 	if deps.Actions != nil {
 		service.SetActions(deps.Actions)
 	}
@@ -215,6 +220,7 @@ func New(deps Deps) Module {
 		PasswordPolicies: policies, PasswordPolicyCommands: policies, PasswordPoliciesHTTP: authhttp.NewPasswordPolicyHandler(policies, policies, deps.ActorID),
 		SignInPolicies: signIns, SignInPoliciesHTTP: authhttp.NewSignInPolicyHandler(signIns, signIns, deps.ActorID),
 		Signups: service, SignupHTTP: authhttp.NewSignupHandler(service),
+		WaitlistCommands: waitlists, WaitlistQueries: waitlists, WaitlistHTTP: authhttp.NewWaitlistHandler(waitlists, waitlists, deps.ActorID),
 		SMS: sms, SMSQueries: sms, SMSHTTP: authhttp.NewSMSHandler(sms, sms, deps.ActorID),
 		Brand:          func(b authentication.Branding) { branding.b.Store(&b) },
 		Risk:           service.SetRisk,

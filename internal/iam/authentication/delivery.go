@@ -211,7 +211,7 @@ type PreviewInput struct {
 const MaxAppName = 100
 
 // PreviewPurposes are the emails IAMKit renders.
-var PreviewPurposes = []string{PurposeLogin, PurposePasswordReset, PurposeEmailVerification, PurposeInvitation, PurposeMFA, PurposeSecurityAlert, PurposeTest}
+var PreviewPurposes = []string{PurposeLogin, PurposePasswordReset, PurposeEmailVerification, PurposeInvitation, PurposeMFA, PurposeSecurityAlert, PurposeWaitlistJoined, PurposeWaitlistApproved, PurposeWaitlistRejected, PurposeTest}
 
 // Validate checks the purpose and draft wording; an unknown locale falls
 // back like any other.

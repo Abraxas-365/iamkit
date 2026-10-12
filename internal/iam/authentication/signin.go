@@ -42,6 +42,19 @@ type SignInPolicy struct {
 	// (accept_terms; the hosted page links the branding's terms_url).
 	// Omitted on update, the stored value is kept.
 	RequireTerms *bool `json:"require_terms" db:"require_terms"`
+	// Waitlist puts password / email-code sign-up behind an operator's
+	// approval (needs AllowSignup): people join a list instead of getting
+	// a code. Federation sign-up, invitations, SCIM and operator-created
+	// users are never gated. Omitted on update, the stored value is kept,
+	// so a client that does not know the field never opens sign-up.
+	Waitlist *bool `json:"waitlist" db:"waitlist"`
+	// WaitlistAutoApproveDomains are email domains that skip the list.
+	// Omitted (null) on update, the stored list is kept; [] clears it.
+	WaitlistAutoApproveDomains []string `json:"waitlist_auto_approve_domains" db:"-"`
+	// WaitlistSignupURL is the sign-up page the approval email links to
+	// (?waitlist=<token> is appended); empty: the email carries the token
+	// but no link. Omitted on update, the stored value is kept.
+	WaitlistSignupURL *string `json:"waitlist_signup_url" db:"waitlist_signup_url"`
 	// Custom is false for the built-in default.
 	Custom    bool       `json:"custom" db:"-"`
 	UpdatedAt *time.Time `json:"updated_at,omitempty" db:"updated_at"`
@@ -49,8 +62,9 @@ type SignInPolicy struct {
 
 // DefaultSignInPolicy allows every method and requires no second factor.
 func DefaultSignInPolicy() SignInPolicy {
-	passkey := true
-	return SignInPolicy{AllowPassword: true, AllowEmailCode: true, AllowSocial: true, AllowPasskey: &passkey, AllowPasswordReset: true, AllowedFactors: DefaultFactors()}
+	passkey, waitlist, url := true, false, ""
+	return SignInPolicy{AllowPassword: true, AllowEmailCode: true, AllowSocial: true, AllowPasskey: &passkey, AllowPasswordReset: true, AllowedFactors: DefaultFactors(),
+		Waitlist: &waitlist, WaitlistAutoApproveDomains: []string{}, WaitlistSignupURL: &url}
 }
 
 // DefaultFactors are the second factors of an environment without a policy:
@@ -75,6 +89,15 @@ func (p SignInPolicy) Validate() error {
 	}
 	if !p.SignupGroup.IsZero() && p.SignupOrganization.IsZero() {
 		return errx.Validation("signup_group_id needs signup_organization_id")
+	}
+	if p.WaitlistOn() && !p.AllowSignup {
+		return errx.Validation("waitlist needs allow_signup")
+	}
+	if err := validWaitlistDomains(p.WaitlistAutoApproveDomains); err != nil {
+		return err
+	}
+	if u := p.WaitlistURL(); u != "" && !SecureURL(u) {
+		return errx.Validation("waitlist_signup_url must use HTTPS (HTTP allowed only on loopback)")
 	}
 	return nil
 }
@@ -132,6 +155,17 @@ func (p SignInPolicy) Methods() Methods {
 
 // TermsRequired reads RequireTerms (nil: not required, the default).
 func (p SignInPolicy) TermsRequired() bool { return p.RequireTerms != nil && *p.RequireTerms }
+
+// WaitlistOn reads Waitlist (nil: off, the default).
+func (p SignInPolicy) WaitlistOn() bool { return p.Waitlist != nil && *p.Waitlist }
+
+// WaitlistURL reads WaitlistSignupURL (nil: none).
+func (p SignInPolicy) WaitlistURL() string {
+	if p.WaitlistSignupURL == nil {
+		return ""
+	}
+	return *p.WaitlistSignupURL
+}
 
 // PasskeyAllowed reads AllowPasskey (nil: allowed, the default).
 func (p SignInPolicy) PasskeyAllowed() bool {

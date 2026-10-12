@@ -25,6 +25,7 @@ export {
   type Organization,
   type Signals,
   type SignedUp,
+  type SignupStatus,
   type SignInOptions,
   type SignInResult,
   type Tokens,

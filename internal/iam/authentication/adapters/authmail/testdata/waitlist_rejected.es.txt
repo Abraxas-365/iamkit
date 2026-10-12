@@ -1,0 +1,8 @@
+Subject: Sobre tu solicitud a Acme
+
+Novedades sobre tu solicitud
+
+Gracias por tu interés en Acme. Por ahora no podemos ofrecerte una cuenta.
+
+--
+No necesitas hacer nada más.

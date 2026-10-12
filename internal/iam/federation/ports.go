@@ -19,6 +19,10 @@ type Commands interface {
 	// Enable turns a disabled connection back on as it was, keeping the
 	// identities linked to it.
 	Enable(ctx context.Context, m Mutation, connection identity.ConnectionID) error
+	// IssueTest issues the one-time ticket (TestPrefix) that opens a test
+	// sign-in of the connection, active or not (a draft needs its
+	// metadata): the URL to open in a browser. Audited with m.
+	IssueTest(ctx context.Context, m Mutation, connection identity.ConnectionID) (TestTicket, error)
 }
 type Queries interface {
 	List(ctx context.Context, environment identity.EnvironmentID, filter ConnectionFilter, page query.Pagination) (query.Paginated[ConnectionView], error)
@@ -37,6 +41,11 @@ type Flows interface {
 	// the callback then checks the ID token's auth_time against them.
 	StartHosted(ctx context.Context, target authentication.Target, connection identity.ConnectionID, continuation string, ask Ask) (Start, error)
 	Callback(ctx context.Context, code, state, binding string) (Outcome, error)
+	// StartTest spends a test ticket (single use, bound to the environment
+	// and connection) and starts the identity provider sign-in in test
+	// mode: its callback only reports what the provider sent (Outcome.Test)
+	// and creates no session, user or link.
+	StartTest(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, ticket string) (Start, error)
 	// Redeem signs in with the result a callback handed to a custom
 	// sign-in UI (Return), given the verifier of the start's challenge: a
 	// session, or the pending second factor.
@@ -73,6 +82,24 @@ type Repository interface {
 	Create(ctx context.Context, m Mutation, input Connection) error
 	Update(ctx context.Context, m Mutation, input Connection) error
 	Find(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) (Connection, error)
+	// FindAny returns the connection active or not (drafts, disabled): the
+	// test connection flow only.
+	FindAny(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) (Connection, error)
+	// SaveTest stores the hash of a test ticket for the connection until
+	// expires and audits its issue with m, in one transaction.
+	SaveTest(ctx context.Context, m Mutation, hash []byte, connection identity.ConnectionID, expires time.Time) error
+	// UseTest spends a test ticket for the environment and connection and
+	// returns who asked for it (401 when unknown, spent, expired or for
+	// another connection).
+	UseTest(ctx context.Context, hash []byte, environment identity.EnvironmentID, connection identity.ConnectionID) (string, error)
+	// RecordTest records the connection.tested event (data.success) for
+	// actor.
+	RecordTest(ctx context.Context, r TestResult, actor string) error
+	// PruneDrafts deletes SAML drafts older than age (with their test
+	// states and tickets) and spent or long expired test tickets. Drafts
+	// have no sessions, identities or sign-ins, so nothing else refers to
+	// them; the deletion records no event.
+	PruneDrafts(ctx context.Context, age time.Duration) error
 	FindDetail(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID) (ConnectionDetail, error)
 	List(ctx context.Context, environment identity.EnvironmentID, filter ConnectionFilter, page query.Pagination) (query.Paginated[ConnectionView], error)
 	Identities(ctx context.Context, environment identity.EnvironmentID, connection identity.ConnectionID, page query.Pagination) (query.Paginated[ExternalIdentityView], error)

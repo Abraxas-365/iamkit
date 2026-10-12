@@ -22,6 +22,8 @@ export const defaultTexts: Record<string, string> = {
   "hosted.title.expired": "Sign-in expired",
   "hosted.expired": "This sign-in link has expired. Go back to the application and try again.",
   "hosted.title.signup": "Create your account",
+  "hosted.title.waitlisted": "You're on the waitlist",
+  "hosted.notice.waitlisted": "Thanks! If %s can join, we'll email you when your spot is ready.",
   "hosted.title.redirecting": "Signing you in",
   "hosted.notice.code_sent": "If the account can sign in with a code, we sent an 8-digit code to %s.",
   "hosted.notice.signup_sent": "Enter the 8-digit code we sent to %s. If this email already has an account, sign in instead.",

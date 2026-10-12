@@ -331,6 +331,15 @@ export function SignInForm(props: SignInFormProps) {
         </>
       );
       break;
+    case "waitlisted":
+      body = (
+        <>
+          {title("hosted.title.waitlisted")}
+          <p {...part("notice")}>{t("hosted.notice.waitlisted", state.login)}</p>
+          {startOver}
+        </>
+      );
+      break;
     case "redirecting":
       body = state.recoveryCodes?.length ? (
         <>

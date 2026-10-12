@@ -424,6 +424,53 @@ func TestSAMLConnection(t *testing.T) {
 	}
 }
 
+func TestSAMLDraftConnection(t *testing.T) {
+	org := identity.NewOrganizationID()
+	draft := ConnectionInput{Organization: org, Name: "Okta", Provider: ProviderSAML, Draft: true}
+	if err := draft.Validate(); err != nil {
+		t.Fatalf("draft without metadata: %v", err)
+	}
+	if c := draft.Connection(identity.NewEnvironmentID()); !c.Draft || c.Provider != ProviderSAML {
+		t.Fatalf("draft connection: %+v", c)
+	}
+	for name, in := range map[string]ConnectionInput{
+		"metadata url":      {Organization: org, Name: "x", Provider: ProviderSAML, Draft: true, Options: Options{MetadataURL: "https://idp.example.com/m"}},
+		"metadata xml":      {Organization: org, Name: "x", Provider: ProviderSAML, Draft: true, Options: Options{MetadataXML: "<x/>"}},
+		"oidc draft":        {Organization: org, Name: "x", Provider: ProviderOIDC, Draft: true, Issuer: "https://idp", Client: "c", ClientSecret: "s"},
+		"default provider":  {Organization: org, Name: "x", Draft: true},
+		"draft no org":      {Name: "x", Provider: ProviderSAML, Draft: true},
+		"draft with secret": {Organization: org, Name: "x", Provider: ProviderSAML, Draft: true, ClientSecret: "s"},
+	} {
+		if err := in.Validate(); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	// Empty metadata stays refused for a connection that is not a draft.
+	if err := (ConnectionInput{Organization: org, Name: "x", Provider: ProviderSAML}).Validate(); err == nil {
+		t.Fatal("non-draft SAML without metadata accepted")
+	}
+	// Assembled: a draft is valid empty; a non-draft is not.
+	if err := (Connection{Provider: ProviderSAML, Draft: true, Organization: org, Enforcement: EnforcementOptional}).Validate(); err != nil {
+		t.Fatalf("assembled draft: %v", err)
+	}
+	if err := (Connection{Provider: ProviderSAML, Organization: org, Enforcement: EnforcementOptional}).Validate(); err == nil {
+		t.Fatal("assembled non-draft without metadata accepted")
+	}
+	if err := (Connection{Provider: ProviderOIDC, Draft: true, Organization: org, Enforcement: EnforcementOptional}).Validate(); err == nil {
+		t.Fatal("assembled OIDC draft accepted")
+	}
+	// The metadata arrives by PATCH and keeps the draft flag until enabled.
+	c := draft.Connection(identity.NewEnvironmentID())
+	url := "https://idp.example.com/metadata"
+	updated, err := (ConnectionUpdate{Options: &Options{MetadataURL: url}}).Apply(c)
+	if err != nil {
+		t.Fatalf("patch metadata: %v", err)
+	}
+	if !updated.Draft || updated.Options.MetadataURL != url {
+		t.Fatalf("patched draft: %+v", updated)
+	}
+}
+
 func TestLDAPConnection(t *testing.T) {
 	org := identity.NewOrganizationID()
 	base := ConnectionInput{Organization: org, Name: "AD", Provider: ProviderLDAP, ClientSecret: "svc", Options: Options{URL: " LDAPS://DC1.Corp.Example/ ", BindDN: "cn=svc,dc=corp", UserBaseDN: "OU=People,DC=corp"}}

@@ -53,43 +53,43 @@ func signupMethod(passwordHash string) string {
 // rejects, an email domain whose organization enforces single sign-on) are
 // answered; an email with an account gets the same answer as a new one and
 // no email, so sign-up never reveals which addresses have accounts.
-func (s *Service) Signup(ctx context.Context, input authentication.Signup) (identity.ChallengeID, error) {
+func (s *Service) Signup(ctx context.Context, input authentication.Signup) (authentication.SignupResult, error) {
 	if input.Environment.IsZero() {
-		return identity.ChallengeID{}, errx.Validation("environment_id is required")
+		return authentication.SignupResult{}, errx.Validation("environment_id is required")
 	}
 	if s.signups == nil {
-		return identity.ChallengeID{}, authentication.ErrSignupDisabled()
+		return authentication.SignupResult{}, authentication.ErrSignupDisabled()
 	}
 	if s.deliverySvc == nil && s.delivery == nil {
-		return identity.ChallengeID{}, errx.External("email delivery is not configured")
+		return authentication.SignupResult{}, errx.External("email delivery is not configured")
 	}
 	// Restrictions (ip, country, email domain) apply to sign-ups too.
 	if err := s.screen(ctx, authentication.Context{EnvironmentID: input.Environment}, input.Email, risk.MethodSignup); err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	policy, err := s.signInPolicy(ctx, input.Environment)
 	if err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	tx, err := s.signups.BeginSignup(ctx)
 	if err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	defer tx.Rollback()
 	methods, err := signupMethods(ctx, tx, input.Environment, policy)
 	if err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	if !methods.Password && !methods.EmailCode {
-		return identity.ChallengeID{}, authentication.ErrSignupDisabled()
+		return authentication.SignupResult{}, authentication.ErrSignupDisabled()
 	}
 	if err = input.Validate(); err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	var accepted *time.Time
 	if policy.TermsRequired() {
 		if !input.AcceptTerms {
-			return identity.ChallengeID{}, authentication.ErrTermsRequired()
+			return authentication.SignupResult{}, authentication.ErrTermsRequired()
 		}
 		now := time.Now()
 		accepted = &now
@@ -98,50 +98,66 @@ func (s *Service) Signup(ctx context.Context, input authentication.Signup) (iden
 	var hash string
 	switch {
 	case input.Password != "" && !methods.Password:
-		return identity.ChallengeID{}, errx.Validation("password sign-in is not allowed; leave password empty to sign in with email codes")
+		return authentication.SignupResult{}, errx.Validation("password sign-in is not allowed; leave password empty to sign in with email codes")
 	case input.Password == "" && !methods.EmailCode:
-		return identity.ChallengeID{}, errx.Validation("password is required")
+		return authentication.SignupResult{}, errx.Validation("password is required")
 	case input.Password != "":
 		// The account starts in the sign-up organization: its requirements
 		// tighten the environment's policy.
 		if hash, err = s.signupPassword(ctx, input.Environment, policy.SignupOrganization, input.Password); err != nil {
-			return identity.ChallengeID{}, err
+			return authentication.SignupResult{}, err
 		}
 	}
 	required, err := tx.SSORequired(ctx, input.Environment, email)
 	if err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	if required {
-		return identity.ChallengeID{}, errSSORequired()
+		return authentication.SignupResult{}, errSSORequired()
 	}
 	if err = s.emailAdmitted(ctx, input.Environment); err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
+	}
+	var entry identity.WaitlistEntryID
+	if policy.WaitlistOn() && !policy.AutoApproves(email) {
+		// The waitlist gates this address: only an approval token for it
+		// lets the sign-up continue; without a valid one (none, unknown,
+		// expired, used, or for another address) the request joins the
+		// list, answered like any other.
+		found, err := s.waitlistToken(ctx, tx, input.Environment, input.WaitlistToken)
+		if err != nil {
+			return authentication.SignupResult{}, err
+		}
+		if found.Email != email {
+			return s.joinWaitlist(ctx, tx, input, email)
+		}
+		entry = found.ID
 	}
 	id := identity.NewChallengeID()
+	answer := authentication.SignupResult{Challenge: id, Status: authentication.SignupCodeSent}
 	exists, err := tx.AccountExists(ctx, input.Environment, email)
 	if err != nil || exists {
-		return id, err
+		return answer, err
 	}
 	recent, err := tx.RecentSignups(ctx, input.Environment, email)
 	if err != nil || recent >= 5 {
-		return id, err
+		return answer, err
 	}
 	code, err := s.secrets.Code()
 	if err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	pending := authentication.PendingSignup{ID: id, Environment: input.Environment, Email: email, Name: strings.TrimSpace(input.Name),
-		PasswordHash: hash, Hash: s.secrets.Hash(id.String() + ":" + code), Expires: time.Now().Add(config.ChallengeTTL), TermsAccepted: accepted}
+		PasswordHash: hash, Hash: s.secrets.Hash(id.String() + ":" + code), Expires: time.Now().Add(config.ChallengeTTL), TermsAccepted: accepted, WaitlistEntry: entry}
 	if err = tx.CreateSignup(ctx, pending); err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	if err = tx.Commit(); err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	message := authentication.Message{Email: email, Purpose: authentication.PurposeEmailVerification, Code: code, Locale: i18n.Match(input.Locale)}
 	s.deliverLater(ctx, input.Environment, message, "signup", id, "environment", input.Environment, "purpose", message.Purpose)
-	return id, nil
+	return answer, nil
 }
 
 // signupPassword checks a new account's password against the environment's
@@ -213,6 +229,11 @@ func (s *Service) CompleteSignup(ctx context.Context, environment identity.Envir
 	if !methods.Allows(method) {
 		return authentication.SignedUp{}, authentication.ErrMethodNotAllowed()
 	}
+	// A sign-up begun before the waitlist was turned on (or for a domain no
+	// longer auto-approved) has no entry: it must not slip past the gate.
+	if policy.WaitlistOn() && row.WaitlistEntry.IsZero() && !policy.AutoApproves(row.Email) {
+		return authentication.SignedUp{}, errx.Unauthorized("invalid challenge")
+	}
 	required, err := tx.SSORequired(ctx, environment, row.Email)
 	if err != nil {
 		return authentication.SignedUp{}, err
@@ -234,7 +255,7 @@ func (s *Service) CompleteSignup(ctx context.Context, environment identity.Envir
 	}
 	user := identity.NewUserID()
 	err = tx.Join(ctx, authentication.Joining{Signup: signup, User: user, Environment: environment, Organization: policy.SignupOrganization,
-		Group: policy.SignupGroup, Email: row.Email, Name: row.Name, PasswordHash: row.PasswordHash, TermsAccepted: row.TermsAccepted})
+		Group: policy.SignupGroup, Email: row.Email, Name: row.Name, PasswordHash: row.PasswordHash, TermsAccepted: row.TermsAccepted, WaitlistEntry: row.WaitlistEntry})
 	if err != nil {
 		return authentication.SignedUp{}, err
 	}

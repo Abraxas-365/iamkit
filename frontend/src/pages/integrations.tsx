@@ -19,6 +19,8 @@ import { RowActions } from '@/components/ui/menu'
 import { ConfirmDialog, CopyField, CopyText, DataTable, DetailSection, EmptyState, EntityRef, FormDialog, PageHeader, RadioCards, Status, SwitchField, ErrorState, Time, selectClass, shortId, splitList } from '@/components/library/patterns'
 import type { Field } from '@/components/library/patterns'
 import { CreateConnectionDialog, providerLabel, type ConnectionKind } from './federation-connection-form'
+import { GuidedSetupDialog, consoleTransport } from '@/components/library/idp-guides/wizard'
+import { ScimGuides } from '@/components/library/idp-guides/guide-view'
 import { ClientAuthDialog, authSummary, type ClientAuth } from '@/components/library/client-auth'
 import { rich, t } from '@/lib/i18n'
 
@@ -180,6 +182,7 @@ export function FederationPage() {
   const { principal } = useAuth()
   const canWrite = principal?.role !== 'viewer'
   const [add, setAdd] = useState<ConnectionKind | null>(null)
+  const [guided, setGuided] = useState(false)
   const [disable, setDisable] = useState<FederationConnection | null>(null)
   const navigate = useNavigate()
   const detailPath = (id: string) => `${console}/federation/${id}`
@@ -234,7 +237,8 @@ export function FederationPage() {
       </div>
     </DetailSection>
 
-    {add && <CreateConnectionDialog base={base} kind={add} onClose={() => setAdd(null)} onCreated={() => (add === 'sso' ? sso : social).reload()} />}
+    {add && <CreateConnectionDialog base={base} kind={add} onGuided={add === 'sso' ? () => { setAdd(null); setGuided(true) } : undefined} onClose={() => setAdd(null)} onCreated={() => (add === 'sso' ? sso : social).reload()} />}
+    {guided && <GuidedSetupDialog base={base} transport={consoleTransport(base)} onClose={() => setGuided(false)} onDone={() => sso.reload()} onAdvanced={() => { setGuided(false); setAdd('sso'); sso.reload() }} />}
     {disable && <ConfirmDialog title={t('Disable {{name}}?', { name: disable.name })} description={t('Users can no longer sign in with it. Their accounts and links are kept.')} confirmLabel={t('Disable')} onClose={() => setDisable(null)} confirm={async () => { await api.delete(`${path}/${disable.id}`); toast.success(`${disable.name} disabled`); social.reload(); sso.reload() }} />}
   </div>
 }
@@ -399,6 +403,7 @@ export function ProvisioningPage() {
   return <div className="space-y-6">
     <PageHeader title={t('SCIM provisioning')} description={t('Let an organization\'s directory (Microsoft Entra ID, Okta, …) create, update and remove its users automatically.')} actions={create} />
     <div className="rounded-lg border bg-muted/30 p-3"><CopyField label={t('SCIM base URL')} value={scimURL} hint={t('Paste this into your directory\'s provisioning settings together with a token issued below.')} /></div>
+    <ScimGuides url={scimURL} token={secret?.secret} />
     <PaginationBar state={list} noun="tokens" />
     <DataTable columns={[t('Token'), { header: t('Organization'), hideBelow: 'sm' }, { header: t('Existing members'), hideBelow: 'lg' }, { header: t('Expires'), nowrap: true, hideBelow: 'md' }, t('Status'), ...(canWrite ? [t('Actions')] : [])]}
       loading={list.loading} error={list.error} retry={list.reload}

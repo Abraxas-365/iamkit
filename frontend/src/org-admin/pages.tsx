@@ -13,6 +13,8 @@ import { ConfirmDialog, CopyField, DataTable, DetailSection, EmptyState, ErrorSt
 import { DomainJoinPanel, type DomainJoinTransport } from '@/components/library/domain-join'
 import { describeAction } from '@/pages/activity'
 import { CreateConnectionDialog, providerLabel, type ConnectionTransport } from '@/pages/federation-connection-form'
+import { GuidedSetupDialog, type GuidedTransport } from '@/components/library/idp-guides/wizard'
+import { ScimGuides } from '@/components/library/idp-guides/guide-view'
 import { OrganizationPasswordRequirements, type PasswordRequirements, type RequirementsStore } from '@/pages/organization-password'
 import { message } from '@/lib/utils'
 import { SetupLinksPanel, type SetupLink, type IssuedSetupLink, type SetupTransport } from '@/components/library/setup-links'
@@ -30,7 +32,7 @@ interface Assignment { role_id: string; role_name: string; resource_name: string
 interface Invitation { id: string; email: string; inviter: string; status: string; expires_at: string; created_at: string }
 interface Issued extends Invitation { link?: string; delivery: string }
 interface Domain { id: string; domain: string; verified: boolean; verification: { name: string; value: string } }
-interface Connection { id: string; name: string; provider: string; enforcement: string; active: boolean; linked: number }
+interface Connection { id: string; name: string; provider: string; enforcement: string; active: boolean; draft?: boolean; linked: number }
 interface Directory { id: string; name: string; connection_id: string; expires_at: string; revoked_at: string | null; adopt_existing_members: boolean; adopt_scope: string; map_phone: boolean }
 interface Directories { items: Directory[]; scim_url: string }
 interface IssuedDirectory { id: string; secret: string; expires_at: string; scim_url: string }
@@ -288,22 +290,31 @@ export function ConnectionsPage() {
   const { client, can, claims, setup } = useAdmin()
   const list = usePortalList<Connection>('/connections')
   const [adding, setAdding] = useState(false)
+  const [guided, setGuided] = useState(false)
   const [disabling, setDisabling] = useState<Connection | null>(null)
   const write = can('iam:org:sso:write')
+  const guidedTransport = useMemo<GuidedTransport>(() => ({
+    create: body => client.post('/connections', body),
+    find: id => client.get(`/connections/${id}`),
+    update: (id, body) => client.patch(`/connections/${id}`, body),
+    test: id => client.post(`/connections/${id}/test`),
+    enable: id => client.post(`/connections/${id}/enable`),
+  }), [client])
   const transport = useMemo<ConnectionTransport>(() => ({
     domains: signal => client.get<Page<{ domain: string; verified: boolean }>>('/domains?limit=100', signal).then(r => r.items),
     create: body => client.post('/connections', body),
     groups: signal => client.get<Page<{ id: string; name: string }>>('/groups?limit=100', signal).then(r => r.items),
   }), [client])
+  const organization = { id: claims.organization_id ?? '', name: setup?.organization_name || 'your organization' }
   return <>
-    <PageHeader title={t('Single sign-on')} description={t('Let your employees sign in with your company\'s identity provider.')} actions={write && <Button onClick={() => setAdding(true)}><KeyRound /> {t('Add SSO')}</Button>} />
+    <PageHeader title={t('Single sign-on')} description={t('Let your employees sign in with your company\'s identity provider.')} actions={write && <><Button onClick={() => setGuided(true)}><KeyRound /> {t('Add SSO')}</Button><Button variant="outline" onClick={() => setAdding(true)}>{t('Advanced')}</Button></>} />
     <DataTable columns={[t('Connection'), { header: t('Mode'), hideBelow: 'sm' }, { header: t('Linked'), hideBelow: 'md' }, t('Status'), t('Actions')]} loading={list.loading} error={list.error} retry={list.reload}
       empty={<EmptyState icon={<KeyRound />} title={t('No SSO yet')} description={t('Connect Entra ID, Google Workspace, Okta, SAML or LDAP.')} />}
       rows={list.data.map(c => [
         <span className="block min-w-0"><span className="block font-medium">{c.name}</span><span className="block text-xs text-muted-foreground">{providerLabel(c.provider)}</span></span>,
         c.enforcement === 'enforced' ? <Badge variant="secondary" className="bg-primary/10 text-primary">{t('SSO required')}</Badge> : <span className="text-sm text-muted-foreground">{t('Optional')}</span>,
         <span className="tabular-nums">{c.linked}</span>,
-        <Status active={c.active} label={c.active ? t('Active') : t('Disabled')} />,
+        <Status active={c.active} label={c.active ? t('Active') : c.draft ? t('Draft') : t('Disabled')} />,
         write ? <RowActions label={t('Actions for {{name}}', { name: c.name })} actions={c.active ? [
           { label: c.enforcement === 'enforced' ? t('Make optional') : t('Require SSO'), onSelect: async () => { try { await client.patch(`/connections/${c.id}`, { enforcement: c.enforcement === 'enforced' ? 'optional' : 'enforced' }); toast.success(t('Connection updated')); list.reload() } catch (e) { toast.error(message(e)) } } },
           { label: t('Disable'), icon: <Ban />, destructive: true, onSelect: () => setDisabling(c) },
@@ -312,7 +323,8 @@ export function ConnectionsPage() {
         ]} /> : null,
       ])} />
     {setup && list.data.length > 0 && <div className="mt-4 space-y-3">{list.data.map(c => <ConnectionSetupInfo key={c.id} connection={c} />)}</div>}
-    {adding && <CreateConnectionDialog base="" kind="sso" organization={{ id: claims.organization_id ?? '', name: setup?.organization_name || 'your organization' }} transport={transport} onClose={() => setAdding(false)} onCreated={list.reload} />}
+    {adding && <CreateConnectionDialog base="" kind="sso" organization={organization} transport={transport} onClose={() => setAdding(false)} onCreated={list.reload} />}
+    {guided && <GuidedSetupDialog base="" organization={organization} transport={guidedTransport} onClose={() => setGuided(false)} onDone={list.reload} onAdvanced={() => { setGuided(false); setAdding(true); list.reload() }} />}
     {disabling && <ConfirmDialog title={t('Disable {{name}}?', { name: disabling.name })} description={t('Its users can no longer sign in with it.')} confirmLabel={t('Disable')} onClose={() => setDisabling(null)}
       confirm={async () => { await client.delete(`/connections/${disabling.id}`); toast.success(t('Connection disabled')); list.reload() }} />}
   </>
@@ -372,6 +384,7 @@ export function DirectoryPage() {
         if (write) cells.push(state === 'revoked' ? null : <RowActions label={t('Actions for {{name}}', { name: d.name })} actions={[{ label: t('Revoke token'), icon: <Ban />, destructive: true, onSelect: () => setRevoking(d) }]} />)
         return cells
       })} />
+    {list.data?.scim_url && <div className="mt-4"><ScimGuides url={list.data.scim_url} token={issued?.secret} /></div>}
     {adding && <FormDialog title={t('Add a directory token')} description={t('The token lets your directory provision users in your organization with SCIM.')} submitLabel={t('Issue token')} success={t('Token issued')} onClose={() => setAdding(false)}
       fields={[
         { name: 'name', label: t('Name'), hint: t('e.g. Acme Entra ID') },

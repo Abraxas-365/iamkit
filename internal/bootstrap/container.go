@@ -273,6 +273,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.PasswordPolicy = authenticationModule.PasswordPoliciesHTTP
 	s.SignInPolicy = authenticationModule.SignInPoliciesHTTP
 	s.Signup = authenticationModule.SignupHTTP
+	s.Waitlist = authenticationModule.WaitlistHTTP
 	s.Delivery = authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, server.OperatorID).
 		Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService)
 	s.SMS = authenticationModule.SMSHTTP
@@ -358,6 +359,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	// provider that opened the session; its answers come back to /slo.
 	federationModule.HTTP.Logout(federationModule.Logout, hostedModule.HTTP.PostForm)
 	federationModule.HTTP.SignedOut(hostedModule.HTTP.SignedOut)
+	federationModule.HTTP.TestResult(hostedModule.HTTP.TestResult)
 	oauthModule.HTTP.Upstream(upstreamLogout{federationModule.Logout})
 	oauthModule.HTTP.PostForm(hostedModule.HTTP.PostForm)
 	s.Workers.Add(federationModule.Jobs...)
@@ -425,6 +427,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		LogStreams:      logStreamModule.HTTP.WithActor(actor),
 		Usage:           usageModule.HTTP,
 		Security:        riskModule.HTTP.WithActor(actor),
+		Waitlist:        authenticationModule.WaitlistHTTP.WithActor(actor),
 	}
 	s.OrgAdminPortal = orgAdmin.PortalHTTP
 	s.SetupLinks = orgAdmin.SetupLinkHTTP

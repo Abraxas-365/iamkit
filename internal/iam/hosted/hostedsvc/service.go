@@ -290,18 +290,29 @@ func (s *Service) Passkey(ctx context.Context, r hosted.Request, session string,
 // Signup emails a code confirming the address of a new account. Which
 // methods the account may use is the authentication module's decision; the
 // page only offers what the client shows.
-func (s *Service) Signup(ctx context.Context, r hosted.Request, email, name, password string, acceptTerms bool) (identity.ChallengeID, error) {
+func (s *Service) Signup(ctx context.Context, r hosted.Request, email, name, password, waitlist string, acceptTerms bool) (authentication.SignupResult, error) {
 	target, options, p, err := s.offering(ctx, r, signup)
 	if err != nil {
-		return identity.ChallengeID{}, err
+		return authentication.SignupResult{}, err
 	}
 	switch {
 	case password != "" && !options.Password:
-		return identity.ChallengeID{}, hosted.ErrMethodUnavailable()
+		return authentication.SignupResult{}, hosted.ErrMethodUnavailable()
 	case password == "" && !options.EmailCode:
-		return identity.ChallengeID{}, hosted.Problem(errx.Validation, hosted.CodePasswordRequired, "password is required")
+		return authentication.SignupResult{}, hosted.Problem(errx.Validation, hosted.CodePasswordRequired, "password is required")
 	}
-	return s.signups.Signup(ctx, authentication.Signup{Environment: target.Environment, Email: email, Name: name, Password: password, Locale: uiLocales(p), AcceptTerms: acceptTerms})
+	return s.signups.Signup(ctx, authentication.Signup{Environment: target.Environment, Email: email, Name: name, Password: password, Locale: uiLocales(p), AcceptTerms: acceptTerms, WaitlistToken: waitlist})
+}
+
+// WaitlistEmail is the address an approval token was issued to; the sign-up
+// page prefills it. Every refusal is the same error, so the page reveals
+// nothing about tokens.
+func (s *Service) WaitlistEmail(ctx context.Context, r hosted.Request, waitlist string) (string, error) {
+	target, _, err := s.offered(ctx, r, signup)
+	if err != nil {
+		return "", err
+	}
+	return s.signups.WaitlistEmail(ctx, target.Environment, waitlist)
 }
 
 // CompleteSignup creates the account and continues as a verified login with

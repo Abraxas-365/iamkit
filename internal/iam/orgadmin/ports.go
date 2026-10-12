@@ -40,6 +40,10 @@ type Commands interface {
 	UpdateConnection(ctx context.Context, p Principal, connection identity.ConnectionID, input federation.ConnectionUpdate) error
 	DisableConnection(ctx context.Context, p Principal, connection identity.ConnectionID) error
 	EnableConnection(ctx context.Context, p Principal, connection identity.ConnectionID) error
+	// TestConnection issues the one-time link that opens a test sign-in of
+	// the organization's connection (iam:org:sso:write); the test creates
+	// no session, user or link.
+	TestConnection(ctx context.Context, p Principal, connection identity.ConnectionID) (federation.TestTicket, error)
 	// PutResourceGrant grants one of the organization's own resources to
 	// another organization.
 	PutResourceGrant(ctx context.Context, p Principal, input authorization.ResourceGrantInput) (authorization.ResourceGrant, error)

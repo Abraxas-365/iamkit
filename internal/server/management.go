@@ -61,6 +61,9 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	if s.SignInPolicy != nil {
 		s.SignInPolicy.Register(e)
 	}
+	if s.Waitlist != nil {
+		s.Waitlist.Register(e)
+	}
 	if s.SigningKeys != nil {
 		s.SigningKeys.Register(e)
 	}

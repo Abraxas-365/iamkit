@@ -95,6 +95,11 @@ const (
 	// FederationStateTTL bounds a round trip to an external identity
 	// provider (state row and browser binding cookie).
 	FederationStateTTL = 5 * time.Minute
+	// SAMLDraftTTL is how long a SAML draft connection (no identity
+	// provider metadata yet) is kept before the prune job deletes it.
+	SAMLDraftTTL = 7 * 24 * time.Hour
+	// FederationTestTTL bounds a test-connection ticket (ik_fedtest_).
+	FederationTestTTL = 10 * time.Minute
 )
 
 // SAMLResponseMax bounds a SAML response posted to the assertion consumer
@@ -295,4 +300,15 @@ const (
 	// ImpossibleTravelMinKm: closer sign-ins are never impossible travel
 	// (GeoIP city precision).
 	ImpossibleTravelMinKm = 500
+	// WaitlistMaxPending caps the entries waiting for a decision (pending)
+	// per environment; joining beyond it is silently ignored (the answer
+	// stays the same).
+	WaitlistMaxPending = 100_000
+	// WaitlistApprovalTTL is how long an approved waitlist entry's sign-up
+	// link works.
+	WaitlistApprovalTTL = 7 * 24 * time.Hour
+	// WaitlistMaxApprove caps the entries one bulk approval decides.
+	WaitlistMaxApprove = 500
+	// WaitlistMaxDomains caps a sign-in policy's auto-approve domains.
+	WaitlistMaxDomains = 50
 )

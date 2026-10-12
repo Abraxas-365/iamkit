@@ -35,7 +35,8 @@ func (p *SignInPolicies) SignInPolicy(ctx context.Context, environment identity.
 }
 
 func (p *SignInPolicies) SetSignInPolicy(ctx context.Context, m authentication.Mutation, input authentication.SignInPolicy) (authentication.SignInPolicy, error) {
-	if input.AllowedFactors == nil || input.AllowPasskey == nil || input.RequireTerms == nil {
+	if input.AllowedFactors == nil || input.AllowPasskey == nil || input.RequireTerms == nil ||
+		input.Waitlist == nil || input.WaitlistAutoApproveDomains == nil || input.WaitlistSignupURL == nil {
 		current, err := p.SignInPolicy(ctx, m.Environment)
 		if err != nil {
 			return authentication.SignInPolicy{}, err
@@ -50,6 +51,19 @@ func (p *SignInPolicies) SetSignInPolicy(ctx context.Context, m authentication.M
 		if input.RequireTerms == nil {
 			terms := current.TermsRequired()
 			input.RequireTerms = &terms
+		}
+		// Omitting the waitlist keeps it: a client unaware of the field
+		// must never turn the gate off.
+		if input.Waitlist == nil {
+			waitlist := current.WaitlistOn()
+			input.Waitlist = &waitlist
+		}
+		if input.WaitlistAutoApproveDomains == nil {
+			input.WaitlistAutoApproveDomains = append([]string{}, current.WaitlistAutoApproveDomains...)
+		}
+		if input.WaitlistSignupURL == nil {
+			url := current.WaitlistURL()
+			input.WaitlistSignupURL = &url
 		}
 	}
 	if err := input.Validate(); err != nil {

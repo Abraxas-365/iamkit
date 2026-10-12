@@ -223,7 +223,11 @@ func (s *DeliveryService) Preview(ctx context.Context, environmentID identity.En
 	case authentication.PurposeSecurityAlert:
 		at := s.now()
 		m.Detection, m.IP, m.Country, m.UserAgent, m.OccurredAt = "new_device", "203.0.113.7", "PE", "Mozilla/5.0", &at
-	case authentication.PurposeTest:
+	case authentication.PurposeWaitlistApproved:
+		expires := s.now().Add(config.WaitlistApprovalTTL)
+		m.ExpiresAt, m.Token = &expires, "sample"
+		m.Link = authentication.WaitlistLink("https://app.example.com/signup", "sample")
+	case authentication.PurposeTest, authentication.PurposeWaitlistJoined, authentication.PurposeWaitlistRejected:
 	default:
 		m.Code = sampleCode
 	}

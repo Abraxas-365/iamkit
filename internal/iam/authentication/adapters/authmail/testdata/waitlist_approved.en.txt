@@ -1,0 +1,12 @@
+Subject: Your Acme spot is ready
+
+You're in
+
+Good news: you've been approved to create your Acme account.
+
+This link works until October 4, 2026.
+
+Create your account: https://app.acme.io/signup?waitlist=ik_wait_token
+
+--
+If you didn't ask to join the waitlist, you can ignore this email.

@@ -1,0 +1,8 @@
+Subject: You're on the Acme waitlist
+
+You're on the waitlist
+
+Thanks for your interest in Acme. We've added you to the waitlist and will email you when your spot is ready.
+
+--
+If you didn't ask to join, you can ignore this email.

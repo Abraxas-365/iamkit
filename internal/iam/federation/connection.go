@@ -45,6 +45,10 @@ type Connection struct {
 	Enforcement  string                  `db:"enforcement"`
 	Provider     string                  `db:"provider"`
 	Options      Options                 `db:"options"`
+	// Draft marks a SAML connection still waiting for its identity
+	// provider's metadata: inactive (nothing signs in through it), with the
+	// SP entity ID as issuer and client ID until Enable prepares it.
+	Draft bool `db:"draft"`
 	// Signup and LinkEmail let unlinked identities of an environment
 	// connection join: a new account in SignupOrganization (and
 	// SignupGroup), or a link to the account with the same verified email.
@@ -75,7 +79,10 @@ func (c Connection) Validate() error {
 	if !c.JIT && !c.JITGroup.IsZero() {
 		return errx.Validation("jit_group_id requires jit_provisioning")
 	}
-	if err := validOptions(c.Provider, c.Options); err != nil {
+	if c.Draft && c.Provider != ProviderSAML {
+		return errx.Validation("only SAML connections can be drafts")
+	}
+	if err := validOptionsFor(c.Provider, c.Options, c.Draft); err != nil {
 		return err
 	}
 	if c.Provider == ProviderSAML && !c.Scoped() {
@@ -202,6 +209,12 @@ type ConnectionInput struct {
 	// GroupMappings (organization connections): IdP group values and the
 	// groups of the organization they put users in.
 	GroupMappings []GroupMapping `json:"group_mappings"`
+	// Draft (SAML only) creates the connection inactive and without
+	// metadata, to learn the service provider values (entity ID, ACS,
+	// metadata URL) before configuring the identity provider; PATCH
+	// options.metadata_url or options.metadata_xml fills it and Enable
+	// activates it.
+	Draft bool `json:"draft"`
 }
 
 // provider is the input's provider, oidc by default.
@@ -230,7 +243,15 @@ func (i ConnectionInput) Validate() error {
 	if err := ValidateGroupMappings(NormalizeGroupMappings(i.GroupMappings)); err != nil {
 		return err
 	}
-	if err := validOptions(i.provider(), i.Options.Normalized()); err != nil {
+	if i.Draft {
+		if i.provider() != ProviderSAML {
+			return errx.Validation("draft applies to SAML connections only")
+		}
+		if o := i.Options.Normalized(); o.MetadataURL != "" || o.MetadataXML != "" {
+			return errx.Validation("a draft connection takes no metadata yet: create it, then set options.metadata_url or options.metadata_xml")
+		}
+	}
+	if err := validOptionsFor(i.provider(), i.Options.Normalized(), i.Draft); err != nil {
 		return err
 	}
 	if i.provider() == ProviderSAML {
@@ -303,7 +324,7 @@ func (i ConnectionInput) Validate() error {
 // service seals ClientSecret separately.
 func (i ConnectionInput) Connection(environment identity.EnvironmentID) Connection {
 	c := Connection{Environment: environment, Organization: i.Organization, Name: strings.TrimSpace(i.Name), Issuer: i.issuer(), Client: strings.TrimSpace(i.Client), SecretEnv: i.SecretEnv, JIT: !i.Organization.IsZero(), JITGroup: i.JITGroup, Enforcement: i.Enforcement,
-		Provider: i.provider(), Options: i.Options.Normalized(), Signup: i.Signup, LinkEmail: i.LinkEmail, SignupOrganization: i.SignupOrganization, SignupGroup: i.SignupGroup, UpdateProfile: i.UpdateProfile, GroupMappings: NormalizeGroupMappings(i.GroupMappings)}
+		Provider: i.provider(), Options: i.Options.Normalized(), Draft: i.Draft, Signup: i.Signup, LinkEmail: i.LinkEmail, SignupOrganization: i.SignupOrganization, SignupGroup: i.SignupGroup, UpdateProfile: i.UpdateProfile, GroupMappings: NormalizeGroupMappings(i.GroupMappings)}
 	if i.JIT != nil {
 		c.JIT = *i.JIT
 	}
@@ -470,6 +491,10 @@ type Claims struct {
 	NameID       string
 	NameIDFormat string
 	SessionIndex string
+	// Received names the attributes the SAML assertion carried (names
+	// only), so a test connection can show what the identity provider
+	// sends. Empty for other providers.
+	Received []string
 }
 
 // Link is the session's SAML link for claims of connection c: set only for
@@ -620,6 +645,12 @@ type State struct {
 	MaxAge *int64
 	// Started is when the state was saved (set by the repository).
 	Started time.Time
+	// Test marks a test connection sign-in: the callback only reports what
+	// the identity provider sent (TestResult) and never signs anybody in,
+	// creates a user or links an identity. TestActor is who asked for it.
+	// Boundary has no application or resource then.
+	Test      bool
+	TestActor string
 }
 type Start struct{ URL, Binding string }
 
@@ -712,6 +743,9 @@ type Outcome struct {
 	// to (set even when the callback fails after the state was consumed);
 	// Result is then the one-time handle to redeem instead of a session.
 	ReturnTo, Result string
+	// Test is set instead of everything else when the callback belongs to
+	// a test connection sign-in (also when it failed): the page to show.
+	Test *TestResult
 }
 
 // Hosted reports whether the callback belongs to a hosted login.
@@ -762,12 +796,15 @@ type ConnectionView struct {
 	Issuer           string `json:"issuer" db:"issuer"`
 	ClientID         string `json:"client_id" db:"client_id"`
 	Active           bool   `json:"active" db:"active"`
-	JIT              bool   `json:"jit_provisioning" db:"jit_provisioning"`
-	Enforcement      string `json:"enforcement" db:"enforcement"`
-	Signup           bool   `json:"signup" db:"signup"`
-	LinkEmail        bool   `json:"link_email" db:"link_email"`
-	UpdateProfile    bool   `json:"update_profile" db:"update_profile"`
-	Linked           int    `json:"linked" db:"linked"`
+	// Draft is a SAML connection waiting for its identity provider's
+	// metadata (inactive until enabled).
+	Draft         bool   `json:"draft" db:"draft"`
+	JIT           bool   `json:"jit_provisioning" db:"jit_provisioning"`
+	Enforcement   string `json:"enforcement" db:"enforcement"`
+	Signup        bool   `json:"signup" db:"signup"`
+	LinkEmail     bool   `json:"link_email" db:"link_email"`
+	UpdateProfile bool   `json:"update_profile" db:"update_profile"`
+	Linked        int    `json:"linked" db:"linked"`
 }
 
 // ConnectionDetail never exposes the secret. SecretSource is "env",
@@ -785,6 +822,7 @@ type ConnectionDetail struct {
 	SecretEnv          string                   `json:"secret_env" db:"secret_env"`
 	SecretSource       string                   `json:"secret_source" db:"secret_source"`
 	Active             bool                     `json:"active" db:"active"`
+	Draft              bool                     `json:"draft" db:"draft"`
 	JIT                bool                     `json:"jit_provisioning" db:"jit_provisioning"`
 	JITGroup           *identity.GroupID        `json:"jit_group_id" db:"jit_group_id"`
 	Enforcement        string                   `json:"enforcement" db:"enforcement"`

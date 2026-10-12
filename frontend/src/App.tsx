@@ -6,6 +6,7 @@ import { OverviewPage, ProjectsPage } from '@/pages/projects'
 import EntitiesPage from '@/pages/entities'
 import ActivityPage from '@/pages/activity'
 import LogoutDeliveriesPage from '@/pages/logout-deliveries'
+import WaitlistPage from '@/pages/waitlist'
 import WebhooksPage, { WebhookDetailPage } from '@/pages/webhooks'
 import { KeysPage, SettingsPage } from '@/pages/settings'
 import OperatorsPage from '@/pages/operators'
@@ -94,6 +95,7 @@ export default function App() {
         <Route path="sessions" element={<ActivityPage />} />
         <Route path="audit-events" element={<ActivityPage audit />} />
         <Route path="logout-deliveries" element={<LogoutDeliveriesPage />} />
+        <Route path="waitlist" element={<WaitlistPage />} />
         <Route path="webhooks" element={<WebhooksPage />} />
         <Route path="webhooks/:webhook" element={<WebhookDetailPage />} />
         <Route path="audit-logs" element={<AuditLogsPage />} />

@@ -35,6 +35,12 @@ const PURPOSES = [
     example: { email: 'ada@example.com', purpose: 'invitation', token: 'ik_inv_…', link: 'https://app.example.com/join?token=ik_inv_…', organization: 'Acme', inviter: 'owner@example.com', expires_at: '2026-10-04T12:00:00Z' },
   },
   { purpose: 'test', label: t('Test (console)'), fields: ['email', 'purpose'], validity: t('No code'), example: { email: 'ops@example.com', purpose: 'test' } },
+  { purpose: 'waitlist_joined', label: t('Waitlist: joined'), fields: ['email', 'purpose'], validity: t('No code'), example: { email: 'ada@example.com', purpose: 'waitlist_joined' } },
+  {
+    purpose: 'waitlist_approved', label: t('Waitlist: approved'), fields: ['email', 'purpose', 'token', 'link', 'expires_at'], validity: t('7 days, single use'),
+    example: { email: 'ada@example.com', purpose: 'waitlist_approved', token: 'ik_wait_…', link: 'https://app.example.com/signup?waitlist=ik_wait_…', expires_at: '2026-10-04T12:00:00Z' },
+  },
+  { purpose: 'waitlist_rejected', label: t('Waitlist: rejected'), fields: ['email', 'purpose'], validity: t('No code; only when the operator chooses to notify'), example: { email: 'ada@example.com', purpose: 'waitlist_rejected' } },
 ]
 
 const GLOBAL_ENV: Record<Provider, string> = { webhook: 'EMAIL_WEBHOOK_URL', smtp: 'SMTP_HOST', resend: 'RESEND_API_KEY' }

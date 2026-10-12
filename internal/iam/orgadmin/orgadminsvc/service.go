@@ -712,6 +712,21 @@ func (s *Service) EnableConnection(ctx context.Context, p orgadmin.Principal, id
 	return s.d.Connections.Enable(ctx, s.federationMutation(p), id)
 }
 
+func (s *Service) TestConnection(ctx context.Context, p orgadmin.Principal, id identity.ConnectionID) (federation.TestTicket, error) {
+	if err := p.Require(authorization.PermOrgSSOWrite); err != nil {
+		return federation.TestTicket{}, err
+	}
+	// Other organizations' connections are NotFound.
+	c, err := s.connection(ctx, p, id)
+	if err != nil {
+		return federation.TestTicket{}, err
+	}
+	if c.SecretSource == "env" {
+		return federation.TestTicket{}, errx.Forbidden("this connection reads a deployment secret (secret_env); an operator must test it")
+	}
+	return s.d.Connections.IssueTest(ctx, s.federationMutation(p), id)
+}
+
 func (s *Service) federationMutation(p orgadmin.Principal) federation.Mutation {
 	return federation.Mutation{Environment: p.Environment, Actor: p.Actor(), Action: p.Action, Target: p.Target}
 }

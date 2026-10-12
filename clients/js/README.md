@@ -53,7 +53,7 @@ location.assign(await iam.complete(ticket, result.tokens.access_token));
 | `mfa.verify` / `mfa.send` / `mfa.enroll` / `mfa.securityKey` | `/identity/v1/mfa/*` |
 | `federation.start` / `federation.finish` | `/identity/v1/federation/start`, `/federation/result` (PKCE) |
 | `federation.ldap` | `/identity/v1/federation/ldap/login` |
-| `signup.start` / `signup.verify` | `/identity/v1/signup[/verify]` |
+| `signup.start` / `signup.verify` | `/identity/v1/signup[/verify]`; `start` answers `status` `code_sent` or `waitlisted` (waitlist on, no code sent) and takes `waitlistToken` from the approval link |
 | `invitation.preview` / `invitation.accept` | `/identity/v1/invitations/*` |
 | `organizations(accessToken, …)` | `GET /identity/v1/organizations` (see also `createAccount`) |
 | `complete(ticket, accessToken, approve?)` | `POST /oauth/authorize/complete` (JSON) |

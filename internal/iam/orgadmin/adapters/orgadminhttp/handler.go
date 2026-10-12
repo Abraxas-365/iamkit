@@ -71,6 +71,7 @@ func (h *Handler) Register(r fiber.Router) {
 	r.Patch("/connections/:connection", h.updateConnection)
 	r.Delete("/connections/:connection", h.disableConnection)
 	r.Post("/connections/:connection/enable", h.enableConnection)
+	r.Post("/connections/:connection/test", h.testConnection)
 	r.Get("/directories", h.directories)
 	r.Post("/directories", h.createDirectory)
 	r.Delete("/directories/:credential", h.revokeDirectory)
@@ -473,6 +474,19 @@ func (h *Handler) enableConnection(c *fiber.Ctx) error {
 		return err
 	}
 	return done(c, h.commands.EnableConnection(c.UserContext(), principal(c), id))
+}
+
+func (h *Handler) testConnection(c *fiber.Ctx) error {
+	id, err := connectionID(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.commands.TestConnection(c.UserContext(), principal(c), id)
+	if err != nil {
+		return err
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(out)
 }
 
 func (h *Handler) events(c *fiber.Ctx) error {

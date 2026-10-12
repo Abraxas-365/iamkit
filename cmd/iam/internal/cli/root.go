@@ -83,6 +83,7 @@ Workspace-level commands (me, projects, environments, operators, keys) do not.`,
 	cmd.AddCommand(passwordPolicyCmd())
 	cmd.AddCommand(userSchemaCmd())
 	cmd.AddCommand(signInPolicyCmd())
+	cmd.AddCommand(waitlistCmd())
 	cmd.AddCommand(signInTextsCmd())
 	cmd.AddCommand(orgAdminPortalCmd())
 	cmd.AddCommand(signingKeysCmd())

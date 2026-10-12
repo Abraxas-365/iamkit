@@ -40,7 +40,7 @@ var script string
 
 var pages = func() map[string]*template.Template {
 	out := map[string]*template.Template{}
-	for _, name := range []string{"identify", "password", "directory", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "signup", "signup-code", "device", "device-confirm", "post"} {
+	for _, name := range []string{"identify", "password", "directory", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "test", "signup", "signup-code", "waitlisted", "device", "device-confirm", "post"} {
 		t := template.Must(template.ParseFS(files, "templates/*.html"))
 		template.Must(t.New("content").Parse(`{{template "` + name + `/content" .}}`))
 		out[name] = t
@@ -166,7 +166,10 @@ type view struct {
 	Brand                                 brand
 	Ticket, Email                         string
 	// Name is the name typed on the sign-up page.
-	Name        string
+	Name string
+	// Waitlist is the approval token of a sign-up link, carried through the
+	// sign-up form (never shown).
+	Waitlist    string
 	Connection  *identity.ConnectionID
 	Connections []federation.ConnectionSummary
 	// SignIn is which methods the client offers; zero on pages that do
@@ -196,6 +199,8 @@ type view struct {
 	// Post is the form the "post" page submits to another site (a SAML
 	// response to the service provider's ACS).
 	Post *PostForm
+	// Test is the test connection result the "test" page shows.
+	Test *federation.TestResult
 	// Preview renders a sample for the console's script-less frame: what
 	// the page script reveals in a browser with WebAuthn is shown.
 	Preview bool
@@ -349,6 +354,7 @@ var (
 		"SIGNUP_DISABLED":             "hosted.error.signup_disabled",
 		"TERMS_REQUIRED":              "hosted.error.terms_required",
 		"SIGNED_UP_NO_ACCESS":         "hosted.error.signed_up_no_access",
+		"WAITLIST_TOKEN_INVALID":      "hosted.error.waitlist_token",
 		// A usage limit of the environment (users, emails, SMS): the
 		// operator's message names the limit, which end users cannot act on.
 		"QUOTA_EXCEEDED": "hosted.error.generic",
@@ -947,6 +953,25 @@ func (h *Handler) SignedOut(c *fiber.Ctx, environment identity.EnvironmentID, pr
 	}
 	v.Title, v.Notice = v.T("hosted.title.signed_out"), v.T("hosted.signed_out")
 	return render(c, fiber.StatusOK, "message", v)
+}
+
+// TestResult is the page a test connection sign-in ends on: whether the
+// identity provider's answer verified and what a real sign-in would read
+// from it. It uses the environment's branding; the values are escaped by
+// the template like every page, and no secret ever reaches it.
+func (h *Handler) TestResult(c *fiber.Ctx, result federation.TestResult) error {
+	settings := hosted.Settings{}
+	if s, err := h.queries.Settings(c.UserContext(), result.Environment); err == nil {
+		settings = s
+	}
+	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, ""), Test: &result}
+	h.word(c, &v, result.Environment, hosted.TextScope{})
+	if result.Success {
+		v.Title, v.Notice = v.T("hosted.title.test_success"), v.T("hosted.test.success")
+	} else {
+		v.Title, v.Error = v.T("hosted.title.test_failed"), v.T("hosted.test.failed")
+	}
+	return render(c, fiber.StatusOK, "test", v)
 }
 
 // environmentLanguage is the configured language (organization, client or

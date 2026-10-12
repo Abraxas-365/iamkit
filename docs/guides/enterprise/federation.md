@@ -13,6 +13,10 @@ kinds of connection:
   GitHub or Apple, optionally with sign-up and linking by verified email, or
   explicitly linked users only.
 
+Provider-specific setup guides (Okta, Microsoft Entra ID, Google Workspace and
+more), a guided wizard and **Test connection** are in [Identity provider setup
+guides](idp-guides.md).
+
 Every connection has a `provider`: a preset (`google`, `microsoft`, `github`,
 `apple`) whose issuer and endpoints IAMKit knows, or `oidc` (default) for any
 OpenID Connect provider with an `issuer`. Organizations whose identity

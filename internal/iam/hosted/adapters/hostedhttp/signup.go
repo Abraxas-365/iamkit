@@ -2,6 +2,7 @@ package hostedhttp
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/errx"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/risk"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
@@ -10,7 +11,8 @@ import (
 // signupPage asks for the name, email and (when the client offers
 // passwords) a password of a new account.
 func (h *Handler) signupPage(c *fiber.Ctx) error {
-	v, ok, err := h.base(c, h.request(c))
+	r := h.request(c)
+	v, ok, err := h.base(c, r)
 	if !ok {
 		return err
 	}
@@ -19,25 +21,33 @@ func (h *Handler) signupPage(c *fiber.Ctx) error {
 		v.Title, v.Error = v.T("hosted.title.sign_in"), v.T("hosted.error.signup_disabled")
 		return render(c, fiber.StatusForbidden, "identify", v)
 	}
+	if token := c.Query("waitlist"); token != "" {
+		// The approval link prefills its address; a token that does not
+		// resolve shows the plain form and says nothing about why.
+		if email, err := h.flow.WaitlistEmail(c.UserContext(), r, token); err == nil {
+			v.Waitlist, v.Email = token, email
+		}
+	}
 	v.show(risk.CaptchaSignup)
 	return render(c, fiber.StatusOK, "signup", v)
 }
 
-// signup emails the code confirming the address.
+// signup emails the code confirming the address, or tells the person they
+// are on the waitlist.
 func (h *Handler) signup(c *fiber.Ctx) error {
 	r := h.request(c)
 	v, ok, err := h.base(c, r)
 	if !ok {
 		return err
 	}
-	v.Title, v.Email, v.Name = v.T("hosted.title.signup"), c.FormValue("email"), c.FormValue("name")
+	v.Title, v.Email, v.Name, v.Waitlist = v.T("hosted.title.signup"), c.FormValue("email"), c.FormValue("name"), c.FormValue("waitlist")
 	if err := h.solve(c, &v, r.Ticket, risk.CaptchaSignup); err != nil {
 		status, text := failed(c, v, err)
 		v.Error = text
 		v.show(risk.CaptchaSignup)
 		return render(c, status, "signup", v)
 	}
-	v.Challenge, err = h.flow.Signup(c.UserContext(), r, v.Email, v.Name, c.FormValue("password"), c.FormValue("accept_terms") == "on")
+	out, err := h.flow.Signup(c.UserContext(), r, v.Email, v.Name, c.FormValue("password"), v.Waitlist, c.FormValue("accept_terms") == "on")
 	if err != nil {
 		var e *errx.Error
 		if errx.As(err, &e) && e.Code == "SSO_REQUIRED" {
@@ -48,6 +58,11 @@ func (h *Handler) signup(c *fiber.Ctx) error {
 		v.show(risk.CaptchaSignup)
 		return h.retry(c, v, "signup", err)
 	}
+	if out.Status == authentication.SignupWaitlisted {
+		v.Title, v.Notice = v.T("hosted.title.waitlisted"), v.T("hosted.notice.waitlisted", v.Email)
+		return render(c, fiber.StatusOK, "waitlisted", v)
+	}
+	v.Challenge = out.Challenge
 	v.Title, v.Notice = v.T("hosted.title.check_email"), v.T("hosted.notice.signup_sent", v.Email)
 	return render(c, fiber.StatusOK, "signup-code", v)
 }

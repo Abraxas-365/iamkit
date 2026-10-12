@@ -37,12 +37,16 @@ func (h *SignupHandler) Signup(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	id, err := h.commands.Signup(ctx, input.Signup)
+	out, err := h.commands.Signup(ctx, input.Signup)
 	if err != nil {
 		return err
 	}
 	c.Set("Cache-Control", "no-store")
-	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"challenge_id": id, "message": "If the email can sign up, a code was sent.", "expires_in": int(config.ChallengeTTL.Seconds())})
+	message := "If the email can sign up, a code was sent."
+	if out.Status == authentication.SignupWaitlisted {
+		message = "If the email can join the waitlist, it was added."
+	}
+	return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"challenge_id": out.Challenge, "status": out.Status, "message": message, "expires_in": int(config.ChallengeTTL.Seconds())})
 }
 
 // Verify creates the account once the code is right: 201 {user_id,

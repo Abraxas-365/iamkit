@@ -106,7 +106,7 @@ func (r Renderer) Render(ctx context.Context, m authentication.Message, draft au
 	if len(v.Body) > 0 {
 		v.Preheader = strings.Join(v.Body[0], " ")
 	}
-	if m.Purpose == authentication.PurposeInvitation {
+	if authentication.HasAction(m.Purpose) {
 		if link := webLink(m.Link); link != "" {
 			v.Link = link
 			v.Action = singleLine(fill(wording.Action))
@@ -143,7 +143,11 @@ func placeholderValues(m authentication.Message, appName, locale string) map[str
 		if m.ExpiresAt != nil {
 			values[authentication.PlaceholderExpiresAt] = i18n.Date(locale, *m.ExpiresAt)
 		}
-	case authentication.PurposeTest:
+	case authentication.PurposeWaitlistApproved:
+		if m.ExpiresAt != nil {
+			values[authentication.PlaceholderExpiresAt] = i18n.Date(locale, *m.ExpiresAt)
+		}
+	case authentication.PurposeTest, authentication.PurposeWaitlistJoined, authentication.PurposeWaitlistRejected:
 	case authentication.PurposeSecurityAlert:
 		reason := "email.security_alert.reason." + m.Detection
 		values[authentication.PlaceholderReason] = i18n.T(locale, reason)

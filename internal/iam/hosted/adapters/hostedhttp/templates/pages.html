@@ -39,6 +39,7 @@
 {{define "signup/content"}}
 <form method="post" action="/hosted/signup">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
+{{if .Waitlist}}<input type="hidden" name="waitlist" value="{{.Waitlist}}">{{end}}
 <label for="name">{{.T "hosted.form.name"}}</label>
 <input id="name" type="text" name="name" value="{{.Name}}" maxlength="200" autocomplete="name" required autofocus>
 <label for="email">{{.T "hosted.form.email"}}</label>
@@ -71,6 +72,13 @@
 <input id="code" type="text" name="code" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="one-time-code" required autofocus>
 <button type="submit">{{.T "hosted.form.verify"}}</button>
 </form>
+<form method="get" action="/hosted/login">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<button type="submit" class="link">{{.T "hosted.form.start_over"}}</button>
+</form>
+{{end}}
+
+{{define "waitlisted/content"}}
 <form method="get" action="/hosted/login">
 <input type="hidden" name="ticket" value="{{.Ticket}}">
 <button type="submit" class="link">{{.T "hosted.form.start_over"}}</button>
@@ -280,6 +288,27 @@
 {{end}}
 
 {{define "message/content"}}{{end}}
+
+{{define "test/content"}}
+{{with .Test}}
+<p class="muted">{{$.T "hosted.test.connection"}}: <strong>{{.ConnectionName}}</strong> ({{.Provider}})</p>
+{{if .Success}}
+<dl class="facts">
+<dt>{{$.T "hosted.test.subject"}}</dt><dd><code>{{.Subject}}</code></dd>
+<dt>{{$.T "hosted.test.email"}}</dt><dd>{{if .Email}}<code>{{.Email}}</code>{{else}}<span class="muted">{{$.T "hosted.test.none"}}</span>{{end}}</dd>
+<dt>{{$.T "hosted.test.email_verified"}}</dt><dd>{{.EmailVerified}}</dd>
+<dt>{{$.T "hosted.test.name"}}</dt><dd>{{if .DisplayName}}{{.DisplayName}}{{else}}<span class="muted">{{$.T "hosted.test.none"}}</span>{{end}}</dd>
+<dt>{{$.T "hosted.test.groups"}}</dt><dd>{{if .Groups}}<ul class="plain">{{range .Groups}}<li><code>{{.}}</code></li>{{end}}</ul>{{else}}<span class="muted">{{$.T "hosted.test.none"}}</span>{{end}}</dd>
+{{if .NameIDFormat}}<dt>{{$.T "hosted.test.nameid_format"}}</dt><dd><code>{{.NameIDFormat}}</code></dd>{{end}}
+{{if .Attributes}}<dt>{{$.T "hosted.test.attributes"}}</dt><dd><ul class="plain">{{range .Attributes}}<li><code>{{.}}</code></li>{{end}}</ul></dd>{{end}}
+</dl>
+<p class="muted">{{$.T "hosted.test.no_session"}}</p>
+{{else}}
+<p>{{.Error}}</p>
+<p class="muted">{{$.T "hosted.test.no_session"}}</p>
+{{end}}
+{{end}}
+{{end}}
 
 {{define "post/content"}}
 <form id="post" method="post" action="{{.Post.Action}}">

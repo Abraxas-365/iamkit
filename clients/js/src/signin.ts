@@ -38,6 +38,8 @@ export type InvitationAccepted = Schema<"Accepted">;
 export type CodeSent = Schema<"CodeSent">;
 export type Enrollment = Schema<"AuthenticationEnrollment">;
 export type SignedUp = Schema<"SignedUp">;
+/** What a sign-up request did: sent a code, or put the address on the waitlist. */
+export type SignupStatus = "code_sent" | "waitlisted";
 export type Organization = Schema<"AuthenticationOrganization">;
 
 /** An access/refresh token pair (+ recovery codes after a first enrollment). */
@@ -343,14 +345,20 @@ export class SignIn {
 
   /** Self-service sign-up (when the sign-in policy allows it). */
   readonly signup = {
-    /** Emails a verification code; the same answer for existing accounts. */
-    start: async (input: { environmentId: string; email: string; name: string; password?: string; locale?: string; acceptTerms?: boolean } & Signals): Promise<{ challengeId: string; expiresIn: number }> => {
+    /**
+     * Emails a verification code; the same answer for existing accounts.
+     * With the environment's waitlist on, the answer has `status`
+     * `"waitlisted"` instead: no code was sent (show "you're on the list")
+     * and `challengeId` is not usable. Once approved, the person gets a link
+     * with `?waitlist=<token>`: pass it as `waitlistToken` to sign up.
+     */
+    start: async (input: { environmentId: string; email: string; name: string; password?: string; locale?: string; acceptTerms?: boolean; waitlistToken?: string } & Signals): Promise<{ challengeId: string; expiresIn: number; status: SignupStatus }> => {
       const out = await unwrap(
         this.client.POST("/identity/v1/signup", {
-          body: this.signals({ environment_id: input.environmentId, email: input.email, name: input.name, password: input.password, locale: input.locale, accept_terms: input.acceptTerms }, input),
+          body: this.signals({ environment_id: input.environmentId, email: input.email, name: input.name, password: input.password, locale: input.locale, accept_terms: input.acceptTerms, waitlist_token: input.waitlistToken || undefined }, input),
         }),
       );
-      return { challengeId: out.challenge_id, expiresIn: out.expires_in };
+      return { challengeId: out.challenge_id, expiresIn: out.expires_in, status: out.status === "waitlisted" ? "waitlisted" : "code_sent" };
     },
     /** Creates the account (no session: sign in next). */
     verify: async (input: { environmentId: string; challengeId: string; code: string }): Promise<SignedUp> =>

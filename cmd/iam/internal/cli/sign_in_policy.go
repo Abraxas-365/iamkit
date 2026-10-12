@@ -40,9 +40,9 @@ func signInPolicyGetCmd() *cobra.Command {
 }
 
 func signInPolicySetCmd() *cobra.Command {
-	var password, emailCode, social, passkey, reset, mfa, mfaFederated, signup, terms bool
-	var signupOrganization, signupGroup string
-	var factors []string
+	var password, emailCode, social, passkey, reset, mfa, mfaFederated, signup, terms, waitlist bool
+	var signupOrganization, signupGroup, waitlistSignupURL string
+	var factors, waitlistDomains []string
 	cmd := &cobra.Command{
 		Use:   "set",
 		Short: "Change the sign-in policy",
@@ -62,6 +62,12 @@ clear the group. --require-terms makes sign-up record the acceptance of the
 terms ("accept_terms", users.terms_accepted_at); the hosted page links the
 branding's legal terms URL.
 
+--waitlist (needs --allow-signup) puts sign-up behind an operator's approval
+("iam waitlist"): people ask to join and wait. Emails of
+--waitlist-auto-approve-domains (comma-separated, at most 50) skip the list;
+--waitlist-signup-url (https, or http on loopback) is the sign-up page the
+approval email links to (empty: the hosted page).
+
 --allow-passkey (default on) lets users sign in with a passkey alone (no
 password, no second factor: the passkey verified them); it needs "webauthn"
 among --allowed-factors.
@@ -75,7 +81,8 @@ delivery with purpose "mfa" (a custom webhook must handle it); "sms" needs
   iam sign-in-policy set --mfa-required
   iam sign-in-policy set --allowed-factors totp,webauthn,sms
   iam sign-in-policy set --allow-signup --signup-organization <org-id> --signup-group <group-id>
-  iam sign-in-policy set --require-terms`,
+  iam sign-in-policy set --require-terms
+  iam sign-in-policy set --waitlist --waitlist-auto-approve-domains example.com`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
 			path := envPath() + "/sign-in-policy"
@@ -93,11 +100,17 @@ delivery with purpose "mfa" (a custom webhook must handle it); "sms" needs
 			for flag, value := range map[string]bool{
 				"allow-password": password, "allow-email-code": emailCode, "allow-social": social, "allow-passkey": passkey,
 				"allow-password-reset": reset, "mfa-required": mfa, "mfa-for-federated": mfaFederated, "allow-signup": signup,
-				"require-terms": terms,
+				"require-terms": terms, "waitlist": waitlist,
 			} {
 				if f.Changed(flag) {
 					body[jsonName(flag)] = value
 				}
+			}
+			if f.Changed("waitlist-auto-approve-domains") {
+				body["waitlist_auto_approve_domains"] = waitlistDomains
+			}
+			if f.Changed("waitlist-signup-url") {
+				body["waitlist_signup_url"] = waitlistSignupURL
 			}
 			if f.Changed("signup-organization") {
 				body["signup_organization_id"] = signupOrganization
@@ -128,6 +141,9 @@ delivery with purpose "mfa" (a custom webhook must handle it); "sms" needs
 	f.BoolVar(&terms, "require-terms", false, "Require accepting the terms to sign up")
 	f.StringVar(&signupOrganization, "signup-organization", "", "Organization new accounts join (needed by --allow-signup)")
 	f.StringVar(&signupGroup, "signup-group", "", "Operator-managed group of it new accounts join")
+	f.BoolVar(&waitlist, "waitlist", false, "Put sign-up behind a waitlist (needs --allow-signup)")
+	f.StringSliceVar(&waitlistDomains, "waitlist-auto-approve-domains", nil, "Email domains that skip the waitlist (comma-separated)")
+	f.StringVar(&waitlistSignupURL, "waitlist-signup-url", "", "Sign-up page the approval email links to (empty = hosted page)")
 	f.StringSliceVar(&factors, "allowed-factors", nil, "Second factors users may enroll: totp, webauthn, sms, email (comma-separated)")
 	return cmd
 }

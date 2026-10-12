@@ -112,6 +112,27 @@ it('turns sign-up on into an organization', async () => {
   await waitFor(() => expect(calls).toEqual([{ method: 'PUT', path: `${env}/sign-in-policy`, body: { ...unchanged, allow_signup: true, signup_organization_id: 'org1' } }]))
 })
 
+it('turns the waitlist on with auto-approve domains and a link URL', async () => {
+  const u = userEvent.setup()
+  policy = { ...defaults, allow_signup: true, signup_organization_id: 'org1' }
+  open('sign-in-policy')
+  const waitlist = await screen.findByRole('switch', { name: 'Waitlist' }) as HTMLInputElement
+  expect(waitlist.disabled).toBe(false)
+  await u.click(waitlist)
+  await u.type(await screen.findByLabelText('Auto-approve domains'), 'Example.com{Enter}')
+  await u.type(screen.getByLabelText('Approval link URL'), 'https://app.example.com/signup')
+  await u.click(screen.getByRole('button', { name: 'Save methods' }))
+  const { custom: _custom, ...unchanged } = defaults
+  await waitFor(() => expect(calls).toEqual([{ method: 'PUT', path: `${env}/sign-in-policy`, body: { ...unchanged, allow_signup: true, signup_organization_id: 'org1', waitlist: true, waitlist_auto_approve_domains: ['example.com'], waitlist_signup_url: 'https://app.example.com/signup' } }]))
+})
+
+it('keeps the waitlist off until sign-up is allowed', async () => {
+  open('sign-in-policy')
+  const waitlist = await screen.findByRole('switch', { name: 'Waitlist' }) as HTMLInputElement
+  expect(waitlist.disabled).toBe(true)
+  expect(screen.getByText('Turn on sign-up first.')).toBeTruthy()
+})
+
 it('allows more second factors and keeps at least one', async () => {
   const u = userEvent.setup()
   open('sign-in-policy')

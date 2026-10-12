@@ -16,6 +16,7 @@ export type Step =
   | "enroll" // the organization requires an authenticator: scan, then verify
   | "signup" // name (+ password) for a new account
   | "signup_verify" // the emailed verification code
+  | "waitlisted" // the environment's waitlist took the sign-up: no code was sent, wait for the approval email
   | "redirecting" // leaving for the identity provider or back to the client
   | "failed"; // the ticket cannot continue (expired, other browser, …)
 
@@ -70,6 +71,12 @@ export interface FlowOptions {
   navigate?: (url: string) => void;
   /** The browser language sent with emailed codes. */
   locale?: string;
+  /**
+   * The approval token of a waitlist link (`?waitlist=<token>` on the
+   * sign-up page). It is sent with the sign-up, which then skips the
+   * waitlist; the email must be the approved one.
+   */
+  waitlistToken?: string;
 }
 
 type Listener = () => void;
@@ -435,13 +442,21 @@ export class SignInFlow {
     this.set({ step: "signup", error: undefined });
   }
 
-  /** Emails the verification code of a new account. */
+  /**
+   * Emails the verification code of a new account. With the environment's
+   * waitlist on (and no valid `waitlistToken`) nothing is sent: the step
+   * becomes `waitlisted` instead.
+   */
   signup(input: { email?: string; name: string; password?: string; acceptTerms?: boolean }): Promise<void> {
     const attempt = (): Promise<void> =>
       this.protect(attempt, async (captchaToken) => {
         const email = (input.email ?? this.current.login).trim();
         this.set({ login: email });
-        const sent = await this.iam.signup.start({ environmentId: this.authorization().environment_id, email, name: input.name, password: input.password, acceptTerms: input.acceptTerms, locale: this.options.locale, captchaToken });
+        const sent = await this.iam.signup.start({ environmentId: this.authorization().environment_id, email, name: input.name, password: input.password, acceptTerms: input.acceptTerms, locale: this.options.locale, waitlistToken: this.options.waitlistToken, captchaToken });
+        if (sent.status === "waitlisted") {
+          this.set({ step: "waitlisted" });
+          return;
+        }
         this.challengeId = sent.challengeId;
         this.password = input.password ?? "";
         this.set({ step: "signup_verify" });

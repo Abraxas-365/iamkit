@@ -52,6 +52,14 @@ const (
 	CodeAccountExists  = "ACCOUNT_EXISTS"
 )
 
+// Waitlist error codes: a waitlist approval link that is not valid anymore —
+// unknown, expired, used or for another email — answers 400 on sign-up; a
+// decision on a rejected or completed entry answers 409.
+const (
+	CodeWaitlistTokenInvalid = "WAITLIST_TOKEN_INVALID"
+	CodeWaitlistNotPending   = "WAITLIST_ENTRY_NOT_PENDING"
+)
+
 // Bot protection and risk error codes (HTTP 403 unless noted). They appear
 // only when the operator configured a CAPTCHA, a risk policy or restrictions:
 // CAPTCHA_REQUIRED asks for a (new) captcha_token — Details["provider"] names

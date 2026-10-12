@@ -1,0 +1,8 @@
+Subject: About your Acme waitlist request
+
+An update on your request
+
+Thanks for your interest in Acme. We can't offer you an account at this time.
+
+--
+You don't need to do anything else.

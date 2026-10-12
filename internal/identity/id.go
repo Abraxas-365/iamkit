@@ -133,6 +133,7 @@ type (
 	logStreamTag     struct{} // log stream (SIEM / object storage)
 	attemptTag       struct{} // sign-in attempt (risk signals)
 	restrictionTag   struct{} // risk allow/deny restriction
+	waitlistTag      struct{} // waitlist entry
 )
 
 // tagName returns a human-readable name for error messages.
@@ -211,6 +212,8 @@ func tagName[T any]() string {
 		return "attempt_id"
 	case restrictionTag:
 		return "restriction_id"
+	case waitlistTag:
+		return "waitlist_entry_id"
 	default:
 		return "id"
 	}
@@ -267,6 +270,8 @@ type (
 	SignInAttemptID = ID[attemptTag]
 	// RestrictionID names a risk allow/deny restriction.
 	RestrictionID = ID[restrictionTag]
+	// WaitlistEntryID names a sign-up waitlist entry.
+	WaitlistEntryID = ID[waitlistTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -309,6 +314,7 @@ func NewAuditEventID() AuditEventID       { return NewID[auditEventTag]() }
 func NewLogStreamID() LogStreamID         { return NewID[logStreamTag]() }
 func NewSignInAttemptID() SignInAttemptID { return NewID[attemptTag]() }
 func NewRestrictionID() RestrictionID     { return NewID[restrictionTag]() }
+func NewWaitlistEntryID() WaitlistEntryID { return NewID[waitlistTag]() }
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -352,6 +358,7 @@ func ParseAuditEventID(raw string) (AuditEventID, error)       { return ParseID[
 func ParseLogStreamID(raw string) (LogStreamID, error)         { return ParseID[logStreamTag](raw) }
 func ParseSignInAttemptID(raw string) (SignInAttemptID, error) { return ParseID[attemptTag](raw) }
 func ParseRestrictionID(raw string) (RestrictionID, error)     { return ParseID[restrictionTag](raw) }
+func ParseWaitlistEntryID(raw string) (WaitlistEntryID, error) { return ParseID[waitlistTag](raw) }
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.
 func MustParseEnvironmentID(raw string) EnvironmentID   { return MustParseID[environmentTag](raw) }

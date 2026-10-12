@@ -19,6 +19,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -163,6 +164,13 @@ func (p Provider) serviceProvider(ctx context.Context, c federation.Connection) 
 	if entity.EntityID != c.Issuer {
 		return nil, errx.Internal("SAML metadata does not match the connection issuer")
 	}
+	return p.build(ctx, c, entity)
+}
+
+// build is the service provider of c around the identity provider's
+// metadata; entity is nil only for a draft's own SP metadata, which
+// nothing talks to the identity provider with.
+func (p Provider) build(ctx context.Context, c federation.Connection, entity *saml.EntityDescriptor) (*saml.ServiceProvider, error) {
 	key, cert, err := p.key(ctx, c)
 	if err != nil {
 		return nil, err
@@ -448,6 +456,17 @@ func Claims(c federation.Connection, a *saml.Assertion) (federation.Claims, erro
 		groups = []string{mapping.Groups}
 	}
 	out.Groups = federation.CleanGroups(attributeValues(a, groups...))
+	for _, statement := range a.AttributeStatements {
+		for _, attr := range statement.Attributes {
+			name := attr.Name
+			if name == "" {
+				name = attr.FriendlyName
+			}
+			if name != "" && len(out.Received) < federation.MaxTestAttributes && !slices.Contains(out.Received, name) {
+				out.Received = append(out.Received, name)
+			}
+		}
+	}
 	return out, nil
 }
 
@@ -509,7 +528,13 @@ func attribute(a *saml.Assertion, names ...string) string {
 // assertion consumer service, the requested NameID format and the
 // certificate for encryption (and signing, when requests are signed).
 func (p Provider) Metadata(ctx context.Context, c federation.Connection) ([]byte, error) {
-	sp, err := p.serviceProvider(ctx, c)
+	var sp *saml.ServiceProvider
+	var err error
+	if c.Draft && c.Options.MetadataXML == "" {
+		sp, err = p.build(ctx, c, nil)
+	} else {
+		sp, err = p.serviceProvider(ctx, c)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -1165,6 +1165,17 @@ type SignInPolicy struct {
 	// (authclient.SignupRequest.AcceptTerms; the hosted page links the
 	// branding's legal terms_url). Nil keeps the stored value.
 	RequireTerms *bool `json:"require_terms,omitempty"`
+	// Waitlist puts sign-up behind an operator's approval (the waitlist
+	// methods); it needs AllowSignup. Emails of WaitlistAutoApproveDomains
+	// (at most 50) skip the list. WaitlistSignupURL (https, or http on
+	// loopback) is the sign-up page the approval email links to, with
+	// ?waitlist=<token> added; empty: the email carries the token but no
+	// link. Nil keeps the stored value (a nil domain list too; an empty
+	// non-nil one clears it), so a client that omits them never turns the
+	// waitlist off.
+	Waitlist                   *bool    `json:"waitlist,omitempty"`
+	WaitlistAutoApproveDomains []string `json:"waitlist_auto_approve_domains,omitzero"`
+	WaitlistSignupURL          *string  `json:"waitlist_signup_url,omitempty"`
 	// Custom is false for the built-in default (everything allowed).
 	Custom    bool   `json:"custom,omitempty"`
 	UpdatedAt string `json:"updated_at,omitempty"`

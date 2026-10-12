@@ -660,3 +660,61 @@ class Risk(_Resource):
     async def test_captcha(self) -> None:
         """Asks the provider to check the stored secret; 422 ``CAPTCHA_SECRET_INVALID`` when it rejects it."""
         await self._c.request("POST", f"{self._c.env()}/captcha/test")
+
+
+class Waitlist(_Resource):
+    """The sign-up waitlist (``/waitlist``, on with the sign-in policy's ``waitlist``).
+
+    Statuses: ``pending``, ``approved``, ``rejected``, ``completed``. Deciding an entry that is not pending
+    answers 409 ``WAITLIST_ENTRY_NOT_PENDING``.
+    """
+
+    async def list(
+        self,
+        *,
+        status: str | None = None,
+        email: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> JSON:
+        """One page, newest first: ``{"items": [...], "page": {"total", "limit", "offset"}}``; ``email`` is a prefix."""
+        params = compact({"status": status, "email": email, "limit": limit, "offset": offset})
+        return await self._c.request("GET", f"{self._c.env()}/waitlist", params=params)  # type: ignore[no-any-return]
+
+    def iterate(self, *, page_size: int = MAX_PAGE_SIZE, **filters: Any) -> AsyncIterator[JSON]:
+        return self._offset_pages(f"{self._c.env()}/waitlist", filters, page_size)
+
+    async def get(self, entry_id: str) -> JSON:
+        return await self._c.request("GET", f"{self._c.env()}/waitlist/{seg(entry_id)}")  # type: ignore[no-any-return]
+
+    async def approve(self, entry_id: str) -> JSON:
+        """Approves a pending entry (or sends an approved one a new link) and emails the person the sign-up link."""
+        return await self._c.request("POST", f"{self._c.env()}/waitlist/{seg(entry_id)}/approve")  # type: ignore[no-any-return]
+
+    async def approve_many(self, ids: Sequence[str] | None = None, *, all_pending: bool = False) -> JSON:
+        """Approves ``ids`` or every pending entry; at most 500 per call: ``{"approved", "skipped", "more"}``."""
+        body = compact({"ids": list(ids) if ids is not None else None, "all_pending": all_pending or None})
+        return await self._c.request("POST", f"{self._c.env()}/waitlist/approve", json=body)  # type: ignore[no-any-return]
+
+    async def reject(self, entry_id: str, *, notify: bool = False) -> JSON:
+        """Rejects an entry; the person is emailed only with ``notify``."""
+        path = f"{self._c.env()}/waitlist/{seg(entry_id)}/reject"
+        return await self._c.request("POST", path, json={"notify": notify})  # type: ignore[no-any-return]
+
+    async def delete(self, entry_id: str) -> None:
+        """Deletes an entry, so its email can join again."""
+        await self._c.request("DELETE", f"{self._c.env()}/waitlist/{seg(entry_id)}")
+
+    async def approve_all_pending(self) -> JSON:
+        """Approves every pending entry, repeating while IAMKit reports ``more``: ``{"approved", "skipped"}`` totals."""
+        approved = 0
+        skipped = 0
+        while True:
+            out = await self._c.request("POST", f"{self._c.env()}/waitlist/approve", json={"all_pending": True})
+            done = int((out or {}).get("approved", 0))
+            approved += done
+            skipped += int((out or {}).get("skipped", 0))
+            # Stop when nothing moved, so a stuck batch cannot loop forever.
+            if not (out or {}).get("more") or not done:
+                result: JSON = {"approved": approved, "skipped": skipped}
+                return result

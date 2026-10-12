@@ -48,6 +48,9 @@ const (
 	// risk policy and restrictions, and the sign-in attempt log.
 	PermSecurityRead  = "iam:security:read"
 	PermSecurityWrite = "iam:security:write"
+	// The sign-up waitlist: list entries, approve, reject and delete them.
+	PermWaitlistRead  = "iam:waitlist:read"
+	PermWaitlistWrite = "iam:waitlist:write"
 )
 
 // Organization-bound permissions. They only open the
@@ -109,6 +112,7 @@ var IAMResourcePermissions = append([]string{
 	PermAuditLogsRead, PermAuditLogsWrite, PermAuditLogsManage,
 	PermAPIKeysRead, PermAPIKeysWrite,
 	PermSecurityRead, PermSecurityWrite,
+	PermWaitlistRead, PermWaitlistWrite,
 }, OrgPermissions...)
 
 // Built-in roles of the IAM resource (roles.system_role). Every environment

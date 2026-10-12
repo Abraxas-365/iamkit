@@ -49,23 +49,24 @@ func (t *SignupTransaction) CreateSignup(ctx context.Context, p authentication.P
 	if _, err := t.tx.ExecContext(ctx, `UPDATE signups SET consumed_at=now() WHERE environment_id=$1 AND email=$2 AND consumed_at IS NULL`, p.Environment, p.Email); err != nil {
 		return failure(err)
 	}
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO signups(id,environment_id,email,name,password_hash,secret_hash,expires_at,terms_accepted_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
-		p.ID, p.Environment, p.Email, p.Name, p.PasswordHash, p.Hash, p.Expires, p.TermsAccepted)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO signups(id,environment_id,email,name,password_hash,secret_hash,expires_at,terms_accepted_at,waitlist_entry_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		p.ID, p.Environment, p.Email, p.Name, p.PasswordHash, p.Hash, p.Expires, p.TermsAccepted, p.WaitlistEntry)
 	return failure(err)
 }
 
 func (t *SignupTransaction) PendingSignup(ctx context.Context, environment identity.EnvironmentID, signup identity.ChallengeID) (authentication.PendingSignup, error) {
 	var row struct {
-		ID           identity.ChallengeID   `db:"id"`
-		Environment  identity.EnvironmentID `db:"environment_id"`
-		Email        string                 `db:"email"`
-		Name         string                 `db:"name"`
-		PasswordHash string                 `db:"password_hash"`
-		Hash         []byte                 `db:"secret_hash"`
-		Attempts     int                    `db:"attempts"`
-		Terms        *time.Time             `db:"terms_accepted_at"`
+		ID           identity.ChallengeID     `db:"id"`
+		Environment  identity.EnvironmentID   `db:"environment_id"`
+		Email        string                   `db:"email"`
+		Name         string                   `db:"name"`
+		PasswordHash string                   `db:"password_hash"`
+		Hash         []byte                   `db:"secret_hash"`
+		Attempts     int                      `db:"attempts"`
+		Terms        *time.Time               `db:"terms_accepted_at"`
+		Waitlist     identity.WaitlistEntryID `db:"waitlist_entry_id"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT id,environment_id,email,name,password_hash,secret_hash,attempts,terms_accepted_at FROM signups
+	err := t.tx.GetContext(ctx, &row, `SELECT id,environment_id,email,name,password_hash,secret_hash,attempts,terms_accepted_at,waitlist_entry_id FROM signups
 		WHERE id=$1 AND environment_id=$2 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`, signup, environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		return authentication.PendingSignup{}, errx.Unauthorized("invalid challenge")
@@ -74,7 +75,7 @@ func (t *SignupTransaction) PendingSignup(ctx context.Context, environment ident
 		return authentication.PendingSignup{}, failure(err)
 	}
 	return authentication.PendingSignup{ID: row.ID, Environment: row.Environment, Email: row.Email, Name: row.Name,
-		PasswordHash: row.PasswordHash, Hash: row.Hash, Attempts: row.Attempts, TermsAccepted: row.Terms}, nil
+		PasswordHash: row.PasswordHash, Hash: row.Hash, Attempts: row.Attempts, TermsAccepted: row.Terms, WaitlistEntry: row.Waitlist}, nil
 }
 
 func (t *SignupTransaction) FailSignup(ctx context.Context, signup identity.ChallengeID) error {
@@ -119,6 +120,11 @@ func (t *SignupTransaction) Join(ctx context.Context, j authentication.Joining) 
 	}
 	if _, err = t.tx.ExecContext(ctx, `UPDATE signups SET consumed_at=now() WHERE id=$1`, j.Signup); err != nil {
 		return failure(err)
+	}
+	if !j.WaitlistEntry.IsZero() {
+		if err = t.completeWaitlist(ctx, j); err != nil {
+			return err
+		}
 	}
 	return audit(ctx, t.tx, authentication.Mutation{Environment: j.Environment, Actor: j.User.String(), Action: authentication.ActionSignup, Target: "/users/" + j.User.String()})
 }

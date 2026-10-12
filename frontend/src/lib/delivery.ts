@@ -81,6 +81,9 @@ export const EMAIL_PURPOSES: { purpose: string; label: string }[] = [
   { purpose: 'password_reset', label: t('Password reset') },
   { purpose: 'email_verification', label: t('Email verification') },
   { purpose: 'invitation', label: t('Invitation') },
+  { purpose: 'waitlist_joined', label: t('Waitlist: joined') },
+  { purpose: 'waitlist_approved', label: t('Waitlist: approved') },
+  { purpose: 'waitlist_rejected', label: t('Waitlist: rejected') },
   { purpose: 'test', label: t('Test email') },
 ]
 export const purposeLabel = (purpose: string) => EMAIL_PURPOSES.find(p => p.purpose === purpose)?.label ?? purpose

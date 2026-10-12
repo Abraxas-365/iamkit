@@ -48,6 +48,9 @@ beforeEach(() => {
         : [apiKey({})]))
     }
     if (method === 'POST' && path === '/log-streams') return Response.json({ id: 'ls2' }, { status: 201 })
+    if (method === 'POST' && path === '/connections') return Response.json({ id: 'draft1' }, { status: 201 })
+    if (method === 'POST' && path === '/connections/draft1/enable') return new Response(null, { status: 204 })
+    if (method === 'GET' && path === '/connections/draft1') return Response.json({ id: 'draft1', draft: true, saml: { entity_id: 'https://iam.example/sp/env1/draft1', acs_url: 'https://iam.example/acs/env1/draft1', metadata_url: 'https://iam.example/sp/env1/draft1/metadata' } })
     if (method === 'PATCH' || method === 'DELETE') return new Response(null, { status: 204 })
     if (path === '/directories') return Response.json({ ...page([{ id: 'c1', name: 'Okta', connection_id: 'k1', expires_at: '2099-01-01T00:00:00Z', revoked_at: null, adopt_existing_members: false, adopt_scope: 'any', map_phone: false }]), scim_url: 'https://iam.example/scim/v2' })
     if (path === '') return Response.json({ id: 'org1', name: 'Acme', mfa_required: false, mfa_for_federated: false, allow_password: true, allow_email_code: true, allow_social: true, allow_passkey: true })
@@ -288,3 +291,27 @@ it('shows API keys read-only to accounts without the write permission and hides 
   const nav = await screen.findByRole('navigation', { name: 'Organization administration' })
   expect(within(nav).queryByRole('link', { name: 'API keys' })).toBeNull()
 })
+
+it('walks an organization administrator through the guided SSO setup and keeps Advanced', async () => {
+  const user = userEvent.setup()
+  signedIn(['iam:org:read', 'iam:org:sso:write'])
+  open('/org-admin/env1/sso')
+  expect(await screen.findByRole('button', { name: 'Advanced' })).toBeTruthy()
+
+  await user.click(screen.getByRole('button', { name: 'Add SSO' }))
+  await user.click(within(await screen.findByRole('group', { name: 'SAML 2.0' })).getByRole('button', { name: 'Okta' }))
+  await user.click(screen.getByRole('button', { name: 'Continue' }))
+  // The draft is created through the portal's own /admin route, then its values are read back.
+  expect(await screen.findByText('https://iam.example/acs/env1/draft1')).toBeTruthy()
+  const create = calls.find(c => c.method === 'POST' && c.url.endsWith('/admin/connections'))!
+  expect(create.body).toEqual({ provider: 'saml', name: 'Okta', organization_id: 'org1', draft: true, options: {} })
+  expect(create.auth).toMatch(/^Bearer /)
+
+  await user.click(screen.getByRole('button', { name: 'I have done this' }))
+  await user.type(screen.getByLabelText('Identity provider metadata URL'), 'https://acme.okta.example/metadata')
+  await user.click(screen.getByRole('button', { name: 'Save metadata' }))
+  await waitFor(() => expect(calls.some(c => c.method === 'PATCH' && c.url.endsWith('/admin/connections/draft1') && JSON.stringify(c.body) === JSON.stringify({ options: { metadata_url: 'https://acme.okta.example/metadata' } }))).toBe(true))
+
+  await user.click(await screen.findByRole('button', { name: 'Enable connection' }))
+  await waitFor(() => expect(calls.some(c => c.method === 'POST' && c.url.endsWith('/admin/connections/draft1/enable'))).toBe(true))
+}, 20_000)

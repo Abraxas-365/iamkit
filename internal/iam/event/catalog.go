@@ -114,6 +114,10 @@ const (
 	ConnectionUpdated  = "connection.updated"
 	ConnectionDisabled = "connection.disabled"
 	ConnectionEnabled  = "connection.enabled"
+	// ConnectionTested: a test sign-in of the connection ended (data
+	// success, connection_id, organization_id; actor: whoever asked for
+	// it). No session, user or link exists after it.
+	ConnectionTested = "connection.tested"
 	// ConnectionIdPInitiated: a verified IdP-initiated SAML response was
 	// handed to the connection's OAuth client sign-in endpoint (no session).
 	ConnectionIdPInitiated = "connection.idp_initiated"
@@ -238,6 +242,15 @@ const (
 	// restriction (data kind, value, action).
 	RiskRestrictionCreated = "risk_restriction.created"
 	RiskRestrictionDeleted = "risk_restriction.deleted"
+	// The sign-up waitlist: joined (actor system, data email_domain only —
+	// never the address), approved / rejected / deleted (actor = the
+	// operator), completed (the approved person created their account;
+	// data user_id).
+	WaitlistJoined    = "waitlist.joined"
+	WaitlistApproved  = "waitlist.approved"
+	WaitlistRejected  = "waitlist.rejected"
+	WaitlistDeleted   = "waitlist.deleted"
+	WaitlistCompleted = "waitlist.completed"
 	// RiskDetected: a sign-in fired detections whose action is log or
 	// stronger; subject = the sign-in attempt, data user_id, detections,
 	// action, outcome, ip, country, method, surface.

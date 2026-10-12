@@ -85,6 +85,8 @@ type APIHandlerSet struct {
 	AuditLogActions *auditloghttp.Actions
 	// Usage serves daily usage (iam:usage:read).
 	Usage *usagehttp.Handler
+	// Waitlist serves the sign-up waitlist (iam:waitlist:read/write).
+	Waitlist *authhttp.WaitlistHandler
 }
 
 type Server struct {
@@ -125,7 +127,9 @@ type Server struct {
 	PasswordPolicy *authhttp.PasswordPolicyHandler
 	SignInPolicy   *authhttp.SignInPolicyHandler
 	Signup         *authhttp.SignupHandler
-	SigningKeys    *signinghttp.Handler
+	// Waitlist serves the sign-up waitlist (…/waitlist).
+	Waitlist    *authhttp.WaitlistHandler
+	SigningKeys *signinghttp.Handler
 	// Features serves IAMKit's feature flags and environment overrides.
 	Features *featurehttp.Handler
 	// Actions serves action targets, executions and the calls log.
@@ -413,6 +417,7 @@ func (s *Server) App() *fiber.App {
 	}
 	auth.Post("/federation/start", s.limit(limiter.Config{Max: 20}), s.Federation.Start)
 	auth.Get("/federation/callback", s.limit(limiter.Config{Max: 30}), s.Federation.Callback)
+	auth.Get("/federation/test/:environment/:connection", s.limit(limiter.Config{Max: 20, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.StartTest)
 	auth.Post("/federation/result", s.limit(limiter.Config{Max: 30}), s.Federation.Result)
 	auth.Post("/federation/callback", s.limit(limiter.Config{Max: 30}), s.Federation.CallbackForm)
 	auth.Post("/federation/saml/acs", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.ACS)

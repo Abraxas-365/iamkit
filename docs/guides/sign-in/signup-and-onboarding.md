@@ -21,12 +21,16 @@ Turn it on in the environment's [sign-in methods](sign-in-methods.md)
 | `signup_organization_id` | Required with `allow_signup`: the organization every new account joins |
 | `signup_group_id` | Optional group of that organization (not a SCIM-provisioned one) the account joins; give the group roles to grant access |
 | `require_terms` | Sign-up must accept the terms ([below](#terms-acceptance)); `iam sign-in-policy set --require-terms` |
+| `waitlist` | Put password / email-code sign-up behind an operator's approval ([below](#waitlist)); needs `allow_signup` |
+| `waitlist_auto_approve_domains` | Email domains (≤ 50) that skip the waitlist |
+| `waitlist_signup_url` | HTTPS sign-up page the approval email links to (`?waitlist=<token>` is appended); empty: the email carries the token only |
 
 The flow, headless ([identity API](../../reference/api/identity.md)) or hosted:
 
 1. `POST /identity/v1/signup` `{environment_id, email, name, password?,
-   locale?, accept_terms?}` → 202 `{challenge_id, expires_in}` and an `email_verification`
-   code by email. The password follows the [password
+   locale?, accept_terms?, waitlist_token?}` → 202 `{challenge_id, status,
+   message, expires_in}` and an `email_verification`
+   code by email (`status` is `code_sent`; `waitlisted` with the [waitlist](#waitlist) on). The password follows the [password
    policy](password-policy.md) of the sign-up organization; without one the
    account signs in with email codes (only when the organization allows them).
 2. `POST /identity/v1/signup/verify` `{environment_id, challenge_id, code}` →
@@ -47,6 +51,33 @@ On the [hosted pages](../applications/hosted-login.md) the sign-in page shows **
 account**. A client can hide it (`"signup": false` in its sign-in methods).
 When the new account's group grants nothing in the client's application, the
 page says the account was created and access is pending.
+
+### Waitlist
+
+With `waitlist` on, only people an operator approves can sign up with a
+password or an email code. Social sign-ups (federation connections that
+create accounts), invitations, SCIM and operator-created users are not gated.
+
+- `POST /identity/v1/signup` from an address that is not auto-approved
+  (`waitlist_auto_approve_domains`) and has no valid `waitlist_token` joins the
+  list: 202 `{challenge_id, status: "waitlisted", …}`, no code. The answer is
+  identical for a new address, one already waiting, one with an account and a
+  full list, so it never reveals which exist. New entries get a
+  `waitlist_joined` email. Risk screening, restrictions, CAPTCHA and rate
+  limits still apply.
+- Operators list entries (`?status=pending|approved|rejected|completed`,
+  `?email=` prefix), approve (`POST …/waitlist/:id/approve`, or in bulk
+  `POST …/waitlist/approve` `{ids}` / `{all_pending: true}`, ≤ 500 per call),
+  reject (`POST …/waitlist/:id/reject` `{notify?}`; silent unless `notify`) and
+  delete (frees the address, also after a rejection) under
+  `/management/v1/environments/ENV_UUID/waitlist` (`/api/v1`:
+  `iam:waitlist:read` / `iam:waitlist:write`).
+- Approving emails (`waitlist_approved`, customizable like other
+  [email templates](../platform/email-delivery.md#emails-iamkit-writes-smtp-resend)) a link `<waitlist_signup_url>?waitlist=<ik_wait_…>`
+  valid 7 days. The hosted sign-up page prefills the address and carries the
+  token; headless apps send it as `waitlist_token` with the same email. The
+  normal email-code verification still follows, and completing it marks the
+  entry `completed`.
 
 ### Terms acceptance
 

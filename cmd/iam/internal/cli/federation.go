@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -11,7 +12,7 @@ import (
 func federationCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "federation",
-		Aliases: []string{"fed"},
+		Aliases: []string{"fed", "connections"},
 		Short:   "Manage federation connections (external identity providers)",
 	}
 	cmd.AddCommand(fedListCmd())
@@ -20,7 +21,43 @@ func federationCmd() *cobra.Command {
 	cmd.AddCommand(fedUpdateCmd())
 	cmd.AddCommand(fedDisableCmd())
 	cmd.AddCommand(fedEnableCmd())
+	cmd.AddCommand(fedTestCmd())
 	return cmd
+}
+
+func fedTestCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "test CONNECTION_ID",
+		Short: "Print a one-time link that signs in through the connection in test mode",
+		Long: `Issues a one-time test link (valid 10 minutes) for an OIDC or SAML connection,
+active or not. Open it in a browser: it signs in at the identity provider and
+shows what came back (claims, mapped email, name and groups). It creates no
+session, user or link.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			c := mustClient(cmd)
+			data, err := c.post(envPath()+"/federation-connections/"+args[0]+"/test", nil)
+			if err != nil {
+				return err
+			}
+			p := newPrinter()
+			if p.wantJSON() {
+				p.JSON(data)
+				return nil
+			}
+			var out struct {
+				URL       string `json:"url"`
+				ExpiresAt string `json:"expires_at"`
+			}
+			if json.Unmarshal(data, &out) != nil || out.URL == "" {
+				p.JSON(data)
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, "Open this link in a browser within 10 minutes; it works once (expires %s):\n", out.ExpiresAt)
+			fmt.Fprintln(p.out, out.URL)
+			return nil
+		},
+	}
 }
 
 func fedListCmd() *cobra.Command {
@@ -73,7 +110,7 @@ func fedCreateCmd() *cobra.Command {
 	var name, provider, issuer, clientID, secretEnv, secretFile, tenant, team, key, org, signupOrg, signupGroup, baseURL string
 	var tenants, domains, mappingFlags []string
 	var groupsClaim string
-	var linkEmail, updateProfile bool
+	var linkEmail, updateProfile, draft bool
 	var o oauth2Flags
 	var sf samlFlags
 	var lf ldapFlags
@@ -92,6 +129,7 @@ func fedCreateCmd() *cobra.Command {
     --userinfo-url https://discord.com/api/users/@me --scopes identify,email \
     --claim-subject id --claim-email email --claim-email-verified verified --claim-name global_name
   iam federation create --provider saml --name "Acme Okta" --organization ORG_ID --metadata-url https://acme.okta.com/app/ID/sso/saml/metadata
+  iam federation create --provider saml --name "Acme Okta" --organization ORG_ID --draft   # prints the ACS URL and entity ID to give the IdP first
   iam federation create --provider saml --name "Acme ADFS" --organization ORG_ID --metadata-file FederationMetadata.xml --name-id-format transient --attr-subject objectGUID
   iam federation create --provider ldap --name "Acme AD" --organization ORG_ID --ldap-url ldaps://dc1.acme.com \
     --bind-dn "CN=iam,OU=Service,DC=acme,DC=com" --client-secret-file bind-password.txt \
@@ -134,11 +172,23 @@ func fedCreateCmd() *cobra.Command {
 					return fmt.Errorf("SAML connections take --metadata-url or --metadata-file, not a client ID, secret or issuer")
 				}
 				body := map[string]any{"name": name, "provider": provider, "organization_id": org}
-				options, err := sf.options()
-				if err != nil {
-					return err
+				if draft {
+					// A draft has no metadata yet: IAMKit answers with the
+					// values to give the identity provider.
+					if sf.metadataURL != "" || sf.metadataFile != "" {
+						return fmt.Errorf("--draft creates the connection before the identity provider metadata exists; add it afterwards with `iam federation update`")
+					}
+					body["draft"] = true
+					if options := sf.draftOptions(); options != nil {
+						body["options"] = options
+					}
+				} else {
+					options, err := sf.options()
+					if err != nil {
+						return err
+					}
+					body["options"] = options
 				}
-				body["options"] = options
 				if linkEmail {
 					body["link_email"] = true
 				}
@@ -148,11 +198,29 @@ func fedCreateCmd() *cobra.Command {
 				if err := addMappings(body, mappingFlags); err != nil {
 					return err
 				}
-				data, err := mustClient(cmd).post(envPath()+"/federation-connections", body)
+				c := mustClient(cmd)
+				data, err := c.post(envPath()+"/federation-connections", body)
 				if err != nil {
 					return err
 				}
-				newPrinter().created("federation connection", data)
+				p := newPrinter()
+				if !draft {
+					p.created("federation connection", data)
+					return nil
+				}
+				// A draft's value is the SP side: show it next to the ID.
+				var created struct {
+					ID string `json:"id"`
+				}
+				if json.Unmarshal(data, &created) != nil || created.ID == "" {
+					p.created("federation connection", data)
+					return nil
+				}
+				detail, err := c.get(envPath() + "/federation-connections/" + created.ID)
+				if err != nil {
+					return err
+				}
+				p.draftCreated(created.ID, detail)
 				return nil
 			}
 			if clientID == "" {
@@ -247,6 +315,7 @@ func fedCreateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&baseURL, "base-url", "", "GitLab self-managed or GitHub Enterprise Server URL")
 	cmd.Flags().StringArrayVar(&mappingFlags, "group-mapping", nil, "Organization connections: map an IdP group value to a group of the organization, VALUE=GROUP_UUID (repeatable)")
 	cmd.Flags().StringVar(&groupsClaim, "groups-claim", "", "OIDC (oidc, google, microsoft, gitlab): ID token claim with the user's groups (default groups)")
+	cmd.Flags().BoolVar(&draft, "draft", false, "SAML: create an inactive draft without metadata and print the SP values (ACS URL, entity ID, metadata URL) to configure the identity provider; then `iam federation update` with the metadata and `iam federation enable`")
 	o.register(cmd)
 	sf.register(cmd)
 	lf.register(cmd)
@@ -363,6 +432,52 @@ func (f ldapFlags) options(sf samlFlags) (map[string]any, error) {
 		options["attributes"] = a
 	}
 	return options, nil
+}
+
+// draftOptions are the SAML options a draft may already carry (no metadata);
+// nil when none is set.
+func (f samlFlags) draftOptions() map[string]any {
+	options := map[string]any{}
+	if f.nameIDFormat != "" {
+		options["name_id_format"] = f.nameIDFormat
+	}
+	if a := f.attributes(); a != nil {
+		options["attributes"] = a
+	}
+	if f.signRequests {
+		options["sign_requests"] = true
+	}
+	if f.singleLogout {
+		options["single_logout"] = true
+	}
+	if f.idpClient != "" {
+		options["idp_initiated_client_id"] = f.idpClient
+	}
+	if len(options) == 0 {
+		return nil
+	}
+	return options
+}
+
+// draftCreated prints a new SAML draft: the ID on stdout and the values to
+// give the identity provider on stderr; JSON output is the connection.
+func (p *printer) draftCreated(id string, detail json.RawMessage) {
+	if p.wantJSON() {
+		p.JSON(detail)
+		return
+	}
+	var d struct {
+		SAML struct {
+			EntityID string `json:"entity_id"`
+			ACS      string `json:"acs_url"`
+			Metadata string `json:"metadata_url"`
+		} `json:"saml"`
+	}
+	_ = json.Unmarshal(detail, &d)
+	fmt.Fprintf(os.Stderr, "Created SAML draft connection: %s\n", id)
+	fmt.Fprintf(os.Stderr, "  ACS URL:      %s\n  Entity ID:    %s\n  Metadata URL: %s\n", d.SAML.ACS, d.SAML.EntityID, d.SAML.Metadata)
+	fmt.Fprintf(os.Stderr, "Give these to the identity provider, then: iam federation update %s --metadata-url URL  and  iam federation enable %s\n", id, id)
+	fmt.Fprintln(p.out, id)
 }
 
 func (f samlFlags) options() (map[string]any, error) {

@@ -144,3 +144,12 @@ export {
   type SignInAttemptPage,
   type UserDevice,
 } from "./security.js";
+export {
+  WaitlistClient,
+  type WaitlistApproved,
+  type WaitlistClientOptions,
+  type WaitlistEntry,
+  type WaitlistFilter,
+  type WaitlistList,
+  type WaitlistStatus,
+} from "./waitlist.js";

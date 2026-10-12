@@ -1,0 +1,12 @@
+Subject: Tu lugar en Acme está listo
+
+Ya puedes entrar
+
+Buenas noticias: te aprobamos para crear tu cuenta de Acme.
+
+Este enlace funciona hasta el 4 de octubre de 2026.
+
+Crear tu cuenta: https://app.acme.io/signup?waitlist=ik_wait_token
+
+--
+Si no pediste unirte a la lista de espera, puedes ignorar este correo.

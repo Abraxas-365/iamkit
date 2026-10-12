@@ -39,7 +39,7 @@ const ssoProviders: { value: Provider; label: string; hint: string }[] = [
   { value: 'ldap', label: t('LDAP / AD'), hint: t('Active Directory, OpenLDAP, FreeIPA or any LDAP directory over TLS. Users type their directory password on the sign-in page; IAMKit checks it with the directory.') },
 ]
 
-const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id) })
+export const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id) })
 
 export interface ConnectionValues {
   provider: Provider; scope: 'environment' | 'organization'; organization_id: string
@@ -156,7 +156,7 @@ export function connectionBody(v: ConnectionValues): Record<string, unknown> {
   return body
 }
 
-const initial: ConnectionValues = {
+export const initial: ConnectionValues = {
   provider: 'google', scope: 'environment', organization_id: '', name: 'Google', issuer: '', client_id: '', client_secret: '', secret_env: '',
   tenant: 'common', tenant_id: '', tenants: [], domains: [], team_id: '', key_id: '', signup: false, signup_organization_id: '', signup_group_id: '', link_email: true,
   base_url: '', authorize_url: '', token_url: '', userinfo_url: '', scopes: [], claim_subject: 'id', claim_email: 'email', claim_email_verified: '', claim_name: 'name', update_profile: false,
@@ -222,7 +222,7 @@ export function GroupMappingEditor({ id, groups, rows, onChange, disabled }: { i
   </div>
 }
 
-export function CreateConnectionDialog({ base, kind, organization, onClose, onCreated, transport }: { base: string; kind: ConnectionKind; organization?: { id: string; name: string }; onClose: () => void; onCreated: () => void; transport?: ConnectionTransport }) {
+export function CreateConnectionDialog({ base, kind, organization, onClose, onCreated, transport, onGuided }: { base: string; kind: ConnectionKind; organization?: { id: string; name: string }; onClose: () => void; onCreated: () => void; transport?: ConnectionTransport; onGuided?: () => void }) {
   const id = useId()
   const callback = useCallbackURL()
   const sso = kind === 'sso' || !!organization
@@ -273,6 +273,7 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
         : sso
           ? t('Let one organization\'s employees sign in with their company\'s login (Entra ID, Google Workspace, Okta…). Anyone whose email is on that organization\'s verified domains is sent to it.')
           : t('Add a "Continue with …" button to the sign-in page. Anyone with an account at the provider can use it.')}</DialogDescription>
+      {sso && onGuided && <Button type="button" variant="outline" size="sm" className="justify-self-start" disabled={busy} onClick={onGuided}>{t('Guided setup')}</Button>}
       <form className="space-y-4" onSubmit={async e => {
         e.preventDefault(); if (pending.current) return
         if (workspace && !v.domains.length) { setError(t('Add at least one Workspace domain, so only the organization\'s Google accounts can sign in.')); return }

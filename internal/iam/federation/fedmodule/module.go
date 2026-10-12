@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/cache"
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/worker"
 	"net/http"
 
@@ -78,5 +79,8 @@ func New(deps Deps) Module {
 	}
 	return Module{Commands: service, Queries: service, Flows: service, Logout: service, HTTP: fedhttp.New(service, service, service, deps.ActorID, deps.Respond), Jobs: []worker.Job{
 		{Name: "federation_logout_prune", Interval: time.Hour, Run: func(ctx context.Context) (bool, error) { return false, repository.PruneLogouts(ctx) }},
+		{Name: "federation_draft_prune", Interval: time.Hour, Run: func(ctx context.Context) (bool, error) {
+			return false, repository.PruneDrafts(ctx, config.SAMLDraftTTL)
+		}},
 	}}
 }

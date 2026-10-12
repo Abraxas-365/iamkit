@@ -27,6 +27,14 @@ type Handler struct {
 	form func(c *fiber.Ctx, environment identity.EnvironmentID, action string, fields [][2]string) error
 	// signedOut renders the hosted signed-out page (hostedhttp.Handler.SignedOut).
 	signedOut func(c *fiber.Ctx, environment identity.EnvironmentID, problem error) error
+	// testPage renders a test connection result (hostedhttp.Handler.TestResult).
+	testPage func(c *fiber.Ctx, result federation.TestResult) error
+}
+
+// TestResult sets the page that shows a test connection result (set in
+// bootstrap; without it the result is JSON).
+func (h *Handler) TestResult(page func(c *fiber.Ctx, result federation.TestResult) error) {
+	h.testPage = page
 }
 
 // SignedOut sets the page shown when a single logout ends without a
@@ -67,6 +75,7 @@ func (h *Handler) Register(e fiber.Router) {
 	e.Get("/federation-connections/:id/identities", h.identities)
 	e.Delete("/federation-connections/:id", h.disable)
 	e.Post("/federation-connections/:id/enable", h.enable)
+	e.Post("/federation-connections/:id/test", h.test)
 	e.Post("/external-identities", h.link)
 	e.Delete("/external-identities/:connection/:user", h.unlink)
 }
@@ -131,6 +140,43 @@ func (h *Handler) enable(c *fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(204)
+}
+
+// test issues the one-time link of a test sign-in of the connection.
+func (h *Handler) test(c *fiber.Ctx) error {
+	id, err := identity.ParseConnectionID(c.Params("id"))
+	if err != nil {
+		return errx.NotFound("federation connection not found")
+	}
+	out, err := h.commands.IssueTest(c.UserContext(), h.mutation(c), id)
+	if err != nil {
+		return err
+	}
+	c.Set("Cache-Control", "no-store")
+	return c.JSON(out)
+}
+
+// StartTest spends the ticket of a test connection link and sends the
+// browser to the identity provider; the callback then shows the result
+// (Callback). The ticket is in the query because the link is opened from a
+// browser tab; the response never echoes it.
+func (h *Handler) StartTest(c *fiber.Ctx) error {
+	environment, err := identity.ParseEnvironmentID(c.Params("environment"))
+	if err != nil {
+		return errx.Unauthorized("invalid or expired test connection link")
+	}
+	connection, err := identity.ParseConnectionID(c.Params("connection"))
+	if err != nil {
+		return errx.Unauthorized("invalid or expired test connection link")
+	}
+	out, err := h.flows.StartTest(c.UserContext(), environment, connection, c.Query("ticket"))
+	if err != nil {
+		return err
+	}
+	c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: out.Binding, Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: int(config.FederationStateTTL.Seconds())})
+	c.Set("Cache-Control", "no-store")
+	c.Set("Referrer-Policy", "no-referrer")
+	return c.Redirect(out.URL, fiber.StatusSeeOther)
 }
 func (h *Handler) list(c *fiber.Ctx) error {
 	var filter federation.ConnectionFilter
@@ -205,6 +251,16 @@ func (h *Handler) Start(c *fiber.Ctx) error {
 }
 func (h *Handler) Callback(c *fiber.Ctx) error {
 	out, err := h.flows.Callback(c.UserContext(), c.Query("code"), c.Query("state"), c.Cookies("__Host-iamkit-federation"))
+	if out.Test != nil && err == nil {
+		// A test sign-in: show what the provider sent, nothing else.
+		c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: "", Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: -1})
+		c.Set("Cache-Control", "no-store")
+		c.Set("Referrer-Policy", "no-referrer")
+		if h.testPage == nil {
+			return c.JSON(fiber.Map{"success": out.Test.Success, "error": out.Test.Error})
+		}
+		return h.testPage(c, *out.Test)
+	}
 	if out.Hosted() && h.hosted != nil {
 		c.Cookie(&fiber.Cookie{Name: "__Host-iamkit-federation", Value: "", Path: "/", Secure: true, HTTPOnly: true, SameSite: "Lax", MaxAge: -1})
 		return h.hosted(c, out, err)

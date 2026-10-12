@@ -221,6 +221,11 @@ var actions = map[string]named{
 	"risk_policy.delete":      {RiskPolicyDeleted, "environment"},
 	"risk_restriction.create": {RiskRestrictionCreated, "risk_restriction"},
 	"risk_restriction.delete": {RiskRestrictionDeleted, "risk_restriction"},
+	// Waitlist decisions (authentication.ActionWaitlist*; target =
+	// /waitlist/<id>). joined and completed are written with eventpg.Emit.
+	"waitlist.approve": {WaitlistApproved, "waitlist_entry"},
+	"waitlist.reject":  {WaitlistRejected, "waitlist_entry"},
+	"waitlist.delete":  {WaitlistDeleted, "waitlist_entry"},
 	// Ends a session: the trigger writes session.revoked.
 	"oauth.logout": {},
 }

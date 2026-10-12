@@ -17,6 +17,7 @@ import { MetadataEditor } from '@/components/library/metadata-editor'
 import { HistorySection } from './history'
 import { SetupLinksPanel, type SetupTransport } from '@/components/library/setup-links'
 import { DomainJoinPanel, type DomainJoinTransport } from '@/components/library/domain-join'
+import { GuidedSetupDialog, consoleTransport } from '@/components/library/idp-guides/wizard'
 import { t } from '@/lib/i18n'
 
 const methods = [
@@ -121,6 +122,7 @@ export function OrganizationConnections() {
   const extra = useMemo(() => ({ organization_id: org.id }), [org.id])
   const list = usePaginatedList<Connection>(`/environments/${environment}/federation-connections`, { extraParams: extra })
   const [adding, setAdding] = useState(false)
+  const [guided, setGuided] = useState(false)
   const add = canWrite && <Button onClick={() => setAdding(true)}><Plus /> {t('Add SSO connection')}</Button>
   return <div className="space-y-4">
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -138,6 +140,7 @@ export function OrganizationConnections() {
         <span className="tabular-nums">{c.linked}</span>,
         <Badge variant="secondary" className={c.active ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}>{c.active ? t('Active') : t('Disabled')}</Badge>,
       ])} />
-    {adding && <CreateConnectionDialog base={`/environments/${environment}`} kind="sso" organization={org} onClose={() => setAdding(false)} onCreated={list.reload} />}
+    {adding && <CreateConnectionDialog base={`/environments/${environment}`} kind="sso" organization={org} onGuided={() => { setAdding(false); setGuided(true) }} onClose={() => setAdding(false)} onCreated={list.reload} />}
+    {guided && <GuidedSetupDialog base={`/environments/${environment}`} organization={org} transport={consoleTransport(`/environments/${environment}`)} onClose={() => setGuided(false)} onDone={list.reload} onAdvanced={() => { setGuided(false); setAdding(true); list.reload() }} />}
   </div>
 }

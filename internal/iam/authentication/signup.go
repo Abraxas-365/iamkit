@@ -13,6 +13,10 @@ import (
 // MaxSignupName bounds the name a person gives when signing up.
 const MaxSignupName = 200
 
+// MaxSignupEmail bounds the address (RFC 5321 path limit, and the
+// waitlist_entries check).
+const MaxSignupEmail = 320
+
 // Signup is a person asking for their own account. The account exists only
 // once they entered the code emailed to them (CompleteSignup). Password is
 // optional: without it the account signs in with email codes.
@@ -26,13 +30,17 @@ type Signup struct {
 	// AcceptTerms records that the person accepted the terms; required
 	// when the sign-in policy's require_terms is set.
 	AcceptTerms bool `json:"accept_terms"`
+	// WaitlistToken is the ik_wait_ token of an approved waitlist entry
+	// (from the approval email); it lets the person sign up while the
+	// environment's waitlist is on.
+	WaitlistToken string `json:"waitlist_token"`
 }
 
 func (s Signup) Validate() error {
 	if s.Environment.IsZero() {
 		return errx.Validation("environment_id is required")
 	}
-	if _, err := identity.Email(s.Email); err != nil {
+	if _, err := identity.Email(s.Email); err != nil || len(s.Email) > MaxSignupEmail {
 		return errx.Validation("email must be a valid address")
 	}
 	if strings.TrimSpace(s.Name) == "" {
@@ -60,6 +68,9 @@ type PendingSignup struct {
 	Expires      time.Time
 	// TermsAccepted is when the person accepted the terms (nil: not asked).
 	TermsAccepted *time.Time
+	// WaitlistEntry is the approved waitlist entry this sign-up was
+	// started with (zero when the waitlist did not gate it).
+	WaitlistEntry identity.WaitlistEntryID
 }
 
 // Joining creates the account of a verified sign-up in the environment's
@@ -74,6 +85,26 @@ type Joining struct {
 	Name          string
 	PasswordHash  string
 	TermsAccepted *time.Time
+	// WaitlistEntry, when set, is completed by the same transaction (it
+	// must still be an unexpired approval for Email, else
+	// ErrWaitlistToken).
+	WaitlistEntry identity.WaitlistEntryID
+}
+
+// Signup statuses: what happened to a sign-up request.
+const (
+	// SignupCodeSent: the code email is on its way (the usual answer).
+	SignupCodeSent = "code_sent"
+	// SignupWaitlisted: the environment's waitlist took the request; no
+	// code is sent until an operator approves it.
+	SignupWaitlisted = "waitlisted"
+)
+
+// SignupResult answers Signup. Challenge is an opaque id the person hands
+// back with the code; for a waitlisted request it is random and unusable.
+type SignupResult struct {
+	Challenge identity.ChallengeID
+	Status    string
 }
 
 // SignedUp is the account a completed sign-up created.

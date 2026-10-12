@@ -113,6 +113,11 @@ type (
 	WebhookInput            = iamclient.WebhookInput
 	WebhookSecret           = iamclient.WebhookSecret
 	WebhookTest             = iamclient.WebhookTest
+	WaitlistApproval        = iamclient.WaitlistApproval
+	WaitlistApproved        = iamclient.WaitlistApproved
+	WaitlistEntry           = iamclient.WaitlistEntry
+	WaitlistFilter          = iamclient.WaitlistFilter
+	WaitlistList            = iamclient.WaitlistList
 )
 
 // Export formats of ExportAuditLogEvents.

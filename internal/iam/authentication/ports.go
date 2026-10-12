@@ -342,16 +342,72 @@ type SignInPolicyRepository interface {
 type SignupCommands interface {
 	// Signup emails a code to confirm the address; it answers the same
 	// for an email that already has an account (nothing is sent then).
-	Signup(ctx context.Context, input Signup) (identity.ChallengeID, error)
+	// With the environment's waitlist on, an address that is not approved
+	// joins the waitlist instead (status waitlisted, no code), with the
+	// same answer for new entries, existing entries and existing accounts.
+	Signup(ctx context.Context, input Signup) (SignupResult, error)
 	// CompleteSignup checks the code and creates the account, its
 	// membership in the sign-up organization and its group membership.
 	CompleteSignup(ctx context.Context, environment identity.EnvironmentID, signup identity.ChallengeID, code string) (SignedUp, error)
+	// WaitlistEmail is the address an approval token was issued to (the
+	// hosted sign-up page prefills it); an unknown, used, expired or
+	// malformed token is ErrWaitlistToken, whatever the reason.
+	WaitlistEmail(ctx context.Context, environment identity.EnvironmentID, token string) (string, error)
+}
+
+// WaitlistCommands are the operator's decisions on the sign-up waitlist.
+type WaitlistCommands interface {
+	// Approve issues the entry's sign-up token (valid
+	// config.WaitlistApprovalTTL) and emails it; approving an approved
+	// entry issues a new token. A rejected or completed entry answers 409
+	// WAITLIST_ENTRY_NOT_PENDING.
+	Approve(ctx context.Context, m Mutation, id identity.WaitlistEntryID) (WaitlistEntry, error)
+	// ApproveMany approves the listed entries or the oldest pending ones,
+	// at most config.WaitlistMaxApprove per call.
+	ApproveMany(ctx context.Context, m Mutation, input WaitlistApprove) (WaitlistBulkResult, error)
+	// Reject refuses a pending or approved entry (its token stops
+	// working); the person is emailed only with input.Notify.
+	Reject(ctx context.Context, m Mutation, id identity.WaitlistEntryID, input WaitlistRejection) (WaitlistEntry, error)
+	// Delete removes an entry, so its email may join again.
+	Delete(ctx context.Context, m Mutation, id identity.WaitlistEntryID) error
+}
+
+// WaitlistQueries read the waitlist.
+type WaitlistQueries interface {
+	List(ctx context.Context, environment identity.EnvironmentID, filter WaitlistFilter, page query.Pagination) (query.Paginated[WaitlistEntry], error)
+	Find(ctx context.Context, environment identity.EnvironmentID, id identity.WaitlistEntryID) (WaitlistEntry, error)
+}
+
+// WaitlistRepository stores the waitlist; decisions audit m in their
+// transaction.
+type WaitlistRepository interface {
+	ListWaitlist(ctx context.Context, environment identity.EnvironmentID, filter WaitlistFilter, page query.Pagination) (query.Paginated[WaitlistEntry], error)
+	FindWaitlist(ctx context.Context, environment identity.EnvironmentID, id identity.WaitlistEntryID) (WaitlistEntry, error)
+	// PendingWaitlist lists the oldest pending entries.
+	PendingWaitlist(ctx context.Context, environment identity.EnvironmentID, limit int) ([]WaitlistEntry, error)
+	// ApproveWaitlist approves a pending or approved entry with a new
+	// token; NotFound, or ErrWaitlistNotDecidable for a rejected or
+	// completed one.
+	ApproveWaitlist(ctx context.Context, m Mutation, a WaitlistApproval) (WaitlistEntry, error)
+	// RejectWaitlist rejects a pending or approved entry and drops its
+	// token; errors as ApproveWaitlist.
+	RejectWaitlist(ctx context.Context, m Mutation, id identity.WaitlistEntryID) (WaitlistEntry, error)
+	DeleteWaitlist(ctx context.Context, m Mutation, id identity.WaitlistEntryID) error
 }
 
 // SignupTransaction is the storage of self-registration, one transaction.
 type SignupTransaction interface {
 	// AccountExists reports whether the environment has a user with email.
 	AccountExists(ctx context.Context, environment identity.EnvironmentID, email string) (bool, error)
+	// JoinWaitlist adds a pending entry for j.Email unless the address
+	// has an open (pending, approved or rejected) entry or the
+	// environment holds config.WaitlistMaxPending pending ones (logged);
+	// an approval that expired unused goes back to pending. created
+	// reports a new entry (and records waitlist.joined).
+	JoinWaitlist(ctx context.Context, j WaitlistJoin) (created bool, err error)
+	// WaitlistToken resolves the hash of an approval token to its live
+	// (approved, unexpired) entry; ErrWaitlistToken otherwise.
+	WaitlistToken(ctx context.Context, environment identity.EnvironmentID, hash []byte) (WaitlistToken, error)
 	// RecentSignups counts sign-ups for email in the last ten minutes.
 	RecentSignups(ctx context.Context, environment identity.EnvironmentID, email string) (int, error)
 	// CreateSignup stores p and consumes older sign-ups for its email.

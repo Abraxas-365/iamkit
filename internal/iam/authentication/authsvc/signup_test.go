@@ -21,10 +21,17 @@ type signupStore struct {
 	joinErr  error
 	commits  int
 	failures int
+	// waitlist: entries by email, tokens by hash; cap makes JoinWaitlist
+	// refuse new entries; completed lists entries Join marked completed.
+	waitlist  map[string]*authentication.WaitlistEntry
+	tokens    map[string]authentication.WaitlistToken
+	cap       bool
+	completed []identity.WaitlistEntryID
 }
 
 func newSignupStore() *signupStore {
-	return &signupStore{methods: authentication.Methods{Password: true, EmailCode: true, Social: true}, pending: map[identity.ChallengeID]*authentication.PendingSignup{}}
+	return &signupStore{methods: authentication.Methods{Password: true, EmailCode: true, Social: true}, pending: map[identity.ChallengeID]*authentication.PendingSignup{},
+		waitlist: map[string]*authentication.WaitlistEntry{}, tokens: map[string]authentication.WaitlistToken{}}
 }
 
 func (s *signupStore) BeginSignup(context.Context) (authentication.SignupTransaction, error) {
@@ -36,7 +43,23 @@ type signupTx struct {
 	created   map[identity.ChallengeID]*authentication.PendingSignup
 	failed    []identity.ChallengeID
 	joined    []authentication.Joining
+	entries   []authentication.WaitlistJoin
 	committed bool
+}
+
+func (t *signupTx) JoinWaitlist(_ context.Context, j authentication.WaitlistJoin) (bool, error) {
+	if _, open := t.store.waitlist[j.Email]; open || t.store.cap {
+		return false, nil
+	}
+	t.entries = append(t.entries, j)
+	return true, nil
+}
+func (t *signupTx) WaitlistToken(_ context.Context, _ identity.EnvironmentID, hash []byte) (authentication.WaitlistToken, error) {
+	found, ok := t.store.tokens[string(hash)]
+	if !ok {
+		return authentication.WaitlistToken{}, authentication.ErrWaitlistToken()
+	}
+	return found, nil
 }
 
 func (t *signupTx) AccountExists(context.Context, identity.EnvironmentID, string) (bool, error) {
@@ -86,6 +109,12 @@ func (t *signupTx) Commit() error {
 	for _, j := range t.joined {
 		delete(t.store.pending, j.Signup)
 		t.store.joined = append(t.store.joined, j)
+		if !j.WaitlistEntry.IsZero() {
+			t.store.completed = append(t.store.completed, j.WaitlistEntry)
+		}
+	}
+	for _, j := range t.entries {
+		t.store.waitlist[j.Email] = &authentication.WaitlistEntry{ID: j.ID, Environment: j.Environment, Email: j.Email, Name: j.Name, Locale: j.Locale, Status: authentication.WaitlistPending}
 	}
 	return nil
 }
@@ -112,6 +141,12 @@ func signupInput() authentication.Signup {
 	return authentication.Signup{Environment: testBoundary().EnvironmentID, Email: "New@Example.com", Name: " Ada ", Password: "a long enough password"}
 }
 
+// startSignup runs Signup and returns the challenge id of its answer.
+func startSignup(s *Service, in authentication.Signup) (identity.ChallengeID, error) {
+	out, err := s.Signup(context.Background(), in)
+	return out.Challenge, err
+}
+
 // message is the errx message of err ("" otherwise).
 func message(err error) string {
 	var e *errx.Error
@@ -128,7 +163,7 @@ func TestSignup(t *testing.T) {
 	delivery := &recordingDelivery{}
 	s := signupService(store, signupPolicy(), delivery)
 	env := testBoundary().EnvironmentID
-	id, err := s.Signup(context.Background(), signupInput())
+	id, err := startSignup(s, signupInput())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +199,7 @@ func TestSignupPasswordless(t *testing.T) {
 	s := signupService(store, signupPolicy(), &recordingDelivery{})
 	input := signupInput()
 	input.Password = ""
-	id, err := s.Signup(context.Background(), input)
+	id, err := startSignup(s, input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -184,12 +219,12 @@ func TestSignupExistingAccount(t *testing.T) {
 	store.exists = true
 	delivery := &recordingDelivery{}
 	s := signupService(store, signupPolicy(), delivery)
-	id, err := s.Signup(context.Background(), signupInput())
+	id, err := startSignup(s, signupInput())
 	if err != nil || id.IsZero() || len(delivery.got) != 0 || len(store.pending) != 0 {
 		t.Fatalf("id=%v err=%v sent=%d pending=%d", id, err, len(delivery.got), len(store.pending))
 	}
 	store.exists, store.recent = false, 5
-	if id, err = s.Signup(context.Background(), signupInput()); err != nil || id.IsZero() || len(delivery.got) != 0 {
+	if id, err = startSignup(s, signupInput()); err != nil || id.IsZero() || len(delivery.got) != 0 {
 		t.Fatalf("rate limited: %v sent=%d", err, len(delivery.got))
 	}
 }
@@ -247,7 +282,7 @@ func TestCompleteSignupLimits(t *testing.T) {
 	store := newSignupStore()
 	s := signupService(store, signupPolicy(), &recordingDelivery{})
 	env := testBoundary().EnvironmentID
-	id, err := s.Signup(context.Background(), signupInput())
+	id, err := startSignup(s, signupInput())
 	if err != nil {
 		t.Fatal(err)
 	}

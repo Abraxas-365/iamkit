@@ -46,6 +46,8 @@ export const ErrorCodes = {
   AccountExists: "ACCOUNT_EXISTS",
   TermsRequired: "TERMS_REQUIRED",
   SignupDisabled: "SIGNUP_DISABLED",
+  /** The waitlist approval link is unknown, expired, used or for another email: ask to join again. */
+  WaitlistTokenInvalid: "WAITLIST_TOKEN_INVALID",
   PasswordResetDisabled: "PASSWORD_RESET_DISABLED",
   ActionDenied: "ACTION_DENIED",
   /** The environment asks for a (new) `captchaToken`; `details.provider` names the provider. */

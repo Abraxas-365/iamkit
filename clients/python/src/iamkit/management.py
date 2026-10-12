@@ -2,7 +2,8 @@
 
 Authenticated with a management key (``ik_mgmt_…``, sent as ``X-API-Key``): keep it server-side. Resources
 hang off the client (``iam.users``, ``iam.organizations``, ``iam.roles``, ``iam.api_keys``, ``iam.events``,
-``iam.webhooks``, ``iam.audit_logs``, ``iam.risk``) and :meth:`IAMKit.request` reaches any other route.
+``iam.webhooks``, ``iam.audit_logs``, ``iam.risk``, ``iam.waitlist``) and
+:meth:`IAMKit.request` reaches any other route.
 Answers are the decoded JSON documents (fields as in ``api/openapi.json``).
 """
 
@@ -48,6 +49,7 @@ class IAMKit:
         self.webhooks = r.Webhooks(self._core)
         self.audit_logs = r.AuditLogs(self._core)
         self.risk = r.Risk(self._core)
+        self.waitlist = r.Waitlist(self._core)
 
     @property
     def environment_id(self) -> str | None:
@@ -113,6 +115,7 @@ class AsyncIAMKit:
         self.webhooks = a.Webhooks(self._core)
         self.audit_logs = a.AuditLogs(self._core)
         self.risk = a.Risk(self._core)
+        self.waitlist = a.Waitlist(self._core)
 
     @property
     def environment_id(self) -> str | None:

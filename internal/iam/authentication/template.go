@@ -25,6 +25,13 @@ const (
 	// PurposeSecurityAlert tells a user their sign-in looked unusual (risk
 	// detections with action notify). It carries no code or link.
 	PurposeSecurityAlert = "security_alert"
+	// The sign-up waitlist: joined confirms the request (no code, no link),
+	// approved carries the sign-up link (or the token when no sign-up page
+	// is known) and its expiry, rejected is sent only when the operator
+	// chose to notify.
+	PurposeWaitlistJoined   = "waitlist_joined"
+	PurposeWaitlistApproved = "waitlist_approved"
+	PurposeWaitlistRejected = "waitlist_rejected"
 )
 
 // Copy is the wording of one email. The layout around it (logo, code box,
@@ -53,7 +60,9 @@ func (c Copy) Overlay(override Copy) Copy {
 }
 
 // HasAction reports whether emails of purpose carry a button.
-func HasAction(purpose string) bool { return purpose == PurposeInvitation }
+func HasAction(purpose string) bool {
+	return purpose == PurposeInvitation || purpose == PurposeWaitlistApproved
+}
 
 // Wording limits, in characters (as in the email_templates schema).
 const (
@@ -146,6 +155,9 @@ var placeholders = map[string][]string{
 	PurposeInvitation:        {PlaceholderAppName, PlaceholderEmail, PlaceholderOrganization, PlaceholderInviter, PlaceholderExpiresAt},
 	PurposeSecurityAlert:     {PlaceholderAppName, PlaceholderEmail, PlaceholderReason, PlaceholderOccurredAt, PlaceholderCountry, PlaceholderIP, PlaceholderUserAgent},
 	PurposeTest:              {PlaceholderAppName, PlaceholderEmail},
+	PurposeWaitlistJoined:    {PlaceholderAppName, PlaceholderEmail},
+	PurposeWaitlistApproved:  {PlaceholderAppName, PlaceholderEmail, PlaceholderExpiresAt},
+	PurposeWaitlistRejected:  {PlaceholderAppName, PlaceholderEmail},
 }
 
 // Placeholders lists the placeholders wording of purpose may use.

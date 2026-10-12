@@ -112,8 +112,14 @@ type Flow interface {
 	VerifyCode(ctx context.Context, r Request, challenge identity.ChallengeID, code string) (Result, error)
 	SendReset(ctx context.Context, r Request, email string) (identity.ChallengeID, error)
 	Reset(ctx context.Context, r Request, challenge identity.ChallengeID, code, password string) error
-	// Signup emails a code to confirm the address of a new account.
-	Signup(ctx context.Context, r Request, email, name, password string, acceptTerms bool) (identity.ChallengeID, error)
+	// Signup emails a code to confirm the address of a new account, or
+	// (the environment's waitlist) adds the address to the waitlist:
+	// Status tells which. waitlist is the approval token of the sign-up
+	// link ("" without one).
+	Signup(ctx context.Context, r Request, email, name, password, waitlist string, acceptTerms bool) (authentication.SignupResult, error)
+	// WaitlistEmail is the address an approval token was issued to, to
+	// prefill the sign-up page; any refusal is an error.
+	WaitlistEmail(ctx context.Context, r Request, waitlist string) (string, error)
 	// CompleteSignup creates the account once the code is right and signs
 	// it in like any verified login. A new account without access to the
 	// application answers ErrSignedUpNoAccess.
@@ -226,8 +232,9 @@ type Challenges interface {
 
 // Signups is self-registration (authentication.SignupCommands).
 type Signups interface {
-	Signup(ctx context.Context, input authentication.Signup) (identity.ChallengeID, error)
+	Signup(ctx context.Context, input authentication.Signup) (authentication.SignupResult, error)
 	CompleteSignup(ctx context.Context, environment identity.EnvironmentID, signup identity.ChallengeID, code string) (authentication.SignedUp, error)
+	WaitlistEmail(ctx context.Context, environment identity.EnvironmentID, token string) (string, error)
 }
 
 // Federation is the part of the federation flows the hosted pages use.

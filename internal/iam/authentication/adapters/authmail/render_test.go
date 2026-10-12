@@ -52,7 +52,9 @@ func sample(purpose string) authentication.Message {
 		m.Token, m.Link, m.Organization, m.Inviter, m.ExpiresAt = "ik_inv_token", "https://app.acme.io/invite?token=ik_inv_token", "Acme Corp", "Bob", &testExpires
 	case authentication.PurposeSecurityAlert:
 		m.Detection, m.IP, m.Country, m.UserAgent, m.OccurredAt = "new_device", "203.0.113.7", "PE", "Mozilla/5.0 (X11; Linux x86_64)", &testExpires
-	case authentication.PurposeTest:
+	case authentication.PurposeWaitlistApproved:
+		m.Token, m.Link, m.ExpiresAt = "ik_wait_token", "https://app.acme.io/signup?waitlist=ik_wait_token", &testExpires
+	case authentication.PurposeTest, authentication.PurposeWaitlistJoined, authentication.PurposeWaitlistRejected:
 	default:
 		m.Code = "12345678"
 	}

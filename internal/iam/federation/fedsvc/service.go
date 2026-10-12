@@ -82,7 +82,33 @@ func (s *Service) prepare(ctx context.Context, c federation.Connection) (federat
 	if !strings.HasPrefix(s.issuer, "https://") {
 		return c, errx.Validation("SAML connections require an HTTPS issuer")
 	}
+	if c.Draft && c.Options.MetadataURL == "" && c.Options.MetadataXML == "" {
+		// Nothing to fetch yet: the SP entity ID stands in as issuer and
+		// client ID (unique per connection) until the metadata names the
+		// identity provider.
+		entity := federation.SAMLServiceProvider(s.issuer, c.Environment, c.ID).EntityID
+		c.Issuer, c.Client = entity, entity
+		return c, nil
+	}
 	return s.provider.Prepare(ctx, c)
+}
+
+// editable finds the connection an update or the SP metadata may read:
+// active, or a draft (inactive, waiting for its metadata).
+func (s *Service) editable(ctx context.Context, environment identity.EnvironmentID, id identity.ConnectionID) (federation.Connection, error) {
+	c, err := s.repository.Find(ctx, environment, id)
+	if err == nil {
+		return c, nil
+	}
+	var e *errx.Error
+	if !errors.As(err, &e) || e.Type != errx.TypeNotFound {
+		return c, err
+	}
+	c, derr := s.repository.FindAny(ctx, environment, id)
+	if derr != nil || !c.Draft {
+		return federation.Connection{}, err
+	}
+	return c, nil
 }
 
 func (s *Service) Update(ctx context.Context, m federation.Mutation, id identity.ConnectionID, input federation.ConnectionUpdate) error {
@@ -92,7 +118,7 @@ func (s *Service) Update(ctx context.Context, m federation.Mutation, id identity
 	if err := input.Validate(); err != nil {
 		return err
 	}
-	current, err := s.repository.Find(ctx, m.Environment, id)
+	current, err := s.editable(ctx, m.Environment, id)
 	if err != nil {
 		return err
 	}
@@ -102,14 +128,15 @@ func (s *Service) Update(ctx context.Context, m federation.Mutation, id identity
 	}
 	if c.Provider == federation.ProviderSAML && input.Options != nil {
 		// Refetch or reparse the metadata; the identity provider's entity
-		// ID is what linked subjects belong to, so it cannot change.
+		// ID is what linked subjects belong to, so it cannot change (a
+		// draft has no subjects: its first metadata names it).
 		if input.Options.MetadataURL != "" && input.Options.MetadataXML == "" {
 			c.Options.MetadataXML = ""
 		}
 		if c, err = s.prepare(ctx, c); err != nil {
 			return err
 		}
-		if c.Issuer != current.Issuer {
+		if !current.Draft && c.Issuer != current.Issuer {
 			return errx.Validation("the metadata names another identity provider entity ID; create another connection")
 		}
 	}
@@ -228,7 +255,20 @@ func (s *Service) Enable(ctx context.Context, m federation.Mutation, id identity
 	if err != nil {
 		return err
 	}
-	if c.Provider == federation.ProviderSAML && c.Options.MetadataURL != "" {
+	if c.Draft {
+		// A draft goes live only with its identity provider's metadata,
+		// prepared here (issuer = the provider's entity ID).
+		if c.Options.MetadataURL == "" && c.Options.MetadataXML == "" {
+			return errx.Business("set options.metadata_url or options.metadata_xml before enabling this draft connection")
+		}
+		c.Draft = false
+		if c.Options.MetadataURL != "" {
+			c.Options.MetadataXML = ""
+		}
+		if c, err = s.prepare(ctx, c); err != nil {
+			return err
+		}
+	} else if c.Provider == federation.ProviderSAML && c.Options.MetadataURL != "" {
 		// The identity provider may have rotated its certificate meanwhile.
 		issuer := c.Issuer
 		c.Options.MetadataXML = ""
@@ -413,6 +453,10 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 	row, err := s.repository.ConsumeState(ctx, s.secrets.Hash(state), s.secrets.Hash(binding))
 	if err != nil {
 		return out, err
+	}
+	if row.Test {
+		// A test sign-in only reports: no session, user, link or action.
+		return s.callbackTest(ctx, row, code, state)
 	}
 	out.Continuation = row.Continuation
 	out.ReturnTo = row.Return.To
@@ -840,7 +884,7 @@ func (s *Service) SAMLMetadata(ctx context.Context, environment identity.Environ
 	if environment.IsZero() || id.IsZero() {
 		return nil, errx.NotFound("SAML connection not found")
 	}
-	c, err := s.repository.Find(ctx, environment, id)
+	c, err := s.editable(ctx, environment, id)
 	if err != nil {
 		return nil, err
 	}

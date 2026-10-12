@@ -1,0 +1,8 @@
+Subject: Estás en la lista de espera de Acme
+
+Estás en la lista de espera
+
+Gracias por tu interés en Acme. Te añadimos a la lista de espera y te escribiremos cuando tu lugar esté listo.
+
+--
+Si no pediste unirte, puedes ignorar este correo.

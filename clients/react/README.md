@@ -89,9 +89,10 @@ See [React account widgets](../../docs/reference/sdk/react-widgets.md).
 
 ## Hooks
 
-- `useSignIn({ticket, organization?, returnTo?, navigate?, locale?})` →
+- `useSignIn({ticket, organization?, returnTo?, navigate?, locale?, waitlistToken?})` →
   `{state, flow}`: `state.step` (`identify`, `password`, `code`, `mfa`,
-  `enroll`, `new_password`, `reset`, `ldap`, `signup`, `signup_verify`,
+  `enroll`, `new_password`, `reset`, `ldap`, `signup`, `signup_verify`, `waitlisted` (the waitlist took the sign-up; pass the
+  approval link's `?waitlist=` as `waitlistToken`; text keys `hosted.title.waitlisted`/`hosted.notice.waitlisted`),
   `captcha`, `risk_challenge`, `blocked`, `redirecting`, `failed`), `state.authorization` (methods, connections,
   branding, texts), `state.error` (`IAMKitError`), `state.busy`; actions
   `flow.identify(login)`, `submitPassword`, `changePassword`, `sendCode`,

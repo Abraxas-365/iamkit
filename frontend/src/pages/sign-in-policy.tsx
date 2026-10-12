@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { FileCheck, Fingerprint, Globe, KeyRound, Mail, MessageSquare, Network, RotateCcw, ShieldCheck, Smartphone, TriangleAlert, UserPlus, Usb } from 'lucide-react'
+import { FileCheck, Fingerprint, Globe, KeyRound, ListPlus, Mail, MessageSquare, Network, RotateCcw, ShieldCheck, Smartphone, TriangleAlert, UserPlus, Usb } from 'lucide-react'
 import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -11,6 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { ConfirmDialog, ErrorState, PageHeader, SettingsList, SettingsSection, SwitchField, Time } from '@/components/library/patterns'
 import { UnsavedChangesGuard } from '@/components/library/unsaved-changes'
 import { SearchSelect } from '@/components/ui/search-select'
+import { TagInput } from '@/components/ui/tag-input'
+import { Input } from '@/components/ui/input'
 import { FACTORS, toggleFactor } from '@/lib/factors'
 import { rich, t } from '@/lib/i18n'
 
@@ -29,11 +31,17 @@ export interface SignInPolicy {
   signup_organization_id: string
   signup_group_id: string
   allowed_factors: string[]
+  /** Sign-ups join a waitlist until an operator approves them (needs allow_signup). */
+  waitlist?: boolean
+  /** Email domains approved on the spot (at most 50). */
+  waitlist_auto_approve_domains?: string[]
+  /** Where the approval email's link goes (https, or loopback http); empty: IAMKit's hosted page. */
+  waitlist_signup_url?: string
   custom?: boolean
   updated_at?: string
 }
 
-type Flag = Exclude<keyof SignInPolicy, 'custom' | 'updated_at' | 'signup_organization_id' | 'signup_group_id' | 'allowed_factors'>
+type Flag = Exclude<keyof SignInPolicy, 'custom' | 'updated_at' | 'signup_organization_id' | 'signup_group_id' | 'allowed_factors' | 'waitlist' | 'waitlist_auto_approve_domains' | 'waitlist_signup_url'>
 const named = (item: Record<string, unknown>) => ({ id: String(item.id), label: String(item.name || item.id), inactive: item.active === false })
 
 type Row = { key: Flag; label: string; hint: string; icon: ReactNode }
@@ -81,9 +89,11 @@ export default function SignInPolicyPage() {
     if (!d) return d
     const next = { ...d, [key]: value }
     if (key === 'allow_password' && !value) next.allow_password_reset = false
+    if (key === 'allow_signup' && !value && next.waitlist) next.waitlist = false
     return next
   })
-  const changed = (Object.keys(draft) as (keyof SignInPolicy)[]).some(k => k === 'allowed_factors' ? (draft.allowed_factors ?? []).join() !== (saved.allowed_factors ?? []).join() : (draft[k] ?? '') !== (saved[k] ?? ''))
+  const sameList = (a?: string[], b?: string[]) => (a ?? []).join() === (b ?? []).join()
+  const changed = (Object.keys(draft) as (keyof SignInPolicy)[]).some(k => k === 'allowed_factors' || k === 'waitlist_auto_approve_domains' ? !sameList(draft[k], saved[k]) : (draft[k] ?? '') !== (saved[k] ?? ''))
   const factors = draft.allowed_factors ?? []
   const passkeys = draft.allow_passkey && factors.includes('webauthn')
   const none = !draft.allow_password && !draft.allow_email_code && !draft.allow_social && !passkeys
@@ -161,6 +171,25 @@ export default function SignInPolicyPage() {
             <p className="text-xs text-muted-foreground">{t('New accounts join this group and get its roles. Only groups managed here (not by directory sync) qualify.')}</p>
           </div>}
         </div>}
+        <div className="border-t">
+          <SettingsList>
+            <SwitchField variant="row" icon={<ListPlus />} label={t('Waitlist')} hint={t('New sign-ups wait for an operator\'s approval. Approved people get an emailed link to create their account; nobody receives a code before that.')}
+              note={!draft.allow_signup ? t('Turn on sign-up first.') : undefined} checked={!!draft.waitlist} disabled={locked || !draft.allow_signup} onCheckedChange={v => setDraft(d => d && ({ ...d, waitlist: v }))} />
+          </SettingsList>
+          {draft.waitlist && <div className="space-y-4 border-t p-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="waitlist-domains">{t('Auto-approve domains')}</label>
+              <TagInput key={`domains-${generation}`} id="waitlist-domains" name="waitlist_auto_approve_domains" defaultValue={draft.waitlist_auto_approve_domains ?? []} disabled={locked} placeholder={t('example.com, then Enter')}
+                onChange={domains => setDraft(d => d && ({ ...d, waitlist_auto_approve_domains: domains.map(x => x.toLowerCase()) }))} />
+              <p className="text-xs text-muted-foreground">{t('People who join with an address on one of these domains are approved at once (at most 50 domains).')}</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" htmlFor="waitlist-url">{t('Approval link URL')}</label>
+              <Input id="waitlist-url" type="url" inputMode="url" placeholder="https://app.example.com/signup" disabled={locked} value={draft.waitlist_signup_url ?? ''} onChange={e => setDraft(d => d && ({ ...d, waitlist_signup_url: e.target.value }))} />
+              <p className="text-xs text-muted-foreground">{rich('Your sign-up page; IAMKit adds {{param}} to it. Leave empty and the approval email carries the token but no link. It must use HTTPS (HTTP only on localhost).', { param: <code className="text-xs">{'?waitlist=<token>'}</code> })}</p>
+            </div>
+          </div>}
+        </div>
       </SettingsSection>
 
       {canWrite && changed && <div data-save-bar className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur md:left-(--sidebar-width)">
