@@ -213,6 +213,13 @@ type Options struct {
 	// initiate_login_uri) that IdP-initiated responses of a SAML connection
 	// are handed to. Empty: unsolicited responses are refused.
 	IdPInitiatedClientID string `json:"idp_initiated_client_id,omitempty"`
+	// SingleLogout turns on SAML single logout for the connection: its
+	// sessions remember the assertion's NameID/SessionIndex, the identity
+	// provider may end them with a signed LogoutRequest at the
+	// connection's SLO endpoint, and /oauth/end_session sends the browser
+	// on to the identity provider's SingleLogoutService. The metadata must
+	// publish one (Prepare checks it). Off by default.
+	SingleLogout bool `json:"single_logout,omitempty"`
 	// GroupsClaim is the ID token claim holding the user's groups (an array
 	// of strings, or one string) on an OpenID Connect connection; "" reads
 	// "groups". The values feed the connection's group mappings.
@@ -248,7 +255,7 @@ type AttributeMapping struct {
 
 // SAML reports whether the options configure a SAML connection.
 func (o Options) SAML() bool {
-	return o.MetadataURL != "" || o.MetadataXML != "" || o.NameIDFormat != "" || o.SignRequests || o.IdPInitiatedClientID != ""
+	return o.MetadataURL != "" || o.MetadataXML != "" || o.NameIDFormat != "" || o.SignRequests || o.IdPInitiatedClientID != "" || o.SingleLogout
 }
 
 // LDAP reports whether the options configure an LDAP connection.
@@ -365,12 +372,17 @@ type ServiceProvider struct {
 	ACS string `json:"acs_url"`
 	// Metadata is the SP metadata to give the identity provider.
 	Metadata string `json:"metadata_url"`
+	// SLO is the connection's single logout service (HTTP-Redirect and
+	// HTTP-POST): the identity provider's LogoutRequests and
+	// LogoutResponses come here. Published in the metadata only with
+	// Options.SingleLogout.
+	SLO string `json:"slo_url"`
 }
 
 // SAMLServiceProvider returns the SP endpoints of a SAML connection.
 func SAMLServiceProvider(issuer string, environment identity.EnvironmentID, connection identity.ConnectionID) ServiceProvider {
-	metadata := issuer + "/identity/v1/federation/saml/" + environment.String() + "/" + connection.String() + "/metadata"
-	return ServiceProvider{EntityID: metadata, ACS: issuer + "/identity/v1/federation/saml/acs", Metadata: metadata}
+	base := issuer + "/identity/v1/federation/saml/" + environment.String() + "/" + connection.String()
+	return ServiceProvider{EntityID: base + "/metadata", ACS: issuer + "/identity/v1/federation/saml/acs", Metadata: base + "/metadata", SLO: base + "/slo"}
 }
 
 // ClaimMapping names the userinfo members (dotted paths into nested

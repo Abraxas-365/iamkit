@@ -40,6 +40,10 @@ type Session struct {
 	AMR     []string
 	// Authenticated is when the session signed in.
 	Authenticated time.Time
+	// Impersonated: an operator or service account acts in the session.
+	Impersonated bool
+	// OAuthClient: the session belongs to an OAuth client's authorization.
+	OAuthClient bool
 }
 type Challenge struct {
 	User        identity.UserID
@@ -107,6 +111,9 @@ type Completed struct {
 	// PasswordHash replaces the user's expired password now that the
 	// second factor passed; "" keeps it.
 	PasswordHash string
+	// Federation is the SAML link the pending login carried (nil when the
+	// first factor was not a SAML sign-in).
+	Federation *FederationLink
 }
 
 // Enrollment is a TOTP authenticator to add during a login.
@@ -210,6 +217,9 @@ type Verified struct {
 	// PasswordExpired holds the session back until the user chose a new
 	// password (Authenticator.ChangePassword).
 	PasswordExpired bool
+	// Federation is the SAML link of an organization SAML sign-in (nil
+	// otherwise); Issue stores it with the session.
+	Federation *FederationLink
 }
 
 // Federated reports whether the user signed in with an organization's own

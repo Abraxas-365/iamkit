@@ -9,12 +9,16 @@ interface Fixture {
   environment: string;
   organization: string;
   secure: string;
+  other: string;
   clientId: string;
   password: string;
   alice: { id: string; email: string };
   reset: { id: string; email: string };
   coder: { id: string; email: string };
   mfa: { id: string; email: string };
+  account: { id: string; email: string };
+  keys: { id: string; email: string };
+  changer: { id: string; email: string };
   invitation: { token: string; email: string };
 }
 
@@ -180,4 +184,91 @@ test("an invitation is accepted on the application's page", async ({ page }) => 
 test("a sign-in page without a ticket or authorize request asks to start from the application", async ({ page }) => {
   await page.goto("/sign-in");
   await expect(page.getByText("Start the sign-in from the application.")).toBeVisible();
+});
+
+// ── The account page (examples/nextjs-login/app/account): @iamkit/react's
+// account widgets against IAMKit's self-service API. ──
+
+/** Signs in through the app's sign-in page and opens /account. */
+async function signInToAccount(page: Page, user: { email: string }, organization: string) {
+  await startSignIn(page, organization);
+  await identify(page, user.email);
+  await page.getByLabel("Password").fill(fixture.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Signed in" })).toBeVisible();
+  await page.getByRole("link", { name: "Account" }).click();
+  await expect(page).toHaveURL(/\/account$/);
+}
+
+test("account: the profile is edited and the current session is marked", async ({ page }) => {
+  await signInToAccount(page, fixture.account, fixture.organization);
+  const profile = page.getByRole("form", { name: "Profile", exact: true });
+  await expect(profile.getByLabel("Name", { exact: true })).toHaveValue("Ava");
+  // The email is read-only.
+  await expect(profile.getByLabel("Email")).toHaveAttribute("readonly", "");
+  await profile.getByLabel("Name", { exact: true }).fill("Ava Account");
+  await profile.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Profile saved.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("form", { name: "Profile", exact: true }).getByLabel("Name", { exact: true })).toHaveValue("Ava Account");
+  // One live session so far (this one), marked as the current one.
+  const current = page.locator('[data-iamkit="item"][data-current="true"][data-session]');
+  await expect(current).toHaveCount(1);
+  await expect(current).toContainText("This session");
+});
+
+test("account: an API key is created, shown once, then revoked", async ({ page }) => {
+  await signInToAccount(page, fixture.keys, fixture.organization);
+  const create = page.getByRole("form", { name: "Create key" });
+  await create.getByLabel("Name", { exact: true }).fill("ci");
+  await create.getByLabel("invoices:read").check();
+  await create.getByRole("button", { name: "Create key" }).click();
+  const value = page.getByTestId("api-key-value");
+  await expect(value).toHaveText(/^ik_key_/);
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(value).toHaveCount(0);
+  // Afterwards only the obfuscated value is listed.
+  const item = page.locator('[data-iamkit="item"][data-key]');
+  await expect(item).toContainText("ci");
+  await page.reload();
+  await expect(page.getByTestId("api-key-value")).toHaveCount(0);
+  await page.getByRole("button", { name: "Revoke: ci" }).click();
+  await expect(page.locator('[data-iamkit="item"][data-key][data-state="revoked"]')).toHaveCount(1);
+});
+
+test("account: a stale sign-in sends the user through a fresh sign-in and back to the page", async ({ page }) => {
+  await signInToAccount(page, fixture.changer, fixture.organization);
+  // The server answers REAUTHENTICATION_REQUIRED when the sign-in is older
+  // than a few minutes; simulate that answer once.
+  await page.route("**/identity/v1/me/password?*", (route) =>
+    route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ error: { code: "REAUTHENTICATION_REQUIRED", message: "sign in again" } }) }),
+  );
+  await page.getByLabel("Current password").fill(fixture.password);
+  await page.getByLabel("New password").fill("Another-password-2026!");
+  const authorize = page.waitForRequest((r) => new URL(r.url()).pathname === "/oauth/authorize");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page).toHaveURL(/\/sign-in\?ticket=/);
+  expect(new URL((await authorize).url()).searchParams.get("max_age")).toBe("0");
+  await identify(page, fixture.changer.email);
+  await page.getByLabel("Password").fill(fixture.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  // Back on the account page (the callback's `next`).
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByRole("heading", { name: "Password" })).toBeVisible();
+});
+
+test("account: the organization switcher signs the user in to the other organization", async ({ page }) => {
+  await signInToAccount(page, fixture.account, fixture.organization);
+  await expect(page.getByTestId("account-organization")).toHaveText(fixture.organization);
+  await expect(page.locator('[data-iamkit="item"][data-current="true"][data-organization]')).toContainText("Acme");
+  await page.getByRole("button", { name: "Switch to Globex" }).click();
+  // IAMKit's sessions of OAuth clients cannot switch in place: a new
+  // authorization pinned to the organization, then back to /account.
+  await expect(page).toHaveURL(/\/sign-in\?ticket=/);
+  await expect(page.locator('[data-iamkit="root"]')).toHaveAttribute("data-step", "identify");
+  await identify(page, fixture.account.email);
+  await page.getByLabel("Password").fill(fixture.password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByTestId("account-organization")).toHaveText(fixture.other);
 });

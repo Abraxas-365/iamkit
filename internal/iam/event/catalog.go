@@ -21,13 +21,17 @@ const (
 	// new password.
 	UserPasswordChangeRequired = "user.password_change_required"
 	// UserPasswordChanged: the user set a new password (data.method:
-	// sign_in — expired or required at sign-in — or reset).
+	// sign_in — expired or required at sign-in —, reset, or self_service —
+	// POST /identity/v1/me/password).
 	UserPasswordChanged = "user.password_changed"
-	UserSignedUp        = "user.signed_up"
-	UserProfileUpdated  = "user.profile_updated"
-	UserProfileSynced   = "user.profile_synced"
-	UserMetadataSet     = "user.metadata_set"
-	UserMetadataDeleted = "user.metadata_deleted"
+	// UserOrganizationSwitched: a session was refreshed into another
+	// organization of the user (data.from, data.to).
+	UserOrganizationSwitched = "user.organization_switched"
+	UserSignedUp             = "user.signed_up"
+	UserProfileUpdated       = "user.profile_updated"
+	UserProfileSynced        = "user.profile_synced"
+	UserMetadataSet          = "user.metadata_set"
+	UserMetadataDeleted      = "user.metadata_deleted"
 	// UserProvisioned: a SCIM directory took over an existing user
 	// (data.mode: claimed, reactivated, adopted); UserDeprovisioned: SCIM
 	// DELETE removed the user from the directory's organization.
@@ -113,6 +117,10 @@ const (
 	// ConnectionIdPInitiated: a verified IdP-initiated SAML response was
 	// handed to the connection's OAuth client sign-in endpoint (no session).
 	ConnectionIdPInitiated = "connection.idp_initiated"
+	// ConnectionSingleLogout: the identity provider's signed LogoutRequest
+	// ended the connection's sessions of a NameID (data.count; actor
+	// system).
+	ConnectionSingleLogout = "connection.single_logout"
 	IdentityLinked         = "identity.linked"
 	IdentityUnlinked       = "identity.unlinked"
 
@@ -132,6 +140,12 @@ const (
 	TokenExchanged       = "token.exchanged"
 	DeviceApproved       = "device.approved"
 	SAMLAssertionIssued  = "saml.assertion_issued"
+	// SAMLLogout: a SAML application's signed LogoutRequest ended the
+	// session it named (actor = the user).
+	SAMLLogout = "saml.logout"
+	// SAMLLogoutFailed: a back-channel (SOAP) LogoutRequest to an
+	// application gave up.
+	SAMLLogoutFailed = "saml.logout_failed"
 
 	MFAEnrolled            = "mfa.enrolled"
 	MFARemoved             = "mfa.removed"

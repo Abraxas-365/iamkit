@@ -490,12 +490,12 @@ func TestFederationProviderOptionsWire(t *testing.T) {
 		t.Fatalf("patch body = %v", body)
 	}
 	_, err = env.CreateFederation(ctx, Federation{Name: "Okta", Provider: ProviderSAML, OrganizationID: "org-1",
-		Options: &FederationOptions{MetadataURL: "https://idp/m", NameIDFormat: NameIDTransient, Attributes: &SAMLAttributes{Subject: "uid"}, SignRequests: true}})
+		Options: &FederationOptions{MetadataURL: "https://idp/m", NameIDFormat: NameIDTransient, Attributes: &SAMLAttributes{Subject: "uid"}, SignRequests: true, SingleLogout: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	options = body["options"].(map[string]any)
-	if body["provider"] != "saml" || options["metadata_url"] != "https://idp/m" || options["name_id_format"] != "transient" || options["attributes"].(map[string]any)["subject"] != "uid" || options["sign_requests"] != true {
+	if body["provider"] != "saml" || options["metadata_url"] != "https://idp/m" || options["name_id_format"] != "transient" || options["attributes"].(map[string]any)["subject"] != "uid" || options["sign_requests"] != true || options["single_logout"] != true {
 		t.Fatalf("saml body = %v", body)
 	}
 	if _, ok := body["client_secret"]; ok {
@@ -543,6 +543,9 @@ func TestSAMLAppRoutes(t *testing.T) {
 		t.Fatalf("create = %+v %v", sp, err)
 	}
 	format := "persistent"
+	empty := ""
+	env.CreateSAMLApp(ctx, CreateSAMLApp{Name: "Wiki", Application: "a", Resource: "r", EntityID: "e", ACSURLs: []string{"https://wiki.example.com/acs"}, SLOURL: "https://wiki.example.com/slo", SLOBinding: "post", SLOSOAPURL: "https://wiki.example.com/soap", Certificate: "PEM"})
+	env.UpdateSAMLApp(ctx, "sp1", UpdateSAMLApp{SLOSOAPURL: &empty})
 	env.SAMLIdentityProvider(ctx)
 	env.SAMLApps(ctx)
 	env.SAMLApp(ctx, "sp1")
@@ -553,6 +556,8 @@ func TestSAMLAppRoutes(t *testing.T) {
 	}
 	want := []string{
 		"POST /management/v1/environments/env-1/saml/service-providers {\"name\":\"Wiki\",\"application_id\":\"a\",\"resource_id\":\"r\",\"entity_id\":\"https://wiki.example.com/saml\",\"acs_urls\":[\"https://wiki.example.com/acs\"]}\n",
+		"POST /management/v1/environments/env-1/saml/service-providers {\"name\":\"Wiki\",\"application_id\":\"a\",\"resource_id\":\"r\",\"entity_id\":\"e\",\"acs_urls\":[\"https://wiki.example.com/acs\"],\"slo_url\":\"https://wiki.example.com/slo\",\"slo_binding\":\"post\",\"slo_soap_url\":\"https://wiki.example.com/soap\",\"certificate\":\"PEM\"}\n",
+		"PATCH /management/v1/environments/env-1/saml/service-providers/sp1 {\"slo_soap_url\":\"\"}\n",
 		"GET /management/v1/environments/env-1/saml/identity-provider ",
 		"GET /management/v1/environments/env-1/saml/service-providers ",
 		"GET /management/v1/environments/env-1/saml/service-providers/sp1 ",

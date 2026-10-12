@@ -48,7 +48,7 @@ export interface ConnectionValues {
   signup: boolean; signup_organization_id: string; signup_group_id: string; link_email: boolean
   base_url: string; authorize_url: string; token_url: string; userinfo_url: string; scopes: string[]
   claim_subject: string; claim_email: string; claim_email_verified: string; claim_name: string; update_profile: boolean
-  metadata_url: string; metadata_xml: string; name_id_format: string; attr_subject: string; attr_email: string; attr_name: string; sign_requests: boolean; idp_initiated_client_id: string
+  metadata_url: string; metadata_xml: string; name_id_format: string; attr_subject: string; attr_email: string; attr_name: string; sign_requests: boolean; single_logout: boolean; idp_initiated_client_id: string
   ldap_url: string; start_tls: boolean; bind_dn: string; user_base_dn: string; user_filter: string; ca_pem: string
   // Where the identity provider keeps the user's groups: a SAML/LDAP attribute
   // (attr_groups), an OIDC ID token claim (groups_claim) or an OAuth 2.0
@@ -86,7 +86,7 @@ export function ldapOptions(v: Pick<ConnectionValues, 'ldap_url' | 'start_tls' |
 
 // samlOptions are the options of a SAML connection: the identity
 // provider's metadata (URL or XML), NameID format and attribute names.
-export function samlOptions(v: Pick<ConnectionValues, 'metadata_url' | 'metadata_xml' | 'name_id_format' | 'attr_subject' | 'attr_email' | 'attr_name' | 'attr_groups' | 'sign_requests'> & { idp_initiated_client_id?: string }) {
+export function samlOptions(v: Pick<ConnectionValues, 'metadata_url' | 'metadata_xml' | 'name_id_format' | 'attr_subject' | 'attr_email' | 'attr_name' | 'attr_groups' | 'sign_requests'> & { single_logout?: boolean; idp_initiated_client_id?: string }) {
   const options: Record<string, unknown> = v.metadata_xml.trim() ? { metadata_xml: v.metadata_xml.trim() } : { metadata_url: v.metadata_url.trim() }
   if (v.name_id_format && v.name_id_format !== 'unspecified') options.name_id_format = v.name_id_format
   const attributes: Record<string, string> = {}
@@ -96,6 +96,7 @@ export function samlOptions(v: Pick<ConnectionValues, 'metadata_url' | 'metadata
   if (v.attr_groups.trim()) attributes.groups = v.attr_groups.trim()
   if (Object.keys(attributes).length) options.attributes = attributes
   if (v.sign_requests) options.sign_requests = true
+  if (v.single_logout) options.single_logout = true
   if (v.idp_initiated_client_id?.trim()) options.idp_initiated_client_id = v.idp_initiated_client_id.trim()
   return options
 }
@@ -159,7 +160,7 @@ const initial: ConnectionValues = {
   provider: 'google', scope: 'environment', organization_id: '', name: 'Google', issuer: '', client_id: '', client_secret: '', secret_env: '',
   tenant: 'common', tenant_id: '', tenants: [], domains: [], team_id: '', key_id: '', signup: false, signup_organization_id: '', signup_group_id: '', link_email: true,
   base_url: '', authorize_url: '', token_url: '', userinfo_url: '', scopes: [], claim_subject: 'id', claim_email: 'email', claim_email_verified: '', claim_name: 'name', update_profile: false,
-  metadata_url: '', metadata_xml: '', name_id_format: 'unspecified', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false, idp_initiated_client_id: '',
+  metadata_url: '', metadata_xml: '', name_id_format: 'unspecified', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false, single_logout: false, idp_initiated_client_id: '',
   ldap_url: '', start_tls: false, bind_dn: '', user_base_dn: '', user_filter: '', ca_pem: '',
   attr_groups: '', groups_claim: '', claim_groups: '', group_mappings: [],
 }
@@ -356,6 +357,7 @@ export function CreateConnectionDialog({ base, kind, organization, onClose, onCr
             {field('attr_groups', t('Groups'), <Input id={`${id}-attr_groups`} value={v.attr_groups} placeholder="groups" onChange={e => set('attr_groups', e.target.value)} />)}
           </div>
           {check('sign_requests', t('Sign authentication requests'), t('For identity providers that require signed AuthnRequests. IAMKit signs with the environment signing key.'))}
+          {check('single_logout', t('Single logout'), t('End the IAMKit sessions of this connection when the identity provider logs the user out, and sign users out at the identity provider when they sign out of an application. The identity provider\'s metadata must publish a single logout service; give it IAMKit\'s metadata again after turning this on.'))}
           {field('idp_initiated_client_id', t('IdP-initiated sign-in client'), <Input id={`${id}-idp_initiated_client_id`} value={v.idp_initiated_client_id} placeholder={t('OAuth client ID (optional)')} onChange={e => set('idp_initiated_client_id', e.target.value)} />,
             t('Optional. An OAuth client with a sign-in endpoint (initiate login URI) that users land on when they start from the identity provider. Empty refuses IdP-initiated responses.'))}
         </fieldset>}

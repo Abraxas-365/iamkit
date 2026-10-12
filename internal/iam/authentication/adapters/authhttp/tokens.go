@@ -15,6 +15,7 @@ type Tokens struct {
 	validator authentication.TokenValidator
 	commands  authentication.SessionCommands
 	queries   authentication.SessionQueries
+	account   authentication.AccountCommands
 }
 
 func NewTokens(issuer authentication.TokenIssuer, validator authentication.TokenValidator, commands authentication.SessionCommands, queries authentication.SessionQueries) *Tokens {

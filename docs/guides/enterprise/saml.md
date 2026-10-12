@@ -59,6 +59,7 @@ Options:
 | `attributes.name` | Attribute with the display name. Default: `displayName`, `cn`, the WS-Federation display name, or `givenName` + `sn`. |
 | `attributes.groups` | Multi-valued attribute with the user's groups, all values read, for [group mapping](federation.md#group-mapping). Default: `groups`, `memberOf`, then `http://schemas.microsoft.com/ws/2008/06/identity/claims/groups`. Okta: a group attribute statement; Entra ID: a groups claim (object IDs unless set to names). |
 | `sign_requests` | Sign AuthnRequests (RSA-SHA256) for IdPs that require it. |
+| `single_logout` | Turn on [single logout](#single-logout). The IdP metadata must publish a SingleLogoutService (HTTP-Redirect or HTTP-POST), else the request is refused (400 `SINGLE_LOGOUT_UNAVAILABLE`). Default off. |
 | `idp_initiated_client_id` | OAuth client (with an `initiate_login_uri`) that [IdP-initiated](#idp-initiated-login) responses are handed to. Unset: they are refused. |
 
 Attribute names match an attribute's `Name` or `FriendlyName`,
@@ -82,7 +83,10 @@ Give the IdP the SP metadata URL (most IdPs import it), or enter the entity ID
 (audience / SP entity ID) and ACS URL (HTTP-POST binding) by hand. Set the
 NameID format you chose and release the email attribute. The SP metadata is
 public and lists the SP certificate for encryption (and for signing, with
-`sign_requests`).
+`sign_requests` or `single_logout`). With `single_logout` it also lists the SP's
+SingleLogoutService (HTTP-Redirect and HTTP-POST) at
+`…/federation/saml/ENV/CONN/slo`: import the metadata into the IdP again after
+turning the option on.
 
 ## Sign-in flow
 
@@ -199,6 +203,38 @@ Rules of the redirect:
 - Each accepted response writes a `connection.idp_initiated` event and shares
   the ACS rate limit.
 
+## Single logout
+
+With `options.single_logout` (off by default) IAMKit is the service provider of
+SAML single logout, in both directions. Every message is signed: IAMKit signs
+what it sends with the environment signing key, and refuses an unsigned, wrongly
+signed, mis-addressed (`Destination`), stale or foreign-`Issuer` message with
+`401`.
+
+```bash
+iam federation update $CONN --metadata-url … --single-logout
+```
+
+- **IdP-initiated.** The IdP sends a signed `LogoutRequest` to the SLO endpoint
+  (HTTP-Redirect or HTTP-POST). IAMKit ends the sessions that signed in through
+  this connection with that NameID (narrowed to the request's `SessionIndex`es
+  when it names them), writes a `connection.single_logout` event, and answers
+  the IdP with a signed `LogoutResponse` (`Success`; `PartialLogout` when the
+  sessions could not be ended). A request is honored once: replays are
+  refused and not answered.
+- **SP-initiated.** When `/oauth/end_session` ends a session that signed in
+  through such a connection, IAMKit then sends the browser to the IdP with a
+  signed `LogoutRequest` (a `303`, or an auto-submitted POST form for IdPs that
+  only publish the POST binding). The IdP's `LogoutResponse` is accepted once,
+  for ten minutes at most, and brings the browser on to the client's
+  `post_logout_redirect_uri` (with `state`) or to the hosted signed-out page.
+  The IAMKit session has already ended by then; an IdP that fails or never
+  answers does not undo it.
+- Only sessions created after the option was on are linked to the IdP session
+  (NameID, format and `SessionIndex` are stored with the session). Headless
+  `POST /identity/v1/logout` and `DELETE /me/sessions` stay local: they never
+  call the IdP.
+
 ## Updating
 
 `PATCH` with `options` replaces the options whole. Sending `metadata_url`
@@ -213,9 +249,10 @@ iam federation update $CONN --metadata-url https://acme.okta.com/app/exk…/sso/
 
 ## Limits
 
-- SP-initiated HTTP-Redirect → HTTP-POST only; no artifact binding, no SAML
-  single logout (end sessions with
-  [session revocation](../../concepts/sessions-and-tokens.md)).
+- SP-initiated sign-in HTTP-Redirect → HTTP-POST only; no artifact binding.
+  Single logout is opt-in per connection and needs the IdP to publish a
+  SingleLogoutService; there is no SOAP back-channel logout. Without it, end
+  sessions with [session revocation](../../concepts/sessions-and-tokens.md).
 - IdP-initiated login only hands off to your application's sign-in endpoint
   (see above); it never signs the user in by itself. IdP-initiated
   responses with encrypted assertions are not supported and are refused (the

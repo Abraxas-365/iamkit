@@ -69,6 +69,11 @@ func (p Provider) Prepare(ctx context.Context, c federation.Connection) (federat
 	if err != nil {
 		return c, err
 	}
+	if c.Options.SingleLogout {
+		if _, ok := logoutService(entity); !ok {
+			return c, federation.ErrSingleLogoutUnavailable()
+		}
+	}
 	c.Issuer = entity.EntityID
 	c.Client = federation.SAMLServiceProvider(p.Issuer, c.Environment, c.ID).EntityID
 	return c, nil
@@ -168,6 +173,11 @@ func (p Provider) serviceProvider(ctx context.Context, c federation.Connection) 
 	sp := &saml.ServiceProvider{EntityID: endpoints.EntityID, Key: key, Certificate: cert, AcsURL: *acs, MetadataURL: *metadata, IDPMetadata: entity, AuthnNameIDFormat: nameIDFormat(c.Options.NameIDFormat)}
 	if c.Options.SignRequests {
 		sp.SignatureMethod = dsig.RSASHA256SignatureMethod
+	}
+	if c.Options.SingleLogout {
+		slo, _ := url.Parse(endpoints.SLO)
+		sp.SloURL = *slo
+		sp.LogoutBindings = []string{saml.HTTPRedirectBinding, saml.HTTPPostBinding}
 	}
 	return sp, nil
 }
@@ -404,6 +414,14 @@ func Claims(c federation.Connection, a *saml.Assertion) (federation.Claims, erro
 	if out.AssertionExpires.Before(time.Now().Add(config.FederationStateTTL)) {
 		out.AssertionExpires = time.Now().Add(config.FederationStateTTL)
 	}
+	// What single logout names back to the identity provider.
+	out.NameID, out.NameIDFormat = strings.TrimSpace(nameID.Value), nameID.Format
+	for _, statement := range a.AuthnStatements {
+		if statement.SessionIndex != "" {
+			out.SessionIndex = statement.SessionIndex
+			break
+		}
+	}
 	if mapping.Subject != "" {
 		out.Subject = attribute(a, mapping.Subject)
 	} else if nameID.Format != string(saml.TransientNameIDFormat) {
@@ -495,11 +513,20 @@ func (p Provider) Metadata(ctx context.Context, c federation.Connection) ([]byte
 	if err != nil {
 		return nil, err
 	}
+	if c.Options.SingleLogout && sp.SignatureMethod == "" {
+		// Logout messages are signed with the key: publish it for signing.
+		sp.SignatureMethod = dsig.RSASHA256SignatureMethod
+	}
 	entity := sp.Metadata()
 	for i := range entity.SPSSODescriptors {
 		d := &entity.SPSSODescriptors[i]
 		// Only HTTP-POST is served; the artifact binding is not.
 		d.AssertionConsumerServices = d.AssertionConsumerServices[:1]
+		if c.Options.SingleLogout && !c.Options.SignRequests {
+			// AuthnRequests stay unsigned: only logout messages are.
+			signed := false
+			d.AuthnRequestsSigned = &signed
+		}
 	}
 	out, err := xml.MarshalIndent(entity, "", "  ")
 	if err != nil {

@@ -108,7 +108,7 @@ func mailFromEnv() (authentication.Delivery, authmodule.Mail, error) {
 // federation transport — OAuth clients' jwks_uri and back-channel logout
 // URIs, and identity providers of sealed-secret federation connections.
 func privateDelivery(t http.RoundTripper) []Option {
-	return []Option{WithWebhookTransport(t), WithLogStreamTransport(t), WithActionTransport(t), WithFederationTransport(t)}
+	return []Option{WithWebhookTransport(t), WithLogStreamTransport(t), WithActionTransport(t), WithFederationTransport(t), WithSAMLLogoutTransport(t)}
 }
 
 // allowPrivateDelivery reads IAMKIT_ALLOW_PRIVATE_DELIVERY (a boolean,

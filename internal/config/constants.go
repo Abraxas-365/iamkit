@@ -248,6 +248,12 @@ const ExternalHTTPTimeout = 10 * time.Second
 // CORSMaxAge is the preflight cache duration in seconds.
 const CORSMaxAge = 3600
 
+// RequestHeaderLimit bounds a request's line plus headers (Fiber's
+// ReadBufferSize; past it the answer is 431). Fiber's 4 KiB default is too
+// small for browsers that carry an application's own cookies to IAMKit on a
+// shared host.
+const RequestHeaderLimit = 16 * 1024
+
 // ClientOriginCacheTTL is how long an answer about an OAuth client's
 // allowed origin is reused: a removed origin stops working within it.
 const ClientOriginCacheTTL = time.Minute

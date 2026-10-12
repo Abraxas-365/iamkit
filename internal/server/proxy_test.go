@@ -1,12 +1,16 @@
 package server
 
 import (
+	"bufio"
+	"fmt"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/valyala/fasthttp/fasthttputil"
 )
 
 // TestTrustedProxies: the client address comes from X-Forwarded-For only
@@ -83,5 +87,35 @@ func TestClientInfoMiddleware(t *testing.T) {
 	}
 	if got := get(&Server{GeoIPHeader: "CF-IPCountry", TrustedProxies: []string{"0.0.0.0/8"}}, "203.0.113.7"); got.Country != "PE" {
 		t.Fatalf("trusted country = %+v", got)
+	}
+}
+
+// TestRequestHeaderLimit: requests carrying several kilobytes of an
+// application's own cookies (shared host) are still read.
+func TestRequestHeaderLimit(t *testing.T) {
+	app := fiber.New((&Server{}).config())
+	app.Get("/", func(c *fiber.Ctx) error { return c.SendStatus(204) })
+	ln := fasthttputil.NewInmemoryListener()
+	defer ln.Close()
+	go func() { _ = app.Listener(ln) }()
+	defer func() { _ = app.Shutdown() }()
+	status := func(cookie int) int {
+		conn, err := ln.Dial()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		fmt.Fprintf(conn, "GET / HTTP/1.1\r\nHost: x\r\nCookie: a=%s\r\nConnection: close\r\n\r\n", strings.Repeat("a", cookie))
+		res, err := http.ReadResponse(bufio.NewReader(conn), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.StatusCode
+	}
+	if got := status(8 * 1024); got != 204 {
+		t.Fatalf("8 KiB of cookies: %d", got)
+	}
+	if got := status(20 * 1024); got != 431 {
+		t.Fatalf("20 KiB of cookies: %d, want 431", got)
 	}
 }

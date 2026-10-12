@@ -1,0 +1,204 @@
+/*
+ * Optional styles for the @iamkit/react account widgets (<UserProfile>,
+ * <UserSecurity>, <UserSessions>, <ApiKeys>, <OrganizationSwitcher>).
+ * Import once: `import "@iamkit/react/widgets.css";`
+ *
+ * Everything hangs off CSS variables; override them on :root or on any
+ * ancestor of the widgets. The rules select the widgets' data-iamkit parts,
+ * so a `classNames` prop or your own CSS still wins by specificity (these
+ * rules are wrapped in :where()).
+ */
+:root {
+  --iamkit-font: inherit;
+  --iamkit-color: #1a1a1a;
+  --iamkit-muted: #666;
+  --iamkit-bg: #fff;
+  --iamkit-border: #d4d4d8;
+  --iamkit-radius: 6px;
+  --iamkit-accent: #2563eb;
+  --iamkit-accent-contrast: #fff;
+  --iamkit-danger: #b91c1c;
+  --iamkit-success: #15803d;
+  --iamkit-focus: var(--iamkit-accent);
+  --iamkit-gap: 0.75rem;
+  --iamkit-pad: 0.5rem 0.75rem;
+}
+
+:where([data-iamkit="root"]) {
+  font-family: var(--iamkit-font);
+  color: var(--iamkit-color);
+  display: flex;
+  flex-direction: column;
+  gap: var(--iamkit-gap);
+  max-width: 40rem;
+}
+
+:where([data-iamkit="section"]) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--iamkit-gap);
+  padding: 1rem;
+  border: 1px solid var(--iamkit-border);
+  border-radius: var(--iamkit-radius);
+  background: var(--iamkit-bg);
+}
+
+:where([data-iamkit="title"]) {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+:where([data-iamkit="subtitle"]) {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+:where([data-iamkit="form"]) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--iamkit-gap);
+}
+
+:where([data-iamkit="field"]) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+:where([data-iamkit="label"]) {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+:where([data-iamkit="input"]) {
+  font: inherit;
+  padding: var(--iamkit-pad);
+  border: 1px solid var(--iamkit-border);
+  border-radius: var(--iamkit-radius);
+  background: var(--iamkit-bg);
+  color: inherit;
+}
+
+:where([data-iamkit="input"][readonly]) {
+  background: color-mix(in srgb, var(--iamkit-border) 25%, transparent);
+}
+
+:where([data-iamkit="button"], [data-iamkit="secondary"], [data-iamkit="danger"]) {
+  font: inherit;
+  cursor: pointer;
+  padding: var(--iamkit-pad);
+  border-radius: var(--iamkit-radius);
+  border: 1px solid var(--iamkit-accent);
+  align-self: flex-start;
+}
+
+:where([data-iamkit="button"]) {
+  background: var(--iamkit-accent);
+  color: var(--iamkit-accent-contrast);
+}
+
+:where([data-iamkit="secondary"]) {
+  background: transparent;
+  color: var(--iamkit-accent);
+}
+
+:where([data-iamkit="danger"]) {
+  background: transparent;
+  color: var(--iamkit-danger);
+  border-color: var(--iamkit-danger);
+}
+
+:where([data-iamkit="button"], [data-iamkit="secondary"], [data-iamkit="danger"]):disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+:where([data-iamkit]):focus-visible {
+  outline: 2px solid var(--iamkit-focus);
+  outline-offset: 2px;
+}
+
+:where([data-iamkit="error"]) {
+  margin: 0;
+  color: var(--iamkit-danger);
+}
+
+:where([data-iamkit="notice"]) {
+  margin: 0;
+  color: var(--iamkit-success);
+}
+
+:where([data-iamkit="meta"]) {
+  margin: 0;
+  color: var(--iamkit-muted);
+  font-size: 0.875rem;
+}
+
+:where([data-iamkit="list"]) {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+:where([data-iamkit="item"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  padding: var(--iamkit-pad);
+  border: 1px solid var(--iamkit-border);
+  border-radius: var(--iamkit-radius);
+}
+
+:where([data-iamkit="item"][data-current="true"]) {
+  border-color: var(--iamkit-accent);
+}
+
+:where([data-iamkit="item"] [data-iamkit="meta"]) {
+  flex: 1 1 100%;
+}
+
+:where([data-iamkit="badge"]) {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--iamkit-accent) 15%, transparent);
+  color: var(--iamkit-accent);
+}
+
+:where([data-iamkit="secret"]) {
+  word-break: break-all;
+  padding: var(--iamkit-pad);
+  border-radius: var(--iamkit-radius);
+  background: color-mix(in srgb, var(--iamkit-border) 30%, transparent);
+}
+
+:where([data-iamkit="codes"]) {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.5rem;
+  font-family: ui-monospace, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-iamkit-theme="light"])) {
+    --iamkit-color: #f4f4f5;
+    --iamkit-muted: #a1a1aa;
+    --iamkit-bg: #18181b;
+    --iamkit-border: #3f3f46;
+    --iamkit-accent: #60a5fa;
+    --iamkit-accent-contrast: #0b0b0c;
+    --iamkit-danger: #f87171;
+    --iamkit-success: #4ade80;
+  }
+}

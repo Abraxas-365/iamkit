@@ -284,7 +284,7 @@ func groupMappings(values []string) ([]map[string]string, error) {
 type samlFlags struct {
 	metadataURL, metadataFile, nameIDFormat, subject, email, name, groups string
 	idpClient                                                             string
-	signRequests                                                          bool
+	signRequests, singleLogout                                            bool
 }
 
 func (f *samlFlags) register(cmd *cobra.Command) {
@@ -297,10 +297,11 @@ func (f *samlFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&f.groups, "groups-attribute", "", "SAML/LDAP: multi-valued attribute with the user's groups (SAML default: groups, memberOf or the Microsoft groups claim; LDAP: memberOf)")
 	cmd.Flags().StringVar(&f.idpClient, "idp-initiated-client", "", "SAML: OAuth client (with an initiate_login_uri) that IdP-initiated logins are handed to; unset refuses IdP-initiated responses")
 	cmd.Flags().BoolVar(&f.signRequests, "sign-requests", false, "SAML: sign AuthnRequests with the environment signing key")
+	cmd.Flags().BoolVar(&f.singleLogout, "single-logout", false, "SAML: single logout (the identity provider's metadata must publish a SingleLogoutService; give the SP metadata back to it)")
 }
 
 func (f samlFlags) set() bool {
-	return f.metadataURL != "" || f.metadataFile != "" || f.nameIDFormat != "" || f.attributes() != nil || f.signRequests || f.idpClient != ""
+	return f.metadataURL != "" || f.metadataFile != "" || f.nameIDFormat != "" || f.attributes() != nil || f.signRequests || f.singleLogout || f.idpClient != ""
 }
 
 // attributes is the attribute mapping shared by SAML and LDAP, nil when
@@ -386,6 +387,9 @@ func (f samlFlags) options() (map[string]any, error) {
 	}
 	if f.signRequests {
 		options["sign_requests"] = true
+	}
+	if f.singleLogout {
+		options["single_logout"] = true
 	}
 	if f.idpClient != "" {
 		options["idp_initiated_client_id"] = f.idpClient

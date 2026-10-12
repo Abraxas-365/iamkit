@@ -20,7 +20,7 @@ export function ErrorState({ error, retry }: { error: string; retry?: () => void
   return <div role="alert" className="space-y-3 rounded-lg border border-destructive/30 p-4"><p className="text-sm text-destructive">{error}</p>{retry && <Button variant="outline" onClick={retry}>{t('Try again')}</Button>}</div>
 }
 export interface Field {
-  name: string; label: string; type?: 'text' | 'email' | 'password' | 'list' | 'tags' | 'checkbox' | 'select' | 'dropdown' | 'radio';
+  name: string; label: string; type?: 'text' | 'email' | 'password' | 'list' | 'tags' | 'checkbox' | 'select' | 'dropdown' | 'radio' | 'textarea';
   optional?: boolean; value?: string | boolean; hint?: string;
   /** For type='tags': pre-split array of values */
   tags?: string[];
@@ -112,6 +112,7 @@ export function FormDialog({ title, description, fields, submit, onClose, succes
         <label className="text-sm font-medium" htmlFor={`${id}-${field.name}`}>{field.label}{field.optional && <span className="ml-1 font-normal text-muted-foreground">{t('(optional)')}</span>}</label>
         {field.type === 'dropdown' && field.options ? <select id={`${id}-${field.name}`} name={field.name} className={selectClass} defaultValue={String(field.value ?? field.options[0]?.value ?? '')} disabled={busy}>{field.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select> :
           field.type === 'select' && field.selectPath && field.selectMap ? <SearchSelect id={`${id}-${field.name}`} name={field.name} path={field.selectPath} mapItem={field.selectMap} defaultValue={String(field.value ?? '')} required={!field.optional} disabled={busy} placeholder={t('Search {{noun}}…', { noun: field.label.toLocaleLowerCase(language()) })} /> :
+          field.type === 'textarea' ? <textarea id={`${id}-${field.name}`} name={field.name} rows={5} defaultValue={String(field.value ?? '')} required={!field.optional} disabled={busy} autoComplete="off" spellCheck={false} className="w-full rounded-lg border border-input bg-transparent px-2.5 py-1.5 font-mono text-xs outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30" /> :
           field.type === 'tags' ? <TagInput id={`${id}-${field.name}`} name={field.name} defaultValue={field.tags ?? []} disabled={busy} placeholder={t('Type and press Enter…')} prefix={field.prefix} /> :
           <Input id={`${id}-${field.name}`} name={field.name} type={field.type === 'list' ? 'text' : field.type ?? 'text'} defaultValue={String(field.value ?? '')} required={!field.optional} disabled={busy} autoComplete={field.type === 'password' ? 'new-password' : 'off'} />}
         {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}

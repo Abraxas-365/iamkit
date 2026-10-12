@@ -24,6 +24,7 @@ const E = `/environments/${environment}`;
 
 const organization = id(await call("POST", `${E}/organizations`, { name: "Acme" }));
 const secure = id(await call("POST", `${E}/organizations`, { name: "Secure" }));
+const other = id(await call("POST", `${E}/organizations`, { name: "Globex" }));
 await call("PATCH", `${E}/organizations/${secure}`, { mfa_required: true });
 
 const application = id(await call("POST", `${E}/applications`, { name: "Invoices", redirect_uris: [`${app}/callback`] }));
@@ -43,6 +44,11 @@ const client = await call("POST", `${E}/oauth-clients`, {
   allowed_origins: [app],
 });
 const clientId = id(client);
+
+// Users may create their own API keys for the invoices API (the account
+// widgets' <ApiKeys>): policy on, and the permissions users may put on one.
+await call("PUT", `${E}/api-key-policy`, { user_keys: true, organization_keys: false, max_ttl_days: null, max_per_user: 10, max_per_organization: 50 });
+await call("PUT", `${E}/resources/${resource}/api-key-permissions`, { user: ["invoices:read"], organization: [] });
 
 // Sign-up into Acme's Customers group; every first-factor method on.
 await call("PUT", `${E}/sign-in-policy`, {
@@ -72,6 +78,7 @@ const fixture = {
   environment,
   organization,
   secure,
+  other,
   application,
   resource,
   clientId,
@@ -80,6 +87,10 @@ const fixture = {
   reset: await user("Riley", "riley@parity.example", [organization]),
   coder: await user("Casey", "casey@parity.example", [organization]),
   mfa: await user("Morgan", "morgan@parity.example", [secure]),
+  // The account page: a member of two organizations, to switch between.
+  account: await user("Ava", "ava@parity.example", [organization, other]),
+  keys: await user("Kim", "kim@parity.example", [organization]),
+  changer: await user("Pat", "pat@parity.example", [organization]),
 };
 const invited = await call("POST", `${E}/organizations/${organization}/invitations`, { email: "ivy@parity.example" });
 fixture.invitation = { token: invited.token, email: "ivy@parity.example" };

@@ -204,10 +204,14 @@ func New(deps Deps) Module {
 	if deps.Passkeys != nil {
 		passkeys = service
 	}
+	httpTokens := authhttp.NewTokens(tokens, tokens, tokens, tokens)
+	httpTokens.Account(service.Accounts())
+	handler := authhttp.New(service, service, service, deps.IssueSession)
+	handler.Account(service.Accounts())
 	return Module{
 		Passkeys: passkeys,
-		Commands: service, Authenticator: service, Validator: tokens, Tokens: authhttp.NewTokens(tokens, tokens, tokens, tokens),
-		HTTP: authhttp.New(service, service, service, deps.IssueSession), Sessions: federationSessions{service}, DeliveryService: deliverySvc,
+		Commands: service, Authenticator: service, Validator: tokens, Tokens: httpTokens,
+		HTTP: handler, Sessions: federationSessions{service}, DeliveryService: deliverySvc,
 		PasswordPolicies: policies, PasswordPolicyCommands: policies, PasswordPoliciesHTTP: authhttp.NewPasswordPolicyHandler(policies, policies, deps.ActorID),
 		SignInPolicies: signIns, SignInPoliciesHTTP: authhttp.NewSignInPolicyHandler(signIns, signIns, deps.ActorID),
 		Signups: service, SignupHTTP: authhttp.NewSignupHandler(service),

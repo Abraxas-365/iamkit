@@ -3,6 +3,7 @@ package fedpg
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -27,9 +28,9 @@ func (r *Repository) ParkResult(ctx context.Context, handle []byte, res federati
 	if _, err := r.db.ExecContext(ctx, `DELETE FROM federation_results WHERE expires_at<now()`); err != nil {
 		return failure(err)
 	}
-	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_results(handle_hash,environment_id,organization_id,application_id,resource_id,user_id,email,organization_sso,no_access,challenge,expires_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now()+make_interval(secs => $11))`,
-		handle, res.Boundary.EnvironmentID, res.Boundary.OrganizationID, res.Boundary.ApplicationID, res.Boundary.ResourceID, res.User, res.Email, res.OrganizationSSO, res.NoAccess, res.Challenge, federation.ResultTTL.Seconds())
+	_, err := r.db.ExecContext(ctx, `INSERT INTO federation_results(handle_hash,environment_id,organization_id,application_id,resource_id,user_id,email,organization_sso,no_access,challenge,federation,expires_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now()+make_interval(secs => $12))`,
+		handle, res.Boundary.EnvironmentID, res.Boundary.OrganizationID, res.Boundary.ApplicationID, res.Boundary.ResourceID, res.User, res.Email, res.OrganizationSSO, res.NoAccess, res.Challenge, link(res.Federation), federation.ResultTTL.Seconds())
 	return failure(err)
 }
 
@@ -44,9 +45,10 @@ func (r *Repository) TakeResult(ctx context.Context, handle []byte) (federation.
 		OrganizationSSO bool                    `db:"organization_sso"`
 		NoAccess        bool                    `db:"no_access"`
 		Challenge       string                  `db:"challenge"`
+		Federation      []byte                  `db:"federation"`
 	}
 	err := r.db.GetContext(ctx, &row, `DELETE FROM federation_results WHERE handle_hash=$1 AND expires_at>now()
-		RETURNING environment_id,organization_id,application_id,resource_id,user_id,email,organization_sso,no_access,challenge`, handle)
+		RETURNING environment_id,organization_id,application_id,resource_id,user_id,email,organization_sso,no_access,challenge,federation`, handle)
 	if errors.Is(err, sql.ErrNoRows) {
 		return federation.Result{}, errx.Unauthorized("invalid or expired federation result")
 	}
@@ -55,7 +57,7 @@ func (r *Repository) TakeResult(ctx context.Context, handle []byte) (federation.
 	}
 	return federation.Result{
 		Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource},
-		User:     row.User, Email: row.Email, OrganizationSSO: row.OrganizationSSO, NoAccess: row.NoAccess, Challenge: row.Challenge,
+		User:     row.User, Email: row.Email, OrganizationSSO: row.OrganizationSSO, NoAccess: row.NoAccess, Challenge: row.Challenge, Federation: unlink(row.Federation),
 	}, nil
 }
 
@@ -74,4 +76,28 @@ func (r *Repository) ActiveUser(ctx context.Context, environment identity.Enviro
 		return nil, federation.Account{}, failure(err)
 	}
 	return authpg.Wrap(tx), account, nil
+}
+
+// link stores a SAML session link as JSON (NULL for none).
+func link(l *authentication.FederationLink) any {
+	if !l.Valid() {
+		return nil
+	}
+	raw, err := json.Marshal(l)
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+// unlink reads what link stored; an unreadable value is no link.
+func unlink(raw []byte) *authentication.FederationLink {
+	if len(raw) == 0 {
+		return nil
+	}
+	var l authentication.FederationLink
+	if json.Unmarshal(raw, &l) != nil || !l.Valid() {
+		return nil
+	}
+	return &l
 }

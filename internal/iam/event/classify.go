@@ -155,6 +155,8 @@ var actions = map[string]named{
 	"oauth.device_approved":               {DeviceApproved, "session"},
 	"oauth.backchannel_failed":            {LogoutDeliveryFailed, "oauth_client"},
 	"saml.assertion_issued":               {SAMLAssertionIssued, "saml_service_provider"},
+	"saml.logout":                         {SAMLLogout, "saml_service_provider"},
+	"saml.logout_failed":                  {SAMLLogoutFailed, "saml_service_provider"},
 	"saml_service_provider.create":        {SAMLServiceProviderCreated, "saml_service_provider"},
 	"saml_service_provider.update":        {SAMLServiceProviderUpdated, "saml_service_provider"},
 	"saml_service_provider.delete":        {SAMLServiceProviderDeleted, "saml_service_provider"},

@@ -50,9 +50,12 @@ func TestLogout(t *testing.T) {
 	}
 
 	s, repo := service(hint, nil)
-	back, environment, err := s.Logout(ctx, oauth.Logout{Hint: "h", Redirect: "https://app.example/bye", State: "a b"})
+	back, environment, ended, err := s.Logout(ctx, oauth.Logout{Hint: "h", Redirect: "https://app.example/bye", State: "a b"})
 	if err != nil || back != "https://app.example/bye?state=a+b" || environment != env {
 		t.Fatalf("logout = %q %v %v", back, environment, err)
+	}
+	if ended != sid {
+		t.Fatalf("ended session %v, want %v", ended, sid)
 	}
 	if len(repo.ended) != 1 || repo.ended[0].Action != "oauth.logout" || repo.ended[0].Target != sid.String() || repo.ended[0].Actor != user.String() {
 		t.Fatalf("ended = %+v", repo.ended)
@@ -60,7 +63,7 @@ func TestLogout(t *testing.T) {
 
 	// Without a redirect the hosted page shows; the session still ends.
 	s, repo = service(hint, nil)
-	if back, _, err = s.Logout(ctx, oauth.Logout{Hint: "h"}); err != nil || back != "" || len(repo.ended) != 1 {
+	if back, _, _, err = s.Logout(ctx, oauth.Logout{Hint: "h"}); err != nil || back != "" || len(repo.ended) != 1 {
 		t.Fatalf("no redirect: %q %v %d", back, err, len(repo.ended))
 	}
 
@@ -70,29 +73,29 @@ func TestLogout(t *testing.T) {
 		"redirect without client": {Redirect: "https://app.example/bye"},
 	} {
 		s, repo = service(hint, nil)
-		if _, _, err = s.Logout(ctx, input); err == nil || len(repo.ended) != 0 {
+		if _, _, _, err = s.Logout(ctx, input); err == nil || len(repo.ended) != 0 {
 			t.Errorf("%s: err=%v ended=%d", name, err, len(repo.ended))
 		}
 	}
 	s, repo = service(oauth.IDTokenHint{}, errx.Validation("invalid id_token_hint"))
-	if _, _, err = s.Logout(ctx, oauth.Logout{Hint: "bad"}); err == nil || len(repo.ended) != 0 {
+	if _, _, _, err = s.Logout(ctx, oauth.Logout{Hint: "bad"}); err == nil || len(repo.ended) != 0 {
 		t.Fatal("bad hint accepted")
 	}
 
 	// client_id alone may redirect to its URI; no session is named.
 	s, repo = service(oauth.IDTokenHint{}, nil)
-	if back, _, err = s.Logout(ctx, oauth.Logout{Client: client.ID, Redirect: "https://app.example/bye"}); err != nil || back != "https://app.example/bye" || len(repo.ended) != 0 {
+	if back, _, _, err = s.Logout(ctx, oauth.Logout{Client: client.ID, Redirect: "https://app.example/bye"}); err != nil || back != "https://app.example/bye" || len(repo.ended) != 0 {
 		t.Fatalf("client-only logout: %q %v", back, err)
 	}
 	// An unknown client refuses.
-	if _, _, err = s.Logout(ctx, oauth.Logout{Client: stranger, Redirect: "https://app.example/bye"}); err == nil {
+	if _, _, _, err = s.Logout(ctx, oauth.Logout{Client: stranger, Redirect: "https://app.example/bye"}); err == nil {
 		t.Fatal("unknown client accepted")
 	}
 	// A hint from another environment does not match the client.
 	other := hint
 	other.Environment = identity.NewEnvironmentID()
 	s, _ = service(other, nil)
-	if _, _, err = s.Logout(ctx, oauth.Logout{Hint: "h", Redirect: "https://app.example/bye"}); err == nil {
+	if _, _, _, err = s.Logout(ctx, oauth.Logout{Hint: "h", Redirect: "https://app.example/bye"}); err == nil {
 		t.Fatal("cross-environment hint accepted")
 	}
 }

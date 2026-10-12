@@ -313,6 +313,9 @@ type Pending struct {
 	// RiskDetections are carried to the session.
 	Challenge      bool
 	RiskDetections []string
+	// Federation is the SAML link of the first factor, carried to the
+	// session (mfa_logins.federation).
+	Federation *authentication.FederationLink
 }
 
 // Verification is a verified second factor: the proof used and, when the

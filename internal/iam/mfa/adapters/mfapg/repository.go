@@ -161,8 +161,8 @@ func detections(d []string) []string {
 // SavePending stores a pending login and sweeps expired ones.
 func (r *Repository) SavePending(ctx context.Context, hash []byte, p mfa.Pending) error {
 	_, err := r.db.ExecContext(ctx, `WITH sweep AS (DELETE FROM mfa_logins WHERE expires_at<now())
-		INSERT INTO mfa_logins(token_hash,environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,expires_at,password_hash,challenge,risk_detections) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-		hash, p.Boundary.EnvironmentID, p.Boundary.OrganizationID, p.Boundary.ApplicationID, p.Boundary.ResourceID, p.User, pq.StringArray(p.AMR), p.Enroll, p.Expires, p.PasswordHash, p.Challenge, pq.StringArray(detections(p.RiskDetections)))
+		INSERT INTO mfa_logins(token_hash,environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,expires_at,password_hash,challenge,risk_detections,federation) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		hash, p.Boundary.EnvironmentID, p.Boundary.OrganizationID, p.Boundary.ApplicationID, p.Boundary.ResourceID, p.User, pq.StringArray(p.AMR), p.Enroll, p.Expires, p.PasswordHash, p.Challenge, pq.StringArray(detections(p.RiskDetections)), link(p.Federation))
 	return failure(err)
 }
 
@@ -332,15 +332,16 @@ func (t *Transaction) Pending(ctx context.Context, hash []byte) (mfa.Pending, er
 		PasswordHash string                  `db:"password_hash"`
 		Challenge    bool                    `db:"challenge"`
 		Detections   pq.StringArray          `db:"risk_detections"`
+		Federation   []byte                  `db:"federation"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,attempts,expires_at,password_hash,challenge,risk_detections FROM mfa_logins WHERE token_hash=$1 AND expires_at>now() FOR UPDATE`, hash)
+	err := t.tx.GetContext(ctx, &row, `SELECT environment_id,organization_id,application_id,resource_id,user_id,amr,enroll,attempts,expires_at,password_hash,challenge,risk_detections,federation FROM mfa_logins WHERE token_hash=$1 AND expires_at>now() FOR UPDATE`, hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return mfa.Pending{}, errx.Unauthorized("sign in again")
 	}
 	if err != nil {
 		return mfa.Pending{}, failure(err)
 	}
-	return mfa.Pending{Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, User: row.User, AMR: []string(row.AMR), Enroll: row.Enroll, Attempts: row.Attempts, Expires: row.Expires, PasswordHash: row.PasswordHash, Challenge: row.Challenge, RiskDetections: []string(row.Detections)}, nil
+	return mfa.Pending{Boundary: authentication.Context{EnvironmentID: row.Environment, OrganizationID: row.Organization, ApplicationID: row.Application, ResourceID: row.Resource}, User: row.User, AMR: []string(row.AMR), Enroll: row.Enroll, Attempts: row.Attempts, Expires: row.Expires, PasswordHash: row.PasswordHash, Challenge: row.Challenge, RiskDetections: []string(row.Detections), Federation: unlink(row.Federation)}, nil
 }
 
 func (t *Transaction) FailPending(ctx context.Context, hash []byte) error {
@@ -453,4 +454,28 @@ func (t *Transaction) Rollback() error {
 		return nil
 	}
 	return failure(err)
+}
+
+// link stores a SAML session link as JSON (NULL for none).
+func link(l *authentication.FederationLink) any {
+	if !l.Valid() {
+		return nil
+	}
+	raw, err := json.Marshal(l)
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+// unlink reads what link stored; an unreadable value is no link.
+func unlink(raw []byte) *authentication.FederationLink {
+	if len(raw) == 0 {
+		return nil
+	}
+	var l authentication.FederationLink
+	if json.Unmarshal(raw, &l) != nil || !l.Valid() {
+		return nil
+	}
+	return &l
 }

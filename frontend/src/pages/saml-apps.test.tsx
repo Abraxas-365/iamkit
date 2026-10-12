@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from '../lib/auth'
@@ -9,7 +9,7 @@ import { parseAttributes } from './saml-apps'
 
 const fetchMock = vi.fn()
 const env = '/environments/env1'
-const wiki = { id: 'sp1', name: 'Wiki', application_id: 'app1', application_name: 'web', resource_id: 'res1', resource_name: 'Billing', entity_id: 'https://wiki.example.com/saml', acs_urls: ['https://wiki.example.com/saml/acs'], name_id_format: 'email', attributes: { mail: 'email' }, created_at: '2026-01-01T00:00:00Z' }
+const wiki = { id: 'sp1', name: 'Wiki', application_id: 'app1', application_name: 'web', resource_id: 'res1', resource_name: 'Billing', entity_id: 'https://wiki.example.com/saml', acs_urls: ['https://wiki.example.com/saml/acs'], name_id_format: 'email', attributes: { mail: 'email' }, slo_url: '', slo_binding: 'redirect', slo_soap_url: '', certificate: '', created_at: '2026-01-01T00:00:00Z' }
 let providers: typeof wiki[]
 let calls: { method: string; path: string; body?: Record<string, unknown> }[]
 let role = 'owner'
@@ -37,7 +37,7 @@ beforeEach(() => {
     const data = path === '/me' ? { operator_id: 'operator1', workspace_id: 'workspace1', role } :
       path === '/projects' ? [{ id: 'project1', name: 'Billing' }] :
         path === '/projects/project1/environments' ? [{ id: 'env1', name: 'Production' }] :
-          path === `${env}/saml/identity-provider` ? { entity_id: 'https://iam.example/saml/env1/metadata', metadata_url: 'https://iam.example/saml/env1/metadata', sso_url: 'https://iam.example/saml/env1/sso', certificate: '-----BEGIN CERTIFICATE-----' } :
+          path === `${env}/saml/identity-provider` ? { entity_id: 'https://iam.example/saml/env1/metadata', metadata_url: 'https://iam.example/saml/env1/metadata', sso_url: 'https://iam.example/saml/env1/sso', slo_url: 'https://iam.example/saml/env1/slo', certificate: '-----BEGIN CERTIFICATE-----' } :
             path === `${env}/saml/service-providers` ? page(providers) :
               path.startsWith(env) ? page([]) : []
     return Response.json(data)
@@ -65,7 +65,7 @@ it('shows the identity provider settings, edits and deletes a SAML application',
   await u.click(await screen.findByRole('menuitem', { name: 'Edit' }))
   await u.click(await screen.findByRole('radio', { name: /User ID/ }))
   await u.click(screen.getByRole('button', { name: 'Save' }))
-  await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'PATCH', path: `${env}/saml/service-providers/sp1`, body: { name: 'Wiki', acs_urls: ['https://wiki.example.com/saml/acs'], name_id_format: 'persistent', attributes: { mail: 'email' } } }))
+  await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'PATCH', path: `${env}/saml/service-providers/sp1`, body: { name: 'Wiki', acs_urls: ['https://wiki.example.com/saml/acs'], name_id_format: 'persistent', attributes: { mail: 'email' }, slo_url: '', slo_binding: 'redirect', slo_soap_url: '', certificate: '' } }))
   expect(await screen.findByText('User ID')).toBeTruthy()
 
   await u.click(screen.getByRole('button', { name: 'Actions for Wiki' }))
@@ -91,3 +91,23 @@ it('is read-only for viewers', async () => {
   expect(screen.queryByRole('button', { name: 'Add SAML application' })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Actions for Wiki' })).toBeNull()
 })
+
+it('sets the single logout settings of a SAML application', async () => {
+  const u = userEvent.setup()
+  open()
+  expect(await screen.findByText('https://wiki.example.com/saml')).toBeTruthy()
+  expect(await screen.findByText('https://iam.example/saml/env1/slo')).toBeTruthy()
+  await u.click(screen.getByRole('button', { name: 'Actions for Wiki' }))
+  await u.click(await screen.findByRole('menuitem', { name: 'Edit' }))
+  const pem = '-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----'
+  const dialog = within(await screen.findByRole('dialog'))
+  await u.click(dialog.getByLabelText(/Single logout URL/))
+  await u.paste('https://wiki.example.com/slo')
+  await u.selectOptions(dialog.getByLabelText('Single logout binding'), 'post')
+  await u.click(dialog.getByLabelText(/Back-channel logout URL/))
+  await u.paste('https://wiki.example.com/soap')
+  await u.click(dialog.getByLabelText(/Signing certificate \(PEM\)/))
+  await u.paste(pem)
+  await u.click(screen.getByRole('button', { name: 'Save' }))
+  await waitFor(() => expect(calls.at(-1)?.body).toMatchObject({ slo_url: 'https://wiki.example.com/slo', slo_binding: 'post', slo_soap_url: 'https://wiki.example.com/soap', certificate: pem }))
+}, 20000)

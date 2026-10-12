@@ -22,6 +22,23 @@ type Handler struct {
 	respond  func(*fiber.Ctx, authentication.Result) error
 	hosted   func(*fiber.Ctx, federation.Outcome, error) error
 	captcha  authentication.Captcha
+	logout   federation.LogoutFlows
+	// form renders an auto-submitted POST (hostedhttp.Handler.PostForm).
+	form func(c *fiber.Ctx, environment identity.EnvironmentID, action string, fields [][2]string) error
+	// signedOut renders the hosted signed-out page (hostedhttp.Handler.SignedOut).
+	signedOut func(c *fiber.Ctx, environment identity.EnvironmentID, problem error) error
+}
+
+// SignedOut sets the page shown when a single logout ends without a
+// redirect (set in bootstrap).
+func (h *Handler) SignedOut(page func(c *fiber.Ctx, environment identity.EnvironmentID, problem error) error) {
+	h.signedOut = page
+}
+
+// Logout sets the SAML single logout flows and the page that posts an
+// HTTP-POST message (set in bootstrap; nil flows = 404).
+func (h *Handler) Logout(flows federation.LogoutFlows, form func(c *fiber.Ctx, environment identity.EnvironmentID, action string, fields [][2]string) error) {
+	h.logout, h.form = flows, form
 }
 
 // Captcha gates the LDAP login behind the environment's headless CAPTCHA

@@ -22,6 +22,20 @@ describe("IdentityClient", () => {
     expect(JSON.parse(calls[2].body)).toMatchObject({ refresh_token: "rt", resource_id: "r" });
   });
 
+  it("switches organization and changes the password", async () => {
+    const { fetch, calls } = fakeFetch((call) =>
+      call.url.includes("/me/password") ? { body: { sessions_revoked: 3 } } : { body: { access_token: "at2", refresh_token: "rt2", token_type: "Bearer", expires_in: 900 } },
+    );
+    const iam = new IdentityClient({ baseUrl: issuer, fetch });
+    const pair = await iam.switchOrganization(boundary, "rt", "o2");
+    expect(pair.refresh_token).toBe("rt2");
+    expect(JSON.parse(calls[0].body)).toMatchObject({ refresh_token: "rt", switch_organization_id: "o2", organization_id: "o" });
+    expect(new URL(calls[0].url).pathname).toBe("/identity/v1/refresh");
+    expect(await iam.changePassword("at", "e", "https://api", "old", "new")).toEqual({ sessions_revoked: 3 });
+    expect(new URL(calls[1].url).pathname + new URL(calls[1].url).search).toBe("/identity/v1/me/password?environment_id=e&audience=https%3A%2F%2Fapi");
+    expect(JSON.parse(calls[1].body)).toEqual({ current_password: "old", new_password: "new" });
+  });
+
   it("reads the profile with the token and query boundary", async () => {
     const { fetch, calls } = fakeFetch(() => ({ body: { id: "u" } }));
     await new IdentityClient({ baseUrl: issuer, fetch }).profile("at", "e", "https://api.example.com");

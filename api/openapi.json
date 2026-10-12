@@ -3487,6 +3487,9 @@
           "sign_requests": {
             "type": "boolean"
           },
+          "single_logout": {
+            "type": "boolean"
+          },
           "start_tls": {
             "type": "boolean"
           },
@@ -3986,6 +3989,9 @@
           "metadata_url": {
             "type": "string"
           },
+          "slo_url": {
+            "type": "string"
+          },
           "sso_url": {
             "type": "string"
           }
@@ -3994,6 +4000,7 @@
           "certificate",
           "entity_id",
           "metadata_url",
+          "slo_url",
           "sso_url"
         ],
         "type": "object"
@@ -5462,6 +5469,9 @@
           "sign_requests": {
             "type": "boolean"
           },
+          "single_logout": {
+            "type": "boolean"
+          },
           "start_tls": {
             "type": "boolean"
           },
@@ -6605,6 +6615,17 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "PasswordChanged": {
+        "properties": {
+          "sessions_revoked": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessions_revoked"
+        ],
         "type": "object"
       },
       "PasswordPolicy": {
@@ -8219,6 +8240,9 @@
               "null"
             ]
           },
+          "certificate": {
+            "type": "string"
+          },
           "entity_id": {
             "type": "string"
           },
@@ -8230,6 +8254,15 @@
           },
           "resource_id": {
             "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "slo_binding": {
+            "type": "string"
+          },
+          "slo_soap_url": {
+            "type": "string"
+          },
+          "slo_url": {
             "type": "string"
           }
         },
@@ -8262,6 +8295,9 @@
               "null"
             ]
           },
+          "certificate": {
+            "type": "string"
+          },
           "created_at": {
             "format": "date-time",
             "type": "string"
@@ -8289,6 +8325,15 @@
           },
           "resource_name": {
             "type": "string"
+          },
+          "slo_binding": {
+            "type": "string"
+          },
+          "slo_soap_url": {
+            "type": "string"
+          },
+          "slo_url": {
+            "type": "string"
           }
         },
         "required": [
@@ -8296,6 +8341,7 @@
           "application_id",
           "application_name",
           "attributes",
+          "certificate",
           "created_at",
           "entity_id",
           "environment_id",
@@ -8303,7 +8349,10 @@
           "name",
           "name_id_format",
           "resource_id",
-          "resource_name"
+          "resource_name",
+          "slo_binding",
+          "slo_soap_url",
+          "slo_url"
         ],
         "type": "object"
       },
@@ -8327,6 +8376,12 @@
               "null"
             ]
           },
+          "certificate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "name": {
             "type": [
               "string",
@@ -8334,6 +8389,24 @@
             ]
           },
           "name_id_format": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slo_binding": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slo_soap_url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "slo_url": {
             "type": [
               "string",
               "null"
@@ -8488,12 +8561,16 @@
           },
           "metadata_url": {
             "type": "string"
+          },
+          "slo_url": {
+            "type": "string"
           }
         },
         "required": [
           "acs_url",
           "entity_id",
-          "metadata_url"
+          "metadata_url",
+          "slo_url"
         ],
         "type": "object"
       },
@@ -30197,6 +30274,198 @@
         ]
       }
     },
+    "/identity/v1/federation/saml/{environment}/{connection}/slo": {
+      "get": {
+        "operationId": "getIdentityFederationSamlbyEnvironmentbyConnectionSlo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "connection",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "RelayState",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "SAMLRequest",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "SAMLResponse",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "RelayState": {
+                    "type": "string"
+                  },
+                  "SAMLRequest": {
+                    "type": "string"
+                  },
+                  "SAMLResponse": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "303": {
+            "description": "Redirect"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "SAMLLogout is a SAML connection's single logout service (HTTP-Redirect and HTTP-POST): the identity provider's LogoutRequest, or its LogoutResponse to an SP-initiated logout.",
+        "tags": [
+          "Identity API"
+        ]
+      },
+      "post": {
+        "operationId": "postIdentityFederationSamlbyEnvironmentbyConnectionSlo",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "connection",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "RelayState",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "SAMLRequest",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "SAMLResponse",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "properties": {
+                  "RelayState": {
+                    "type": "string"
+                  },
+                  "SAMLRequest": {
+                    "type": "string"
+                  },
+                  "SAMLResponse": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "303": {
+            "description": "Redirect"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "SAMLLogout is a SAML connection's single logout service (HTTP-Redirect and HTTP-POST): the identity provider's LogoutRequest, or its LogoutResponse to an SP-initiated logout.",
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
     "/identity/v1/federation/start": {
       "post": {
         "operationId": "postIdentityFederationStart",
@@ -32194,6 +32463,87 @@
         ]
       }
     },
+    "/identity/v1/me/password": {
+      "post": {
+        "operationId": "postIdentityMePassword",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "audience": {
+                    "type": "string"
+                  },
+                  "current_password": {
+                    "type": "string"
+                  },
+                  "environment_id": {
+                    "type": "string"
+                  },
+                  "new_password": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordChanged"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "ChangePassword is POST /identity/v1/me/password: the caller's current password and a new one (a fresh sign-in is required; the user's other sessions end).",
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
     "/identity/v1/me/phone": {
       "delete": {
         "operationId": "deleteIdentityMePhone",
@@ -33486,6 +33836,10 @@
                     "type": "string"
                   },
                   "resource_id": {
+                    "description": "UUID (empty when unset)",
+                    "type": "string"
+                  },
+                  "switch_organization_id": {
                     "description": "UUID (empty when unset)",
                     "type": "string"
                   }
@@ -56387,6 +56741,9 @@
           },
           "302": {
             "description": "Redirect"
+          },
+          "303": {
+            "description": "Redirect"
           }
         },
         "summary": "endSession is OpenID Connect RP-Initiated Logout 1.0.",
@@ -56454,6 +56811,9 @@
             "description": "No content"
           },
           "302": {
+            "description": "Redirect"
+          },
+          "303": {
             "description": "Redirect"
           }
         },

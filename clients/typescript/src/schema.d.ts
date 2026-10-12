@@ -2904,6 +2904,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/identity/v1/federation/saml/{environment}/{connection}/slo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** SAMLLogout is a SAML connection's single logout service (HTTP-Redirect and HTTP-POST): the identity provider's LogoutRequest, or its LogoutResponse to an SP-initiated logout. */
+        get: operations["getIdentityFederationSamlbyEnvironmentbyConnectionSlo"];
+        put?: never;
+        /** SAMLLogout is a SAML connection's single logout service (HTTP-Redirect and HTTP-POST): the identity provider's LogoutRequest, or its LogoutResponse to an SP-initiated logout. */
+        post: operations["postIdentityFederationSamlbyEnvironmentbyConnectionSlo"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/identity/v1/federation/start": {
         parameters: {
             query?: never;
@@ -3317,6 +3335,23 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["patchIdentityMeFactorsWebauthnbyId"];
+        trace?: never;
+    };
+    "/identity/v1/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** ChangePassword is POST /identity/v1/me/password: the caller's current password and a new one (a fresh sign-in is required; the user's other sessions end). */
+        post: operations["postIdentityMePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/identity/v1/me/phone": {
@@ -7983,6 +8018,7 @@ export interface components {
             prompt?: string;
             scopes?: string[] | null;
             sign_requests?: boolean;
+            single_logout?: boolean;
             start_tls?: boolean;
             team_id?: string;
             tenant?: string;
@@ -8131,6 +8167,7 @@ export interface components {
             certificate: string;
             entity_id: string;
             metadata_url: string;
+            slo_url: string;
             sso_url: string;
         };
         ImportRequestInput: {
@@ -8523,6 +8560,7 @@ export interface components {
             prompt?: string;
             scopes?: string[] | null;
             sign_requests?: boolean;
+            single_logout?: boolean;
             start_tls?: boolean;
             team_id?: string;
             tenant?: string;
@@ -8764,6 +8802,9 @@ export interface components {
             metadata?: unknown | null;
             name?: string;
             type?: string;
+        };
+        PasswordChanged: {
+            sessions_revoked: number;
         };
         PasswordPolicy: {
             breach_check: boolean;
@@ -9226,11 +9267,15 @@ export interface components {
             attributes?: {
                 [key: string]: string;
             } | null;
+            certificate?: string;
             entity_id?: string;
             name?: string;
             name_id_format?: string;
             /** @description UUID (empty when unset) */
             resource_id?: string;
+            slo_binding?: string;
+            slo_soap_url?: string;
+            slo_url?: string;
         };
         SamlidpServiceProvider: {
             acs_urls: string[] | null;
@@ -9240,6 +9285,7 @@ export interface components {
             attributes: {
                 [key: string]: string;
             } | null;
+            certificate: string;
             /** Format: date-time */
             created_at: string;
             entity_id: string;
@@ -9252,14 +9298,21 @@ export interface components {
             /** @description UUID (empty when unset) */
             resource_id: string;
             resource_name: string;
+            slo_binding: string;
+            slo_soap_url: string;
+            slo_url: string;
         };
         SamlidpUpdateInput: {
             acs_urls?: string[] | null;
             attributes?: {
                 [key: string]: string;
             } | null;
+            certificate?: string | null;
             name?: string | null;
             name_id_format?: string | null;
+            slo_binding?: string | null;
+            slo_soap_url?: string | null;
+            slo_url?: string | null;
         };
         Schema: {
             actor?: unknown | null;
@@ -9297,6 +9350,7 @@ export interface components {
             acs_url: string;
             entity_id: string;
             metadata_url: string;
+            slo_url: string;
         };
         ServiceaccountInputInput: {
             /** @description UUID (empty when unset) */
@@ -21802,6 +21856,124 @@ export interface operations {
             };
         };
     };
+    getIdentityFederationSamlbyEnvironmentbyConnectionSlo: {
+        parameters: {
+            query?: {
+                RelayState?: string;
+                SAMLRequest?: string;
+                SAMLResponse?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    RelayState?: string;
+                    SAMLRequest?: string;
+                    SAMLResponse?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Redirect */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postIdentityFederationSamlbyEnvironmentbyConnectionSlo: {
+        parameters: {
+            query?: {
+                RelayState?: string;
+                SAMLRequest?: string;
+                SAMLResponse?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/x-www-form-urlencoded": {
+                    RelayState?: string;
+                    SAMLRequest?: string;
+                    SAMLResponse?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Redirect */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     postIdentityFederationStart: {
         parameters: {
             query?: never;
@@ -23254,6 +23426,57 @@ export interface operations {
             };
         };
     };
+    postIdentityMePassword: {
+        parameters: {
+            query?: {
+                audience?: string;
+                environment_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    audience?: string;
+                    current_password?: string;
+                    environment_id?: string;
+                    new_password?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordChanged"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     postIdentityMePhone: {
         parameters: {
             query?: {
@@ -24120,6 +24343,8 @@ export interface operations {
                     refresh_token?: string;
                     /** @description UUID (empty when unset) */
                     resource_id?: string;
+                    /** @description UUID (empty when unset) */
+                    switch_organization_id?: string;
                 };
             };
         };
@@ -38043,6 +38268,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Redirect */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     postOauthEndSession: {
@@ -38077,6 +38309,13 @@ export interface operations {
             };
             /** @description Redirect */
             302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Redirect */
+            303: {
                 headers: {
                     [name: string]: unknown;
                 };

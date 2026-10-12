@@ -1,10 +1,9 @@
 "use server";
 
-import { challengeOf, createVerifier } from "@iamkit/js";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { config, redirectUri } from "@/lib/config";
-import { REQUEST_COOKIE, SESSION_COOKIE, type PendingRequest } from "@/lib/session";
+import { authorizeUrl } from "@/lib/authorize";
+import { ACCESS_COOKIE, SESSION_COOKIE } from "@/lib/session";
 
 /**
  * Starts the OAuth authorization (code + PKCE). The client is not a
@@ -13,27 +12,35 @@ import { REQUEST_COOKIE, SESSION_COOKIE, type PendingRequest } from "@/lib/sessi
  * receives the ticket.
  */
 export async function signIn(form: FormData) {
-  const c = config();
-  const request: PendingRequest = { state: createVerifier(43), nonce: createVerifier(43), verifier: createVerifier() };
-  (await cookies()).set(REQUEST_COOKIE, JSON.stringify(request), { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: 600 });
-  const query = new URLSearchParams({
-    client_id: c.clientId,
-    redirect_uri: redirectUri(c),
-    response_type: "code",
-    scope: "openid email profile",
-    state: request.state,
-    nonce: request.nonce,
-    code_challenge: await challengeOf(request.verifier),
-    code_challenge_method: "S256",
-  });
-  const organization = String(form.get("organization") ?? "");
-  if (organization) query.set("organization_id", organization);
-  const hint = String(form.get("login_hint") ?? "");
-  if (hint) query.set("login_hint", hint);
-  redirect(`/sign-in?${query}`);
+  redirect(
+    await authorizeUrl({
+      organization: String(form.get("organization") ?? "") || undefined,
+      login_hint: String(form.get("login_hint") ?? "") || undefined,
+    }),
+  );
 }
 
 export async function signOut() {
-  (await cookies()).delete(SESSION_COOKIE);
+  const jar = await cookies();
+  jar.delete(SESSION_COOKIE);
+  jar.delete(ACCESS_COOKIE);
   redirect("/");
+}
+
+/**
+ * The account widgets ask for a recent sign-in (REAUTHENTICATION_REQUIRED):
+ * sign in again with max_age=0 and come back to /account.
+ */
+export async function reauthenticate() {
+  redirect(await authorizeUrl({ fresh: true, next: "/account" }));
+}
+
+/**
+ * Sessions issued through OAuth (code + PKCE) cannot switch organization in
+ * place, so the switcher starts a new authorization pinned to the chosen
+ * organization (a user already signed in to IAMKit's SSO/MFA rules meets
+ * them here, like at any sign-in).
+ */
+export async function selectOrganization(organization: string) {
+  redirect(await authorizeUrl({ organization, next: "/account" }));
 }

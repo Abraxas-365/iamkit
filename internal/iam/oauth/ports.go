@@ -47,8 +47,9 @@ type Flows interface {
 	Access(ctx context.Context, client *Client, subject identity.UserID, session identity.SessionID, organization identity.OrganizationID) (authentication.Access, error)
 	// Logout ends the session an id_token_hint names (RP-initiated logout)
 	// and returns where the browser goes next (empty: the signed-out page)
-	// and the environment it belongs to, when known.
-	Logout(ctx context.Context, input Logout) (string, identity.EnvironmentID, error)
+	// the environment it belongs to, when known, and the session that
+	// ended (zero when none did) for UpstreamLogout.
+	Logout(ctx context.Context, input Logout) (string, identity.EnvironmentID, identity.SessionID, error)
 }
 
 // Hints verifies an id_token_hint: an ID token IAMKit signed, expired or

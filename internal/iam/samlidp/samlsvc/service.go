@@ -19,12 +19,15 @@ type Service struct {
 	protocol   samlidp.Protocol
 	secrets    samlidp.Secrets
 	now        func() time.Time
+	// logout is single logout (SetLogout); nil leaves it off.
+	logout *logout
 }
 
 var (
-	_ samlidp.Commands = (*Service)(nil)
-	_ samlidp.Queries  = (*Service)(nil)
-	_ samlidp.Flows    = (*Service)(nil)
+	_ samlidp.Commands    = (*Service)(nil)
+	_ samlidp.Queries     = (*Service)(nil)
+	_ samlidp.Flows       = (*Service)(nil)
+	_ samlidp.LogoutFlows = (*Service)(nil)
 )
 
 func New(repository samlidp.Repository, protocol samlidp.Protocol, secrets samlidp.Secrets) *Service {
@@ -38,7 +41,7 @@ func (s *Service) Create(ctx context.Context, m samlidp.Mutation, input samlidp.
 	}
 	id := identity.NewServiceProviderID()
 	m.Action, m.Target = samlidp.ActionCreate, id.String()
-	sp := samlidp.ServiceProvider{ID: id, Environment: m.Environment, Name: input.Name, Application: input.Application, Resource: input.Resource, EntityID: input.EntityID, ACSURLs: input.ACSURLs, NameIDFormat: input.NameIDFormat, Attributes: input.Attributes}
+	sp := samlidp.ServiceProvider{ID: id, Environment: m.Environment, Name: input.Name, Application: input.Application, Resource: input.Resource, EntityID: input.EntityID, ACSURLs: input.ACSURLs, NameIDFormat: input.NameIDFormat, Attributes: input.Attributes, SLOURL: input.SLOURL, SLOBinding: input.SLOBinding, SLOSOAPURL: input.SLOSOAPURL, Certificate: input.Certificate}
 	if err := s.repository.Create(ctx, m, sp); err != nil {
 		return samlidp.ServiceProvider{}, err
 	}
@@ -55,6 +58,15 @@ func (s *Service) Update(ctx context.Context, m samlidp.Mutation, id identity.Se
 	if input.Name != nil {
 		name := strings.TrimSpace(*input.Name)
 		input.Name = &name
+	}
+	if input.ChangesLogout() {
+		current, err := s.repository.Find(ctx, m.Environment, id)
+		if err != nil {
+			return samlidp.ServiceProvider{}, err
+		}
+		if err := samlidp.ValidateLogout(input.Logout(current)); err != nil {
+			return samlidp.ServiceProvider{}, err
+		}
 	}
 	m.Action, m.Target = samlidp.ActionUpdate, id.String()
 	if err := s.repository.Update(ctx, m, id, input); err != nil {
@@ -187,9 +199,18 @@ func (s *Service) Finish(ctx context.Context, ticket, binding string, login saml
 	if err != nil {
 		return samlidp.Response{}, err
 	}
-	response, err := s.protocol.Respond(ctx, p.Environment, sp, p.Request, sp.Assert(login, subject))
+	assertion := sp.Assert(login, subject)
+	response, err := s.protocol.Respond(ctx, p.Environment, sp, p.Request, assertion)
 	if err != nil {
 		return samlidp.Response{}, err
+	}
+	// Single logout needs to know which application got which session (the
+	// SessionIndex of the assertion is the session id).
+	if s.logout != nil && sp.SingleLogout() {
+		link := samlidp.IdPSession{Session: login.Session, ServiceProvider: sp.ID, Environment: p.Environment, User: login.User, NameID: assertion.NameID}
+		if err := s.logout.repository.RememberSession(ctx, link); err != nil {
+			return samlidp.Response{}, err
+		}
 	}
 	m := samlidp.Mutation{Environment: p.Environment, Actor: login.User.String(), Action: samlidp.ActionAssertion, Target: sp.ID.String()}
 	if err := s.repository.ConsumeRequest(ctx, m, s.secrets.Hash(ticket)); err != nil {

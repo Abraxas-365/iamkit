@@ -86,6 +86,35 @@ jobs:
           npm test
           npm run build
 
+  python:
+    # The Python SDK (iamkit): lint, strict types and tests on the oldest and newest supported Pythons.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.13']
+    defaults:
+      run:
+        working-directory: clients/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: clients/python/uv.lock
+      - name: Install
+        run: uv sync --frozen --python ${{ matrix.python-version }}
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: Types
+        run: uv run mypy
+      - name: Async twin is current
+        run: uv run python scripts/unasync.py --check
+      - name: Tests
+        run: uv run pytest -q
+
   browser:
     # The console, hosted pages and org-admin portal in headless Chromium:
     # IAMKit built from the checkout on PostgreSQL + Mailpit testcontainers.

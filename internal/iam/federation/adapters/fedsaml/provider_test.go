@@ -33,12 +33,20 @@ const issuer = "https://iam.example.com"
 
 func setup(t *testing.T, options federation.Options) (fedsaml.Provider, *samltest.IdP, federation.Connection) {
 	t.Helper()
+	return setupSLO(t, options, "")
+}
+
+// setupSLO is setup with an identity provider publishing the
+// SingleLogoutService bindings ("redirect", "post", "both" or "").
+func setupSLO(t *testing.T, options federation.Options, slo string) (fedsaml.Provider, *samltest.IdP, federation.Connection) {
+	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
 	}
 	p := fedsaml.New(issuer, keyring{key}, nil)
 	idp := samltest.New("https://idp.example.com")
+	idp.SLO = slo
 	options.MetadataXML = idp.Metadata()
 	c := federation.Connection{ID: identity.NewConnectionID(), Environment: identity.NewEnvironmentID(), Organization: identity.NewOrganizationID(), Provider: federation.ProviderSAML, Options: options.Normalized()}
 	if c, err = p.Prepare(context.Background(), c); err != nil {

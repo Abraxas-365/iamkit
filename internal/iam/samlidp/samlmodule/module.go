@@ -2,6 +2,11 @@
 package samlmodule
 
 import (
+	"context"
+	"net/http"
+	"time"
+
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/samlidp"
 	"github.com/Abraxas-365/iamkit/internal/iam/samlidp/adapters/samlhttp"
@@ -9,6 +14,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/samlidp/adapters/samlxml"
 	"github.com/Abraxas-365/iamkit/internal/iam/samlidp/samlsvc"
 	"github.com/Abraxas-365/iamkit/internal/iam/signing"
+	"github.com/Abraxas-365/iamkit/internal/worker"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
 )
@@ -21,16 +27,30 @@ type Deps struct {
 	// from it.
 	Issuer  string
 	ActorID func(*fiber.Ctx) string
+	// Transport sends back-channel logout (nil: public addresses only).
+	Transport http.RoundTripper
 }
 
 type Module struct {
 	Commands samlidp.Commands
 	Queries  samlidp.Queries
 	Flows    samlidp.Flows
-	HTTP     *samlhttp.Handler
+	// Logouts is single logout (inbound requests, back-channel delivery).
+	Logouts samlidp.LogoutFlows
+	// Jobs are the back-channel logout background jobs.
+	Jobs []worker.Job
+	HTTP *samlhttp.Handler
 }
 
 func New(deps Deps) Module {
-	service := samlsvc.New(samlpg.New(deps.DB), samlxml.New(deps.Keys, deps.Issuer), mgmtsecret.Generator{})
-	return Module{Commands: service, Queries: service, Flows: service, HTTP: samlhttp.New(service, service, service, deps.ActorID)}
+	repository := samlpg.New(deps.DB)
+	protocol := samlxml.New(deps.Keys, deps.Issuer)
+	service := samlsvc.New(repository, protocol, mgmtsecret.Generator{})
+	service.SetLogout(repository, protocol, samlxml.NewSender(deps.Transport))
+	handler := samlhttp.New(service, service, service, deps.ActorID)
+	handler.Logout(service)
+	return Module{Commands: service, Queries: service, Flows: service, Logouts: service, HTTP: handler, Jobs: []worker.Job{
+		{Name: "saml_logout_delivery", Interval: config.LogoutDispatchInterval, Run: service.DispatchLogouts},
+		{Name: "saml_logout_prune", Interval: time.Hour, Run: func(ctx context.Context) (bool, error) { return false, service.PruneLogouts(ctx) }},
+	}}
 }

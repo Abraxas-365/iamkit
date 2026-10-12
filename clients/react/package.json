@@ -1,7 +1,7 @@
 {
   "name": "@iamkit/react",
   "version": "0.1.0",
-  "description": "Headless React hooks and unstyled components for custom IAMKit sign-in UIs",
+  "description": "Headless React hooks and unstyled components for custom IAMKit sign-in UIs and account widgets",
   "type": "module",
   "license": "SEE LICENSE IN ../../README.md",
   "main": "./dist/index.js",
@@ -10,12 +10,16 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    }
+    },
+    "./widgets.css": "./widgets.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "widgets.css"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "*.css"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",

@@ -52,7 +52,7 @@ const values: ConnectionValues = {
   provider: 'google', scope: 'environment', organization_id: '', name: 'Google', issuer: 'ignored', client_id: ' gid ', client_secret: 's', secret_env: '',
   tenant: 'common', tenant_id: '', tenants: [], domains: [], team_id: '', key_id: '', signup: false, signup_organization_id: '', signup_group_id: '', link_email: true,
   base_url: '', authorize_url: '', token_url: '', userinfo_url: '', scopes: [], claim_subject: 'id', claim_email: 'email', claim_email_verified: '', claim_name: 'name', update_profile: false,
-  metadata_url: '', metadata_xml: '', name_id_format: 'unspecified', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false, idp_initiated_client_id: '',
+  metadata_url: '', metadata_xml: '', name_id_format: 'unspecified', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false, single_logout: false, idp_initiated_client_id: '',
   ldap_url: '', start_tls: false, bind_dn: '', user_base_dn: '', user_filter: '', ca_pem: '',
   attr_groups: '', groups_claim: '', claim_groups: '', group_mappings: [],
 }
@@ -97,11 +97,13 @@ it('builds and patches a SAML connection', () => {
   expect(connectionBody({ ...saml, metadata_xml: '<EntityDescriptor/>', name_id_format: 'transient', attr_subject: 'uid', attr_email: 'mail', sign_requests: true }).options).toEqual({
     metadata_xml: '<EntityDescriptor/>', name_id_format: 'transient', attributes: { subject: 'uid', email: 'mail' }, sign_requests: true,
   })
+  expect(connectionBody({ ...saml, single_logout: true }).options).toEqual({ metadata_url: 'https://idp.example/metadata', single_logout: true })
   expect(connectionBody({ ...saml, idp_initiated_client_id: ' c1 ' }).options).toEqual({ metadata_url: 'https://idp.example/metadata', idp_initiated_client_id: 'c1' })
   const conn: ConnectionDetail = { ...google, provider: 'saml', organization_id: 'o1', secret_env: '', secret_source: 'none', jit_group_id: null, jit_provisioning: true, enforcement: 'optional', created_at: '', options: { metadata_xml: '<x/>', name_id_format: 'persistent' } }
   const same = { name: 'Google', metadata_url: '', metadata_xml: '', name_id_format: 'persistent', attr_subject: '', attr_email: '', attr_name: '', sign_requests: false, jit_provisioning: true, jit_group_id: '', enforcement: 'optional' }
   expect(connectionPatch(conn, same)).toEqual({})
   expect(connectionPatch(conn, { ...same, idp_initiated_client_id: 'c1' })).toEqual({ options: { metadata_xml: '<x/>', name_id_format: 'persistent', idp_initiated_client_id: 'c1' } })
+  expect(connectionPatch(conn, { ...same, single_logout: true })).toEqual({ options: { metadata_xml: '<x/>', name_id_format: 'persistent', single_logout: true } })
   // The stored XML is kept when only a mapping changes.
   expect(connectionPatch(conn, { ...same, attr_email: 'mail' })).toEqual({ options: { metadata_xml: '<x/>', name_id_format: 'persistent', attributes: { email: 'mail' } } })
   expect(connectionPatch(conn, { ...same, metadata_url: 'https://idp/m' })).toEqual({ options: { metadata_url: 'https://idp/m', name_id_format: 'persistent' } })

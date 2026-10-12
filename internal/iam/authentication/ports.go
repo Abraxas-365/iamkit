@@ -503,6 +503,22 @@ type Transaction interface {
 	// change: sessions and challenges stay, password_changed_at and the
 	// lockout are untouched, and no event is emitted.
 	RehashPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, old, hash string) error
+	// AccountPassword locks the active human user's password state by id
+	// (self-service password change); Unauthorized when there is none.
+	AccountPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (PasswordAccount, error)
+	// ChangeOwnPassword stores the user's new password hash (restarts its
+	// age, clears the lockout and password_change_required) without ending
+	// the session current (nor its token-exchange children): every other
+	// session of the user ends and unused emailed codes are spent. It records
+	// user.password_changed (data.method self_service, sessions_revoked) and
+	// returns how many sessions ended.
+	ChangeOwnPassword(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, current identity.SessionID, hash string) (int, error)
+	// SwitchSession moves a live, non-impersonated session into another
+	// organization of the user: it opens session there (same application,
+	// resource, amr, authenticated_at and expiry as from) and ends from, in
+	// one step with event user.organization_switched. The caller checked
+	// access, methods, SSO and MFA.
+	SwitchSession(ctx context.Context, from identity.SessionID, to Context, user identity.UserID, session identity.SessionID) error
 	Audit(ctx context.Context, m Mutation) error
 	// SSORequired reports whether the boundary organization requires SSO for
 	// the email: it has an active enforced connection, has verified the

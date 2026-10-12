@@ -66,6 +66,27 @@ connect hosts.
 - `loadCaptchaScript(provider, nonce?)`, `captchaScripts`.
 - `IAMKitProvider` also takes `deviceId` / `deviceStorage` (see `@iamkit/js`).
 
+## Account widgets
+
+Self-service widgets for the signed-in user, on the `createAccount` client of
+`@iamkit/js`: `<UserProfile>`, `<UserSecurity>` (password, authenticator app
+with an injectable `renderQRCode`, email/SMS codes, security keys, passkeys,
+recovery codes), `<UserSessions>`, `<ApiKeys>` and `<OrganizationSwitcher>`,
+with the hooks `useAccount`, `usePassword`, `useSessions`, `useFactors`,
+`useApiKeys` and `useOrganizations` behind an `<AccountProvider account
+onReauthenticate>`. `REAUTHENTICATION_REQUIRED` anywhere calls
+`onReauthenticate`. Optional styles: `import "@iamkit/react/widgets.css"`.
+See [React account widgets](../../docs/reference/sdk/react-widgets.md).
+
+```tsx
+<AccountProvider account={createAccount({ baseUrl, environmentId, audience, getAccessToken })} onReauthenticate={signInAgain}>
+  <UserProfile />
+  <UserSecurity renderQRCode={(uri) => <QRCode value={uri} />} />
+  <UserSessions />
+  <ApiKeys />
+</AccountProvider>
+```
+
 ## Hooks
 
 - `useSignIn({ticket, organization?, returnTo?, navigate?, locale?})` →

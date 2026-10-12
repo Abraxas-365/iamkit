@@ -120,16 +120,16 @@ func validatePostLogout(values []string) error {
 // Logout ends the session an ID token names and resolves where the
 // browser returns. A post_logout_redirect_uri needs a client (client_id
 // or the hint's audience) that registered it exactly.
-func (s *Service) Logout(ctx context.Context, input oauth.Logout) (string, identity.EnvironmentID, error) {
+func (s *Service) Logout(ctx context.Context, input oauth.Logout) (string, identity.EnvironmentID, identity.SessionID, error) {
 	var hint oauth.IDTokenHint
 	var environment identity.EnvironmentID
 	if input.Hint != "" {
 		var err error
 		if hint, err = s.hints.Parse(ctx, input.Hint); err != nil {
-			return "", identity.EnvironmentID{}, err
+			return "", identity.EnvironmentID{}, identity.SessionID{}, err
 		}
 		if !input.Client.IsZero() && !hint.Names(input.Client) {
-			return "", identity.EnvironmentID{}, errx.Validation("client_id does not match id_token_hint")
+			return "", identity.EnvironmentID{}, identity.SessionID{}, errx.Validation("client_id does not match id_token_hint")
 		}
 		if input.Client.IsZero() {
 			input.Client = hint.Client()
@@ -138,27 +138,29 @@ func (s *Service) Logout(ctx context.Context, input oauth.Logout) (string, ident
 	}
 	if input.Redirect != "" || (!input.Client.IsZero() && environment.IsZero()) {
 		if input.Client.IsZero() {
-			return "", identity.EnvironmentID{}, errx.Validation("post_logout_redirect_uri requires client_id or id_token_hint")
+			return "", identity.EnvironmentID{}, identity.SessionID{}, errx.Validation("post_logout_redirect_uri requires client_id or id_token_hint")
 		}
 		client, err := s.Client(ctx, input.Client)
 		if err != nil {
-			return "", identity.EnvironmentID{}, errx.Validation("unknown client_id")
+			return "", identity.EnvironmentID{}, identity.SessionID{}, errx.Validation("unknown client_id")
 		}
 		if !environment.IsZero() && client.Environment != environment {
-			return "", identity.EnvironmentID{}, errx.Validation("client_id does not match id_token_hint")
+			return "", identity.EnvironmentID{}, identity.SessionID{}, errx.Validation("client_id does not match id_token_hint")
 		}
 		environment = client.Environment
 		if input.Redirect != "" && !slices.Contains(client.PostLogoutRedirects, input.Redirect) {
-			return "", identity.EnvironmentID{}, oauth.ErrUnregisteredLogoutRedirect()
+			return "", identity.EnvironmentID{}, identity.SessionID{}, oauth.ErrUnregisteredLogoutRedirect()
 		}
 	}
+	var ended identity.SessionID
 	if !hint.Session.IsZero() {
 		m := oauth.Mutation{Environment: hint.Environment, Actor: hint.Subject.String(), Action: "oauth.logout", Target: hint.Session.String()}
 		if _, err := s.repository.EndSession(ctx, m, hint.Subject, hint.Session); err != nil {
-			return "", identity.EnvironmentID{}, err
+			return "", identity.EnvironmentID{}, identity.SessionID{}, err
 		}
+		ended = hint.Session
 	}
-	return input.Back(), environment, nil
+	return input.Back(), environment, ended, nil
 }
 func (s *Service) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
 	if id.IsZero() {

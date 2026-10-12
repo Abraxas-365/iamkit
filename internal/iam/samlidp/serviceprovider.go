@@ -78,7 +78,21 @@ type ServiceProvider struct {
 	NameIDFormat    string                     `json:"name_id_format"`
 	// Attributes maps SAML attribute names to sources.
 	Attributes map[string]string `json:"attributes"`
-	CreatedAt  time.Time         `json:"created_at"`
+	// Single logout (all optional, "" = off): SLOURL + SLOBinding answer
+	// the application's own LogoutRequests; SLOSOAPURL receives IAMKit's
+	// back-channel LogoutRequest when a session the application got an
+	// assertion for ends; Certificate (PEM) verifies the application's
+	// signed LogoutRequests (required for either).
+	SLOURL      string    `json:"slo_url"`
+	SLOBinding  string    `json:"slo_binding"`
+	SLOSOAPURL  string    `json:"slo_soap_url"`
+	Certificate string    `json:"certificate"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// SingleLogout reports whether the provider takes part in single logout.
+func (sp ServiceProvider) SingleLogout() bool {
+	return sp.Certificate != "" && (sp.SLOURL != "" || sp.SLOSOAPURL != "")
 }
 
 // Create registers a service provider.
@@ -90,6 +104,10 @@ type Create struct {
 	ACSURLs      []string               `json:"acs_urls"`
 	NameIDFormat string                 `json:"name_id_format"`
 	Attributes   map[string]string      `json:"attributes"`
+	SLOURL       string                 `json:"slo_url"`
+	SLOBinding   string                 `json:"slo_binding"`
+	SLOSOAPURL   string                 `json:"slo_soap_url"`
+	Certificate  string                 `json:"certificate"`
 }
 
 // WithDefaults fills the NameID format and an empty attribute map.
@@ -100,8 +118,14 @@ func (c Create) WithDefaults() Create {
 	if c.Attributes == nil {
 		c.Attributes = map[string]string{}
 	}
+	if c.SLOBinding == "" {
+		c.SLOBinding = SLOBindingRedirect
+	}
 	c.Name = strings.TrimSpace(c.Name)
 	c.EntityID = strings.TrimSpace(c.EntityID)
+	c.SLOURL = strings.TrimSpace(c.SLOURL)
+	c.SLOSOAPURL = strings.TrimSpace(c.SLOSOAPURL)
+	c.Certificate = strings.TrimSpace(c.Certificate)
 	return c
 }
 
@@ -126,6 +150,9 @@ func (c Create) Validate() error {
 			return err
 		}
 	}
+	if err := ValidateLogout(c.SLOURL, c.SLOBinding, c.SLOSOAPURL, c.Certificate); err != nil {
+		return err
+	}
 	return ValidateAttributes(c.Attributes)
 }
 
@@ -136,11 +163,40 @@ type Update struct {
 	ACSURLs      *[]string          `json:"acs_urls"`
 	NameIDFormat *string            `json:"name_id_format"`
 	Attributes   *map[string]string `json:"attributes"`
+	// Single logout: "" clears a URL or the certificate.
+	SLOURL      *string `json:"slo_url"`
+	SLOBinding  *string `json:"slo_binding"`
+	SLOSOAPURL  *string `json:"slo_soap_url"`
+	Certificate *string `json:"certificate"`
+}
+
+// Logout returns the provider's single logout settings after u (the
+// service checks them as a whole with ValidateLogout).
+func (u Update) Logout(sp ServiceProvider) (sloURL, binding, soapURL, certificate string) {
+	sloURL, binding, soapURL, certificate = sp.SLOURL, sp.SLOBinding, sp.SLOSOAPURL, sp.Certificate
+	if u.SLOURL != nil {
+		sloURL = strings.TrimSpace(*u.SLOURL)
+	}
+	if u.SLOBinding != nil {
+		binding = *u.SLOBinding
+	}
+	if u.SLOSOAPURL != nil {
+		soapURL = strings.TrimSpace(*u.SLOSOAPURL)
+	}
+	if u.Certificate != nil {
+		certificate = strings.TrimSpace(*u.Certificate)
+	}
+	return sloURL, binding, soapURL, certificate
+}
+
+// ChangesLogout reports whether u touches the single logout settings.
+func (u Update) ChangesLogout() bool {
+	return u.SLOURL != nil || u.SLOBinding != nil || u.SLOSOAPURL != nil || u.Certificate != nil
 }
 
 func (u Update) Validate() error {
-	if u.Name == nil && u.ACSURLs == nil && u.NameIDFormat == nil && u.Attributes == nil {
-		return errx.Validation("name, acs_urls, name_id_format or attributes is required")
+	if u.Name == nil && u.ACSURLs == nil && u.NameIDFormat == nil && u.Attributes == nil && !u.ChangesLogout() {
+		return errx.Validation("name, acs_urls, name_id_format, attributes or a single logout setting is required")
 	}
 	if u.Name != nil {
 		if err := validName(strings.TrimSpace(*u.Name)); err != nil {
@@ -234,6 +290,9 @@ type IdentityProvider struct {
 	EntityID    string `json:"entity_id"`
 	SSOURL      string `json:"sso_url"`
 	MetadataURL string `json:"metadata_url"`
+	// SLOURL is where applications send their signed LogoutRequests
+	// (HTTP-Redirect and HTTP-POST).
+	SLOURL string `json:"slo_url"`
 	// Certificate is the signing certificate (PEM); it changes when the
 	// environment's signing key is rotated.
 	Certificate string `json:"certificate"`

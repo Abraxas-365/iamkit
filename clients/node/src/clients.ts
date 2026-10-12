@@ -124,6 +124,28 @@ export class IdentityClient {
     return this.http.json("/identity/v1/refresh", { ...body(boundary), refresh_token: refreshToken });
   }
 
+  /**
+   * Moves the refresh token's session into another organization of the user
+   * (`boundary` is the session's current one). The old session and refresh
+   * token end; store the new pair. A target organization that needs a
+   * sign-in the session lacks answers a 403 `REAUTHENTICATION_REQUIRED`
+   * error whose `details` are `{ organization_id, reason }` (`sso`, `mfa`
+   * or `method`): sign in again with that organization.
+   */
+  switchOrganization(boundary: Boundary, refreshToken: string, organizationId: string): Promise<TokenPair> {
+    return this.http.json("/identity/v1/refresh", { ...body(boundary), refresh_token: refreshToken, switch_organization_id: organizationId });
+  }
+
+  /**
+   * Changes the token's user's own password (people only; a sign-in within
+   * the last minutes, else a 403 `REAUTHENTICATION_REQUIRED` error; a wrong
+   * current password is 422 `INVALID_CURRENT_PASSWORD`, a rejected new one
+   * 400 `PASSWORD_POLICY`). The user's other sessions end.
+   */
+  changePassword(accessToken: string, environmentId: string, audience: string, currentPassword: string, newPassword: string): Promise<{ sessions_revoked: number }> {
+    return this.http.json(withQuery("/identity/v1/me/password", { environment_id: environmentId, audience }), { current_password: currentPassword, new_password: newPassword }, accessToken);
+  }
+
   /** Ends the token's session. */
   async logout(accessToken: string, environmentId: string, audience: string): Promise<void> {
     await this.http.json("/identity/v1/logout", { environment_id: environmentId, audience }, accessToken);

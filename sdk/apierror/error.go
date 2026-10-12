@@ -27,6 +27,15 @@ const (
 	RuleReused   = "reused"
 )
 
+// Account self-service error codes: ReauthenticationRequired (HTTP 403)
+// also answers a switch the target organization's sign-in rules refuse
+// (details organization_id and reason sso|mfa|method).
+const (
+	CodeReauthenticationRequired = "REAUTHENTICATION_REQUIRED"
+	CodeInvalidCurrentPassword   = "INVALID_CURRENT_PASSWORD"
+	CodeNoPassword               = "NO_PASSWORD"
+)
+
 // Sign-in policy error codes (HTTP 403): the environment or organization
 // does not allow the method, or the environment does not offer password
 // reset.

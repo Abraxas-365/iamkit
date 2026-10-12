@@ -77,4 +77,8 @@ func (s *Server) samlRoutes(app *fiber.App) {
 	sso := s.limit(limiter.Config{Max: 30, Expiration: time.Minute, LimitReached: tooMany})
 	group.Get("/sso", sso, s.SAML.SSO)
 	group.Post("/sso", sso, s.SAML.SSO)
+	// Single logout: a service provider's signed LogoutRequest.
+	slo := s.limit(limiter.Config{Max: 30, Expiration: time.Minute, LimitReached: tooMany})
+	group.Get("/slo", slo, s.SAML.SLO)
+	group.Post("/slo", slo, s.SAML.SLO)
 }

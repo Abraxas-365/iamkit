@@ -22,7 +22,7 @@ export interface ConnectionDetail {
     authorize_url?: string; token_url?: string; userinfo_url?: string; scopes?: string[]
     groups_claim?: string
     claims?: { subject?: string; email?: string; email_verified?: string; name?: string; groups?: string }
-    metadata_url?: string; metadata_xml?: string; name_id_format?: string; sign_requests?: boolean; idp_initiated_client_id?: string
+    metadata_url?: string; metadata_xml?: string; name_id_format?: string; sign_requests?: boolean; single_logout?: boolean; idp_initiated_client_id?: string
     attributes?: { subject?: string; email?: string; name?: string; groups?: string }
     url?: string; start_tls?: boolean; bind_dn?: string; user_base_dn?: string; user_filter?: string; ca_pem?: string
   }
@@ -129,7 +129,7 @@ export default function FederationDetailPage() {
         <InfoCard label={t('ACS URL (HTTP-POST)')} value={conn.saml.acs_url} mono />
         <InfoCard label={t('SP metadata URL')} value={conn.saml.metadata_url} mono />
         <InfoCard label={t('IdP metadata')} value={conn.options?.metadata_url || t('Pasted XML')} mono={!!conn.options?.metadata_url} />
-        <InfoCard label={t('NameID / attributes')} value={`${conn.options?.name_id_format || t('unspecified')}` + (conn.options?.attributes ? ' · ' + Object.entries(conn.options.attributes).map(([k, name]) => `${k} ← ${name}`).join(', ') : '') + (conn.options?.sign_requests ? t(' · signed requests') : '')} mono />
+        <InfoCard label={t('NameID / attributes')} value={`${conn.options?.name_id_format || t('unspecified')}` + (conn.options?.attributes ? ' · ' + Object.entries(conn.options.attributes).map(([k, name]) => `${k} ← ${name}`).join(', ') : '') + (conn.options?.sign_requests ? t(' · signed requests') : '') + (conn.options?.single_logout ? t(' · single logout') : '')} mono />
         <InfoCard label={t('IdP-initiated client')} value={conn.options?.idp_initiated_client_id || t('None (IdP-initiated sign-in refused)')} mono={!!conn.options?.idp_initiated_client_id} />
       </> : <InfoCard label={conn.provider === 'apple' ? t('Services ID') : t('Client ID')} value={conn.client_id} mono />}
       {conn.provider === 'microsoft' && conn.options?.tenant && <InfoCard label={t('Accounts')} value={(tenants[conn.options.tenant] ?? t('Tenant {{tenant}}', { tenant: conn.options.tenant })) + (conn.options.tenants?.length ? ' · ' + t('only {{count}} allowed tenants', { count: conn.options.tenants.length }) : '')} />}
@@ -257,6 +257,7 @@ export function editFields(conn: ConnectionDetail, base: string): Field[] {
       { name: 'attr_name', label: t('Name attribute'), optional: true, value: o.attributes?.name ?? '' },
       { name: 'attr_groups', label: t('Groups attribute'), optional: true, value: o.attributes?.groups ?? '', hint: t('Multi-valued attribute with the user\'s groups. Empty tries groups, memberOf and the Microsoft groups claim.') },
       { name: 'sign_requests', label: t('Sign authentication requests'), type: 'checkbox', value: !!o.sign_requests },
+      { name: 'single_logout', label: t('Single logout'), type: 'checkbox', value: !!o.single_logout },
       { name: 'idp_initiated_client_id', label: t('IdP-initiated sign-in client'), optional: true, value: o.idp_initiated_client_id ?? '', hint: t('OAuth client ID with an initiate login URI. Empty refuses IdP-initiated responses.') },
     )
   } else if (conn.provider === 'ldap') {
@@ -340,8 +341,8 @@ export function connectionPatch(conn: ConnectionDetail, values: Record<string, s
     const str = (key: string) => typeof values[key] === 'string' ? (values[key] as string).trim() : ''
     const o = conn.options ?? {}
     const xml = str('metadata_xml'), url = str('metadata_url')
-    const next = samlOptions({ metadata_url: url, metadata_xml: xml || (url ? '' : o.metadata_xml ?? ''), name_id_format: str('name_id_format'), attr_subject: str('attr_subject'), attr_email: str('attr_email'), attr_name: str('attr_name'), attr_groups: str('attr_groups'), sign_requests: values.sign_requests === true, idp_initiated_client_id: str('idp_initiated_client_id') })
-    const was = samlOptions({ metadata_url: o.metadata_url ?? '', metadata_xml: o.metadata_url ? '' : o.metadata_xml ?? '', name_id_format: o.name_id_format || 'unspecified', attr_subject: o.attributes?.subject ?? '', attr_email: o.attributes?.email ?? '', attr_name: o.attributes?.name ?? '', attr_groups: o.attributes?.groups ?? '', sign_requests: !!o.sign_requests, idp_initiated_client_id: o.idp_initiated_client_id ?? '' })
+    const next = samlOptions({ metadata_url: url, metadata_xml: xml || (url ? '' : o.metadata_xml ?? ''), name_id_format: str('name_id_format'), attr_subject: str('attr_subject'), attr_email: str('attr_email'), attr_name: str('attr_name'), attr_groups: str('attr_groups'), sign_requests: values.sign_requests === true, single_logout: values.single_logout === true, idp_initiated_client_id: str('idp_initiated_client_id') })
+    const was = samlOptions({ metadata_url: o.metadata_url ?? '', metadata_xml: o.metadata_url ? '' : o.metadata_xml ?? '', name_id_format: o.name_id_format || 'unspecified', attr_subject: o.attributes?.subject ?? '', attr_email: o.attributes?.email ?? '', attr_name: o.attributes?.name ?? '', attr_groups: o.attributes?.groups ?? '', sign_requests: !!o.sign_requests, single_logout: !!o.single_logout, idp_initiated_client_id: o.idp_initiated_client_id ?? '' })
     if (xml || url || JSON.stringify(next) !== JSON.stringify(was)) patch.options = next
   }
   if (conn.provider === 'ldap' && typeof values.ldap_url === 'string') {

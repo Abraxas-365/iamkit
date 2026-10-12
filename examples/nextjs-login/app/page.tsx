@@ -13,6 +13,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         <p data-testid="user">{String(user.sub)}</p>
         <p data-testid="organization">{String(user.organization_id ?? "")}</p>
         <p data-testid="amr">{Array.isArray(user.amr) ? user.amr.join(" ") : ""}</p>
+        <p>
+          <a href="/account">Account</a>
+        </p>
         <form action={signOut}>
           <button type="submit">Sign out</button>
         </form>

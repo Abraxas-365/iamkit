@@ -23,11 +23,15 @@ export interface ServiceProvider {
   acs_urls: string[]
   name_id_format: 'email' | 'persistent'
   attributes: Record<string, string>
+  slo_url: string
+  slo_binding: 'redirect' | 'post'
+  slo_soap_url: string
+  certificate: string
   created_at: string
 }
 
 /** GET /saml/identity-provider (samlidp.IdentityProvider). */
-interface IdentityProvider { entity_id: string; sso_url: string; metadata_url: string; certificate: string }
+interface IdentityProvider { entity_id: string; sso_url: string; slo_url: string; metadata_url: string; certificate: string }
 
 export const attributeSources = ['email', 'name', 'user_id', 'organization_id', 'permissions']
 
@@ -82,12 +86,19 @@ export default function SAMLAppsPage() {
     { name: 'acs_urls', label: t('Assertion consumer service URLs'), type: 'tags', tags: sp?.acs_urls ?? [], hint: t('HTTPS URLs the signed response may be posted to; the first is the default.') },
     { name: 'name_id_format', label: t('NameID'), type: 'radio', value: sp?.name_id_format ?? 'email', options: nameIDOptions },
     { name: 'attributes', label: t('Attributes'), type: 'tags', optional: true, tags: Object.entries(sp?.attributes ?? {}).map(([k, v]) => `${k}=${v}`), hint: t('name=source, source one of {{sources}} (e.g. mail=email).', { sources: attributeSources.join(', ') }) },
+    { name: 'slo_url', label: t('Single logout URL'), optional: true, value: sp?.slo_url ?? '', hint: t('Optional. HTTPS URL where IAMKit answers the application\'s own signed logout request. Needs the certificate.') },
+    { name: 'slo_binding', label: t('Single logout binding'), type: 'dropdown', value: sp?.slo_binding ?? 'redirect', options: [{ value: 'redirect', label: t('HTTP-Redirect') }, { value: 'post', label: t('HTTP-POST') }] },
+    { name: 'slo_soap_url', label: t('Back-channel logout URL (SOAP)'), optional: true, value: sp?.slo_soap_url ?? '', hint: t('Optional. HTTPS URL where IAMKit sends a signed logout request when a session the application signed in ends. Needs the certificate.') },
+    { name: 'certificate', label: t('Signing certificate (PEM)'), type: 'textarea', optional: true, value: sp?.certificate ?? '', hint: t('The application\'s signing certificate. Logout requests must be signed with it; leave empty to turn single logout off.') },
   ]
 
   const save = async (data: Record<string, string | boolean>) => {
+    const logout = { slo_url: data.slo_url, slo_binding: data.slo_binding, slo_soap_url: data.slo_soap_url, certificate: data.certificate }
     const body = { name: data.name, acs_urls: list(data.acs_urls), name_id_format: data.name_id_format, attributes: parseAttributes(list(data.attributes)) }
-    if (editing === 'new') await api.post(path, { ...body, application_id: data.application_id, resource_id: data.resource_id, entity_id: data.entity_id })
-    else if (editing) await api.patch(`${path}/${editing.id}`, body)
+    // Creating sends only the single logout settings that were filled in;
+    // updating sends all of them, so an empty value clears a setting.
+    if (editing === 'new') await api.post(path, { ...body, ...Object.fromEntries(Object.entries(logout).filter(([, v]) => v !== '')), application_id: data.application_id, resource_id: data.resource_id, entity_id: data.entity_id })
+    else if (editing) await api.patch(`${path}/${editing.id}`, { ...body, ...logout })
     providers.reload()
   }
 
@@ -102,6 +113,7 @@ export default function SAMLAppsPage() {
     {idp && <section aria-label={t('Identity provider settings')} className="grid gap-3 rounded-lg border p-4 md:grid-cols-2">
       <CopyField label={t('Metadata URL')} value={idp.metadata_url} hint={t('Give this URL to the service provider, or the values below.')} />
       <CopyField label={t('Single sign-on URL')} value={idp.sso_url} />
+      <CopyField label={t('Single logout URL')} value={idp.slo_url} hint={t('Where applications send signed logout requests (HTTP-Redirect and HTTP-POST).')} />
       <CopyField label={t('Entity ID (Issuer)')} value={idp.entity_id} />
       <CopyField label={t('Signing certificate')} value={idp.certificate} hint={t('Changes when the environment\'s signing key is rotated; service providers reading the metadata pick it up.')} />
     </section>}

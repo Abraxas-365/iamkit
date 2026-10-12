@@ -17,6 +17,7 @@ type Handler struct {
 	passkeys authentication.PasskeyCommands
 	issue    func(*fiber.Ctx, authentication.Issued) error
 	captcha  authentication.Captcha
+	account  authentication.AccountCommands
 }
 
 // Captcha gates /login, /challenges (every purpose) behind the
@@ -198,9 +199,26 @@ func (h *Handler) Refresh(c *fiber.Ctx) error {
 	var input struct {
 		authentication.Context
 		Token string `json:"refresh_token"`
+		// Switch is the organization to move the session to (optional;
+		// the body's organization_id stays the current boundary).
+		Switch identity.OrganizationID `json:"switch_organization_id"`
 	}
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
+	}
+	if !input.Switch.IsZero() {
+		if h.account == nil {
+			return errx.Validation("organization switch is not available")
+		}
+		s := authentication.Switch{Boundary: input.Context, Token: input.Token, Organization: input.Switch}
+		if err := s.Validate(); err != nil {
+			return err
+		}
+		out, err := h.account.SwitchOrganization(c.UserContext(), s)
+		if err != nil {
+			return err
+		}
+		return h.issue(c, out)
 	}
 	out, err := h.commands.Refresh(c.UserContext(), input.Context, input.Token)
 	if err != nil {
@@ -208,6 +226,9 @@ func (h *Handler) Refresh(c *fiber.Ctx) error {
 	}
 	return h.issue(c, out)
 }
+
+// Account sets the organization switch of /refresh (set by authmodule).
+func (h *Handler) Account(account authentication.AccountCommands) { h.account = account }
 func (h *Handler) InitiateChallenge(c *fiber.Ctx) error {
 	var input struct {
 		Environment identity.EnvironmentID `json:"environment_id"`

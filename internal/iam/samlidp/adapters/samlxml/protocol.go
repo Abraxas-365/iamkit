@@ -87,7 +87,11 @@ func (p Protocol) IdentityProvider(ctx context.Context, environment identity.Env
 		return samlidp.IdentityProvider{}, err
 	}
 	certificate := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: idp.Certificate.Raw})
-	return samlidp.IdentityProvider{EntityID: idp.MetadataURL.String(), SSOURL: idp.SSOURL.String(), MetadataURL: idp.MetadataURL.String(), Certificate: string(certificate)}, nil
+	slo, err := p.url(environment, "slo")
+	if err != nil {
+		return samlidp.IdentityProvider{}, err
+	}
+	return samlidp.IdentityProvider{EntityID: idp.MetadataURL.String(), SSOURL: idp.SSOURL.String(), MetadataURL: idp.MetadataURL.String(), SLOURL: slo.String(), Certificate: string(certificate)}, nil
 }
 
 // Metadata is crewjam's IdP metadata with the NameID formats IAMKit sends;
@@ -98,6 +102,18 @@ func (p Protocol) Metadata(ctx context.Context, environment identity.Environment
 		return nil, err
 	}
 	metadata := idp.Metadata()
+	slo, err := p.url(environment, "slo")
+	if err != nil {
+		return nil, err
+	}
+	// Single logout: applications with a registered certificate send
+	// signed LogoutRequests here (Redirect or POST). IAMKit only sends
+	// SOAP (back-channel to the application's slo_soap_url) and does not
+	// receive it, so no SOAP endpoint is listed.
+	metadata.IDPSSODescriptors[0].SingleLogoutServices = []saml.Endpoint{
+		{Binding: saml.HTTPRedirectBinding, Location: slo.String()},
+		{Binding: saml.HTTPPostBinding, Location: slo.String()},
+	}
 	metadata.IDPSSODescriptors[0].NameIDFormats = []saml.NameIDFormat{saml.EmailAddressNameIDFormat, saml.PersistentNameIDFormat}
 	out, err := xml.MarshalIndent(metadata, "", "  ")
 	if err != nil {

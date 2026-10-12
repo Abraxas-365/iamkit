@@ -271,6 +271,13 @@ func (t *Transaction) CreateSession(ctx context.Context, b authentication.Contex
 	if err != nil {
 		return failure(err)
 	}
+	// A SAML sign-in with single logout: what the identity provider needs
+	// to find this session again (same transaction as the session).
+	if link := authentication.FederationLinkFrom(ctx); link.Valid() {
+		if _, err = t.tx.ExecContext(ctx, `INSERT INTO federation_sessions(session_id,environment_id,connection_id,name_id,name_id_format,session_index) VALUES($1,$2,$3,$4,$5,$6)`, id, b.EnvironmentID, link.Connection, link.NameID, link.NameIDFormat, link.SessionIndex); err != nil {
+			return failure(err)
+		}
+	}
 	_, err = t.tx.ExecContext(ctx, `UPDATE users SET last_signed_in_at=$3 WHERE environment_id=$1 AND id=$2`, b.EnvironmentID, user, authenticated)
 	if err == nil {
 		t.signIns = append(t.signIns, amr)
@@ -290,9 +297,11 @@ func (t *Transaction) Refresh(ctx context.Context, b authentication.Context, has
 		Revoked sql.NullTime       `db:"revoked_at"`
 		AMR     pq.StringArray     `db:"amr"`
 		Auth    time.Time          `db:"authenticated_at"`
+		Actor   bool               `db:"impersonated"`
+		Client  bool               `db:"oauth_client"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT s.id AS session_id,s.user_id,s.expires_at,t.used_at,s.revoked_at,s.amr,s.authenticated_at FROM refresh_tokens t JOIN sessions s ON s.id=t.session_id AND s.environment_id=t.environment_id WHERE t.secret_hash=$1 AND s.environment_id=$2 AND s.organization_id=$3 AND s.application_id=$4 AND s.resource_id=$5 AND t.expires_at>now() FOR UPDATE OF s,t`, hash, b.EnvironmentID, b.OrganizationID, b.ApplicationID, b.ResourceID)
-	return authentication.Session{ID: row.ID, User: row.User, Expires: row.Expires, Used: row.Used.Valid, Revoked: row.Revoked.Valid, AMR: []string(row.AMR), Authenticated: row.Auth}, credentialError(err)
+	err := t.tx.GetContext(ctx, &row, `SELECT s.id AS session_id,s.user_id,s.expires_at,t.used_at,s.revoked_at,s.amr,s.authenticated_at,(s.actor_id IS NOT NULL OR s.actor_account_id IS NOT NULL) AS impersonated,(s.oauth_client_id IS NOT NULL) AS oauth_client FROM refresh_tokens t JOIN sessions s ON s.id=t.session_id AND s.environment_id=t.environment_id WHERE t.secret_hash=$1 AND s.environment_id=$2 AND s.organization_id=$3 AND s.application_id=$4 AND s.resource_id=$5 AND t.expires_at>now() FOR UPDATE OF s,t`, hash, b.EnvironmentID, b.OrganizationID, b.ApplicationID, b.ResourceID)
+	return authentication.Session{ID: row.ID, User: row.User, Expires: row.Expires, Used: row.Used.Valid, Revoked: row.Revoked.Valid, AMR: []string(row.AMR), Authenticated: row.Auth, Impersonated: row.Actor, OAuthClient: row.Client}, credentialError(err)
 }
 func (t *Transaction) RevokeSession(ctx context.Context, id identity.SessionID) error {
 	_, err := t.tx.ExecContext(ctx, `UPDATE sessions SET revoked_at=now() WHERE id=$1`, id)

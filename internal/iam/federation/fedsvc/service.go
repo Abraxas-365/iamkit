@@ -18,6 +18,8 @@ import (
 
 type Service struct {
 	repository federation.Repository
+	logouts    federation.LogoutRepository
+	saml       federation.LogoutProtocol
 	provider   federation.Provider
 	cipher     federation.Cipher
 	secrets    federation.Secrets
@@ -30,6 +32,12 @@ type Service struct {
 
 // SetActions runs the environment's federation hooks.
 func (s *Service) SetActions(actions federation.Actions) { s.actions = actions }
+
+// SetLogout enables SAML single logout: the protocol reads and signs the
+// messages, the repository stores the sessions' links and pending logouts.
+func (s *Service) SetLogout(p federation.LogoutProtocol, r federation.LogoutRepository) {
+	s.saml, s.logouts = p, r
+}
 
 // SetQuota enforces the environment's users limit on first sign-ins that
 // create accounts.
@@ -444,11 +452,15 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 		return out, err
 	}
 	defer tx.Rollback()
+	// What single logout needs of the session this sign-in opens (SAML
+	// connections with options.single_logout only).
+	link := connection.Link(claims)
+	ctx = authentication.WithFederationLink(ctx, link)
 	// Enforcement is checked for the account's own email: the provider's
 	// may differ for an operator-linked identity.
 	if out.Hosted() {
 		// The hosted pages choose the organization and issue the session.
-		out.Verified = authentication.Verified{User: user.ID, Email: user.Email, Method: authentication.MethodSSO, Organization: connection.Organization}
+		out.Verified = authentication.Verified{User: user.ID, Email: user.Email, Method: authentication.MethodSSO, Organization: connection.Organization, Federation: link}
 		// Keep the group changes the sign-in made; the hosted journey
 		// issues the session in its own transaction.
 		return out, tx.Commit()
@@ -467,7 +479,7 @@ func (s *Service) Callback(ctx context.Context, code, state, binding string) (fe
 		if err != nil {
 			return out, err
 		}
-		if err = s.repository.ParkResult(ctx, hash, federation.Result{Boundary: row.Boundary, User: user.ID, Email: user.Email, OrganizationSSO: connection.Scoped(), NoAccess: connection.Scoped() || connection.Social(), Challenge: row.Return.Challenge}); err != nil {
+		if err = s.repository.ParkResult(ctx, hash, federation.Result{Boundary: row.Boundary, User: user.ID, Email: user.Email, OrganizationSSO: connection.Scoped(), NoAccess: connection.Scoped() || connection.Social(), Challenge: row.Return.Challenge, Federation: link}); err != nil {
 			return out, err
 		}
 		out.Result = handle
@@ -505,7 +517,7 @@ func (s *Service) Redeem(ctx context.Context, handle, verifier string) (authenti
 		return authentication.Result{}, err
 	}
 	defer tx.Rollback()
-	result, err := s.sessions.SignIn(ctx, tx, r.Boundary, user.ID, user.Email, r.OrganizationSSO)
+	result, err := s.sessions.SignIn(authentication.WithFederationLink(ctx, r.Federation), tx, r.Boundary, user.ID, user.Email, r.OrganizationSSO)
 	if r.NoAccess && unauthorized(err) {
 		return result, errx.Forbidden("signed in, but the user has no access to this application")
 	}

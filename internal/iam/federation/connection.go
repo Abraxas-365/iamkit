@@ -463,6 +463,23 @@ type Claims struct {
 	AssertionExpires time.Time
 	// AuthTime is the ID token's auth_time (zero when absent).
 	AuthTime time.Time
+	// NameID, NameIDFormat and SessionIndex are the SAML assertion's
+	// subject NameID (raw, whatever Subject was mapped from) and its
+	// AuthnStatement SessionIndex: the session's FederationLink when the
+	// connection has single logout. Empty for other providers.
+	NameID       string
+	NameIDFormat string
+	SessionIndex string
+}
+
+// Link is the session's SAML link for claims of connection c: set only for
+// SAML connections with single logout and an assertion that named a
+// NameID.
+func (c Connection) Link(claims Claims) *authentication.FederationLink {
+	if c.Provider != ProviderSAML || !c.Options.SingleLogout || claims.NameID == "" {
+		return nil
+	}
+	return &authentication.FederationLink{Connection: c.ID, NameID: claims.NameID, NameIDFormat: claims.NameIDFormat, SessionIndex: claims.SessionIndex}
 }
 
 // Admit decides whether an unlinked provider identity may be provisioned just
@@ -665,6 +682,9 @@ type Result struct {
 	// identity; access is what is missing).
 	NoAccess  bool
 	Challenge string
+	// Federation is the SAML link of the sign-in (nil for other
+	// providers), stored with the session the redemption opens.
+	Federation *authentication.FederationLink
 }
 
 // Verifies reports whether verifier is the S256 verifier of the

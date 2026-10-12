@@ -28,6 +28,9 @@ type IdP struct {
 	// Encrypt makes assertions encrypted to the service provider's
 	// certificate (from its metadata).
 	Encrypt bool
+	// SLO publishes a SingleLogoutService at Base+"/slo" in the metadata:
+	// "redirect", "post" or "both"; "" publishes none.
+	SLO string
 }
 
 // New returns an identity provider with a fresh key.
@@ -59,7 +62,17 @@ func (i *IdP) EntityID() string { return i.idp.MetadataURL.String() }
 
 // Metadata is the identity provider's metadata XML.
 func (i *IdP) Metadata() string {
-	out, err := xml.MarshalIndent(i.idp.Metadata(), "", "  ")
+	entity := i.idp.Metadata()
+	if i.SLO != "" {
+		slo := i.Base + "/slo"
+		if i.SLO == "redirect" || i.SLO == "both" {
+			entity.IDPSSODescriptors[0].SingleLogoutServices = append(entity.IDPSSODescriptors[0].SingleLogoutServices, saml.Endpoint{Binding: saml.HTTPRedirectBinding, Location: slo})
+		}
+		if i.SLO == "post" || i.SLO == "both" {
+			entity.IDPSSODescriptors[0].SingleLogoutServices = append(entity.IDPSSODescriptors[0].SingleLogoutServices, saml.Endpoint{Binding: saml.HTTPPostBinding, Location: slo})
+		}
+	}
+	out, err := xml.MarshalIndent(entity, "", "  ")
 	if err != nil {
 		panic(err)
 	}
@@ -100,6 +113,8 @@ type User struct {
 	NameIDFormat string
 	Email        string
 	Name         string
+	// SessionIndex is the identity provider's session ("" = "session").
+	SessionIndex string
 	// Attributes are extra attributes by name.
 	Attributes map[string]string
 	// MultiAttributes are multi-valued attributes by name (group lists).
@@ -155,7 +170,11 @@ func (i *IdP) Unsolicited(serviceProvider, relayState string, user User) (Form, 
 
 func (i *IdP) respond(req *saml.IdpAuthnRequest, user User) (Form, error) {
 	var err error
-	session := &saml.Session{ID: "session", NameID: user.NameID, NameIDFormat: user.NameIDFormat, UserEmail: user.Email, UserCommonName: user.Name, CreateTime: time.Now(), ExpireTime: time.Now().Add(time.Hour)}
+	index := user.SessionIndex
+	if index == "" {
+		index = "session"
+	}
+	session := &saml.Session{ID: "session", Index: index, NameID: user.NameID, NameIDFormat: user.NameIDFormat, UserEmail: user.Email, UserCommonName: user.Name, CreateTime: time.Now(), ExpireTime: time.Now().Add(time.Hour)}
 	for name, value := range user.Attributes {
 		session.CustomAttributes = append(session.CustomAttributes, saml.Attribute{Name: name, Values: []saml.AttributeValue{{Type: "xs:string", Value: value}}})
 	}

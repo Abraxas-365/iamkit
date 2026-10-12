@@ -104,6 +104,7 @@ type options struct {
 	auditRetention time.Duration
 	webhooks       http.RoundTripper
 	logStreams     http.RoundTripper
+	samlLogouts    http.RoundTripper
 	actions        http.RoundTripper
 	features       feature.Deployment
 	limits         usage.Values
@@ -163,6 +164,13 @@ func WithWebhookTransport(t http.RoundTripper) Option {
 // IAMKIT_ALLOW_PRIVATE_DELIVERY).
 func WithLogStreamTransport(t http.RoundTripper) Option {
 	return func(o *options) { o.logStreams = t }
+}
+
+// WithSAMLLogoutTransport replaces the guarded transport SAML back-channel
+// logout requests are sent through (tests with a loopback application;
+// IAMKIT_ALLOW_PRIVATE_DELIVERY).
+func WithSAMLLogoutTransport(t http.RoundTripper) Option {
+	return func(o *options) { o.samlLogouts = t }
 }
 
 // WithEventRetention sets how long the event log keeps events
@@ -333,15 +341,24 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	authenticationModule.HTTP.Captcha(riskModule.Captchas)
 	authenticationModule.SignupHTTP.Captcha(riskModule.Captchas)
 	federationModule.HTTP.Captcha(riskModule.Captchas)
-	samlModule := samlmodule.New(samlmodule.Deps{DB: db, Keys: signingModule.Keyring, Issuer: issuer, ActorID: server.OperatorID})
+	samlModule := samlmodule.New(samlmodule.Deps{DB: db, Keys: signingModule.Keyring, Issuer: issuer, ActorID: server.OperatorID, Transport: o.samlLogouts})
 	if on, ok := o.features[config.FeatureSAMLIdP]; !ok || on {
 		s.SAML = samlModule.HTTP
+		// Tests run the delivery job once with Workers.RunOnce("saml_logout_delivery").
+		s.Workers.Add(samlModule.Jobs...)
 	}
 	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: tickets{oauth: oauthModule.Flows, saml: samlModule.Flows}, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Passkeys: authenticationModule.Passkeys, Features: featureModule.Queries, Captcha: hostedCaptcha{riskModule.Captchas, riskModule.Captcha}, Risk: riskModule.Evaluator, Finish: finisher(oauthModule.HTTP.Finish, samlModule.HTTP), ActorID: server.OperatorID})
 	s.Hosted = hostedModule.HTTP
 	samlModule.HTTP.PostForm(hostedModule.HTTP.PostForm)
 	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
 	oauthModule.HTTP.SignedOut(hostedModule.HTTP.SignedOut)
+	// SAML single logout (SP side): end_session continues at the identity
+	// provider that opened the session; its answers come back to /slo.
+	federationModule.HTTP.Logout(federationModule.Logout, hostedModule.HTTP.PostForm)
+	federationModule.HTTP.SignedOut(hostedModule.HTTP.SignedOut)
+	oauthModule.HTTP.Upstream(upstreamLogout{federationModule.Logout})
+	oauthModule.HTTP.PostForm(hostedModule.HTTP.PostForm)
+	s.Workers.Add(federationModule.Jobs...)
 	oauthModule.HTTP.ProfileClaims(userModule.Queries)
 	oauthModule.HTTP.Actions(actionModule.Runner)
 	oauthModule.HTTP.Usage(usageModule.Commands)

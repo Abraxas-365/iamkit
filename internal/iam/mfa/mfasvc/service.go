@@ -107,7 +107,7 @@ func (s *Service) Begin(ctx context.Context, boundary authentication.Context, us
 	if err != nil {
 		return "", err
 	}
-	err = s.repository.SavePending(ctx, hash, mfa.Pending{Boundary: boundary, User: user, AMR: amr, Enroll: enroll, Expires: s.now().Add(config.MFALoginTTL), PasswordHash: passwordHash})
+	err = s.repository.SavePending(ctx, hash, mfa.Pending{Boundary: boundary, User: user, AMR: amr, Enroll: enroll, Expires: s.now().Add(config.MFALoginTTL), PasswordHash: passwordHash, Federation: authentication.FederationLinkFrom(ctx)})
 	return raw, err
 }
 
@@ -131,7 +131,7 @@ func (s *Service) BeginChallenge(ctx context.Context, boundary authentication.Co
 		return "", err
 	}
 	err = s.repository.SavePending(ctx, hash, mfa.Pending{Boundary: boundary, User: user, AMR: amr, Expires: s.now().Add(config.MFALoginTTL),
-		PasswordHash: passwordHash, Challenge: true, RiskDetections: detections})
+		PasswordHash: passwordHash, Challenge: true, RiskDetections: detections, Federation: authentication.FederationLinkFrom(ctx)})
 	return raw, err
 }
 
@@ -457,7 +457,7 @@ func (s *Service) Complete(ctx context.Context, token string, proof authenticati
 		amr = append(append([]string{}, p.AMR...), "otp")
 	}
 	done := authentication.Completed{Boundary: p.Boundary, User: p.User, AMR: amr, RecoveryCodes: v.RecoveryCodes, PasswordHash: p.PasswordHash,
-		Challenge: p.Challenge, RiskDetections: p.RiskDetections}
+		Challenge: p.Challenge, RiskDetections: p.RiskDetections, Federation: p.Federation}
 	if issue != nil {
 		// issue commits its own session transaction while this one (and a
 		// pooled connection) stays open. Should the commit below then fail,

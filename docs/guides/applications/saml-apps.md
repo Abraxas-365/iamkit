@@ -38,10 +38,11 @@ Console **Applications → SAML applications** shows them; or
 | --- | --- |
 | Metadata URL (also the IdP entity ID / Issuer) | `{JWT_ISSUER}/saml/{environment}/metadata` |
 | Single sign-on URL (HTTP-Redirect and HTTP-POST) | `{JWT_ISSUER}/saml/{environment}/sso` |
+| Single logout URL (HTTP-Redirect and HTTP-POST) | `{JWT_ISSUER}/saml/{environment}/slo` |
 | Signing certificate | PEM, RSA-SHA256 signatures |
 | NameID formats | `emailAddress`, `persistent` |
 
-Most service providers take the metadata URL; otherwise paste the three other
+Most service providers take the metadata URL; otherwise paste the other
 values.
 
 ## 2. Register the service provider
@@ -104,6 +105,66 @@ target = the service provider). Registrations are audited
   signed requests.
 - The SSO endpoint is rate limited (30/min per IP), metadata 60/min.
 
+## Single logout (SLO)
+
+Single logout is **opt-in per application**; without it nothing changes and
+sessions in the application stay independent of IAMKit's. It works in both
+directions once the application registers its **signing certificate** and at
+least one URL:
+
+| Field | CLI flag | Meaning |
+| --- | --- | --- |
+| `certificate` | `--certificate FILE` (PEM; `-` reads stdin) | The application's signing certificate. Required with either URL; every LogoutRequest it sends must be signed with it. |
+| `slo_url` | `--slo-url` | HTTPS URL where IAMKit answers the application's own LogoutRequest. |
+| `slo_binding` | `--slo-binding redirect\|post` | How IAMKit answers at `slo_url` (default `redirect`). |
+| `slo_soap_url` | `--slo-soap-url` | HTTPS URL where IAMKit sends a LogoutRequest (SOAP, back channel) when a session ends. |
+
+```bash
+iam saml-apps update SP_ID --certificate wiki.pem \
+  --slo-url https://wiki.example.com/saml/slo --slo-binding post \
+  --slo-soap-url https://wiki.example.com/saml/soap
+```
+
+`""` clears a URL or the certificate (clearing the certificate while a URL
+stays is refused). Also in the console form and the SDK's `CreateSAMLApp` /
+`UpdateSAMLApp`.
+
+**Application-initiated logout.** The application sends the browser to the
+single logout URL with a signed LogoutRequest (HTTP-Redirect: the signature
+is over the query string; HTTP-POST: an enveloped XML signature). IAMKit
+checks the issuer (a registered application with single logout), the
+signature against the registered certificate, `Destination`, `IssueInstant`
+(within 90 seconds of its clock) and `NotOnOrAfter`, then ends the IAMKit
+session named by the request's `SessionIndex` (the value of the assertion) if
+that session was asserted to this application for this NameID. It answers
+with a signed LogoutResponse through `slo_binding`, carrying the request's
+`RelayState`: `Success`, or `Requester` when no such session exists (so a
+request cannot probe sessions). Unsigned, wrongly signed or unknown-issuer
+requests get 401 and change nothing. The session ends with
+`session.revoked` (`reason` `saml_logout`) and the call is audited
+`saml.logout`. The application that asked is not notified again.
+
+**IAMKit-initiated logout.** When a session the application received an
+assertion for ends any other way — the user signs out, an operator revokes
+sessions, the session is revoked by policy — and the application has a
+`slo_soap_url`, IAMKit queues a signed SOAP LogoutRequest (NameID,
+`SessionIndex`, `NotOnOrAfter` 5 minutes ahead). The `saml_logout_delivery`
+job sends it, one try at a time per row, retrying with a growing delay (30
+seconds up to one hour) for up to 8 attempts; a SAML LogoutResponse of
+`Success` (or `UnknownPrincipal`, the session is gone for them already) counts
+as delivered. After the last failure IAMKit records `saml.logout_failed`
+(actor system). Delivery dials only public addresses
+(`IAMKIT_ALLOW_PRIVATE_DELIVERY` for development) and follows no redirects;
+finished rows are pruned after 30 days by `saml_logout_prune`. Both jobs run
+with the `saml_idp` feature.
+
+Signatures are verified with RSA or ECDSA **SHA-256/384/512**. **SHA-1 is
+refused** (`rsa-sha1` signatures and SHA-1 digests); so is a certificate
+outside its validity period. Redirect and POST single logout endpoints are
+rate limited like SSO. Metadata advertises the `SingleLogoutService`
+(HTTP-Redirect and HTTP-POST); the back channel is outbound only, so no SOAP
+endpoint is listed.
+
 ## Not supported (yet)
 
 IdP-initiated sign-in (IAMKit as the identity provider; the opposite
@@ -118,5 +179,5 @@ already open in it.
 | --- | --- | --- |
 | List | `iam saml-apps list [--application APP_ID]` | `GET …/saml/service-providers` |
 | Show | `iam saml-apps get SP_ID` | `GET …/saml/service-providers/:id` |
-| Change | `iam saml-apps update SP_ID --acs URL --name-id-format persistent --attr mail=email` (`--clear-attrs` for none) | `PATCH …/saml/service-providers/:id` |
+| Change | `iam saml-apps update SP_ID --acs URL --name-id-format persistent --attr mail=email` (`--clear-attrs` for none; single logout flags above) | `PATCH …/saml/service-providers/:id` |
 | Delete | `iam saml-apps delete SP_ID` | `DELETE …/saml/service-providers/:id` |

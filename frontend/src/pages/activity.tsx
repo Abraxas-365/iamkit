@@ -48,6 +48,7 @@ const named: Record<string, string> = {
   'service_account.impersonation': t('Changed whether a service account may impersonate users'),
   'signing_key.create': t('Created a signing key'), 'signing_key.activate': t('Activated a signing key'), 'signing_key.retire': t('Retired a signing key'),
   'saml_service_provider.create': t('Added a SAML application'), 'saml_service_provider.update': t('Updated a SAML application'), 'saml_service_provider.delete': t('Deleted a SAML application'), 'saml.assertion_issued': t('Signed in to a SAML application'),
+  'saml.logout': t('Signed out of a SAML application'), 'saml.logout_failed': t('SAML back-channel logout delivery failed'),
   'sms.update': t('Updated SMS delivery'), 'sms.delete': t('Removed SMS delivery'), 'sms.test': t('Sent a test SMS'),
   impersonate: t('Impersonated a user'), 'org_setup_link.used': t('Setup link opened'),
   'user.signup': t('User signed up'), 'user.deactivated': t('Deactivated a user'), 'user.reactivated': t('Reactivated user'),
@@ -160,6 +161,8 @@ const eventNamed: Record<string, string> = {
   'user.signed_up': t('User signed up'), 'user.provisioned': t('User provisioned by the directory'), 'user.deprovisioned': t('User deprovisioned by the directory'),
   'application.resource_linked': t('Linked a resource to an application'), 'application.resource_unlinked': t('Unlinked a resource from an application'),
   'org_setup_link.used': t('Setup link opened'), 'group.members_changed': t('Changed group members'), 'grant.updated': t('Set a grant'), 'grant.deleted': t('Removed a grant'),
+  'user.organization_switched': t('Switched organization'), 'connection.single_logout': t('Signed out by the identity provider'),
+  'saml.logout': t('Signed out of a SAML application'), 'saml.logout_failed': t('SAML back-channel logout delivery failed'),
 }
 
 /** describeEvent turns a semantic event type (user.created) into a sentence. */

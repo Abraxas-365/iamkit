@@ -345,7 +345,7 @@ func (s *Server) limit(cfg limiter.Config) fiber.Handler {
 // append to, what clients send) and only those proxies' forwarded headers
 // are read; without them the default stays: the socket address.
 func (s *Server) config() fiber.Config {
-	cfg := fiber.Config{AppName: "IAMKit", DisableStartupMessage: true, BodyLimit: 64 * 1024, ErrorHandler: errorHandler}
+	cfg := fiber.Config{AppName: "IAMKit", DisableStartupMessage: true, BodyLimit: 64 * 1024, ReadBufferSize: config.RequestHeaderLimit, ErrorHandler: errorHandler}
 	if len(s.TrustedProxies) > 0 {
 		cfg.ProxyHeader = fiber.HeaderXForwardedFor
 		cfg.EnableTrustedProxyCheck = true
@@ -417,6 +417,10 @@ func (s *Server) App() *fiber.App {
 	auth.Post("/federation/callback", s.limit(limiter.Config{Max: 30}), s.Federation.CallbackForm)
 	auth.Post("/federation/saml/acs", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.ACS)
 	auth.Get("/federation/saml/:environment/:connection/metadata", s.limit(limiter.Config{Max: 60, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.SAMLMetadata)
+	// SAML single logout of a connection (404 without options.single_logout).
+	sloLimit := s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }})
+	auth.Get("/federation/saml/:environment/:connection/slo", sloLimit, s.Federation.SAMLLogout)
+	auth.Post("/federation/saml/:environment/:connection/slo", sloLimit, s.Federation.SAMLLogout)
 	auth.Post("/federation/ldap/login", s.limit(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.DirectoryLogin)
 	auth.Post("/discover", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.Discover)
 	if s.Hosted != nil {
@@ -433,6 +437,8 @@ func (s *Server) App() *fiber.App {
 	auth.Get("/me/sessions", sessionsLimit, s.Tokens.Sessions)
 	auth.Post("/me/sessions/revoke-others", sessionsLimit, s.Tokens.RevokeOtherSessions)
 	auth.Delete("/me/sessions/:id", sessionsLimit, s.Tokens.RevokeSession)
+	// Self-service password change (fresh sign-in, current password).
+	auth.Post("/me/password", s.limit(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Tokens.ChangePassword)
 	if s.CaptchaPublic != nil {
 		s.CaptchaPublic.Register(auth, s.limit(limiter.Config{Max: 60, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}))
 	}

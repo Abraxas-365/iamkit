@@ -358,6 +358,7 @@ func (s *Service) VerifyMFA(ctx context.Context, token string, proof authenticat
 			}
 		}
 		sctx, decision, sig := s.completed(ctx, tx, done)
+		sctx = authentication.WithFederationLink(sctx, done.Federation)
 		if out, err = s.NewSession(sctx, tx, done.Boundary, done.User, done.AMR); err != nil {
 			return credentialFailure(err)
 		}

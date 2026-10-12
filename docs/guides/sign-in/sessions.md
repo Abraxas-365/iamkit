@@ -91,9 +91,66 @@ no audit row or event. Access tokens already issued stay valid until they
 expire, as with any revocation; resource servers that must react at once
 introspect.
 
+## Change the password
+
+`POST /identity/v1/me/password?environment_id=ENV&audience=AUD` with
+`{"current_password": "…", "new_password": "…"}` changes the caller's own
+password. It takes the same user token as the routes above, from a person's
+application session: impersonated tokens, API keys and machine users get 403.
+
+- The sign-in must be recent (the same window as API keys and phone changes):
+  an older session gets **403 `REAUTHENTICATION_REQUIRED`**; send the user
+  through sign-in again, then retry.
+- A wrong `current_password` is **422 `INVALID_CURRENT_PASSWORD`** and counts
+  toward the account lockout like a failed sign-in. An account without a
+  password is **422 `NO_PASSWORD`** (use a password reset).
+- The new password passes the environment's and the user's organizations'
+  [password policy](password-policy.md), the breach check
+  and the reuse rule: **400 `PASSWORD_POLICY`** with `details.rule`.
+- On success the answer is `{"sessions_revoked": n}`: every **other** session
+  of the user ended (with its refresh tokens), the current one stays and keeps
+  working, outstanding emailed codes are void, and `user.password_changed` is
+  emitted with `data.method` `self_service`. Access tokens already issued
+  stay valid until they expire.
+
+The route is rate limited (10 calls per minute per client address).
+
+## Switch organization
+
+A user who belongs to several organizations moves a session between them with
+`POST /identity/v1/refresh`, adding `switch_organization_id` to the usual body
+(`environment_id`, `organization_id`, `application_id`, `resource_id` of the
+**current** session, and its `refresh_token`):
+
+```json
+{
+  "environment_id": "…", "organization_id": "CURRENT", "application_id": "…",
+  "resource_id": "…", "refresh_token": "ik_refresh_…",
+  "switch_organization_id": "TARGET"
+}
+```
+
+The answer is a new token pair for the target organization. The old session
+and its refresh token end (a second use of the old refresh token is a 401), the
+new session keeps the original sign-in (`authenticated_at`, `amr`, expiry) and
+`user.organization_switched` is emitted. The user needs the same access a
+normal sign-in to the target would require:
+
+| Answer | When |
+|---|---|
+| 403 `FORBIDDEN` | The user is not a member of the target, or it has no access to this application |
+| 403 `REAUTHENTICATION_REQUIRED` with `details` `{"organization_id", "reason"}` | The target needs more than the session proves: `sso` (the organization enforces single sign-on), `mfa` (a second factor the session lacks) or `method` (the sign-in method is not allowed there). Start a new authorization with that organization (`organization_id` hint) |
+| 401 | The refresh token is unknown, spent or expired |
+| 403 | Impersonated and OAuth-client sessions cannot switch |
+
 ## SDKs
 
-- Go: `authclient.Client.ListSessions`, `RevokeSession`, `RevokeOtherSessions`
-  (`sdk/authclient`).
+- JavaScript (`@iamkit/js`): `createAccount(...)` has `sessions.list`,
+  `sessions.revoke`, `sessions.revokeOthers`, `changePassword` and
+  `switchOrganization`; `@iamkit/node`'s `IdentityClient` has
+  `changePassword` and `switchOrganization`.
+
+- Go: `authclient.Client.ListSessions`, `RevokeSession`, `RevokeOtherSessions`,
+  `ChangePassword` and `SwitchOrganization` (`sdk/authclient`).
 - Any other language: call the three endpoints above; they are in the
   [OpenAPI document](../../reference/api/openapi.md) (`@iamkit/api` types).

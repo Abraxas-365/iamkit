@@ -28,6 +28,7 @@ type Handler struct {
 	flows    samlidp.Flows
 	actor    func(*fiber.Ctx) string
 	form     Form
+	logout   samlidp.LogoutFlows
 }
 
 func New(commands samlidp.Commands, queries samlidp.Queries, flows samlidp.Flows, actor func(*fiber.Ctx) string) *Handler {

@@ -5,9 +5,12 @@
 package samltest
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/xml"
 	"net/url"
+	"sync"
 
 	"github.com/crewjam/saml"
 )
@@ -15,6 +18,10 @@ import (
 // SP is an in-memory service provider (its ACS URL is never dialed).
 type SP struct {
 	sp *saml.ServiceProvider
+	// key and cert sign LogoutRequests (generated on first use).
+	mu   sync.Mutex
+	key  *rsa.PrivateKey
+	cert *x509.Certificate
 }
 
 // Result is what a verified response asserts.

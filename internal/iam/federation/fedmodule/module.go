@@ -2,7 +2,11 @@
 package fedmodule
 
 import (
+	"context"
+	"time"
+
 	"github.com/Abraxas-365/iamkit/internal/cache"
+	"github.com/Abraxas-365/iamkit/internal/worker"
 	"net/http"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
@@ -49,21 +53,30 @@ type Module struct {
 	Commands federation.Commands
 	Queries  federation.Queries
 	Flows    federation.Flows
-	HTTP     *fedhttp.Handler
+	// Logout is SAML single logout (SP side): /slo and end_session.
+	Logout federation.LogoutFlows
+	HTTP   *fedhttp.Handler
+	// Jobs prune pending SAML logouts.
+	Jobs []worker.Job
 }
 
 func New(deps Deps) Module {
+	saml := fedsaml.New(deps.Issuer, deps.Keys, deps.Transport)
 	provider := router{
 		oidc: fedoidc.Provider{Issuer: deps.Issuer, Cipher: deps.Cipher, Guarded: deps.Transport, Discovery: deps.Discovery},
-		saml: fedsaml.New(deps.Issuer, deps.Keys, deps.Transport),
+		saml: saml,
 	}
 	directory := fedldap.New(deps.Cipher, deps.LDAPAllowed, deps.LDAPDial)
-	service := fedsvc.New(fedpg.New(deps.DB), provider, directory, deps.Cipher, mgmtsecret.Generator{}, deps.Sessions, deps.Issuer)
+	repository := fedpg.New(deps.DB)
+	service := fedsvc.New(repository, provider, directory, deps.Cipher, mgmtsecret.Generator{}, deps.Sessions, deps.Issuer)
+	service.SetLogout(saml, repository)
 	if deps.Actions != nil {
 		service.SetActions(deps.Actions)
 	}
 	if deps.Quota != nil {
 		service.SetQuota(deps.Quota)
 	}
-	return Module{Commands: service, Queries: service, Flows: service, HTTP: fedhttp.New(service, service, service, deps.ActorID, deps.Respond)}
+	return Module{Commands: service, Queries: service, Flows: service, Logout: service, HTTP: fedhttp.New(service, service, service, deps.ActorID, deps.Respond), Jobs: []worker.Job{
+		{Name: "federation_logout_prune", Interval: time.Hour, Run: func(ctx context.Context) (bool, error) { return false, repository.PruneLogouts(ctx) }},
+	}}
 }

@@ -239,3 +239,42 @@ func TestRiskAdaptersStayInRiskModule(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// SAML single logout: the SAML/XML signature libraries stay in the two
+// SAML protocol adapters (fedsaml: IAMKit as service provider; samlxml:
+// IAMKit as identity provider) and their test doubles; the OAuth module
+// continues end_session upstream only through its own oauth.UpstreamLogout
+// port, never by importing federation or samlidp (bootstrap adapts).
+func TestSAMLStaysInProtocolAdapters(t *testing.T) {
+	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+		if err != nil {
+			return err
+		}
+		normalized := filepath.ToSlash(path)
+		protocol := strings.Contains(normalized, "/federation/adapters/fedsaml/") || strings.Contains(normalized, "/samlidp/adapters/samlxml/")
+		oauthPkg := strings.Contains(normalized, "/internal/iam/oauth/")
+		for _, spec := range file.Imports {
+			name, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				return err
+			}
+			if (strings.HasPrefix(name, "github.com/crewjam/saml") || strings.HasPrefix(name, "github.com/russellhaering/goxmldsig") || strings.HasPrefix(name, "github.com/beevik/etree")) && !protocol {
+				t.Errorf("%s imports the SAML/XML library %s outside fedsaml/samlxml", path, name)
+			}
+			if oauthPkg && (strings.HasSuffix(name, "/internal/iam/federation") || strings.Contains(name, "/internal/iam/federation/") || strings.Contains(name, "/internal/iam/samlidp")) {
+				t.Errorf("%s: the OAuth module imports %s (use oauth.UpstreamLogout)", path, name)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

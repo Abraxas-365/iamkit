@@ -138,3 +138,29 @@ func TestCheck(t *testing.T) {
 		})
 	}
 }
+
+func TestLogoutRequestCheck(t *testing.T) {
+	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	slo := "https://iam.example.com/saml/env/slo"
+	base := samlidp.LogoutRequest{ID: "id-1", Issuer: "https://a.example", NameID: "ada@example.com", Destination: slo, IssueInstant: now.Add(-10 * time.Second)}
+	if err := base.Check(slo, now); err != nil {
+		t.Fatalf("valid request: %v", err)
+	}
+	bad := map[string]func(*samlidp.LogoutRequest){
+		"id":                  func(r *samlidp.LogoutRequest) { r.ID = "" },
+		"missing destination": func(r *samlidp.LogoutRequest) { r.Destination = "" },
+		"other destination":   func(r *samlidp.LogoutRequest) { r.Destination = "https://other.example/slo" },
+		"old":                 func(r *samlidp.LogoutRequest) { r.IssueInstant = now.Add(-2 * time.Minute) },
+		"not on or after":     func(r *samlidp.LogoutRequest) { r.NotOnOrAfter = now },
+		"name id":             func(r *samlidp.LogoutRequest) { r.NameID = "" },
+	}
+	for name, mutate := range bad {
+		t.Run(name, func(t *testing.T) {
+			r := base
+			mutate(&r)
+			if err := r.Check(slo, now); err == nil {
+				t.Fatal("expected an error")
+			}
+		})
+	}
+}

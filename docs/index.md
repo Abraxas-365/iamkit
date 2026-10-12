@@ -42,6 +42,10 @@ Runnable code is in the [examples](examples/README.md).
   and [SCIM](reference/sdk/scim.md).
 - **Node.js SDK:** [`@iamkit/node`](reference/sdk/node.md) — token verification,
   Express/Connect middleware, OAuth client, webhooks and actions.
+- **Python SDK:** [`iamkit`](reference/sdk/python.md) — token verification, FastAPI/Flask/Django
+  guards, OAuth client, webhooks and actions, and a management client.
+- **React account widgets:** [`@iamkit/react`](reference/sdk/react-widgets.md) — profile,
+  security, sessions, API keys and organization switcher for signed-in users.
 - **Platform:** [configuration](reference/configuration.md), [CLI](reference/cli.md),
   [token claims](reference/token-claims.md), [errors and pagination](reference/errors-and-pagination.md).
 - **Events:** [event log](reference/events.md), [event webhooks](reference/event-webhooks.md)

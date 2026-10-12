@@ -314,6 +314,9 @@ type FederationOptions struct {
 	NameIDFormat string              `json:"name_id_format,omitempty"`
 	Attributes   *SAMLAttributes     `json:"attributes,omitempty"`
 	SignRequests bool                `json:"sign_requests,omitempty"`
+	// SingleLogout turns on SAML single logout (the identity provider's
+	// metadata must publish a SingleLogoutService).
+	SingleLogout bool `json:"single_logout,omitempty"`
 	// IdPInitiatedClientID is the OAuth client (with an InitiateLoginURI)
 	// that a SAML connection hands IdP-initiated responses to; empty
 	// refuses them.
@@ -951,6 +954,9 @@ type SAMLIdentityProvider struct {
 	EntityID    string `json:"entity_id"`
 	SSOURL      string `json:"sso_url"`
 	MetadataURL string `json:"metadata_url"`
+	// SLOURL is where applications send their signed LogoutRequests
+	// (HTTP-Redirect and HTTP-POST).
+	SLOURL      string `json:"slo_url"`
 	Certificate string `json:"certificate"`
 }
 
@@ -959,6 +965,12 @@ type SAMLIdentityProvider struct {
 // NameIDFormat is "email" or "persistent" (the user ID); Attributes maps
 // SAML attribute names to "email", "name", "user_id", "organization_id" or
 // "permissions" (the user's permissions on the resource).
+//
+// Single logout is opt-in: SLOURL + SLOBinding ("redirect" or "post") is
+// where IAMKit answers the application's own signed LogoutRequest,
+// SLOSOAPURL where it sends a signed SOAP LogoutRequest when a session the
+// application received an assertion for ends, and Certificate (PEM) is the
+// application's signing certificate (required with either URL).
 type SAMLApp struct {
 	ID              string            `json:"id"`
 	Environment     string            `json:"environment_id"`
@@ -971,6 +983,10 @@ type SAMLApp struct {
 	ACSURLs         []string          `json:"acs_urls"`
 	NameIDFormat    string            `json:"name_id_format"`
 	Attributes      map[string]string `json:"attributes"`
+	SLOURL          string            `json:"slo_url"`
+	SLOBinding      string            `json:"slo_binding"`
+	SLOSOAPURL      string            `json:"slo_soap_url"`
+	Certificate     string            `json:"certificate"`
 	CreatedAt       time.Time         `json:"created_at"`
 }
 
@@ -984,6 +1000,11 @@ type CreateSAMLApp struct {
 	ACSURLs      []string          `json:"acs_urls"`
 	NameIDFormat string            `json:"name_id_format,omitempty"`
 	Attributes   map[string]string `json:"attributes,omitempty"`
+	// Single logout (see SAMLApp); the URLs must be HTTPS and need Certificate.
+	SLOURL      string `json:"slo_url,omitempty"`
+	SLOBinding  string `json:"slo_binding,omitempty"`
+	SLOSOAPURL  string `json:"slo_soap_url,omitempty"`
+	Certificate string `json:"certificate,omitempty"`
 }
 
 // UpdateSAMLApp changes the non-nil fields; Attributes
@@ -993,6 +1014,11 @@ type UpdateSAMLApp struct {
 	ACSURLs      *[]string          `json:"acs_urls,omitempty"`
 	NameIDFormat *string            `json:"name_id_format,omitempty"`
 	Attributes   *map[string]string `json:"attributes,omitempty"`
+	// Single logout; "" clears a URL or the certificate.
+	SLOURL      *string `json:"slo_url,omitempty"`
+	SLOBinding  *string `json:"slo_binding,omitempty"`
+	SLOSOAPURL  *string `json:"slo_soap_url,omitempty"`
+	Certificate *string `json:"certificate,omitempty"`
 }
 
 // SAMLIdentityProvider returns the environment's IdP settings.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -53,6 +54,21 @@ type Handler struct {
 	claims     oauth.ProfileClaims
 	actions    oauth.Actions
 	usage      oauth.Usage
+	// upstream continues end_session at a SAML identity provider (nil:
+	// nothing upstream).
+	upstream oauth.UpstreamLogout
+	// postForm renders an auto-submitted POST to the identity provider
+	// (hostedhttp.Handler.PostForm).
+	postForm func(c *fiber.Ctx, environment identity.EnvironmentID, action string, fields [][2]string) error
+}
+
+// Upstream sets the SAML single logout continuation of end_session.
+func (h *Handler) Upstream(u oauth.UpstreamLogout) { h.upstream = u }
+
+// PostForm sets the page that auto-submits an HTTP-POST SAML logout message
+// (hostedhttp.Handler.PostForm); without it only redirects continue.
+func (h *Handler) PostForm(form func(c *fiber.Ctx, environment identity.EnvironmentID, action string, fields [][2]string) error) {
+	h.postForm = form
 }
 
 // Usage counts the access tokens fosite issues.
@@ -899,9 +915,25 @@ func (h *Handler) endSession(c *fiber.Ctx) error {
 		}
 		input.Client = id
 	}
-	back, environment, err := h.flows.Logout(c.UserContext(), input)
+	back, environment, session, err := h.flows.Logout(c.UserContext(), input)
 	if err != nil {
 		return h.signedOutPage(c, environment, err)
+	}
+	// The session ended here; a SAML identity provider that opened it is
+	// told next, and its LogoutResponse brings the browser back to back.
+	// A failure upstream never undoes the local logout.
+	if h.upstream != nil && !session.IsZero() {
+		target, fields, ok, uerr := h.upstream.BeginLogout(c.UserContext(), environment, session, back)
+		if uerr != nil {
+			slog.WarnContext(c.UserContext(), "iamkit: upstream logout", "error", uerr)
+		} else if ok {
+			if len(fields) == 0 {
+				return c.Redirect(target, fiber.StatusSeeOther)
+			}
+			if h.postForm != nil {
+				return h.postForm(c, environment, target, fields)
+			}
+		}
 	}
 	if back != "" {
 		return c.Redirect(back, fiber.StatusFound)

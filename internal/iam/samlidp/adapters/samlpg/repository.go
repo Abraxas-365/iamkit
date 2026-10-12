@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -51,7 +52,7 @@ func notFound(err error) error {
 	return failure(err)
 }
 
-const columns = `sp.id, sp.environment_id, sp.name, sp.application_id, a.name AS application_name, sp.resource_id, res.name AS resource_name, sp.entity_id, sp.acs_urls, sp.name_id_format, sp.attributes, sp.created_at`
+const columns = `sp.id, sp.environment_id, sp.name, sp.application_id, a.name AS application_name, sp.resource_id, res.name AS resource_name, sp.entity_id, sp.acs_urls, sp.name_id_format, sp.attributes, sp.slo_url, sp.slo_binding, sp.slo_soap_url, sp.certificate, sp.created_at`
 
 const from = ` FROM saml_service_providers sp JOIN applications a ON a.id=sp.application_id JOIN resources res ON res.id=sp.resource_id`
 
@@ -67,6 +68,10 @@ type row struct {
 	ACS             pq.StringArray             `db:"acs_urls"`
 	NameIDFormat    string                     `db:"name_id_format"`
 	Attributes      []byte                     `db:"attributes"`
+	SLOURL          string                     `db:"slo_url"`
+	SLOBinding      string                     `db:"slo_binding"`
+	SLOSOAPURL      string                     `db:"slo_soap_url"`
+	Certificate     string                     `db:"certificate"`
 	CreatedAt       time.Time                  `db:"created_at"`
 }
 
@@ -75,7 +80,7 @@ func (r row) provider() (samlidp.ServiceProvider, error) {
 	if err := json.Unmarshal(r.Attributes, &attributes); err != nil {
 		return samlidp.ServiceProvider{}, failure(err)
 	}
-	return samlidp.ServiceProvider{ID: r.ID, Environment: r.Environment, Name: r.Name, Application: r.Application, ApplicationName: r.ApplicationName, Resource: r.Resource, ResourceName: r.ResourceName, EntityID: r.EntityID, ACSURLs: []string(r.ACS), NameIDFormat: r.NameIDFormat, Attributes: attributes, CreatedAt: r.CreatedAt}, nil
+	return samlidp.ServiceProvider{ID: r.ID, Environment: r.Environment, Name: r.Name, Application: r.Application, ApplicationName: r.ApplicationName, Resource: r.Resource, ResourceName: r.ResourceName, EntityID: r.EntityID, ACSURLs: []string(r.ACS), NameIDFormat: r.NameIDFormat, Attributes: attributes, SLOURL: r.SLOURL, SLOBinding: r.SLOBinding, SLOSOAPURL: r.SLOSOAPURL, Certificate: r.Certificate, CreatedAt: r.CreatedAt}, nil
 }
 
 func audit(ctx context.Context, tx *sqlx.Tx, m samlidp.Mutation) error {
@@ -107,8 +112,8 @@ func (r *Repository) Create(ctx context.Context, m samlidp.Mutation, sp samlidp.
 	if err != nil {
 		return failure(err)
 	}
-	return r.change(ctx, m, `INSERT INTO saml_service_providers(id,environment_id,application_id,resource_id,name,entity_id,acs_urls,name_id_format,attributes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-		sp.ID, m.Environment, sp.Application, sp.Resource, sp.Name, sp.EntityID, pq.StringArray(sp.ACSURLs), sp.NameIDFormat, attributes)
+	return r.change(ctx, m, `INSERT INTO saml_service_providers(id,environment_id,application_id,resource_id,name,entity_id,acs_urls,name_id_format,attributes,slo_url,slo_binding,slo_soap_url,certificate) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+		sp.ID, m.Environment, sp.Application, sp.Resource, sp.Name, sp.EntityID, pq.StringArray(sp.ACSURLs), sp.NameIDFormat, attributes, sp.SLOURL, sp.SLOBinding, sp.SLOSOAPURL, sp.Certificate)
 }
 
 func (r *Repository) Update(ctx context.Context, m samlidp.Mutation, id identity.ServiceProviderID, input samlidp.Update) error {
@@ -124,8 +129,8 @@ func (r *Repository) Update(ctx context.Context, m samlidp.Mutation, id identity
 		}
 		attributes = raw
 	}
-	return r.change(ctx, m, `UPDATE saml_service_providers SET name=COALESCE($3,name), acs_urls=COALESCE($4,acs_urls), name_id_format=COALESCE($5,name_id_format), attributes=COALESCE($6::jsonb,attributes) WHERE environment_id=$1 AND id=$2`,
-		m.Environment, id, input.Name, acs, input.NameIDFormat, attributes)
+	return r.change(ctx, m, `UPDATE saml_service_providers SET name=COALESCE($3,name), acs_urls=COALESCE($4,acs_urls), name_id_format=COALESCE($5,name_id_format), attributes=COALESCE($6::jsonb,attributes), slo_url=COALESCE($7,slo_url), slo_binding=COALESCE($8,slo_binding), slo_soap_url=COALESCE($9,slo_soap_url), certificate=COALESCE($10,certificate) WHERE environment_id=$1 AND id=$2`,
+		m.Environment, id, input.Name, acs, input.NameIDFormat, attributes, trimmed(input.SLOURL), input.SLOBinding, trimmed(input.SLOSOAPURL), trimmed(input.Certificate))
 }
 
 // Delete removes the provider (audit events keep its ID) and, by cascade,
@@ -245,4 +250,14 @@ func (r *Repository) Subject(ctx context.Context, environment identity.Environme
 		return samlidp.Subject{}, errx.Unauthorized("invalid session context")
 	}
 	return out, failure(err)
+}
+
+// trimmed is the value stored for an optional text field (the service
+// validated the trimmed value).
+func trimmed(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	t := strings.TrimSpace(*v)
+	return &t
 }

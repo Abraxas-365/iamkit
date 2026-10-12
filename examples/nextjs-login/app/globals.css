@@ -54,3 +54,6 @@ button {
   text-align: center;
   color: #78716c;
 }
+main:has([data-iamkit="section"], [data-iamkit="root"] > [data-iamkit="list"]) {
+  max-width: 44rem;
+}

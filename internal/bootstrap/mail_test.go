@@ -122,7 +122,7 @@ func TestPrivateDeliveryTransports(t *testing.T) {
 	for _, opt := range privateDelivery(http.DefaultTransport) {
 		opt(&o)
 	}
-	if o.webhooks != http.DefaultTransport || o.actions != http.DefaultTransport || o.transport != http.DefaultTransport {
+	if o.webhooks != http.DefaultTransport || o.actions != http.DefaultTransport || o.samlLogouts != http.DefaultTransport || o.transport != http.DefaultTransport {
 		t.Fatalf("webhooks=%t actions=%t federation=%t, want all set", o.webhooks != nil, o.actions != nil, o.transport != nil)
 	}
 }
