@@ -54,14 +54,6 @@ func (s *DeliveryService) SetGlobalProvider(provider string) { s.globalProvider 
 // SetRenderer sets the renderer of previews; without one, Preview fails.
 func (s *DeliveryService) SetRenderer(r authentication.Renderer) { s.renderer = r }
 
-// Audited delivery actions; the target is the environment's delivery path
-// (or, for tests, the source used), never the URL or secret.
-const (
-	ActionDeliveryUpdate = "delivery.update"
-	ActionDeliveryDelete = "delivery.delete"
-	ActionDeliveryTest   = "delivery.test"
-)
-
 // SetDeliveryConfig validates and stores the configuration. A provider
 // secret (SMTP password, Resend API key, webhook token) is sealed; left blank
 // while keeping the same provider, a stored SMTP password or API key is kept.
@@ -89,7 +81,7 @@ func (s *DeliveryService) SetDeliveryConfig(ctx context.Context, m authenticatio
 			return err
 		}
 	}
-	m.Action, m.Target = ActionDeliveryUpdate, "/environments/"+m.Environment.String()+"/delivery"
+	m.Action, m.Target = authentication.ActionDeliveryUpdate, "/environments/"+m.Environment.String()+"/delivery"
 	return s.repo.SetDeliveryConfig(ctx, m, input, sealed)
 }
 
@@ -140,7 +132,7 @@ func (s *DeliveryService) DeleteDeliveryConfig(ctx context.Context, m authentica
 	if m.Environment.IsZero() {
 		return errx.Validation("environment_id must be a valid UUID")
 	}
-	m.Action, m.Target = ActionDeliveryDelete, "/environments/"+m.Environment.String()+"/delivery"
+	m.Action, m.Target = authentication.ActionDeliveryDelete, "/environments/"+m.Environment.String()+"/delivery"
 	return s.repo.DeleteDeliveryConfig(ctx, m)
 }
 
@@ -265,7 +257,7 @@ func (s *DeliveryService) TestDelivery(ctx context.Context, m authentication.Mut
 	}
 	email, _ := identity.Email(input.Email)
 	attempt, _ := s.deliver(ctx, m.Environment, authentication.Message{Email: email, Purpose: authentication.PurposeTest})
-	m.Action, m.Target = ActionDeliveryTest, attempt.Source
+	m.Action, m.Target = authentication.ActionDeliveryTest, attempt.Source
 	if err := s.repo.Audit(ctx, m); err != nil {
 		return authentication.Attempt{}, err
 	}

@@ -45,6 +45,9 @@ const (
 )
 
 func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input user.Create) (identity.UserID, error) {
+	if err := input.Validate(); err != nil {
+		return identity.UserID{}, err
+	}
 	return s.create(ctx, environment, input, originAPI)
 }
 
@@ -58,7 +61,7 @@ func (s *Service) Import(ctx context.Context, environment identity.EnvironmentID
 	}
 	out := user.ImportResult{Results: make([]user.ImportRowResult, 0, len(rows))}
 	for i, row := range rows {
-		id, err := s.create(ctx, environment, row, originImport)
+		id, err := s.createRow(ctx, environment, row)
 		if err != nil {
 			out.Failed++
 			out.Results = append(out.Results, user.ImportRowResult{Index: i, Error: rowError(err)})
@@ -68,6 +71,14 @@ func (s *Service) Import(ctx context.Context, environment identity.EnvironmentID
 		out.Results = append(out.Results, user.ImportRowResult{Index: i, ID: &id})
 	}
 	return out, nil
+}
+
+// createRow validates and creates one import row.
+func (s *Service) createRow(ctx context.Context, environment identity.EnvironmentID, row user.Create) (identity.UserID, error) {
+	if err := row.Validate(); err != nil {
+		return identity.UserID{}, err
+	}
+	return s.create(ctx, environment, row, originImport)
 }
 
 // rowError is the public form of a row's failure: errx errors keep their
@@ -81,9 +92,7 @@ func rowError(err error) *user.ImportRowError {
 }
 
 func (s *Service) create(ctx context.Context, environment identity.EnvironmentID, input user.Create, origin string) (identity.UserID, error) {
-	if err := input.Validate(); err != nil {
-		return identity.UserID{}, err
-	}
+	// input is validated by the callers (Create, Import).
 	input.PasswordHash = strings.TrimSpace(input.PasswordHash)
 	if input.PasswordHash != "" {
 		if s.hashes == nil {
@@ -103,16 +112,13 @@ func (s *Service) create(ctx context.Context, environment identity.EnvironmentID
 		return identity.UserID{}, err
 	}
 	input.ExternalID, _ = identity.ExternalID(input.ExternalID) // validated
+	id := identity.NewUserID()
 	if input.Kind == user.KindMachine {
 		input.AvatarURL, _ = identity.AvatarURL(input.AvatarURL) // validated
-		return s.repository.Create(ctx, environment, input, "", origin)
+		return id, s.repository.Create(ctx, environment, id, input, "", origin)
 	}
 	input.Kind = user.KindHuman
-	email, err := identity.Email(input.Email)
-	if err != nil {
-		return identity.UserID{}, errx.Validation("valid email required")
-	}
-	input.Email = email
+	input.Email, _ = identity.Email(input.Email)             // validated
 	input.AvatarURL, _ = identity.AvatarURL(input.AvatarURL) // validated
 	input.Username, _ = identity.Username(input.Username)
 	hash := input.PasswordHash
@@ -126,7 +132,7 @@ func (s *Service) create(ctx context.Context, environment identity.EnvironmentID
 		}
 	}
 	input.Password, input.PasswordHash = "", ""
-	return s.repository.Create(ctx, environment, input, hash, origin)
+	return id, s.repository.Create(ctx, environment, id, input, hash, origin)
 }
 
 // checkPassword applies the environment's policy, tightened by the home

@@ -2,12 +2,12 @@
 package hostedmodule
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted/adapters/hostedhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted/adapters/hostedpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted/hostedsvc"
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
 )
@@ -51,7 +51,7 @@ type Module struct {
 }
 
 func New(deps Deps) Module {
-	service := hostedsvc.New(hostedpg.New(deps.DB), mgmtsecret.Generator{}, deps.Authorizations, deps.Authenticator, deps.Challenges, deps.Federation, deps.SecondFactor)
+	service := hostedsvc.New(hostedpg.New(deps.DB), cryptox.Generator{}, deps.Authorizations, deps.Authenticator, deps.Challenges, deps.Federation, deps.SecondFactor)
 	if deps.SignInPolicies != nil {
 		service.SetSignInPolicies(deps.SignInPolicies)
 	}

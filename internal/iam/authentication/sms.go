@@ -166,6 +166,17 @@ const (
 	ActionSMSTest   = "sms.test"
 )
 
+// Audit actions of the delivery configuration and the email templates; the
+// target is the environment's delivery path (or, for tests, the source
+// used), never the URL or secret.
+const (
+	ActionDeliveryUpdate = "delivery.update"
+	ActionDeliveryDelete = "delivery.delete"
+	ActionDeliveryTest   = "delivery.test"
+	ActionTemplateUpdate = "email_template.updated"
+	ActionTemplateReset  = "email_template.reset"
+)
+
 // SMS failure codes (delivery adapters set them; Describe explains them).
 const (
 	CodeSMSUnavailable         = "SMS_NOT_CONFIGURED"

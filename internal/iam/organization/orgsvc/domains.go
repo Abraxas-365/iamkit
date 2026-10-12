@@ -37,10 +37,10 @@ func verificationToken() (string, error) {
 }
 
 func (s *Domains) AddDomain(ctx context.Context, b organization.Boundary, m organization.Mutation, input organization.DomainInput) (organization.Domain, error) {
-	name, err := identity.Domain(input.Domain)
-	if err != nil {
+	if err := input.Validate(); err != nil {
 		return organization.Domain{}, err
 	}
+	name, _ := identity.Domain(input.Domain) // validated
 	token, err := verificationToken()
 	if err != nil {
 		return organization.Domain{}, err

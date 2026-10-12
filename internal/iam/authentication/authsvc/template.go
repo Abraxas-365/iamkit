@@ -10,12 +10,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
-// Audited template actions; the target is the template's path.
-const (
-	ActionTemplateUpdate = "email_template.updated"
-	ActionTemplateReset  = "email_template.reset"
-)
-
 var (
 	_ authentication.TemplateCommands = (*DeliveryService)(nil)
 	_ authentication.TemplateQueries  = (*DeliveryService)(nil)
@@ -55,7 +49,7 @@ func (s *DeliveryService) SetTemplate(ctx context.Context, m authentication.Muta
 	if err != nil {
 		return err
 	}
-	m.Action, m.Target = ActionTemplateUpdate, templateTarget(m.Environment, key)
+	m.Action, m.Target = authentication.ActionTemplateUpdate, templateTarget(m.Environment, key)
 	return repo.SetTemplate(ctx, m, key, input)
 }
 
@@ -70,7 +64,7 @@ func (s *DeliveryService) ResetTemplate(ctx context.Context, m authentication.Mu
 	if err != nil {
 		return err
 	}
-	m.Action, m.Target = ActionTemplateReset, templateTarget(m.Environment, key)
+	m.Action, m.Target = authentication.ActionTemplateReset, templateTarget(m.Environment, key)
 	return repo.DeleteTemplate(ctx, m, key)
 }
 

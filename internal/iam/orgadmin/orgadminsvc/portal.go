@@ -22,12 +22,6 @@ func NewPortals(repository orgadmin.PortalRepository, issuer string) *Portals {
 	return &Portals{repository: repository, issuer: issuer}
 }
 
-// Action names of the portal's audit events.
-const (
-	ActionPortalEnabled  = "org_admin_portal.enabled"
-	ActionPortalDisabled = "org_admin_portal.disabled"
-)
-
 func (s *Portals) Portal(ctx context.Context, environment identity.EnvironmentID) (orgadmin.Portal, error) {
 	out, err := s.repository.Portal(ctx, environment)
 	if err != nil {
@@ -41,7 +35,7 @@ func (s *Portals) EnablePortal(ctx context.Context, m orgadmin.PortalMutation) (
 	if err != nil {
 		return orgadmin.Portal{}, err
 	}
-	m.Action, m.Target = ActionPortalEnabled, ""
+	m.Action, m.Target = orgadmin.ActionPortalEnabled, ""
 	out, err := s.repository.EnablePortal(ctx, m, identity.NewApplicationID(), identity.NewClientID(), redirects)
 	if err != nil {
 		return out, err
@@ -50,7 +44,7 @@ func (s *Portals) EnablePortal(ctx context.Context, m orgadmin.PortalMutation) (
 }
 
 func (s *Portals) DisablePortal(ctx context.Context, m orgadmin.PortalMutation) error {
-	m.Action, m.Target = ActionPortalDisabled, ""
+	m.Action, m.Target = orgadmin.ActionPortalDisabled, ""
 	return s.repository.DisablePortal(ctx, m)
 }
 

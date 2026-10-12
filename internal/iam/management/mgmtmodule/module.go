@@ -2,11 +2,11 @@
 package mgmtmodule
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/management"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtbcrypt"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtpg"
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtsvc"
 	"github.com/jmoiron/sqlx"
 )
@@ -39,7 +39,7 @@ type Module struct {
 
 func New(deps Deps) Module {
 	repository := mgmtpg.New(deps.DB)
-	secrets := mgmtsecret.Generator{}
+	secrets := cryptox.Generator{}
 	passwords := mgmtbcrypt.Hasher{}
 	auth := mgmtsvc.New(repository, repository, secrets, passwords)
 	control := mgmtsvc.NewControl(repository, secrets)

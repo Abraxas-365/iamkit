@@ -54,7 +54,7 @@ type Deps struct {
 	LogStreamViews      logstream.Queries
 	APIKeys             apikey.Commands
 	APIKeyViews         apikey.Queries
-	// SetupSecrets generates the setup link secrets (mgmtsecret.Generator).
+	// SetupSecrets generates the setup link secrets (cryptox.Generator).
 	SetupSecrets orgadmin.SetupSecrets
 }
 

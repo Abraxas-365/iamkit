@@ -17,10 +17,8 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/httpx"
 	"github.com/Abraxas-365/iamkit/internal/iam/action"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
-	"github.com/Abraxas-365/iamkit/internal/iam/oauth/oauthsvc"
 	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/gofiber/fiber/v2"
@@ -28,6 +26,19 @@ import (
 )
 
 type Provider func(*oauth.Client) (fosite.OAuth2Provider, *oauthfosite.Store, error)
+
+// Tokens is what the endpoints need of IAMKit's own bearer tokens: reading
+// and signing them, and answering machine grants (authhttp.Tokens, injected
+// by bootstrap).
+type Tokens interface {
+	Validate(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error)
+	Self(c *fiber.Ctx) (authentication.Token, authentication.Profile, error)
+	ProfileOf(c *fiber.Ctx, token authentication.Token) (authentication.Profile, error)
+	Verify(c *fiber.Ctx, raw string) (authentication.Token, error)
+	Sign(c *fiber.Ctx, t authentication.Token, audience string) (string, error)
+	IssueMachine(c *fiber.Ctx, account identity.AccountID) (fiber.Map, error)
+	KeyGrant(c *fiber.Ctx, assertion string, boundary authentication.Context) (fiber.Map, error)
+}
 
 // AccountAuthenticator authenticates a service account at the token
 // endpoint (client_credentials): its secret or a private_key_jwt assertion.
@@ -39,7 +50,7 @@ type Handler struct {
 	queries  oauth.Queries
 	flows    oauth.Flows
 	provider Provider
-	tokens   *authhttp.Tokens
+	tokens   Tokens
 	issuer   string
 	actor    func(*fiber.Ctx) string
 	// signedOut renders the end_session result page (hosted module);
@@ -116,7 +127,7 @@ func (h *Handler) SignedOut(page func(c *fiber.Ctx, environment identity.Environ
 	h.signedOut = page
 }
 
-func New(commands oauth.Commands, queries oauth.Queries, flows oauth.Flows, provider Provider, tokens *authhttp.Tokens, issuer string, actor func(*fiber.Ctx) string) *Handler {
+func New(commands oauth.Commands, queries oauth.Queries, flows oauth.Flows, provider Provider, tokens Tokens, issuer string, actor func(*fiber.Ctx) string) *Handler {
 	return &Handler{commands: commands, queries: queries, flows: flows, provider: provider, tokens: tokens, issuer: issuer, actor: actor}
 }
 func env(c *fiber.Ctx) identity.EnvironmentID {
@@ -252,7 +263,7 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	if err != nil {
 		return authorizeClientError(err)
 	}
-	if err = oauthsvc.ValidateAuthorization(h.issuer, client, q); err != nil {
+	if err = oauth.ValidateAuthorization(h.issuer, client, q); err != nil {
 		return err
 	}
 	ar, err := p.NewAuthorizeRequest(req.Context(), req)
@@ -334,7 +345,7 @@ func (h *Handler) complete(c *fiber.Ctx) error {
 		if err != nil {
 			return oauth.Login{}, errx.Forbidden("login does not match client")
 		}
-		if err = oauthsvc.ValidateLogin(access, client); err != nil {
+		if err = oauth.ValidateLogin(access, client); err != nil {
 			return oauth.Login{}, err
 		}
 		return oauth.Login{User: access.Subject, Organization: access.OrganizationID, Session: access.SessionID, Permissions: access.Permissions}, nil
@@ -587,7 +598,7 @@ func (h *Handler) token(c *fiber.Ctx) error {
 			return response(c, w)
 		}
 		session, ok := ar.GetSession().(*oauthfosite.Session)
-		if !ok || session.AccessClaims == nil || oauthsvc.ValidateSession(session.Deadline) != nil {
+		if !ok || session.AccessClaims == nil || oauth.ValidateSession(session.Deadline) != nil {
 			p.WriteAccessError(ctx, w, ar, endedGrant)
 			return response(c, w)
 		}
@@ -765,7 +776,7 @@ func (h *Handler) liveIntrospection(c *fiber.Ctx, caller *oauth.Client, ir fosit
 	if !ok || session.AccessClaims == nil {
 		return false
 	}
-	if oauthsvc.ValidateSession(session.Deadline) != nil {
+	if oauth.ValidateSession(session.Deadline) != nil {
 		return false
 	}
 	owner, err := identity.ParseClientID(ar.GetClient().GetID())
@@ -880,7 +891,7 @@ func (h *Handler) opaqueToken(c *fiber.Ctx, key, raw string) (authentication.Tok
 		return authentication.Token{}, invalid
 	}
 	session, ok := ar.GetSession().(*oauthfosite.Session)
-	if !ok || session.AccessClaims == nil || oauthsvc.ValidateSession(session.Deadline) != nil || ar.GetClient().GetID() != client.ID.String() {
+	if !ok || session.AccessClaims == nil || oauth.ValidateSession(session.Deadline) != nil || ar.GetClient().GetID() != client.ID.String() {
 		return authentication.Token{}, invalid
 	}
 	extra := session.AccessClaims.Extra

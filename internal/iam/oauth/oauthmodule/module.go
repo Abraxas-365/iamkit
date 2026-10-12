@@ -6,9 +6,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpassword"
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthhttp"
@@ -26,11 +24,15 @@ type Deps struct {
 	Keys       signing.Keyring
 	Issuer     string
 	HMACSecret func() string
+	// Passwords hashes client secrets.
+	Passwords oauth.Passwords
 	// Transport reaches clients' jwks_uri and back-channel logout URIs
 	// (nil: public addresses only).
 	Transport http.RoundTripper
-	Tokens    *authhttp.Tokens
-	ActorID   func(*fiber.Ctx) string
+	// Tokens reads, signs and answers IAMKit's own bearer tokens
+	// (authhttp.Tokens).
+	Tokens  oauthhttp.Tokens
+	ActorID func(*fiber.Ctx) string
 }
 type Module struct {
 	// Logouts serves the back-channel logout delivery log.
@@ -51,7 +53,7 @@ type Module struct {
 
 func New(deps Deps) Module {
 	clients := oauthpg.New(deps.DB)
-	service := oauthsvc.New(clients, mgmtsecret.Generator{}, authpassword.Hasher{}, oauthfosite.Hints{Keys: deps.Keys, Issuer: deps.Issuer})
+	service := oauthsvc.New(clients, cryptox.Generator{}, deps.Passwords, oauthfosite.Hints{Keys: deps.Keys, Issuer: deps.Issuer})
 	fetcher := oauthfosite.NewKeyFetcher(deps.Transport)
 	provider := func(client *oauth.Client) (fosite.OAuth2Provider, *oauthfosite.Store, error) {
 		store := &oauthfosite.Store{DB: deps.DB, Environment: client.Environment, Clients: clients}

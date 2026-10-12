@@ -55,14 +55,14 @@ func TestPortalLifecycle(t *testing.T) {
 	if repo.redirects.Callback != base+"/callback" || repo.redirects.SignedOut != base {
 		t.Fatalf("redirects = %+v", repo.redirects)
 	}
-	if m := repo.mutations[0]; m.Action != ActionPortalEnabled || m.Target != "" || m.Actor != "op" {
+	if m := repo.mutations[0]; m.Action != orgadmin.ActionPortalEnabled || m.Target != "" || m.Actor != "op" {
 		t.Fatalf("mutation = %+v", m)
 	}
 	again, _ := s.EnablePortal(ctx, orgadmin.PortalMutation{Environment: env})
 	if again.Client != p.Client {
 		t.Fatal("enabling again registered another client")
 	}
-	if err = s.DisablePortal(ctx, orgadmin.PortalMutation{Environment: env}); err != nil || repo.mutations[2].Action != ActionPortalDisabled {
+	if err = s.DisablePortal(ctx, orgadmin.PortalMutation{Environment: env}); err != nil || repo.mutations[2].Action != orgadmin.ActionPortalDisabled {
 		t.Fatalf("disable = %v %+v", err, repo.mutations)
 	}
 	if p, _ = s.Portal(ctx, env); p.Enabled || p.URL != "" || p.Client.IsZero() {

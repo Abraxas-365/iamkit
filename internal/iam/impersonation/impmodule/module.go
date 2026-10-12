@@ -2,7 +2,6 @@
 package impmodule
 
 import (
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/adapters/imphttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/adapters/imppg"
@@ -11,8 +10,12 @@ import (
 )
 
 type Deps struct {
-	DB     *sqlx.DB
-	Tokens *authhttp.Tokens
+	DB *sqlx.DB
+	// Tokens answers with the impersonation token (authhttp.Tokens.Issue).
+	Tokens imphttp.Issue
+	// Operator reads the management operator of the request
+	// (mgmthttp.Principal).
+	Operator imphttp.Operator
 }
 type Module struct {
 	Commands impersonation.Commands
@@ -21,5 +24,5 @@ type Module struct {
 
 func New(deps Deps) Module {
 	service := impsvc.New(imppg.New(deps.DB))
-	return Module{Commands: service, HTTP: imphttp.New(service, deps.Tokens)}
+	return Module{Commands: service, HTTP: imphttp.New(service, deps.Tokens, deps.Operator)}
 }

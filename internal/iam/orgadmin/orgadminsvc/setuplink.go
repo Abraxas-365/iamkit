@@ -28,10 +28,6 @@ func NewSetupLinks(repository orgadmin.SetupLinkRepository, secrets orgadmin.Set
 	return &SetupLinks{repository: repository, secrets: secrets, issuer: issuer, now: time.Now}
 }
 
-// Action names of the setup link's audit events (create and revoke are
-// audited by their HTTP method and path, see event.Classify).
-const ActionSetupLinkUsed = "org_setup_link.used"
-
 // SetupURL is the link an administrator opens: the secret rides in the
 // fragment, which browsers never send to servers.
 func SetupURL(issuer string, environment identity.EnvironmentID, secret string) string {
@@ -96,6 +92,9 @@ func setupMutation(p orgadmin.Principal) orgadmin.SetupMutation {
 
 func (s *Service) CreateSetupLink(ctx context.Context, p orgadmin.Principal, input orgadmin.SetupLinkInput) (orgadmin.IssuedSetupLink, error) {
 	if err := p.RequireOwner(); err != nil {
+		return orgadmin.IssuedSetupLink{}, err
+	}
+	if err := input.Validate(); err != nil {
 		return orgadmin.IssuedSetupLink{}, err
 	}
 	return s.d.SetupLinks.Create(ctx, setupMutation(p), input)

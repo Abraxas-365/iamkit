@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/bootstrap"
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/migrations"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -195,7 +195,7 @@ func TestIdentityIsolationJourney(t *testing.T) {
 	federationJourney(t, app, key, call, owner, base, env, orgA, user, client, resource)
 	// Separate workspace cannot manage this environment, even with a valid owner key.
 	workspaceB, operatorB := uuid.NewString(), uuid.NewString()
-	foreign, hash, _ := mgmtsecret.Secret("ik_mgmt_")
+	foreign, hash, _ := cryptox.Secret("ik_mgmt_")
 	for _, q := range []struct {
 		sql  string
 		args []any

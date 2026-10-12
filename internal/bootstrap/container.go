@@ -33,6 +33,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhibp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpassword"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/authmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
@@ -48,8 +49,8 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/invmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtbcrypt"
+	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtpg"
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/management/mgmtsvc"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa/mfamodule"
@@ -69,6 +70,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/usage"
 	"github.com/Abraxas-365/iamkit/internal/iam/usage/usagemodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/adapters/userhttp"
+	"github.com/Abraxas-365/iamkit/internal/iam/user/adapters/userschema"
 	"github.com/Abraxas-365/iamkit/internal/iam/user/usermodule"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/server"
@@ -275,9 +277,9 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService)
 	s.SMS = authenticationModule.SMSHTTP
 	mfaModule.Deliver(authenticationModule.DeliveryService, authenticationModule.SMS)
-	userModule := usermodule.New(usermodule.Deps{DB: db, Actions: actionModule.Runner, Quota: usageModule.Commands, ActorID: server.OperatorID, PasswordPolicy: authenticationModule.PasswordPolicies, SMS: authenticationModule.SMS})
+	userModule := usermodule.New(usermodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Actions: actionModule.Runner, Quota: usageModule.Commands, ActorID: server.OperatorID, PasswordPolicy: authenticationModule.PasswordPolicies, SMS: authenticationModule.SMS})
 	s.Users = userModule.HTTP
-	apiKeyModule := apikeymodule.New(apikeymodule.Deps{DB: db, Secrets: mgmtsecret.Generator{}, ActorID: server.OperatorID})
+	apiKeyModule := apikeymodule.New(apikeymodule.Deps{DB: db, Secrets: cryptox.Generator{}, ActorID: server.OperatorID})
 	s.APIKeys = apiKeyModule.HTTP
 	s.APIKeySelf = apiKeyModule.Self(func(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
 		return s.Tokens.Validate(c, environment, audience)
@@ -291,7 +293,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Groups = organizationModule.Groups
 	s.Domains = organizationModule.Domains
 	s.Organizations = organizationModule.HTTP
-	invitationModule := invmodule.New(invmodule.Deps{DB: db, Delivery: authenticationModule.DeliveryService, Quota: usageModule.Commands, ActorID: server.OperatorID, PasswordPolicy: authenticationModule.PasswordPolicies})
+	invitationModule := invmodule.New(invmodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Delivery: authenticationModule.DeliveryService, Quota: usageModule.Commands, ActorID: server.OperatorID, PasswordPolicy: authenticationModule.PasswordPolicies})
 	s.Invitations = invitationModule.HTTP
 	authorizationModule := authzmodule.New(authzmodule.Deps{DB: db, ActorID: server.OperatorID})
 	s.Grants = authorizationModule.Grants
@@ -304,7 +306,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Provisioning = provisioningModule.HTTP
 	applicationModule := appmodule.New(appmodule.Deps{DB: db, Quota: usageModule.Commands, ActorID: server.OperatorID})
 	s.Applications = applicationModule.HTTP
-	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, Tokens: s.Tokens, ActorID: server.OperatorID})
+	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, Tokens: s.Tokens, ActorID: server.OperatorID})
 	s.OAuth = oauthModule.HTTP
 	s.ClientOrigins = oauthModule.Queries
 	s.LogoutDeliveries = oauthModule.Logouts
@@ -316,7 +318,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	logStreamModule := logstreammodule.New(logstreammodule.Deps{DB: db, Cipher: o.sealer, Transport: o.logStreams, ActorID: server.OperatorID})
 	s.LogStreams = logStreamModule.HTTP
 	s.LogStreamDispatcher = logStreamModule.Dispatcher
-	auditLogModule := auditlogmodule.New(auditlogmodule.Deps{DB: db, Retention: o.auditRetention, Usage: usageModule.Commands, ActorID: server.OperatorID})
+	auditLogModule := auditlogmodule.New(auditlogmodule.Deps{DB: db, Schemas: userschema.Validator{}, Retention: o.auditRetention, Usage: usageModule.Commands, ActorID: server.OperatorID})
 	s.AuditLogEvents = auditLogModule.Events
 	s.AuditLogActions = auditLogModule.Actions
 	s.Workers = &worker.Runner{}
@@ -371,7 +373,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	serviceAccountModule := sacctmodule.New(sacctmodule.Deps{DB: db, ActorID: server.OperatorID, Owner: server.Owner})
 	s.ServiceAccounts = serviceAccountModule.HTTP
 	s.Activity = managementModule.Activity
-	impersonationModule := impmodule.New(impmodule.Deps{DB: db, Tokens: s.Tokens})
+	impersonationModule := impmodule.New(impmodule.Deps{DB: db, Tokens: s.Tokens.Issue, Operator: mgmthttp.Principal})
 	s.Impersonation = impersonationModule.HTTP
 
 	// /api/v1/* route group — JWT auth with scoped permissions.
@@ -392,7 +394,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Directories: provisioningModule.ControlCommands, DirectoryViews: provisioningModule.ControlQueries,
 		AuditLogs: auditLogModule.EventQueries, LogStreams: logStreamModule.Commands, LogStreamViews: logStreamModule.Queries,
 		APIKeys: apiKeyModule.Commands, APIKeyViews: apiKeyModule.Queries,
-		SetupSecrets: mgmtsecret.Generator{},
+		SetupSecrets: cryptox.Generator{},
 	})
 	s.API.WithSetup(orgAdmin.SetupLinkQueries)
 	apiUsers := userhttp.New(userModule.Commands, userModule.Queries, actor)
@@ -444,7 +446,7 @@ func orgAdminCaller(c *fiber.Ctx) orgadminhttp.Caller {
 }
 func Management(db *sqlx.DB) *mgmtsvc.Service {
 	repo := mgmtpg.New(db)
-	return mgmtsvc.New(repo, repo, mgmtsecret.Generator{}, nil)
+	return mgmtsvc.New(repo, repo, cryptox.Generator{}, nil)
 }
 
 // ManagementWithPasswords returns a management service that can also set
@@ -452,7 +454,7 @@ func Management(db *sqlx.DB) *mgmtsvc.Service {
 // is set.
 func ManagementWithPasswords(db *sqlx.DB) *mgmtsvc.Service {
 	repo := mgmtpg.New(db)
-	return mgmtsvc.New(repo, repo, mgmtsecret.Generator{}, mgmtbcrypt.Hasher{})
+	return mgmtsvc.New(repo, repo, cryptox.Generator{}, mgmtbcrypt.Hasher{})
 }
 
 // OpenDatabase connects to DATABASE_URL through an OpenTelemetry-wrapped

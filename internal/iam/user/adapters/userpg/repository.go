@@ -59,11 +59,10 @@ func phoneUnverifiable(err error) bool {
 
 // Create inserts the user and, with a home organization, the membership
 // in it, in one transaction.
-func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, input user.Create, hash string, origin string) (identity.UserID, error) {
-	id := identity.NewUserID()
+func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, id identity.UserID, input user.Create, hash string, origin string) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
-		return id, failure(err, "create user")
+		return failure(err, "create user")
 	}
 	defer tx.Rollback()
 	metadata := "{}"
@@ -72,29 +71,29 @@ func (r *Repository) Create(ctx context.Context, environment identity.Environmen
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO users(id,environment_id,email,name,password_hash,otp_enabled,avatar_url,username,home_organization_id,kind,external_id,email_verified,metadata) VALUES($1,$2,nullif($3,''),$4,$5,$6,$7,nullif($8,''),$9,$10,nullif($11,''),$12,$13::jsonb)`, id, environment, input.Email, input.Name, hash, input.OTPEnabled, input.AvatarURL, input.Username, input.HomeOrganization, kind(input.Kind), input.ExternalID, input.EmailVerified, metadata)
 	if usernameTaken(err) {
-		return id, errx.Conflict("username is taken")
+		return errx.Conflict("username is taken")
 	}
 	if externalIDTaken(err) {
-		return id, errx.Conflict("external_id is taken")
+		return errx.Conflict("external_id is taken")
 	}
 	if emailTaken(err) {
-		return id, errx.Conflict("email is taken")
+		return errx.Conflict("email is taken")
 	}
 	if homeMissing(err) {
-		return id, errx.Validation("home_organization_id must be an organization of the environment")
+		return errx.Validation("home_organization_id must be an organization of the environment")
 	}
 	if err != nil {
-		return id, failure(err, "user already exists")
+		return failure(err, "user already exists")
 	}
 	if !input.HomeOrganization.IsZero() {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO memberships(environment_id,organization_id,user_id) VALUES($1,$2,$3)`, environment, input.HomeOrganization, id); err != nil {
-			return id, failure(err, "create membership")
+			return failure(err, "create membership")
 		}
 	}
 	if err = eventpg.UserCreated(ctx, tx, environment, event.ActorFrom(ctx), id, input.HomeOrganization, origin); err != nil {
-		return id, err
+		return err
 	}
-	return id, failure(tx.Commit(), "commit user")
+	return failure(tx.Commit(), "commit user")
 }
 
 // homeMissing reports a home organization outside the environment.

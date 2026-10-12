@@ -3,15 +3,13 @@ package oauthsvc
 import (
 	"context"
 	"crypto/subtle"
-	"slices"
-	"strings"
-	"time"
-
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
+	"slices"
+	"strings"
 )
 
 type Service struct {
@@ -297,44 +295,4 @@ func (s *Service) Access(ctx context.Context, client *oauth.Client, subject iden
 		return authentication.Access{}, errx.Unauthorized("invalid session context")
 	}
 	return s.repository.Access(ctx, client, subject, session, organization)
-}
-func ValidateAuthorization(issuer string, client *oauth.Client, query map[string][]string) error {
-	if err := identity.ValidateIssuer(issuer); err != nil {
-		return err
-	}
-	get := func(key string) string {
-		v := query[key]
-		if len(v) == 0 {
-			return ""
-		}
-		return v[0]
-	}
-	for key, v := range query {
-		if len(v) != 1 || key == "request" || key == "request_uri" {
-			return errx.Validation("invalid authorization request")
-		}
-	}
-	if !client.RedirectRegistered(get("redirect_uri")) || get("response_type") != "code" || get("code_challenge_method") != "S256" || get("code_challenge") == "" || get("state") == "" || get("nonce") == "" || (get("response_mode") != "" && get("response_mode") != "query") {
-		return errx.Validation("code, exact redirect, S256, state and nonce required")
-	}
-	if _, err := oauth.ConnectionHint(query); err != nil {
-		return err
-	}
-	if _, err := oauth.ParseInteraction(query); err != nil {
-		return err
-	}
-	_, err := oauth.OrganizationHint(query)
-	return err
-}
-func ValidateLogin(access authentication.Token, client *oauth.Client) error {
-	if access.Impersonated() || access.Purpose != "application" || access.ApplicationID != client.Application || access.ResourceID != client.Resource {
-		return errx.Forbidden("login does not match client")
-	}
-	return nil
-}
-func ValidateSession(deadline time.Time) error {
-	if !deadline.After(time.Now()) {
-		return errx.Unauthorized("session expired")
-	}
-	return nil
 }

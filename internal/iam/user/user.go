@@ -201,8 +201,15 @@ func (c Create) Validate() error {
 	if _, err := identity.ExternalID(c.ExternalID); err != nil {
 		return err
 	}
-	_, err := identity.AvatarURL(c.AvatarURL)
-	return err
+	if _, err := identity.AvatarURL(c.AvatarURL); err != nil {
+		return err
+	}
+	if c.Kind != KindMachine {
+		if _, err := identity.Email(c.Email); err != nil {
+			return errx.Validation("valid email required")
+		}
+	}
+	return nil
 }
 
 // NoMetadata reports whether the create carries no metadata (absent, empty

@@ -2,6 +2,7 @@ package orgadminsvc
 
 import (
 	"context"
+	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/iam/auditlog"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
@@ -21,6 +22,9 @@ func (s *Service) AuditLogs(ctx context.Context, p orgadmin.Principal, filter au
 		return auditlog.Page{}, err
 	}
 	filter.Organization = p.Organization
+	if err := filter.Validate(); err != nil {
+		return auditlog.Page{}, err
+	}
 	return s.d.AuditLogs.List(ctx, p.Environment, filter, limit)
 }
 
@@ -29,6 +33,9 @@ func (s *Service) ExportAuditLogs(ctx context.Context, p orgadmin.Principal, fil
 		return err
 	}
 	filter.Organization = p.Organization
+	if err := filter.Validate(); err != nil {
+		return err
+	}
 	return s.d.AuditLogs.Export(ctx, p.Environment, filter, write)
 }
 
@@ -80,11 +87,23 @@ func (s *Service) CreateLogStream(ctx context.Context, p orgadmin.Principal, inp
 	}
 	// The scope names the organization; a body that names another one is
 	// refused by the service.
+	input.Name = strings.TrimSpace(input.Name)
+	input.Config = input.Config.Normalize()
+	if err := input.Validate(); err != nil {
+		return logstream.Created{}, err
+	}
 	return s.d.LogStreams.Create(ctx, streamMutation(p, logstream.ActionCreate), input)
 }
 
 func (s *Service) UpdateLogStream(ctx context.Context, p orgadmin.Principal, stream identity.LogStreamID, input logstream.Update) (logstream.Stream, error) {
 	if err := p.Require(authorization.PermOrgLogStreamsWrite); err != nil {
+		return logstream.Stream{}, err
+	}
+	if input.Name != nil {
+		name := strings.TrimSpace(*input.Name)
+		input.Name = &name
+	}
+	if err := input.Validate(); err != nil {
 		return logstream.Stream{}, err
 	}
 	if err := s.d.LogStreams.Update(ctx, streamMutation(p, logstream.ActionUpdate), stream, input); err != nil {

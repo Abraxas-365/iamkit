@@ -9,6 +9,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/worker"
 	"net/http"
 
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedhttp"
@@ -17,7 +18,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedsaml"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/fedsvc"
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/signing"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
@@ -68,7 +68,7 @@ func New(deps Deps) Module {
 	}
 	directory := fedldap.New(deps.Cipher, deps.LDAPAllowed, deps.LDAPDial)
 	repository := fedpg.New(deps.DB)
-	service := fedsvc.New(repository, provider, directory, deps.Cipher, mgmtsecret.Generator{}, deps.Sessions, deps.Issuer)
+	service := fedsvc.New(repository, provider, directory, deps.Cipher, cryptox.Generator{}, deps.Sessions, deps.Issuer)
 	service.SetLogout(saml, repository)
 	if deps.Actions != nil {
 		service.SetActions(deps.Actions)

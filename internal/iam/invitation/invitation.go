@@ -26,6 +26,9 @@ const (
 	StatusExpired  = "expired"
 )
 
+// Clock is injected so expiry is testable.
+type Clock func() time.Time
+
 type Boundary struct {
 	Environment  identity.EnvironmentID
 	Organization identity.OrganizationID

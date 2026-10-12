@@ -10,7 +10,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/auditlog/adapters/auditloghttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/auditlog/adapters/auditlogpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/auditlog/auditlogsvc"
-	"github.com/Abraxas-365/iamkit/internal/iam/user/adapters/userschema"
 	"github.com/Abraxas-365/iamkit/internal/worker"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
@@ -20,8 +19,9 @@ type Deps struct {
 	DB *sqlx.DB
 	// Retention is how long events are kept (IAMKIT_AUDIT_LOG_RETENTION).
 	Retention time.Duration
-	// Schemas compiles and applies the actions' JSON Schemas (default: the
-	// userschema validator, the same draft 2020-12 rules as user schemas).
+	// Schemas compiles and applies the actions' JSON Schemas (required; the
+	// composition root passes the userschema validator, the same draft
+	// 2020-12 rules as user schemas).
 	Schemas auditlog.SchemaValidator
 	// Usage limits and counts ingest (nil: none).
 	Usage   auditlog.Usage
@@ -42,9 +42,6 @@ type Module struct {
 }
 
 func New(deps Deps) Module {
-	if deps.Schemas == nil {
-		deps.Schemas = userschema.Validator{}
-	}
 	actionRepository := auditlogpg.NewActions(deps.DB)
 	actions := auditlogsvc.NewActions(actionRepository, deps.Schemas)
 	events := auditlogsvc.New(auditlogpg.NewEvents(deps.DB), actionRepository, deps.Schemas, deps.Retention)

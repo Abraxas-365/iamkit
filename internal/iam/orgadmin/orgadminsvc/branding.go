@@ -33,6 +33,9 @@ func (s *Service) SaveBranding(ctx context.Context, p orgadmin.Principal, input 
 	if err := p.Require(authorization.PermOrgSettingsWrite); err != nil {
 		return hosted.OrganizationSettings{}, err
 	}
+	if err := input.Validate(); err != nil {
+		return hosted.OrganizationSettings{}, err
+	}
 	return s.d.Branding.SaveOrganizationSettings(ctx, hostedMutation(p), p.Organization, input)
 }
 
@@ -57,6 +60,9 @@ func (s *Service) PasswordPolicy(ctx context.Context, p orgadmin.Principal) (aut
 
 func (s *Service) SetPasswordPolicy(ctx context.Context, p orgadmin.Principal, input authentication.PasswordRequirements) (authentication.PasswordRequirements, error) {
 	if err := p.Require(authorization.PermOrgSettingsWrite); err != nil {
+		return authentication.PasswordRequirements{}, err
+	}
+	if err := input.Validate(); err != nil {
 		return authentication.PasswordRequirements{}, err
 	}
 	return s.d.PasswordPolicies.SetOrganizationPasswordPolicy(ctx, authMutation(p), p.Organization, input)

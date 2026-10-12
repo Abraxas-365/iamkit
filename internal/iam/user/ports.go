@@ -148,9 +148,9 @@ type Queries interface {
 }
 
 type Repository interface {
-	// Create inserts the user; origin is the user.created event's
-	// data.origin ("api", "import").
-	Create(ctx context.Context, environment identity.EnvironmentID, input Create, passwordHash string, origin string) (identity.UserID, error)
+	// Create inserts the user under the ID the service generated; origin is
+	// the user.created event's data.origin ("api", "import").
+	Create(ctx context.Context, environment identity.EnvironmentID, id identity.UserID, input Create, passwordHash string, origin string) error
 	List(ctx context.Context, environment identity.EnvironmentID, filter Filter, page query.Pagination) (query.Paginated[User], error)
 	Find(ctx context.Context, environment identity.EnvironmentID, user identity.UserID) (User, error)
 	Update(ctx context.Context, m Mutation, user identity.UserID, input Update) error

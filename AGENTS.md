@@ -271,7 +271,8 @@ consumed by services.
 ### Rules
 
 1. **`ports.go` contains only interfaces.** No structs, no constants, no
-   `Validate()` methods. One file, predictable location.
+   `Validate()` methods. One file, predictable location. Enforced by
+   `TestPortsAreInterfaces`.
 
 2. **Domain files are named after the aggregate**, not `models.go` or `types.go`:
    `resource.go`, `grant.go`, `connection.go`, `credential.go`, etc.
@@ -280,12 +281,28 @@ consumed by services.
    `Validate() error` on a value receiver. One field → one error message.
 
 4. **Services are thin orchestrators.** They call `input.Validate()`, generate
-   IDs, enforce cross-entity invariants, and delegate to the repository.
+   IDs, enforce cross-entity invariants, and delegate to the repository. A
+   `*svc` package exports no constants or variables (statuses, actions and
+   purposes live in the domain package; tuning knobs stay unexported):
+   `TestServicesExportNoConstants`. Repositories never call
+   `identity.New<Entity>ID()`: `TestRepositoriesDoNotGenerateIDs`.
 
 5. **Adapters never import other adapters** (except `authpg.Resolve` which is
    shared SQL reused by `fedpg` and `oauthpg` for session resolution, and
    `eventpg`, the event writer every `*pg` adapter calls in its own
-   transaction — only `*pg` packages may import it).
+   transaction — only `*pg` packages may import it). The layer rules
+   (foundation → domain → svc → module/adapters, only the composition root
+   imports assemblers and adapters, domain and `*svc` import no SQL or
+   transport) are enforced by `TestLayerDependencies`
+   (`internal/architecture/layers_test.go`). Its only exceptions are the
+   `sharedSQL` and `siblingAdapters` maps, each entry with its reason
+   (`oauthhttp` → `oauthfosite`). Anything a module needs from another
+   module's adapter (`authhttp.Tokens`, `mgmthttp.Principal`,
+   `authpassword.Hasher`, the `userschema` validator) is declared as a
+   consumer-side port or function type and injected through `Deps` by
+   bootstrap (`imphttp.Issue`/`Operator`, `oauthhttp.Tokens`,
+   `invitation`/`oauth.Passwords`, `usermodule.Passwords`,
+   `auditlogmodule.Deps.Schemas`).
 
 6. **Module assemblers are the only place** where concrete adapter types appear
    together. They return a `Module` struct with interface-typed fields.
@@ -651,6 +668,12 @@ Rules:
 - Cross-entity checks (permissions ⊆ catalog, prefix enforcement) stay in services.
 - `Update` structs with `*T` fields validate only non-nil fields.
 - ID fields are typed (`identity.XID`) so they don't need UUID format validation.
+- An exported method of a `*svc` package that takes a type with `Validate()`
+  calls `<param>.Validate()` itself, and a `Validate()` calls `Validate()` on
+  its fields that have one: `TestServicesValidateInputs`
+  (`internal/architecture/validate_test.go`). Exceptions are the
+  `validateExempt` map, each with its reason (`authentication.Context` is a
+  partial scope by design; the optional `federation.Return`).
 
 ### Where Validation Happens
 

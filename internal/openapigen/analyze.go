@@ -290,6 +290,8 @@ var Bindings = map[string]string{
 	"github.com/Abraxas-365/iamkit/internal/iam/federation/adapters/fedhttp.Handler.hosted":     "github.com/Abraxas-365/iamkit/internal/iam/hosted/adapters/hostedhttp.(*Handler).Federated",
 	// The OAuth side of bootstrap's finisher (SAML tickets render a form).
 	"github.com/Abraxas-365/iamkit/internal/iam/hosted/adapters/hostedhttp.Handler.finish": "github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthhttp.(*Handler).Finish",
+	// Impersonation answers through the token writer bootstrap injects.
+	"github.com/Abraxas-365/iamkit/internal/iam/impersonation/adapters/imphttp.Handler.issue": "github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp.(*Tokens).Issue",
 }
 
 func fieldName(s *types.Selection) string {

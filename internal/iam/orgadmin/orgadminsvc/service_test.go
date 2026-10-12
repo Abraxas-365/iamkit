@@ -345,13 +345,13 @@ func TestInvitationRolesChecked(t *testing.T) {
 func TestConnectionsStayInTheOrganization(t *testing.T) {
 	f := newFixture()
 	p := principal(manager, authorization.PermOrgSSOWrite, authorization.PermOrgRead)
-	_, err := f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", SecretEnv: "DATABASE_URL"})
+	_, err := f.CreateConnection(ctx, p, federation.ConnectionInput{Issuer: "https://idp.example.com", Client: "client", ClientSecret: "not-a-real-secret", Name: "x", SecretEnv: "DATABASE_URL"})
 	kind(t, err, 400)
-	_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", Organization: otherOrg})
+	_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Issuer: "https://idp.example.com", Client: "client", ClientSecret: "not-a-real-secret", Name: "x", Organization: otherOrg})
 	kind(t, err, 400)
-	_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", SignupOrganization: otherOrg})
+	_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Issuer: "https://idp.example.com", Client: "client", ClientSecret: "not-a-real-secret", Name: "x", SignupOrganization: otherOrg})
 	kind(t, err, 400)
-	if _, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x"}); err != nil {
+	if _, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Issuer: "https://idp.example.com", Client: "client", ClientSecret: "not-a-real-secret", Name: "x"}); err != nil {
 		t.Fatal(err)
 	}
 	if f.connections.created[0].Organization != org {
@@ -423,11 +423,11 @@ func TestConnectionGroupsFollowTheAssignmentRule(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			mapped := []federation.GroupMapping{{Value: "staff", Group: emptyGroup}, {Value: "root", Group: ownersGroup}}
-			_, err := f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", JITGroup: ownersGroup})
+			_, err := f.CreateConnection(ctx, p, federation.ConnectionInput{Issuer: "https://idp.example.com", Client: "client", ClientSecret: "not-a-real-secret", Name: "x", JITGroup: ownersGroup})
 			kind(t, err, 403)
-			_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", SignupGroup: powerGroup})
+			_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Issuer: "https://idp.example.com", Client: "client", ClientSecret: "not-a-real-secret", Name: "x", SignupGroup: powerGroup})
 			kind(t, err, 403)
-			_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", GroupMappings: mapped})
+			_, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Issuer: "https://idp.example.com", Client: "client", ClientSecret: "not-a-real-secret", Name: "x", GroupMappings: mapped})
 			kind(t, err, 403)
 			id := identity.NewConnectionID()
 			kind(t, f.UpdateConnection(ctx, p, id, federation.ConnectionUpdate{JITGroup: &ownersGroup}), 403)
@@ -436,7 +436,7 @@ func TestConnectionGroupsFollowTheAssignmentRule(t *testing.T) {
 
 			// Groups without roles, and unset ones, pass.
 			before := len(f.connections.created)
-			if _, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Name: "x", JITGroup: emptyGroup, GroupMappings: mapped[:1]}); err != nil {
+			if _, err = f.CreateConnection(ctx, p, federation.ConnectionInput{Issuer: "https://idp.example.com", Client: "client", ClientSecret: "not-a-real-secret", Name: "x", JITGroup: emptyGroup, GroupMappings: mapped[:1]}); err != nil {
 				t.Fatal(err)
 			}
 			if err = f.UpdateConnection(ctx, p, id, federation.ConnectionUpdate{JITGroup: &emptyGroup}); err != nil {
@@ -450,7 +450,7 @@ func TestConnectionGroupsFollowTheAssignmentRule(t *testing.T) {
 
 	// A fully privileged owner may point a connection at the owners group.
 	all := principal(owner, authorization.OrgPermissions...)
-	if _, err := f.CreateConnection(ctx, all, federation.ConnectionInput{Name: "x", JITGroup: ownersGroup}); err != nil {
+	if _, err := f.CreateConnection(ctx, all, federation.ConnectionInput{Issuer: "https://idp.example.com", Client: "client", ClientSecret: "not-a-real-secret", Name: "x", JITGroup: ownersGroup}); err != nil {
 		t.Fatalf("owner: %v", err)
 	}
 }

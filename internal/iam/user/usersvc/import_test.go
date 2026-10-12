@@ -23,12 +23,12 @@ type importRepository struct {
 	taken   map[string]bool
 }
 
-func (r *importRepository) Create(_ context.Context, _ identity.EnvironmentID, input user.Create, hash, origin string) (identity.UserID, error) {
+func (r *importRepository) Create(_ context.Context, _ identity.EnvironmentID, _ identity.UserID, input user.Create, hash, origin string) error {
 	if r.taken[input.Email] {
-		return identity.UserID{}, errx.Conflict("email is taken")
+		return errx.Conflict("email is taken")
 	}
 	r.created = append(r.created, createRecord{input, hash, origin})
-	return identity.NewUserID(), nil
+	return nil
 }
 
 type hashChecker struct{ seen []string }
@@ -132,7 +132,7 @@ func TestImport(t *testing.T) {
 	repo := &importRepository{taken: map[string]bool{"dup@example.com": true}}
 	svc := service(repo)
 	svc.SetPasswordHashes(&hashChecker{})
-	svc.SetQuota(&quotaStub{left: 4})
+	svc.SetQuota(&quotaStub{left: 3})
 
 	out, err := svc.Import(ctx, env, []user.Create{
 		{Email: "one@example.com", Name: "One", PasswordHash: bcryptSample},
@@ -145,8 +145,8 @@ func TestImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Quota: one, dup, bad (email is checked after admission) and three use it up;
-	// the bad hash fails before admission; four is refused.
+	// Quota: one, dup and three use it up; the bad email and the bad hash fail
+	// before admission; four is refused.
 	if out.Created != 2 || out.Failed != 4 || len(out.Results) != 6 {
 		t.Fatalf("out = %+v", out)
 	}

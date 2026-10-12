@@ -73,9 +73,6 @@ func nullBytes(b []byte) any {
 }
 
 func (r *Attempts) Record(ctx context.Context, a risk.Attempt, loginHash, deviceHash []byte) error {
-	if a.ID.IsZero() {
-		a.ID = identity.NewSignInAttemptID()
-	}
 	if a.Detections == nil {
 		a.Detections = []string{}
 	}

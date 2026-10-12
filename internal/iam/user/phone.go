@@ -21,6 +21,10 @@ const (
 	ActionPhoneVerifiedSet = "user.phone_verified_set"
 )
 
+// PurposePhone is the SMS purpose of phone verification codes (it must name
+// authentication.SMSPurposePhone, which the SMS provider accepts).
+const PurposePhone = "phone_verification"
+
 // PhoneVerification is a number the user asked to verify: the hashed code
 // texted to it and the counters that limit sends and guesses. One per user;
 // asking for another number replaces the number and code but keeps the

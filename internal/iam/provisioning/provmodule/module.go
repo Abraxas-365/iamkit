@@ -2,7 +2,7 @@
 package provmodule
 
 import (
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning/adapters/provhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/provisioning/adapters/provpg"
@@ -30,12 +30,12 @@ type Module struct {
 
 func New(deps Deps) Module {
 	repository := provpg.New(deps.DB)
-	service := provsvc.New(repository, mgmtsecret.Generator{})
+	service := provsvc.New(repository, cryptox.Generator{})
 	if deps.Quota != nil {
 		service.SetQuota(deps.Quota)
 	}
 	groups := provsvc.NewGroups(repository)
-	control := provsvc.NewControl(repository, mgmtsecret.Generator{})
+	control := provsvc.NewControl(repository, cryptox.Generator{})
 	return Module{
 		Commands: service, Queries: service,
 		GroupCommands: groups, GroupQueries: groups,

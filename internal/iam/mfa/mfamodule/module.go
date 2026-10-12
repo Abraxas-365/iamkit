@@ -2,8 +2,8 @@
 package mfamodule
 
 import (
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa/adapters/mfahttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/mfa/adapters/mfapg"
@@ -42,7 +42,7 @@ type Module struct {
 }
 
 func New(deps Deps) Module {
-	service := mfasvc.New(mfapg.New(deps.DB), mfatotp.TOTP{}, deps.Cipher, mgmtsecret.Generator{}, deps.Clock)
+	service := mfasvc.New(mfapg.New(deps.DB), mfatotp.TOTP{}, deps.Cipher, cryptox.Generator{}, deps.Clock)
 	relying := mfawebauthn.New(deps.Issuer, deps.Origins)
 	service.SetRelying(relying)
 	// Without a relying party (issuer on an IP address) nothing offers

@@ -17,6 +17,10 @@ const (
 	SetupSessionPrefix = "ik_setupsess_"
 )
 
+// Action names of the setup link's audit events (create and revoke are
+// audited by their HTTP method and path, see event.Classify).
+const ActionSetupLinkUsed = "org_setup_link.used"
+
 // Setup intents: what a setup link lets its holder configure.
 const (
 	IntentSSO       = "sso"

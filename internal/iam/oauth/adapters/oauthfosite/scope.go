@@ -9,7 +9,7 @@ import (
 
 // scopeStrategy is fosite's wildcard matching plus the organization hint
 // scope (urn:iamkit:org:id:<id>), which any client may request; the ID
-// itself is checked by oauthsvc.ValidateAuthorization.
+// itself is checked by oauth.ValidateAuthorization.
 func scopeStrategy(haystack []string, needle string) bool {
 	if strings.HasPrefix(needle, oauth.OrganizationScopePrefix) {
 		return true

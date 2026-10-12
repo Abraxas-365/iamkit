@@ -2,7 +2,7 @@
 package sacctmodule
 
 import (
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/adapters/saccthttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/serviceaccount/adapters/sacctpg"
@@ -24,6 +24,6 @@ type Module struct {
 }
 
 func New(deps Deps) Module {
-	service := sacctsvc.New(sacctpg.New(deps.DB), mgmtsecret.Generator{})
+	service := sacctsvc.New(sacctpg.New(deps.DB), cryptox.Generator{})
 	return Module{Commands: service, Queries: service, HTTP: saccthttp.New(service, service, deps.ActorID, deps.Owner)}
 }

@@ -1,13 +1,11 @@
-package oauthsvc
+package oauth
 
 import (
 	"testing"
-
-	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 )
 
 func TestValidateAuthorizationIssuer(t *testing.T) {
-	client := &oauth.Client{Redirects: []string{"http://localhost:3000/callback"}}
+	client := &Client{Redirects: []string{"http://localhost:3000/callback"}}
 	query := map[string][]string{
 		"redirect_uri": {client.Redirects[0]}, "response_type": {"code"},
 		"code_challenge_method": {"S256"}, "code_challenge": {"challenge"},
@@ -37,7 +35,7 @@ func TestValidateAuthorizationIssuer(t *testing.T) {
 }
 
 func TestValidateAuthorizationInteraction(t *testing.T) {
-	client := &oauth.Client{Redirects: []string{"https://app.example/callback"}}
+	client := &Client{Redirects: []string{"https://app.example/callback"}}
 	for _, tc := range []struct {
 		name  string
 		extra map[string]string

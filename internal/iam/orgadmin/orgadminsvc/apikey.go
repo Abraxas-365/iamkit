@@ -40,6 +40,9 @@ func (s *Service) CreateAPIKey(ctx context.Context, p orgadmin.Principal, input 
 	if input.Organization.IsZero() {
 		input.Organization = p.Organization
 	}
+	if err := input.Validate(); err != nil {
+		return apikey.Issued{}, err
+	}
 	return s.d.APIKeys.Create(ctx, s.keyMutation(p), input)
 }
 

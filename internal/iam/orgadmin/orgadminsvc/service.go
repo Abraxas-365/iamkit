@@ -135,6 +135,9 @@ func (s *Service) UpdateMember(ctx context.Context, p orgadmin.Principal, member
 	if err := p.Require(authorization.PermOrgMembersWrite); err != nil {
 		return err
 	}
+	if err := input.Validate(); err != nil {
+		return err
+	}
 	if err := s.member(ctx, p, member); err != nil {
 		return err
 	}
@@ -213,6 +216,9 @@ func (s *Service) Users(ctx context.Context, p orgadmin.Principal, filter user.F
 	}
 	filter.HomeOrganization = p.Organization
 	filter.Kind = user.KindHuman // machine users are operators' business
+	if err := filter.Validate(); err != nil {
+		return query.Paginated[user.User]{}, err
+	}
 	out, err := s.d.UserQueries.List(ctx, p.Environment, filter, page)
 	for i := range out.Items {
 		out.Items[i].Metadata = nil // operators' data
@@ -316,6 +322,9 @@ func (s *Service) RoleAssignments(ctx context.Context, p orgadmin.Principal, u i
 }
 
 func (s *Service) AssignRole(ctx context.Context, p orgadmin.Principal, input orgadmin.Assignment) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
 	if err := s.assignable(ctx, p, input); err != nil {
 		return err
 	}
@@ -325,6 +334,9 @@ func (s *Service) AssignRole(ctx context.Context, p orgadmin.Principal, input or
 // UnassignRole removes a role. Only owners change an owner's roles, and
 // the last owner keeps the owner role.
 func (s *Service) UnassignRole(ctx context.Context, p orgadmin.Principal, input orgadmin.Assignment) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
 	if err := s.assignable(ctx, p, input); err != nil {
 		return err
 	}
@@ -471,6 +483,9 @@ func (s *Service) Invitations(ctx context.Context, p orgadmin.Principal, filter 
 	if err := p.Require(authorization.PermOrgMembersRead); err != nil {
 		return query.Paginated[invitation.Invitation]{}, err
 	}
+	if err := filter.Validate(); err != nil {
+		return query.Paginated[invitation.Invitation]{}, err
+	}
 	return s.d.InvitationViews.List(ctx, s.invitationBoundary(p), filter, page)
 }
 
@@ -478,6 +493,9 @@ func (s *Service) Invitations(ctx context.Context, p orgadmin.Principal, filter 
 // may assign.
 func (s *Service) Invite(ctx context.Context, p orgadmin.Principal, input invitation.Input) (invitation.Issued, error) {
 	if err := p.Require(authorization.PermOrgInvitationsWrite); err != nil {
+		return invitation.Issued{}, err
+	}
+	if err := input.Validate(); err != nil {
 		return invitation.Issued{}, err
 	}
 	if (len(input.Roles) > 0 || len(input.Groups) > 0) && !p.Has(authorization.PermOrgRolesAssign) {
@@ -543,6 +561,9 @@ func (s *Service) Domains(ctx context.Context, p orgadmin.Principal, page query.
 
 func (s *Service) AddDomain(ctx context.Context, p orgadmin.Principal, input organization.DomainInput) (organization.Domain, error) {
 	if err := p.Require(authorization.PermOrgDomainsWrite); err != nil {
+		return organization.Domain{}, err
+	}
+	if err := input.Validate(); err != nil {
 		return organization.Domain{}, err
 	}
 	return s.d.Domains.AddDomain(ctx, boundary(p), orgMutation(p), input)
@@ -615,6 +636,9 @@ func (s *Service) CreateConnection(ctx context.Context, p orgadmin.Principal, in
 	for _, m := range input.GroupMappings {
 		groups = append(groups, m.Group)
 	}
+	if err := input.Validate(); err != nil {
+		return identity.ConnectionID{}, err
+	}
 	if err := s.groupsAssignable(ctx, p, groups); err != nil {
 		return identity.ConnectionID{}, err
 	}
@@ -654,6 +678,9 @@ func (s *Service) UpdateConnection(ctx context.Context, p orgadmin.Principal, id
 	}
 	for _, m := range input.GroupMappings {
 		groups = append(groups, m.Group)
+	}
+	if err := input.Validate(); err != nil {
+		return err
 	}
 	if err := s.groupsAssignable(ctx, p, groups); err != nil {
 		return err

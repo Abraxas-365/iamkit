@@ -65,7 +65,7 @@ func TestSetTemplate(t *testing.T) {
 	if got.Subject != "Tu código {{code}}" || got.Body != "Hola\n\n{{email}}" {
 		t.Fatalf("not normalized: %+v", got)
 	}
-	if a := repo.audited[0]; a.Action != ActionTemplateUpdate || !strings.HasSuffix(a.Target, "/delivery/templates/login/es") || a.Actor != "op" {
+	if a := repo.audited[0]; a.Action != authentication.ActionTemplateUpdate || !strings.HasSuffix(a.Target, "/delivery/templates/login/es") || a.Actor != "op" {
 		t.Fatalf("audit %+v", a)
 	}
 
@@ -73,7 +73,7 @@ func TestSetTemplate(t *testing.T) {
 	if err := s.SetTemplate(ctx, m, key, authentication.Copy{Subject: "  "}); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := repo.saved[key]; ok || repo.audited[1].Action != ActionTemplateReset {
+	if _, ok := repo.saved[key]; ok || repo.audited[1].Action != authentication.ActionTemplateReset {
 		t.Fatalf("empty wording kept: %+v", repo.audited)
 	}
 
@@ -111,7 +111,7 @@ func TestResetTemplateIdempotent(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if len(repo.audited) != 2 || repo.audited[0].Action != ActionTemplateReset {
+	if len(repo.audited) != 2 || repo.audited[0].Action != authentication.ActionTemplateReset {
 		t.Fatalf("audits %+v", repo.audited)
 	}
 	if err := s.ResetTemplate(ctx, m, authentication.TemplateKey{Purpose: "invitation", Locale: "xx"}); err == nil {

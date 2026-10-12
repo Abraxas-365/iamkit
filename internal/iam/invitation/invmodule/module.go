@@ -2,19 +2,20 @@
 package invmodule
 
 import (
-	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authpassword"
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invmail"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/adapters/invpg"
 	"github.com/Abraxas-365/iamkit/internal/iam/invitation/invsvc"
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
 )
 
 type Deps struct {
 	DB *sqlx.DB
+	// Passwords hashes new accounts' passwords.
+	Passwords invitation.Passwords
 	// Delivery sends invitation mail; nil skips delivery (the operator gets
 	// the token in the response).
 	Delivery invmail.Sender
@@ -37,7 +38,7 @@ func New(deps Deps) Module {
 	if deps.Delivery != nil {
 		mailer = invmail.Mailer{Sender: deps.Delivery}
 	}
-	service := invsvc.New(invpg.New(deps.DB), mgmtsecret.Generator{}, authpassword.Hasher{}, mailer, nil)
+	service := invsvc.New(invpg.New(deps.DB), cryptox.Generator{}, deps.Passwords, mailer, nil)
 	if deps.PasswordPolicy != nil {
 		service.SetPasswordPolicy(deps.PasswordPolicy)
 	}

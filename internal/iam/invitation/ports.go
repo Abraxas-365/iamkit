@@ -80,9 +80,6 @@ type Mailer interface {
 	Link(ctx context.Context, environment identity.EnvironmentID, token string) (string, error)
 }
 
-// Clock is injected so expiry is testable.
-type Clock func() time.Time
-
 // Quota admits a creation within the environment's limits (usage.Commands):
 // limit usage.LimitUsers when accepting creates the account → 422
 // QUOTA_EXCEEDED.

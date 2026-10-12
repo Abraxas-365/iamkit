@@ -13,9 +13,6 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
-// PurposePhone is the SMS purpose of phone verification codes.
-const PurposePhone = "phone_verification"
-
 // Phones implements self-service phone verification.
 type Phones struct {
 	repository user.PhoneRepository
@@ -61,7 +58,7 @@ func (s *Phones) StartPhoneVerification(ctx context.Context, m user.Mutation, id
 	}
 	// The code is stored before it is sent: a failed text leaves nothing
 	// usable, and the cooldown still applies.
-	if err = s.sms.SendSMS(ctx, m.Environment, phone, PurposePhone, code); err != nil {
+	if err = s.sms.SendSMS(ctx, m.Environment, phone, user.PurposePhone, code); err != nil {
 		return user.PhoneCodeSent{}, err
 	}
 	return user.PhoneCodeSent{Destination: user.MaskPhone(phone), ExpiresAt: sent.Expires.UTC()}, nil

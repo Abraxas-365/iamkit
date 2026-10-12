@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
-	"github.com/Abraxas-365/iamkit/internal/iam/management/adapters/mgmtsecret"
+	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/samlidp"
 	"github.com/Abraxas-365/iamkit/internal/iam/samlidp/adapters/samlhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/samlidp/adapters/samlpg"
@@ -45,7 +45,7 @@ type Module struct {
 func New(deps Deps) Module {
 	repository := samlpg.New(deps.DB)
 	protocol := samlxml.New(deps.Keys, deps.Issuer)
-	service := samlsvc.New(repository, protocol, mgmtsecret.Generator{})
+	service := samlsvc.New(repository, protocol, cryptox.Generator{})
 	service.SetLogout(repository, protocol, samlxml.NewSender(deps.Transport))
 	handler := samlhttp.New(service, service, service, deps.ActorID)
 	handler.Logout(service)

@@ -11,6 +11,12 @@ import (
 // SystemClient marks the portal's OAuth client (oauth_clients.system).
 const SystemClient = "org_admin"
 
+// Action names of the portal's audit events.
+const (
+	ActionPortalEnabled  = "org_admin_portal.enabled"
+	ActionPortalDisabled = "org_admin_portal.disabled"
+)
+
 // PortalApplication is the name of the application IAMKit registers for
 // the portal.
 const PortalApplication = "Organization admin portal"
