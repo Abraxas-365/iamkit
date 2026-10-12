@@ -311,4 +311,15 @@ const (
 	WaitlistMaxApprove = 500
 	// WaitlistMaxDomains caps a sign-in policy's auto-approve domains.
 	WaitlistMaxDomains = 50
+	// WaitlistRetention is how long completed and rejected waitlist entries
+	// are kept (counted from their decision) unless IAMKIT_WAITLIST_RETENTION
+	// says otherwise. Pending and approved entries are never pruned.
+	WaitlistRetention = 365 * 24 * time.Hour
+	// WaitlistPruneBatch is how many entries one prune round deletes; a full
+	// batch makes the worker run again at once.
+	WaitlistPruneBatch = 5000
+	// SignupAnswerFloor is the least time a successful sign-up request takes
+	// to answer: a new address does database writes an existing account does
+	// not, and without a floor the latency tells them apart.
+	SignupAnswerFloor = 250 * time.Millisecond
 )

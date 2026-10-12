@@ -121,6 +121,10 @@
   "hosted.test.nameid_format": "NameID format",
   "hosted.test.attributes": "Attributes received",
   "hosted.test.none": "not sent",
+  "hosted.title.test_start": "Тестовий вхід",
+  "hosted.test.start_intro": "Тестовий вхід для підключення єдиного входу готовий.",
+  "hosted.test.start_note": "Вас буде перенаправлено до постачальника посвідчень. Нічого не створюється: ні сеансу, ні користувача, ні зв'язку. Продовжуйте, лише якщо ви замовляли цей тест.",
+  "hosted.test.start_button": "Почати тестовий вхід",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",
   "hosted.title.sign_out_failed": "Не вдалося вийти",
 

@@ -121,6 +121,10 @@
   "hosted.test.nameid_format": "NameID format",
   "hosted.test.attributes": "Attributes received",
   "hosted.test.none": "not sent",
+  "hosted.title.test_start": "Test sign-in",
+  "hosted.test.start_intro": "A test sign-in for a single sign-on connection is ready.",
+  "hosted.test.start_note": "You will be sent to the identity provider. Nothing is created: no session, user or link. Continue only if you requested this test.",
+  "hosted.test.start_button": "Start test sign-in",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",
 
   "hosted.notice.code_sent": "If the account can sign in with a code, we sent an 8-digit code to %s.",

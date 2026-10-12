@@ -35,6 +35,8 @@ type Service struct {
 	// mail tracks code emails still being sent after their response
 	// (deliverLater).
 	mail sync.WaitGroup
+	// signupFloor is the least time a successful Signup takes.
+	signupFloor time.Duration
 }
 
 // deliverLater sends a code email after the caller answered: how long the
@@ -90,7 +92,7 @@ func (s *Service) emailAdmitted(ctx context.Context, environment identity.Enviro
 }
 
 func New(repository authentication.Repository, passwords authentication.Passwords, secrets authentication.Secrets, delivery authentication.Delivery) *Service {
-	return &Service{repository: repository, passwords: passwords, secrets: secrets, delivery: delivery}
+	return &Service{repository: repository, passwords: passwords, secrets: secrets, delivery: delivery, signupFloor: config.SignupAnswerFloor}
 }
 func (s *Service) SetDeliveryService(ds *DeliveryService) { s.deliverySvc = ds }
 

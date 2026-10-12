@@ -18,7 +18,7 @@ settings appear:
 | --- | --- |
 | `waitlist` | Hold new sign-ups for approval. Needs `allow_signup` (400 otherwise) |
 | `waitlist_auto_approve_domains` | Email domains (at most 50) approved on the spot, for example your company's |
-| `waitlist_signup_url` | Your sign-up page, HTTPS (HTTP only on loopback). `?waitlist=<token>` is appended to it. Empty: the approval email carries the token but no link |
+| `waitlist_signup_url` | Your sign-up page, HTTPS (HTTP only on loopback). `?waitlist=<token>` is appended to it. Its origin must be IAMKit's own or listed in `allowed_origins` of an active [OAuth client](../applications/custom-sign-in-ui.md) of the environment, else 422. Empty: the approval email carries the token but no link |
 
 ```sh
 iam sign-in-policy set --allow-signup --signup-organization ORG_UUID \
@@ -33,7 +33,16 @@ client that does not know the waitlist never turns it off. Turning
 `allow_signup` off also requires turning `waitlist` off.
 
 The approval email links to `waitlist_signup_url` with the token in the query,
-so point it only at a page you control. The list holds at most 100,000 pending
+so IAMKit only accepts a page whose origin (`scheme://host[:port]`) is its own
+issuer or an `allowed_origins` entry of an active OAuth client of an active
+application in the environment: whoever can edit the policy cannot point the
+link at a foreign host and collect tokens. The check runs when the page is set
+or changed (422 `waitlist_signup_url must be IAMKit's origin or an allowed_origins
+entry of one of the environment's OAuth clients`; saving the policy with the
+stored page unchanged is not re-checked, so other edits are never blocked) and
+again on every approval:
+if the client was disabled or lost the origin since, the email still carries
+the token but no link, and the server logs a warning. The list holds at most 100,000 pending
 entries; past that, joins are dropped silently to the person (the answer never
 changes) and logged as `waitlist full: join dropped` — turn on
 [CAPTCHA](bot-protection.md) for public sign-up pages. An approval
@@ -57,7 +66,10 @@ access*) is empty and tells you how to enable it.
 
 The answer is the same for a new address, one already waiting and one that
 already has an account, so it never reveals which exist. Show the same
-"thanks, we'll email you" text in every case. New entries receive a
+"thanks, we'll email you" text in every case. To keep the response time from
+telling them apart either, a successful sign-up answer is never sent sooner
+than 250 ms after the request arrived, counted from after the password hash when
+there is one (errors answer at once). New entries receive a
 `waitlist_joined` email. Risk screening, restrictions, CAPTCHA and rate limits
 apply exactly as they do to sign-up. An address on an auto-approve domain skips
 the list and gets the normal code at once.
@@ -90,6 +102,16 @@ old one stops working.
 
 Entries are `pending`, `approved`, `rejected` or `completed`. At most 100,000
 entries can be pending in an environment.
+
+### Retention
+
+An hourly background job (`waitlist_prune`) deletes `completed` and `rejected`
+entries decided longer ago than `IAMKIT_WAITLIST_RETENTION` (default `8760h`,
+365 days; a Go duration of at least `24h`, an invalid value stops start-up).
+Age counts from `decided_at` (completing an entry sets no time of its own, so
+a completed entry ages from its approval; `created_at` is used when there is
+none). `pending` and `approved` entries are never pruned, and pruning writes
+no events. Pruning a rejected entry lets that address join again.
 
 ## Operating the list
 

@@ -23,12 +23,27 @@ type Waitlists struct {
 	secrets    authentication.Secrets
 	service    *Service
 	now        func() time.Time
+	retention  time.Duration
 }
 
 // NewWaitlists builds the waitlist use cases; service sends the emails
 // (after the response, like sign-up codes) and reads the sign-in policy.
 func NewWaitlists(repository authentication.WaitlistRepository, secrets authentication.Secrets, service *Service) *Waitlists {
-	return &Waitlists{repository: repository, secrets: secrets, service: service, now: time.Now}
+	return &Waitlists{repository: repository, secrets: secrets, service: service, now: time.Now, retention: config.WaitlistRetention}
+}
+
+// SetRetention sets how long completed and rejected entries are kept (the
+// default is config.WaitlistRetention); d <= 0 keeps the default.
+func (w *Waitlists) SetRetention(d time.Duration) {
+	if d > 0 {
+		w.retention = d
+	}
+}
+
+// Prune deletes one batch of completed and rejected entries decided longer
+// ago than the retention.
+func (w *Waitlists) Prune(ctx context.Context) (int, error) {
+	return w.repository.PruneWaitlist(ctx, w.now().Add(-w.retention), config.WaitlistPruneBatch)
 }
 
 var (
@@ -66,10 +81,31 @@ func (w *Waitlists) Approve(ctx context.Context, m authentication.Mutation, id i
 	if err != nil {
 		return authentication.WaitlistEntry{}, err
 	}
-	return w.approve(ctx, m, id, policy)
+	return w.approve(ctx, m, id, w.linkBase(ctx, m.Environment, policy))
 }
 
-func (w *Waitlists) approve(ctx context.Context, m authentication.Mutation, id identity.WaitlistEntryID, policy authentication.SignInPolicy) (authentication.WaitlistEntry, error) {
+// linkBase is the policy's waitlist_signup_url when its origin is still
+// allowed (an OAuth client may have been disabled or lost the origin since
+// it was saved), else "": the approval email then carries the token without
+// a link, never a link to an unlisted host. A failed check counts as not
+// allowed.
+func (w *Waitlists) linkBase(ctx context.Context, environment identity.EnvironmentID, policy authentication.SignInPolicy) string {
+	base := policy.WaitlistURL()
+	if base == "" || w.service.signIns == nil {
+		// No page, or no allowlist wired to check it against: no link.
+		return ""
+	}
+	allowed, err := w.service.signIns.SignupURLAllowed(ctx, environment, base)
+	if err != nil || !allowed {
+		slog.WarnContext(ctx, "waitlist_signup_url is not an allowed origin: approval emails carry no link", "environment", environment, "err", err)
+		return ""
+	}
+	return base
+}
+
+// approve decides one entry; linkBase is the already checked sign-up page
+// ("" for no link).
+func (w *Waitlists) approve(ctx context.Context, m authentication.Mutation, id identity.WaitlistEntryID, linkBase string) (authentication.WaitlistEntry, error) {
 	raw, hash, err := w.secrets.Generate(authentication.WaitlistTokenPrefix)
 	if err != nil {
 		return authentication.WaitlistEntry{}, err
@@ -81,7 +117,7 @@ func (w *Waitlists) approve(ctx context.Context, m authentication.Mutation, id i
 		return authentication.WaitlistEntry{}, err
 	}
 	message := authentication.Message{Email: entry.Email, Purpose: authentication.PurposeWaitlistApproved, Token: raw,
-		Link: authentication.WaitlistLink(policy.WaitlistURL(), raw), ExpiresAt: &expires, Locale: i18n.Match(entry.Locale)}
+		Link: authentication.WaitlistLink(linkBase, raw), ExpiresAt: &expires, Locale: i18n.Match(entry.Locale)}
 	w.service.deliverLater(ctx, m.Environment, message, "waitlist_entry", id, "environment", m.Environment, "purpose", message.Purpose)
 	return entry, nil
 }
@@ -119,8 +155,9 @@ func (w *Waitlists) ApproveMany(ctx context.Context, m authentication.Mutation, 
 			ids = append(ids, e.ID)
 		}
 	}
+	base := w.linkBase(ctx, m.Environment, policy)
 	for _, id := range ids {
-		if _, err := w.approve(ctx, m, id, policy); err != nil {
+		if _, err := w.approve(ctx, m, id, base); err != nil {
 			var e *errx.Error
 			if !errx.As(err, &e) || (e.Type != errx.TypeNotFound && e.Code != authentication.CodeWaitlistNotPending) {
 				slog.ErrorContext(ctx, "waitlist approval failed", "waitlist_entry", id, "err", err)

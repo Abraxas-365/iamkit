@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication/adapters/authhttp"
@@ -21,6 +22,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
 	"github.com/Abraxas-365/iamkit/internal/iam/signing"
 	"github.com/Abraxas-365/iamkit/internal/identity"
+	"github.com/Abraxas-365/iamkit/internal/worker"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jmoiron/sqlx"
 )
@@ -46,6 +48,9 @@ type Deps struct {
 	Usage authentication.Usage
 	// Mail configures how emails IAMKit renders are written and sent.
 	Mail Mail
+	// WaitlistRetention is how long completed and rejected waitlist entries
+	// are kept (<= 0: config.WaitlistRetention).
+	WaitlistRetention time.Duration
 }
 
 // Mail configures rendered email: the deployment default language, the
@@ -110,6 +115,8 @@ type Module struct {
 	// WaitDeliveries waits for code emails still being sent after their
 	// response (shutdown, tests).
 	WaitDeliveries func(timeout time.Duration) bool
+	// Jobs are the background jobs (waitlist pruning).
+	Jobs []worker.Job
 }
 type federationSessions struct{ service *authsvc.Service }
 
@@ -154,9 +161,11 @@ func New(deps Deps) Module {
 	policies := authsvc.NewPasswordPolicies(authpg.NewPasswordPolicyRepository(deps.DB), deps.Breaches)
 	service.SetPasswordPolicies(policies)
 	signIns := authsvc.NewSignInPolicies(authpg.NewSignInPolicyRepository(deps.DB))
+	signIns.SetIssuer(deps.Issuer)
 	service.SetSignInPolicies(signIns)
 	service.SetSignups(repo)
 	waitlists := authsvc.NewWaitlists(repo, authsecret.Generator{}, service)
+	waitlists.SetRetention(deps.WaitlistRetention)
 	if deps.Actions != nil {
 		service.SetActions(deps.Actions)
 	}
@@ -225,5 +234,12 @@ func New(deps Deps) Module {
 		Brand:          func(b authentication.Branding) { branding.b.Store(&b) },
 		Risk:           service.SetRisk,
 		WaitDeliveries: service.WaitDeliveries,
+		Jobs: []worker.Job{
+			// Completed and rejected waitlist entries past the retention.
+			{Name: "waitlist_prune", Interval: time.Hour, Run: func(ctx context.Context) (bool, error) {
+				n, err := waitlists.Prune(ctx)
+				return n >= config.WaitlistPruneBatch, err
+			}},
+		},
 	}
 }

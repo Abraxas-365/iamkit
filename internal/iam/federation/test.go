@@ -24,6 +24,15 @@ type TestTicket struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+// TestLink is what the interstitial of a test connection link carries: the
+// path's environment and connection and the ticket of its query, none of
+// them checked against the database (opening the link spends nothing).
+type TestLink struct {
+	Environment identity.EnvironmentID
+	Connection  identity.ConnectionID
+	Ticket      string
+}
+
 // TestResult is the outcome of a test sign-in, rendered as a page and
 // recorded as the connection.tested event. It never carries secrets, and
 // producing it creates no session, user, link or action run.

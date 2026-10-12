@@ -40,7 +40,7 @@ var script string
 
 var pages = func() map[string]*template.Template {
 	out := map[string]*template.Template{}
-	for _, name := range []string{"identify", "password", "directory", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "test", "signup", "signup-code", "waitlisted", "device", "device-confirm", "post"} {
+	for _, name := range []string{"identify", "password", "directory", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "test", "test-start", "signup", "signup-code", "waitlisted", "device", "device-confirm", "post"} {
 		t := template.Must(template.ParseFS(files, "templates/*.html"))
 		template.Must(t.New("content").Parse(`{{template "` + name + `/content" .}}`))
 		out[name] = t
@@ -201,6 +201,8 @@ type view struct {
 	Post *PostForm
 	// Test is the test connection result the "test" page shows.
 	Test *federation.TestResult
+	// TestStart is the test connection link the "test-start" page posts.
+	TestStart *federation.TestLink
 	// Preview renders a sample for the console's script-less frame: what
 	// the page script reveals in a browser with WebAuthn is shown.
 	Preview bool
@@ -972,6 +974,23 @@ func (h *Handler) TestResult(c *fiber.Ctx, result federation.TestResult) error {
 		v.Title, v.Error = v.T("hosted.title.test_failed"), v.T("hosted.test.failed")
 	}
 	return render(c, fiber.StatusOK, "test", v)
+}
+
+// TestStart is the page a test connection link opens on: a button that
+// posts the ticket, so that only a person starts the sign-in (link scanners
+// and prefetchers only ever GET). It reads the environment's branding only;
+// the ticket is neither looked up nor shown. The CSP sets no form-action:
+// browsers apply it to the redirect that follows the post too, which goes to
+// the identity provider.
+func (h *Handler) TestStart(c *fiber.Ctx, link federation.TestLink) error {
+	settings := hosted.Settings{}
+	if s, err := h.queries.Settings(c.UserContext(), link.Environment); err == nil {
+		settings = s
+	}
+	v := view{Lang: environmentLanguage(c, settings), Brand: brandOf(settings, ""), TestStart: &link}
+	h.word(c, &v, link.Environment, hosted.TextScope{})
+	v.Title, v.Subtitle = v.T("hosted.title.test_start"), v.T("hosted.test.start_intro")
+	return render(c, fiber.StatusOK, "test-start", v)
 }
 
 // environmentLanguage is the configured language (organization, client or

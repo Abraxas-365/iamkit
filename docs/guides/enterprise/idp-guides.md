@@ -122,17 +122,21 @@ iam federation enable CONNECTION_ID
 
 `POST …/federation-connections/:id/test` (organization admins:
 `POST …/organizations/:organization/admin/connections/:connection/test`,
-`iam:org:sso:write`) returns `{"url", "expires_at"}`. The URL carries a
+`iam:org:sso:write`) returns `{"url", "expires_at"}` and records
+`connection.test_requested` (actor = the administrator). The URL carries a
 one-time `ik_fedtest_` ticket valid for 10 minutes (`FederationTestTTL`). Open
-it in a browser: it redirects to the IdP, and when you come back IAMKit shows
-what it received (subject, email, whether the email is verified, name, groups)
-or why it failed. A test works for OIDC and SAML connections, active or draft;
-LDAP has none.
+it in a browser: it shows a short page with a **Start test sign-in** button.
+Opening the link spends nothing, so email and chat link scanners cannot use up
+the ticket; the button posts it and redirects to the IdP, and when you come back
+IAMKit shows what it received (subject, email, whether the email is verified,
+name, groups) or why it failed. A test works for OIDC and SAML connections,
+active or draft; LDAP has none.
 
 A test creates no session, no user and no link, and nothing about the claims is
 stored. It records only `connection.tested` with the connection and whether it
 succeeded. A used, expired or foreign ticket answers 401 `invalid or expired
-test connection link`; a draft without metadata is 422.
+test connection link` when the button is pressed (the page itself only checks
+the ticket's shape); a draft without metadata is 422.
 
 ## Troubleshooting
 

@@ -11,10 +11,34 @@ import (
 // SignInPolicies implements the sign-in policy use cases.
 type SignInPolicies struct {
 	repository authentication.SignInPolicyRepository
+	// issuerOrigin is IAMKit's own origin, always allowed as the
+	// waitlist sign-up page ("" when the issuer is unknown: tests).
+	issuerOrigin string
 }
 
 func NewSignInPolicies(repository authentication.SignInPolicyRepository) *SignInPolicies {
 	return &SignInPolicies{repository: repository}
+}
+
+// SetIssuer tells the service IAMKit's issuer, whose origin a
+// waitlist_signup_url may point at without being an OAuth client origin.
+func (p *SignInPolicies) SetIssuer(issuer string) {
+	p.issuerOrigin, _ = authentication.URLOrigin(issuer)
+}
+
+// SignupURLAllowed reports whether raw may be the waitlist sign-up page of
+// the environment: its origin is IAMKit's own or listed in allowed_origins
+// of an active OAuth client of an active application. An approval link to
+// anywhere else would hand sign-up tokens to a foreign host.
+func (p *SignInPolicies) SignupURLAllowed(ctx context.Context, environment identity.EnvironmentID, raw string) (bool, error) {
+	origin, ok := authentication.URLOrigin(raw)
+	if !ok {
+		return false, nil
+	}
+	if origin == p.issuerOrigin {
+		return true, nil
+	}
+	return p.repository.SignupOriginAllowed(ctx, environment, origin)
 }
 
 var (
@@ -35,7 +59,11 @@ func (p *SignInPolicies) SignInPolicy(ctx context.Context, environment identity.
 }
 
 func (p *SignInPolicies) SetSignInPolicy(ctx context.Context, m authentication.Mutation, input authentication.SignInPolicy) (authentication.SignInPolicy, error) {
-	if input.AllowedFactors == nil || input.AllowPasskey == nil || input.RequireTerms == nil ||
+	// The sign-up page's origin is checked when it is set or changed: a
+	// stored page whose origin was later dropped must not block unrelated
+	// edits (approval emails re-check it and leave the link out).
+	checkURL := input.WaitlistSignupURL != nil && *input.WaitlistSignupURL != ""
+	if checkURL || input.AllowedFactors == nil || input.AllowPasskey == nil || input.RequireTerms == nil ||
 		input.Waitlist == nil || input.WaitlistAutoApproveDomains == nil || input.WaitlistSignupURL == nil {
 		current, err := p.SignInPolicy(ctx, m.Environment)
 		if err != nil {
@@ -64,6 +92,8 @@ func (p *SignInPolicies) SetSignInPolicy(ctx context.Context, m authentication.M
 		if input.WaitlistSignupURL == nil {
 			url := current.WaitlistURL()
 			input.WaitlistSignupURL = &url
+		} else if *input.WaitlistSignupURL == current.WaitlistURL() {
+			checkURL = false
 		}
 	}
 	if err := input.Validate(); err != nil {
@@ -82,6 +112,15 @@ func (p *SignInPolicies) SetSignInPolicy(ctx context.Context, m authentication.M
 		}
 	}
 	m.Action, m.Target = authentication.ActionSignInPolicyUpdated, signInTarget(m.Environment)
+	if u := input.WaitlistURL(); checkURL && u != "" {
+		allowed, err := p.SignupURLAllowed(ctx, m.Environment, u)
+		if err != nil {
+			return authentication.SignInPolicy{}, err
+		}
+		if !allowed {
+			return authentication.SignInPolicy{}, errx.Business("waitlist_signup_url must be IAMKit's origin or an allowed_origins entry of one of the environment's OAuth clients")
+		}
+	}
 	if err := p.repository.SetSignInPolicy(ctx, m, input); err != nil {
 		return authentication.SignInPolicy{}, err
 	}

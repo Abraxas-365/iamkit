@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -165,6 +166,25 @@ func (r *Repository) RejectWaitlist(ctx context.Context, m authentication.Mutati
 			WHERE environment_id=$1 AND id=$2 AND status IN ('pending','approved') RETURNING `+waitlistColumns, m.Environment, id, m.Actor)
 		return out, err
 	})
+}
+
+// PruneWaitlist deletes up to limit completed or rejected entries decided
+// before the cutoff. Completing an entry sets no timestamp of its own, so a
+// completed entry ages from its approval (decided_at); created_at stands in
+// for rows without one. Pending and approved entries are never touched: the
+// status is checked again on the locked row, so an entry reopened meanwhile
+// stays. No audit row and no event: this is retention, not a decision.
+func (r *Repository) PruneWaitlist(ctx context.Context, before time.Time, limit int) (int, error) {
+	res, err := r.db.ExecContext(ctx, `DELETE FROM waitlist_entries WHERE id IN (
+		SELECT id FROM waitlist_entries
+		WHERE status IN ('completed','rejected') AND COALESCE(decided_at, created_at) < $1
+		ORDER BY COALESCE(decided_at, created_at) LIMIT $2 FOR UPDATE SKIP LOCKED)
+		AND status IN ('completed','rejected')`, before, limit)
+	if err != nil {
+		return 0, failure(err)
+	}
+	n, err := res.RowsAffected()
+	return int(n), failure(err)
 }
 
 func (r *Repository) DeleteWaitlist(ctx context.Context, m authentication.Mutation, id identity.WaitlistEntryID) error {

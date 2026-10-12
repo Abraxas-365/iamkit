@@ -22,6 +22,10 @@ var _ authentication.SignupCommands = (*Service)(nil)
 // refused as disabled).
 func (s *Service) SetSignups(r authentication.SignupRepository) { s.signups = r }
 
+// SetSignupFloor sets the least time a successful Signup takes to answer
+// (default config.SignupAnswerFloor; 0 turns the floor off, tests).
+func (s *Service) SetSignupFloor(d time.Duration) { s.signupFloor = max(d, 0) }
+
 // signupMethods are the methods new accounts may use: the environment's
 // narrowed by the sign-up organization's (none when sign-up is off or the
 // organization is not active).
@@ -53,7 +57,27 @@ func signupMethod(passwordHash string) string {
 // rejects, an email domain whose organization enforces single sign-on) are
 // answered; an email with an account gets the same answer as a new one and
 // no email, so sign-up never reveals which addresses have accounts.
-func (s *Service) Signup(ctx context.Context, input authentication.Signup) (authentication.SignupResult, error) {
+func (s *Service) Signup(ctx context.Context, input authentication.Signup) (result authentication.SignupResult, err error) {
+	started := time.Now()
+	defer func() {
+		if err != nil {
+			return
+		}
+		// Every successful answer takes at least the floor, whether the
+		// address is new (database writes), waiting, or already an account
+		// (none). Errors stay immediate. A password sign-up restarts the
+		// clock after hashing (which costs the same for every address and
+		// may outlast the floor), so the writes behind it stay covered.
+		if wait := s.signupFloor - time.Since(started); wait > 0 {
+			timer := time.NewTimer(wait)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				result, err = authentication.SignupResult{}, ctx.Err()
+			}
+		}
+	}()
 	if input.Environment.IsZero() {
 		return authentication.SignupResult{}, errx.Validation("environment_id is required")
 	}
@@ -107,6 +131,7 @@ func (s *Service) Signup(ctx context.Context, input authentication.Signup) (auth
 		if hash, err = s.signupPassword(ctx, input.Environment, policy.SignupOrganization, input.Password); err != nil {
 			return authentication.SignupResult{}, err
 		}
+		started = time.Now()
 	}
 	required, err := tx.SSORequired(ctx, input.Environment, email)
 	if err != nil {

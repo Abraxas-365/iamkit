@@ -121,6 +121,10 @@
   "hosted.test.nameid_format": "NameID format",
   "hosted.test.attributes": "Attributes received",
   "hosted.test.none": "not sent",
+  "hosted.title.test_start": "Autentificare de test",
+  "hosted.test.start_intro": "O autentificare de test pentru o conexiune de autentificare unică este pregătită.",
+  "hosted.test.start_note": "Veți fi trimis la furnizorul de identitate. Nu se creează nimic: nicio sesiune, niciun utilizator, nicio legătură. Continuați doar dacă ați solicitat acest test.",
+  "hosted.test.start_button": "Începe autentificarea de test",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",
   "hosted.title.sign_out_failed": "Deconectarea a eșuat",
 

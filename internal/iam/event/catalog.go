@@ -114,6 +114,11 @@ const (
 	ConnectionUpdated  = "connection.updated"
 	ConnectionDisabled = "connection.disabled"
 	ConnectionEnabled  = "connection.enabled"
+	// ConnectionTestRequested: an administrator issued a test sign-in link
+	// for the connection (actor: whoever asked; data organization_id for
+	// organization calls). Nothing is tested yet: connection.tested follows
+	// when the sign-in ends.
+	ConnectionTestRequested = "connection.test_requested"
 	// ConnectionTested: a test sign-in of the connection ended (data
 	// success, connection_id, organization_id; actor: whoever asked for
 	// it). No session, user or link exists after it.

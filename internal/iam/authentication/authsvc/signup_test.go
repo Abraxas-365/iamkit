@@ -134,8 +134,66 @@ func signupPolicy() authentication.SignInPolicy {
 func signupService(store *signupStore, policy authentication.SignInPolicy, delivery authentication.Delivery) *Service {
 	s := withSignIn(New(testRepository{&testTransaction{}}, testPasswords{}, testSecrets{}, delivery), policy)
 	s.SetSignups(store)
+	s.SetSignupFloor(0)
 	return s
 }
+
+// A successful answer takes at least the floor, new address or account
+// alike; refusals answer at once; a cancelled context ends the wait.
+func TestSignupAnswerFloor(t *testing.T) {
+	const floor = 120 * time.Millisecond
+	for name, exists := range map[string]bool{"new": false, "account": true} {
+		store := newSignupStore()
+		store.exists = exists
+		s := signupService(store, signupPolicy(), &recordingDelivery{})
+		s.SetSignupFloor(floor)
+		started := time.Now()
+		if _, err := s.Signup(context.Background(), signupInput()); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if took := time.Since(started); took < floor {
+			t.Fatalf("%s answered in %v, under the floor", name, took)
+		}
+	}
+	off := signupPolicy()
+	off.AllowSignup = false
+	s := signupService(newSignupStore(), off, &recordingDelivery{})
+	s.SetSignupFloor(time.Minute)
+	started := time.Now()
+	if _, err := s.Signup(context.Background(), signupInput()); code(err) != authentication.CodeSignupDisabled || time.Since(started) > time.Second {
+		t.Fatalf("a refusal waited: %v after %v", err, time.Since(started))
+	}
+	s = signupService(newSignupStore(), signupPolicy(), &recordingDelivery{})
+	s.SetSignupFloor(time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	started = time.Now()
+	if _, err := s.Signup(ctx, signupInput()); err == nil || time.Since(started) > 10*time.Second {
+		t.Fatalf("cancellation did not end the wait: %v", err)
+	}
+	// A password hash slower than the floor does not use it up: the floor
+	// still covers the lookup and writes after the hash.
+	const hashing = 150 * time.Millisecond
+	s = signupService(newSignupStore(), signupPolicy(), &recordingDelivery{})
+	s.passwords = slowPasswords{hashing}
+	s.SetSignupFloor(floor)
+	started = time.Now()
+	if _, err := s.Signup(context.Background(), signupInput()); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(started); took < hashing+floor {
+		t.Fatalf("slow hash: answered in %v, want at least %v", took, hashing+floor)
+	}
+}
+
+// slowPasswords hashes in a fixed time, like bcrypt at a high cost.
+type slowPasswords struct{ took time.Duration }
+
+func (p slowPasswords) Hash(string) (string, error) {
+	time.Sleep(p.took)
+	return "hash", nil
+}
+func (slowPasswords) Compare(string, string) (bool, bool) { return true, false }
 
 func signupInput() authentication.Signup {
 	return authentication.Signup{Environment: testBoundary().EnvironmentID, Email: "New@Example.com", Name: " Ada ", Password: "a long enough password"}

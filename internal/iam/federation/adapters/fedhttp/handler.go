@@ -29,6 +29,14 @@ type Handler struct {
 	signedOut func(c *fiber.Ctx, environment identity.EnvironmentID, problem error) error
 	// testPage renders a test connection result (hostedhttp.Handler.TestResult).
 	testPage func(c *fiber.Ctx, result federation.TestResult) error
+	// testStart renders the interstitial of a test link (hostedhttp.Handler.TestStart).
+	testStart func(c *fiber.Ctx, link federation.TestLink) error
+}
+
+// TestStart sets the page a test connection link opens on (set in
+// bootstrap; without it the link answers 404).
+func (h *Handler) TestStart(page func(c *fiber.Ctx, link federation.TestLink) error) {
+	h.testStart = page
 }
 
 // TestResult sets the page that shows a test connection result (set in
@@ -156,20 +164,18 @@ func (h *Handler) test(c *fiber.Ctx) error {
 	return c.JSON(out)
 }
 
-// StartTest spends the ticket of a test connection link and sends the
-// browser to the identity provider; the callback then shows the result
-// (Callback). The ticket is in the query because the link is opened from a
-// browser tab; the response never echoes it.
+// StartTest spends the ticket of a test connection link (POST, form field
+// ticket) and sends the browser to the identity provider; the callback then
+// shows the result (Callback). Spending needs a POST because link scanners
+// and prefetchers fetch GET links: the GET (TestStartPage) only renders the
+// button that posts here. The response never echoes the ticket.
 func (h *Handler) StartTest(c *fiber.Ctx) error {
-	environment, err := identity.ParseEnvironmentID(c.Params("environment"))
+	environment, connection, err := testLink(c)
 	if err != nil {
-		return errx.Unauthorized("invalid or expired test connection link")
+		return err
 	}
-	connection, err := identity.ParseConnectionID(c.Params("connection"))
-	if err != nil {
-		return errx.Unauthorized("invalid or expired test connection link")
-	}
-	out, err := h.flows.StartTest(c.UserContext(), environment, connection, c.Query("ticket"))
+	// The ticket is a form field only: never read from the query of a POST.
+	out, err := h.flows.StartTest(c.UserContext(), environment, connection, string(c.Request().PostArgs().Peek("ticket")))
 	if err != nil {
 		return err
 	}
@@ -177,6 +183,41 @@ func (h *Handler) StartTest(c *fiber.Ctx) error {
 	c.Set("Cache-Control", "no-store")
 	c.Set("Referrer-Policy", "no-referrer")
 	return c.Redirect(out.URL, fiber.StatusSeeOther)
+}
+
+// TestStartPage is the GET of a test connection link: an interstitial with
+// a button that posts the ticket to StartTest. It spends nothing and reads
+// nothing about the ticket (only its shape is checked), so scanners that
+// open the link neither burn it nor learn whether it is valid.
+func (h *Handler) TestStartPage(c *fiber.Ctx) error {
+	environment, connection, err := testLink(c)
+	if err != nil {
+		return err
+	}
+	ticket := c.Query("ticket")
+	if !strings.HasPrefix(ticket, federation.TestPrefix) || len(ticket) > 128 {
+		return errx.Unauthorized("invalid or expired test connection link")
+	}
+	c.Set("Cache-Control", "no-store")
+	c.Set("Referrer-Policy", "no-referrer")
+	view := federation.TestLink{Environment: environment, Connection: connection, Ticket: ticket}
+	if h.testStart == nil {
+		return errx.NotFound("not found")
+	}
+	return h.testStart(c, view)
+}
+
+// testLink reads the environment and connection of a test link's path.
+func testLink(c *fiber.Ctx) (identity.EnvironmentID, identity.ConnectionID, error) {
+	environment, err := identity.ParseEnvironmentID(c.Params("environment"))
+	if err != nil {
+		return environment, identity.ConnectionID{}, errx.Unauthorized("invalid or expired test connection link")
+	}
+	connection, err := identity.ParseConnectionID(c.Params("connection"))
+	if err != nil {
+		return environment, connection, errx.Unauthorized("invalid or expired test connection link")
+	}
+	return environment, connection, nil
 }
 func (h *Handler) list(c *fiber.Ctx) error {
 	var filter federation.ConnectionFilter

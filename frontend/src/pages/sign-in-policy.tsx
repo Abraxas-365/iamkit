@@ -186,7 +186,7 @@ export default function SignInPolicyPage() {
             <div className="space-y-1.5">
               <label className="text-sm font-medium" htmlFor="waitlist-url">{t('Approval link URL')}</label>
               <Input id="waitlist-url" type="url" inputMode="url" placeholder="https://app.example.com/signup" disabled={locked} value={draft.waitlist_signup_url ?? ''} onChange={e => setDraft(d => d && ({ ...d, waitlist_signup_url: e.target.value }))} />
-              <p className="text-xs text-muted-foreground">{rich('Your sign-up page; IAMKit adds {{param}} to it. Leave empty and the approval email carries the token but no link. It must use HTTPS (HTTP only on localhost).', { param: <code className="text-xs">{'?waitlist=<token>'}</code> })}</p>
+              <p className="text-xs text-muted-foreground">{rich('Your sign-up page; IAMKit adds {{param}} to it. Leave empty and the approval email carries the token but no link. It must use HTTPS (HTTP only on localhost) and be on IAMKit’s origin or an allowed origin of one of your OAuth clients.', { param: <code className="text-xs">{'?waitlist=<token>'}</code> })}</p>
             </div>
           </div>}
         </div>

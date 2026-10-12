@@ -310,6 +310,14 @@
 {{end}}
 {{end}}
 
+{{define "test-start/content"}}
+<form method="post" action="/identity/v1/federation/test/{{.TestStart.Environment}}/{{.TestStart.Connection}}">
+<input type="hidden" name="ticket" value="{{.TestStart.Ticket}}">
+<p class="muted">{{.T "hosted.test.start_note"}}</p>
+<button type="submit">{{.T "hosted.test.start_button"}}</button>
+</form>
+{{end}}
+
 {{define "post/content"}}
 <form id="post" method="post" action="{{.Post.Action}}">
 {{range .Post.Fields}}<input type="hidden" name="{{index . 0}}" value="{{index . 1}}">

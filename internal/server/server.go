@@ -417,7 +417,11 @@ func (s *Server) App() *fiber.App {
 	}
 	auth.Post("/federation/start", s.limit(limiter.Config{Max: 20}), s.Federation.Start)
 	auth.Get("/federation/callback", s.limit(limiter.Config{Max: 30}), s.Federation.Callback)
-	auth.Get("/federation/test/:environment/:connection", s.limit(limiter.Config{Max: 20, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.StartTest)
+	testLimit := s.limit(limiter.Config{Max: 20, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }})
+	// The link opens an interstitial (GET spends nothing, so scanners cannot
+	// burn the ticket); the button posts it.
+	auth.Get("/federation/test/:environment/:connection", testLimit, s.Federation.TestStartPage)
+	auth.Post("/federation/test/:environment/:connection", testLimit, s.Federation.StartTest)
 	auth.Post("/federation/result", s.limit(limiter.Config{Max: 30}), s.Federation.Result)
 	auth.Post("/federation/callback", s.limit(limiter.Config{Max: 30}), s.Federation.CallbackForm)
 	auth.Post("/federation/saml/acs", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Federation.ACS)

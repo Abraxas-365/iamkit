@@ -3,6 +3,7 @@ package authsvc
 import (
 	"context"
 	"reflect"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,6 +15,15 @@ import (
 type signInRepository struct {
 	authentication.SignInPolicyRepository
 	policy *authentication.SignInPolicy
+	// origins are the allowed_origins of the environment's OAuth clients.
+	origins *[]string
+}
+
+func (r signInRepository) SignupOriginAllowed(_ context.Context, _ identity.EnvironmentID, origin string) (bool, error) {
+	if r.origins == nil {
+		return false, nil
+	}
+	return slices.Contains(*r.origins, origin), nil
 }
 
 func (r signInRepository) GetSignInPolicy(context.Context, identity.EnvironmentID) (authentication.SignInPolicy, error) {
@@ -24,7 +34,7 @@ func (r signInRepository) GetSignInPolicy(context.Context, identity.EnvironmentI
 }
 
 func withSignIn(s *Service, p authentication.SignInPolicy) *Service {
-	s.SetSignInPolicies(NewSignInPolicies(signInRepository{policy: &p}))
+	s.SetSignInPolicies(NewSignInPolicies(signInRepository{policy: &p, origins: &[]string{"https://app.example.com"}}))
 	return s
 }
 

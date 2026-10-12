@@ -13,11 +13,39 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// testLink opens a test connection link like a browser tab: it returns the
-// redirect to the identity provider and the binding cookie.
+// testLink opens a test connection link like a browser tab: the GET shows the
+// interstitial (which must spend nothing), its button posts the ticket. It
+// returns the status of the first answer that is not the page (the POST's, or
+// the GET's when it is no page), the redirect to the identity provider and the
+// binding cookie.
 func (e *Env) testLink(link string) (int, string, *http.Cookie, string) {
 	e.t.Helper()
-	req := httptest.NewRequest("GET", strings.TrimPrefix(link, "https://iam.example"), nil)
+	path := strings.TrimPrefix(link, "https://iam.example")
+	page := e.follow(path, nil)
+	if page.Status != 200 {
+		return page.Status, "", nil, messageOf(page)
+	}
+	if !strings.Contains(page.Body, `method="post"`) || !strings.Contains(page.Body, `name="ticket"`) {
+		e.t.Fatalf("interstitial has no form: %s", page.Body)
+	}
+	return e.testPost(link)
+}
+
+func messageOf(r Response) string {
+	msg, _ := r.JSON["message"].(string)
+	return msg
+}
+
+// testPost posts the link's ticket like the interstitial's button does.
+func (e *Env) testPost(link string) (int, string, *http.Cookie, string) {
+	e.t.Helper()
+	u, err := url.Parse(link)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	form := url.Values{"ticket": {u.Query().Get("ticket")}}
+	req := httptest.NewRequest("POST", u.Path, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	res, err := e.App.Test(req, 10000)
 	if err != nil {
 		e.t.Fatal(err)
@@ -112,12 +140,59 @@ func TestSAMLDraftConnectionJourney(t *testing.T) {
 	if n := count(t, e.DB, `SELECT count(*) FROM federation_tests WHERE position('ik_fedtest_' in ticket_hash::text)>0`); n != 0 {
 		t.Fatal("the raw ticket is stored")
 	}
+	// Asking for the link is a typed event: actor and the connection as subject.
+	if n := count(t, e.DB, `SELECT count(*) FROM events WHERE type='connection.test_requested' AND subject_kind='connection' AND subject_id=$1 AND actor_kind='operator' AND actor_id<>''`, conn); n != 1 {
+		t.Fatalf("connection.test_requested events = %d", n)
+	}
+	// Link scanners and prefetchers only GET: the interstitial spends
+	// nothing and says nothing about the ticket, however often it is opened.
+	path := strings.TrimPrefix(link, "https://iam.example")
+	for range 3 {
+		scan := e.follow(path, nil)
+		if scan.Status != 200 || !strings.Contains(scan.Body, `method="post"`) || !strings.Contains(scan.Body, "Start test sign-in") || strings.Contains(scan.Body, "<script") {
+			t.Fatalf("interstitial: %d %s", scan.Status, scan.Body)
+		}
+		if !strings.Contains(scan.Body, `action="/identity/v1/federation/test/`+e.EnvID+"/"+conn+`"`) {
+			t.Fatalf("interstitial action: %s", scan.Body)
+		}
+	}
+	scanReq := httptest.NewRequest("GET", path, nil)
+	scanRes, err := e.App.Test(scanReq, 10000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanRes.Body.Close()
+	csp := scanRes.Header.Get("Content-Security-Policy")
+	if scanRes.Header.Get("Cache-Control") != "no-store" || scanRes.Header.Get("Referrer-Policy") != "no-referrer" || strings.Contains(csp, "form-action") || !strings.Contains(csp, "default-src 'none'") {
+		t.Fatalf("interstitial headers: %v", scanRes.Header)
+	}
+	if n := count(t, e.DB, `SELECT count(*) FROM federation_tests WHERE consumed_at IS NOT NULL`); n != 0 {
+		t.Fatalf("opening the link spent the ticket (%d)", n)
+	}
+	// A malformed ticket is refused without a lookup; a wrong one on POST.
+	if r := e.follow(path[:strings.Index(path, "?")]+"?ticket=nope", nil); r.Status != 401 {
+		t.Fatalf("interstitial with a malformed ticket: %d", r.Status)
+	}
+	if status, _, _, _ := e.testPost(path[:strings.Index(path, "?")] + "?ticket=ik_fedtest_nope"); status != 401 {
+		t.Fatalf("POST with a wrong ticket: %d", status)
+	}
+	if n := count(t, e.DB, `SELECT count(*) FROM federation_tests WHERE consumed_at IS NOT NULL`); n != 0 {
+		t.Fatal("a wrong ticket spent another")
+	}
+	// The ticket is not accepted from the query of a POST: it is a form field.
+	if r := e.Do("POST", path, "", nil); r.Status != 401 {
+		t.Fatalf("POST without a form ticket: %d", r.Status)
+	}
 	status, redirect, cookie, msg := e.testLink(link)
 	if status != 303 || !strings.HasPrefix(redirect, "https://idp.example.com/sso?SAMLRequest=") || cookie == nil {
 		t.Fatalf("test start: %d %q %v %s", status, redirect, cookie, msg)
 	}
+	// The binding cookie survives the top-level POST: Lax, Secure, host-only.
+	if cookie.Name != "__Host-iamkit-federation" || !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("binding cookie = %+v", cookie)
+	}
 	// A spent ticket opens nothing.
-	if status, _, _, _ = e.testLink(link); status != 401 {
+	if status, _, _, _ = e.testPost(link); status != 401 {
 		t.Fatalf("reused ticket: %d", status)
 	}
 	user := samltest.User{NameID: "00u-tess", NameIDFormat: string(saml.PersistentNameIDFormat), Email: "tess@example.com", Name: "Tess"}
@@ -269,6 +344,22 @@ func TestOIDCConnectionTest(t *testing.T) {
 	// The same state cannot be replayed.
 	if r := e.follow(callback, cookie); r.Status != 401 {
 		t.Fatalf("callback replay: %d", r.Status)
+	}
+
+	// An organization administrator asks for the link through the portal's
+	// API: the event names the connection and the organization.
+	e.makeOrgAdmin(e.Org, e.Alice)
+	admin := e.orgAdminToken(e.Org, e.AliceEmail)
+	before := count(t, e.DB, `SELECT count(*) FROM events WHERE type='connection.test_requested'`)
+	adminLink := e.Must("POST", e.adminBase(e.Org)+"/connections/"+conn+"/test", admin, nil, 200).JSON["url"].(string)
+	if !strings.Contains(adminLink, "/identity/v1/federation/test/"+e.EnvID+"/"+conn+"?ticket=ik_fedtest_") {
+		t.Fatalf("org-admin link = %s", adminLink)
+	}
+	if n := count(t, e.DB, `SELECT count(*) FROM events WHERE type='connection.test_requested' AND subject_kind='connection' AND subject_id=$1 AND organization_id=$2 AND actor_kind='user' AND actor_id=$3`, conn, e.Org, e.Alice); n != 1 {
+		t.Fatalf("org-admin connection.test_requested events = %d", n)
+	}
+	if n := count(t, e.DB, `SELECT count(*) FROM events WHERE type='connection.test_requested'`); n != before+1 {
+		t.Fatalf("connection.test_requested total = %d, want %d", n, before+1)
 	}
 
 	// Unknown connection, bad tickets.

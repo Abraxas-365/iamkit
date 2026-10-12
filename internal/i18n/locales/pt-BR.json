@@ -121,6 +121,10 @@
   "hosted.test.nameid_format": "NameID format",
   "hosted.test.attributes": "Attributes received",
   "hosted.test.none": "not sent",
+  "hosted.title.test_start": "Teste de login",
+  "hosted.test.start_intro": "Um teste de login está pronto para uma conexão de login único.",
+  "hosted.test.start_note": "Você será enviado ao provedor de identidade. Nada é criado: nenhuma sessão, usuário ou vínculo. Continue somente se você solicitou este teste.",
+  "hosted.test.start_button": "Iniciar o teste de login",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",
   "hosted.title.sign_out_failed": "Não foi possível sair",
 

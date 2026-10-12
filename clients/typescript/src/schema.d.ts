@@ -3046,10 +3046,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** StartTest spends the ticket of a test connection link and sends the browser to the identity provider; the callback then shows the result (Callback). */
+        /** TestStartPage is the GET of a test connection link: an interstitial with a button that posts the ticket to StartTest. */
         get: operations["getIdentityFederationTestbyEnvironmentbyConnection"];
         put?: never;
-        post?: never;
+        /** StartTest spends the ticket of a test connection link (POST, form field ticket) and sends the browser to the identity provider; the callback then shows the result (Callback). */
+        post: operations["postIdentityFederationTestbyEnvironmentbyConnection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -22614,6 +22615,46 @@ export interface operations {
             query?: {
                 ticket?: string;
             };
+            header?: never;
+            path: {
+                environment: string;
+                connection: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Success */
+            "2XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postIdentityFederationTestbyEnvironmentbyConnection: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 environment: string;

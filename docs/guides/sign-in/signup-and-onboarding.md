@@ -23,7 +23,7 @@ Turn it on in the environment's [sign-in methods](sign-in-methods.md)
 | `require_terms` | Sign-up must accept the terms ([below](#terms-acceptance)); `iam sign-in-policy set --require-terms` |
 | `waitlist` | Put password / email-code sign-up behind an operator's approval ([below](#waitlist)); needs `allow_signup` |
 | `waitlist_auto_approve_domains` | Email domains (≤ 50) that skip the waitlist |
-| `waitlist_signup_url` | HTTPS sign-up page the approval email links to (`?waitlist=<token>` is appended); empty: the email carries the token only |
+| `waitlist_signup_url` | HTTPS sign-up page the approval email links to (`?waitlist=<token>` is appended); its origin must be IAMKit's own or an `allowed_origins` entry of an active OAuth client of the environment (422 otherwise); empty: the email carries the token only |
 
 The flow, headless ([identity API](../../reference/api/identity.md)) or hosted:
 
@@ -33,6 +33,9 @@ The flow, headless ([identity API](../../reference/api/identity.md)) or hosted:
    code by email (`status` is `code_sent`; `waitlisted` with the [waitlist](#waitlist) on). The password follows the [password
    policy](password-policy.md) of the sign-up organization; without one the
    account signs in with email codes (only when the organization allows them).
+   A successful answer takes at least 250 ms (after the password hash, when
+   one is set) whether the address is new or already has an account (errors
+   are immediate), so timing reveals nothing.
 2. `POST /identity/v1/signup/verify` `{environment_id, challenge_id, code}` →
    201 `{user_id, organization_id, email}`. Only now does the account exist
    (email verified, member of the organization and group; audited

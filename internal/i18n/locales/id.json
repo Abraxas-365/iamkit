@@ -121,6 +121,10 @@
   "hosted.test.nameid_format": "NameID format",
   "hosted.test.attributes": "Attributes received",
   "hosted.test.none": "not sent",
+  "hosted.title.test_start": "Uji masuk",
+  "hosted.test.start_intro": "Uji masuk untuk koneksi single sign-on sudah siap.",
+  "hosted.test.start_note": "Anda akan diarahkan ke penyedia identitas. Tidak ada yang dibuat: tidak ada sesi, pengguna, atau tautan. Lanjutkan hanya jika Anda yang meminta uji ini.",
+  "hosted.test.start_button": "Mulai uji masuk",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",
   "hosted.title.sign_out_failed": "Gagal keluar",
 

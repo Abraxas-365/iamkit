@@ -92,6 +92,20 @@ func TestClassifyConnectionEnabled(t *testing.T) {
 	}
 }
 
+func TestClassifyConnectionTestRequested(t *testing.T) {
+	const env = "/management/v1/environments/0b3c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11"
+	const id = "7f0c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11"
+	for _, path := range []string{
+		env + "/federation-connections/" + id + "/test",
+		"/api/v1/environments/0b3c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11/organizations/9a0c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11/admin/connections/" + id + "/test",
+	} {
+		c, ok := Classify("POST", path)
+		if !ok || c.Type != ConnectionTestRequested || c.Subject.Kind != "connection" || c.Subject.ID != id {
+			t.Errorf("%s: %+v %v", path, c, ok)
+		}
+	}
+}
+
 func TestClassifyOrganizationDirectories(t *testing.T) {
 	const base = "/api/v1/environments/0b3c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11/organizations/9a0c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11/admin/directories/"
 	const id = "7f0c8a6e-6a0e-4c43-9d55-0d2d9b2b8a11"

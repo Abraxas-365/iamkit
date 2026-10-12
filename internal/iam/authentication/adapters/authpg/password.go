@@ -266,3 +266,15 @@ func (r *SignInPolicyRepository) SignupTarget(ctx context.Context, environment i
 	}
 	return row.Organization, row.Group, nil
 }
+
+// SignupOriginAllowed reports whether an active OAuth client of an active
+// application of the environment lists origin in allowed_origins.
+func (r *SignInPolicyRepository) SignupOriginAllowed(ctx context.Context, environment identity.EnvironmentID, origin string) (bool, error) {
+	var ok bool
+	err := r.db.GetContext(ctx, &ok, `SELECT EXISTS(SELECT 1 FROM oauth_clients oc JOIN applications a ON a.id=oc.application_id AND a.environment_id=oc.environment_id
+		WHERE oc.environment_id=$1 AND oc.allowed_origins @> ARRAY[$2]::text[] AND oc.active AND a.active)`, environment, origin)
+	if err != nil {
+		return false, errx.Wrap(err, "read allowed origins", errx.TypeInternal)
+	}
+	return ok, nil
+}

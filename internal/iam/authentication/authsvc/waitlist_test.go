@@ -266,6 +266,50 @@ func (r *waitlistRepo) DeleteWaitlist(_ context.Context, _ authentication.Mutati
 	return nil
 }
 
+// PruneWaitlist mirrors the SQL: completed or rejected entries decided
+// (else created) before the cutoff, at most limit.
+func (r *waitlistRepo) PruneWaitlist(_ context.Context, before time.Time, limit int) (int, error) {
+	n := 0
+	for id, e := range r.entries {
+		if n == limit || (e.Status != authentication.WaitlistCompleted && e.Status != authentication.WaitlistRejected) {
+			continue
+		}
+		at := e.CreatedAt
+		if e.DecidedAt != nil {
+			at = *e.DecidedAt
+		}
+		if at.Before(before) {
+			delete(r.entries, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
+// Prune keeps pending and approved entries and the recently decided ones,
+// whatever their age.
+func TestWaitlistPrune(t *testing.T) {
+	repo := newWaitlistRepo("old-done@example.com", "old-rejected@example.com", "fresh-rejected@example.com", "old-pending@example.com", "old-approved@example.com")
+	old, fresh := time.Now().Add(-config.WaitlistRetention-time.Hour), time.Now().Add(-time.Hour)
+	set := func(i int, status string, at time.Time) {
+		e := repo.entries[repo.order[i]]
+		e.Status, e.CreatedAt, e.DecidedAt = status, at, &at
+	}
+	set(0, authentication.WaitlistCompleted, old)
+	set(1, authentication.WaitlistRejected, old)
+	set(2, authentication.WaitlistRejected, fresh)
+	set(3, authentication.WaitlistPending, old)
+	set(4, authentication.WaitlistApproved, old)
+	w, _ := waitlistsFor(repo, &recordingDelivery{})
+	if n, err := w.Prune(context.Background()); err != nil || n != 2 || len(repo.entries) != 3 {
+		t.Fatalf("pruned %d (%v), left %d", n, err, len(repo.entries))
+	}
+	w.SetRetention(time.Minute)
+	if n, err := w.Prune(context.Background()); err != nil || n != 1 || len(repo.entries) != 2 {
+		t.Fatalf("shorter retention pruned %d (%v), left %d", n, err, len(repo.entries))
+	}
+}
+
 func waitlistsFor(repo *waitlistRepo, delivery authentication.Delivery) (*Waitlists, *Service) {
 	s := signupService(newSignupStore(), waitlistPolicy(), delivery)
 	return NewWaitlists(repo, testSecrets{}, s), s
@@ -465,6 +509,59 @@ func (s *signInSaver) SetSignInPolicy(_ context.Context, _ authentication.Mutati
 }
 func (s *signInSaver) SignupTarget(context.Context, identity.EnvironmentID, identity.OrganizationID, identity.GroupID) (bool, bool, error) {
 	return true, true, nil
+}
+func (s *signInSaver) SignupOriginAllowed(_ context.Context, _ identity.EnvironmentID, origin string) (bool, error) {
+	return origin == "https://app.example.com", nil
+}
+
+// The sign-up page must be IAMKit's own origin or a client's allowed
+// origin: anywhere else would receive the approval tokens.
+func TestSetSignInPolicySignupURLAllowlist(t *testing.T) {
+	env := authentication.Mutation{Environment: testBoundary().EnvironmentID}
+	p := NewSignInPolicies(&signInSaver{stored: waitlistPolicy()})
+	p.SetIssuer("https://iam.example.org")
+	in := waitlistPolicy()
+	for url, want := range map[string]bool{
+		"https://app.example.com/signup":     true,
+		"https://APP.example.com:443/signup": true,
+		"https://iam.example.org/hosted/up":  true,
+		"https://evil.example.net/signup":    false,
+		"https://app.example.com:8443/x":     false,
+		"https://iam.example.org.evil.net/x": false,
+		"":                                   true,
+	} {
+		in.WaitlistSignupURL = ptrx.String(url)
+		_, err := p.SetSignInPolicy(context.Background(), env, in)
+		if (err == nil) != want || (err != nil && !strings.Contains(message(err), "waitlist_signup_url must be")) {
+			t.Fatalf("%q: allowed=%v err=%v", url, want, err)
+		}
+	}
+}
+
+// An approval whose sign-up page lost its origin still carries the token,
+// without a link; the bulk path too.
+func TestWaitlistApproveDropsUnlistedLink(t *testing.T) {
+	repo := newWaitlistRepo("a@example.com", "b@example.com")
+	delivery := &recordingDelivery{}
+	w, s := waitlistsFor(repo, delivery)
+	policy := waitlistPolicy()
+	s.SetSignInPolicies(NewSignInPolicies(signInRepository{policy: &policy})) // no client lists any origin
+	m := authentication.Mutation{Environment: testBoundary().EnvironmentID, Actor: "op"}
+	if _, err := w.Approve(context.Background(), m, repo.order[0]); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := w.ApproveMany(context.Background(), m, authentication.WaitlistApprove{IDs: []identity.WaitlistEntryID{repo.order[1]}}); err != nil || out.Approved != 1 {
+		t.Fatalf("%+v %v", out, err)
+	}
+	s.WaitDeliveries(time.Second)
+	if len(delivery.got) != 2 {
+		t.Fatalf("delivery: %+v", delivery.got)
+	}
+	for _, got := range delivery.got {
+		if got.Link != "" || got.Token == "" {
+			t.Fatalf("approval email: %+v", got)
+		}
+	}
 }
 
 func TestWaitlistLink(t *testing.T) {

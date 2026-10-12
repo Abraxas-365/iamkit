@@ -165,6 +165,7 @@ const eventNamed: Record<string, string> = {
   'application.resource_linked': t('Linked a resource to an application'), 'application.resource_unlinked': t('Unlinked a resource from an application'),
   'org_setup_link.used': t('Setup link opened'), 'group.members_changed': t('Changed group members'), 'grant.updated': t('Set a grant'), 'grant.deleted': t('Removed a grant'),
   'user.organization_switched': t('Switched organization'), 'connection.single_logout': t('Signed out by the identity provider'),
+  'connection.test_requested': t('Test sign-in link created'),
   'saml.logout': t('Signed out of a SAML application'), 'saml.logout_failed': t('SAML back-channel logout delivery failed'),
 }
 

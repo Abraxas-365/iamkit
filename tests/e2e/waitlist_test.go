@@ -1,16 +1,34 @@
 package e2e_test
 
 import (
+	"context"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/bootstrap"
 	"github.com/gofiber/fiber/v2"
 )
+
+// waitlistClient registers https://app.example.com as an allowed origin of an
+// OAuth client of the environment (once) and returns its id: the sign-up page
+// of a waitlist must be IAMKit's own origin or one of these.
+func (e *Env) waitlistClient() string {
+	e.t.Helper()
+	var id string
+	err := e.DB.Get(&id, `SELECT id FROM oauth_clients WHERE environment_id=$1 AND allowed_origins @> ARRAY['https://app.example.com']::text[] AND active LIMIT 1`, e.EnvID)
+	if err == nil {
+		return id
+	}
+	return e.Must("POST", e.Base+"/oauth-clients", e.Owner, fiber.Map{"application_id": e.Client, "resource_id": e.Res, "redirect_uris": []string{"https://app.example/callback"},
+		"public": true, "allowed_origins": []string{"https://app.example.com"}}, 201).JSON["client_id"].(string)
+}
 
 // waitlistEnv turns sign-up and the waitlist on for the environment.
 func waitlistEnv(e *Env, extra fiber.Map) {
 	e.t.Helper()
+	e.waitlistClient()
 	body := fiber.Map{"allow_password": true, "allow_email_code": true, "allow_social": true, "allow_password_reset": true,
 		"allow_signup": true, "signup_organization_id": e.Org, "waitlist": true,
 		"waitlist_signup_url": "https://app.example.com/signup"}
@@ -18,6 +36,111 @@ func waitlistEnv(e *Env, extra fiber.Map) {
 		body[k] = v
 	}
 	e.Must("PUT", e.Base+"/sign-in-policy", e.Owner, body, 200)
+}
+
+// TestWaitlistSignupURLAllowlist: waitlist_signup_url must be IAMKit's origin
+// or an allowed origin of an active OAuth client; an approval whose page lost
+// its origin sends the token without a link.
+func TestWaitlistSignupURLAllowlist(t *testing.T) {
+	e := newEnv(t)
+	put := func(url string, status int) Response {
+		return e.Must("PUT", e.Base+"/sign-in-policy", e.Owner, fiber.Map{"allow_password": true, "allow_email_code": true, "allow_signup": true,
+			"signup_organization_id": e.Org, "waitlist": true, "waitlist_signup_url": url}, status)
+	}
+	// No client lists the origin: refused (422); IAMKit's own origin is fine.
+	r := put("https://app.example.com/signup", 422)
+	if !strings.Contains(string(r.Body), "waitlist_signup_url must be") {
+		t.Fatalf("message: %s", r.Body)
+	}
+	put("https://iam.example/hosted/signup", 200)
+	put("https://iam.example.evil.net/signup", 422)
+
+	client := e.waitlistClient()
+	put("https://app.example.com/signup", 200)
+	put("https://APP.example.com:443/signup", 200)
+	put("https://app.example.com:8443/signup", 422)
+	put("https://evil.example.net/signup", 422)
+	put("https://app.example.com/signup", 200)
+	// The client is disabled after the policy was saved: the approval email
+	// carries the token and no link.
+	signup := func(email string) {
+		e.Must("POST", "/identity/v1/signup", "", fiber.Map{"environment_id": e.EnvID, "email": email, "name": "Wait Person", "password": "a long enough password"}, 202)
+	}
+	signup("linked@example.com")
+	signup("unlinked@example.com")
+	signup("bulk@example.com")
+	e.Server.WaitDeliveries(5 * 1e9)
+	idOf := func(email string) string {
+		items := e.Must("GET", e.Base+"/waitlist?email="+url.QueryEscape(email), e.Owner, nil, 200).JSON["items"].([]any)
+		return items[0].(map[string]any)["id"].(string)
+	}
+	e.Must("POST", e.Base+"/waitlist/"+idOf("linked@example.com")+"/approve", e.Owner, nil, 200)
+	e.Server.WaitDeliveries(5 * 1e9)
+	if m, ok := e.Mail.Last("waitlist_approved"); !ok || m.Email != "linked@example.com" || m.Link != "https://app.example.com/signup?waitlist="+m.Token {
+		t.Fatalf("listed origin: %+v", m)
+	}
+	e.Must("DELETE", e.Base+"/oauth-clients/"+client, e.Owner, nil, 204)
+	e.Must("POST", e.Base+"/waitlist/"+idOf("unlinked@example.com")+"/approve", e.Owner, nil, 200)
+	e.Must("POST", e.Base+"/waitlist/approve", e.Owner, fiber.Map{"ids": []string{idOf("bulk@example.com")}}, 200)
+	e.Server.WaitDeliveries(5 * 1e9)
+	seen := map[string]bool{}
+	for _, m := range e.Mail.Sent {
+		if m.Purpose == "waitlist_approved" && (m.Email == "unlinked@example.com" || m.Email == "bulk@example.com") {
+			seen[m.Email] = true
+			if m.Link != "" || !strings.HasPrefix(m.Token, "ik_wait_") {
+				t.Fatalf("approval after the origin was lost: %+v", m)
+			}
+		}
+	}
+	if len(seen) != 2 {
+		t.Fatalf("approval mails: %v", seen)
+	}
+	// Saving the policy with the stored (now unlisted) page unchanged is
+	// allowed (it must not block unrelated edits); changing to another
+	// unlisted page is refused.
+	e.Must("PUT", e.Base+"/sign-in-policy", e.Owner, fiber.Map{"allow_password": true, "allow_email_code": true, "allow_signup": true,
+		"signup_organization_id": e.Org, "waitlist": true}, 200)
+	put("https://app.example.com/signup", 200)
+	put("https://app.example.com/other", 422)
+}
+
+// TestWaitlistPrune: the waitlist_prune job deletes completed and rejected
+// entries past the retention and never pending or approved ones.
+func TestWaitlistPrune(t *testing.T) {
+	e := newEnv(t, bootstrap.WithWaitlistRetention(48*time.Hour))
+	waitlistEnv(e, nil)
+	for _, email := range []string{"done@example.com", "rejected@example.com", "fresh@example.com", "pending@example.com", "approved@example.com"} {
+		e.Must("POST", "/identity/v1/signup", "", fiber.Map{"environment_id": e.EnvID, "email": email, "name": "Wait Person", "password": "a long enough password"}, 202)
+	}
+	status := func(email, to, age string) {
+		if _, err := e.DB.Exec(`UPDATE waitlist_entries SET status=$3, decided_at=now()-$4::interval, created_at=now()-$4::interval WHERE environment_id=$1 AND email=$2`, e.EnvID, email, to, age); err != nil {
+			t.Fatal(err)
+		}
+	}
+	status("done@example.com", "completed", "72 hours")
+	status("rejected@example.com", "rejected", "72 hours")
+	status("fresh@example.com", "rejected", "1 hour")
+	status("pending@example.com", "pending", "400 days")
+	status("approved@example.com", "approved", "400 days")
+	if found, err := e.Server.Workers.RunOnce(context.Background(), "waitlist_prune"); !found || err != nil {
+		t.Fatalf("waitlist_prune: found=%v err=%v", found, err)
+	}
+	left := map[string]bool{}
+	rows, err := e.DB.Queryx(`SELECT email FROM waitlist_entries WHERE environment_id=$1`, e.EnvID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var email string
+		if err := rows.Scan(&email); err != nil {
+			t.Fatal(err)
+		}
+		left[email] = true
+	}
+	if len(left) != 3 || !left["fresh@example.com"] || !left["pending@example.com"] || !left["approved@example.com"] {
+		t.Fatalf("entries left: %v", left)
+	}
 }
 
 func (e *Env) waitlistMail(purpose string) int {

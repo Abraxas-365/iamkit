@@ -523,6 +523,30 @@ func SecureURL(raw string) bool {
 	return u.Scheme == "https" || (u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))
 }
 
+// URLOrigin is the origin of raw (lowercase scheme://host[:port], the
+// default port dropped), the form OAuth clients keep in allowed_origins;
+// false when raw is not an absolute http(s) URL.
+func URLOrigin(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" || u.Opaque != "" {
+		return "", false
+	}
+	scheme, host, port := strings.ToLower(u.Scheme), strings.ToLower(u.Hostname()), u.Port()
+	if host == "" || (scheme != "https" && scheme != "http") {
+		return "", false
+	}
+	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+		port = ""
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port != "" {
+		host += ":" + port
+	}
+	return scheme + "://" + host, true
+}
+
 // InvitationLink appends the invitation token to an invitation_url; an
 // empty base yields no link.
 func InvitationLink(base, token string) string {

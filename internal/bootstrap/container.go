@@ -114,8 +114,11 @@ type options struct {
 	// Phase 5: bot protection and risk signals (wired by riskmodule).
 	captcha          http.RoundTripper
 	attemptRetention time.Duration
-	geoipDB          string
-	geoipHeader      string
+	// waitlistRetention keeps completed and rejected waitlist entries
+	// (0: config.WaitlistRetention).
+	waitlistRetention time.Duration
+	geoipDB           string
+	geoipHeader       string
 }
 
 // WithCaptchaTransport replaces the guarded transport CAPTCHA siteverify
@@ -129,6 +132,13 @@ func WithCaptchaTransport(t http.RoundTripper) Option {
 // (IAMKIT_SIGN_IN_ATTEMPT_RETENTION, default config.SignInAttemptRetention).
 func WithSignInAttemptRetention(d time.Duration) Option {
 	return func(o *options) { o.attemptRetention = d }
+}
+
+// WithWaitlistRetention sets how long completed and rejected waitlist
+// entries are kept (IAMKIT_WAITLIST_RETENTION, default
+// config.WaitlistRetention).
+func WithWaitlistRetention(d time.Duration) Option {
+	return func(o *options) { o.waitlistRetention = d }
 }
 
 // WithGeoIP sets the deployment's GeoIP: a MaxMind-format database file
@@ -266,7 +276,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	// federation, OAuth, users and organizations.
 	actionModule := actionmodule.New(actionmodule.Deps{DB: db, Cipher: o.sealer, Transport: o.actions, Features: featureModule.Queries, Usage: usageModule.Commands, Cache: shared, ActorID: server.OperatorID})
 	s.Actions = actionModule.HTTP
-	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Actions: actionModule.Runner, Usage: usageModule.Commands, Keys: signingModule.Keyring, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor, Passkeys: mfaModule.Passkeys, Cipher: o.sealer, Breaches: o.breaches, ActorID: server.OperatorID, Mail: o.mail})
+	authenticationModule := authmodule.New(authmodule.Deps{DB: db, Actions: actionModule.Runner, Usage: usageModule.Commands, Keys: signingModule.Keyring, Issuer: issuer, Delivery: delivery, OAuthTokens: oauthfosite.AccessTokens{DB: db}, IssueSession: s.IssueSession, SecondFactor: mfaModule.SecondFactor, Passkeys: mfaModule.Passkeys, Cipher: o.sealer, Breaches: o.breaches, ActorID: server.OperatorID, Mail: o.mail, WaitlistRetention: o.waitlistRetention})
 	s.Tokens = authenticationModule.Tokens
 	s.WaitDeliveries = authenticationModule.WaitDeliveries
 	s.Auth = authenticationModule.HTTP
@@ -329,6 +339,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Workers.Add(actionModule.Jobs...)
 	s.Workers.Add(usageModule.Jobs...)
 	s.Workers.Add(auditLogModule.Jobs...)
+	s.Workers.Add(authenticationModule.Jobs...)
 	riskModule := riskmodule.New(riskmodule.Deps{DB: db, Cipher: o.sealer, Features: featureModule.Queries, Transport: o.captcha, Issuer: issuer,
 		GeoIPDB: o.geoipDB, GeoIPHeader: o.geoipHeader, Retention: o.attemptRetention, ActorID: server.OperatorID,
 		Mail: authenticationModule.DeliveryService, Secret: func() string { return os.Getenv("IAMKIT_ENCRYPTION_KEY") }})
@@ -360,6 +371,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	federationModule.HTTP.Logout(federationModule.Logout, hostedModule.HTTP.PostForm)
 	federationModule.HTTP.SignedOut(hostedModule.HTTP.SignedOut)
 	federationModule.HTTP.TestResult(hostedModule.HTTP.TestResult)
+	federationModule.HTTP.TestStart(hostedModule.HTTP.TestStart)
 	oauthModule.HTTP.Upstream(upstreamLogout{federationModule.Logout})
 	oauthModule.HTTP.PostForm(hostedModule.HTTP.PostForm)
 	s.Workers.Add(federationModule.Jobs...)
@@ -554,6 +566,14 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		}
 		attemptRetention = d
 	}
+	waitlistRetention := config.WaitlistRetention
+	if v := os.Getenv("IAMKIT_WAITLIST_RETENTION"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < 24*time.Hour {
+			return nil, errx.Validation("IAMKIT_WAITLIST_RETENTION must be a duration of at least 24h (e.g. 8760h)")
+		}
+		waitlistRetention = d
+	}
 	features, unknown, err := feature.ParseDeployment(os.Getenv("IAMKIT_FEATURES"))
 	if err != nil {
 		return nil, err
@@ -575,7 +595,7 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		return nil, errx.Validation("IAMKIT_GEOIP_HEADER needs IAMKIT_TRUSTED_PROXIES")
 	}
 	opts := []Option{WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso), WithWebAuthnOrigins(list(os.Getenv("IAMKIT_WEBAUTHN_ORIGINS"))), WithEventRetention(retention), WithAuditLogRetention(auditRetention), WithFeatures(features), WithLimits(limits),
-		WithSignInAttemptRetention(attemptRetention), WithGeoIP(strings.TrimSpace(os.Getenv("IAMKIT_GEOIP_DB")), geoHeader)}
+		WithSignInAttemptRetention(attemptRetention), WithWaitlistRetention(waitlistRetention), WithGeoIP(strings.TrimSpace(os.Getenv("IAMKIT_GEOIP_DB")), geoHeader)}
 	var redis *cacheredis.Client
 	if v := os.Getenv("REDIS_URL"); v != "" {
 		if redis, err = cacheredis.Open(context.Background(), v); err != nil {

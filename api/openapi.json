@@ -31286,6 +31286,57 @@
           }
         ],
         "responses": {
+          "2XX": {
+            "description": "Success"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "summary": "TestStartPage is the GET of a test connection link: an interstitial with a button that posts the ticket to StartTest.",
+        "tags": [
+          "Identity API"
+        ]
+      },
+      "post": {
+        "operationId": "postIdentityFederationTestbyEnvironmentbyConnection",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "connection",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
           "303": {
             "description": "Redirect"
           },
@@ -31311,7 +31362,7 @@
             "description": "Server error"
           }
         },
-        "summary": "StartTest spends the ticket of a test connection link and sends the browser to the identity provider; the callback then shows the result (Callback).",
+        "summary": "StartTest spends the ticket of a test connection link (POST, form field ticket) and sends the browser to the identity provider; the callback then shows the result (Callback).",
         "tags": [
           "Identity API"
         ]

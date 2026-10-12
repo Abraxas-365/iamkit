@@ -22,7 +22,7 @@ func TestWorkers(t *testing.T) {
 
 	w := e.Server.Workers
 	want := []string{"logout_delivery", "logout_prune", "event_prune", "event_webhook", "event_webhook_maintenance",
-		"log_stream_delivery", "log_stream_maintenance", "action_call_prune", "usage_rollup", "usage_prune", "audit_log_prune", "sign_in_attempt_prune", "captcha_pass_prune", "saml_logout_delivery", "saml_logout_prune", "federation_logout_prune", "federation_draft_prune"}
+		"log_stream_delivery", "log_stream_maintenance", "action_call_prune", "usage_rollup", "usage_prune", "audit_log_prune", "waitlist_prune", "sign_in_attempt_prune", "captcha_pass_prune", "saml_logout_delivery", "saml_logout_prune", "federation_logout_prune", "federation_draft_prune"}
 	if got := w.Jobs(); !slices.Equal(got, want) {
 		t.Fatalf("jobs = %v", got)
 	}

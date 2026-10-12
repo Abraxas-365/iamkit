@@ -335,6 +335,11 @@ type SignInPolicyRepository interface {
 	// of the environment and group (when not zero) an operator-managed
 	// (not SCIM) group of it.
 	SignupTarget(ctx context.Context, environment identity.EnvironmentID, organization identity.OrganizationID, group identity.GroupID) (organizationOK, groupOK bool, err error)
+	// SignupOriginAllowed reports whether origin (normalized: lowercase
+	// scheme://host[:port], default port dropped) is listed in
+	// allowed_origins of an active OAuth client of an active application
+	// of the environment.
+	SignupOriginAllowed(ctx context.Context, environment identity.EnvironmentID, origin string) (bool, error)
 }
 
 // SignupCommands are self-registration: a person asks for an account and
@@ -370,6 +375,11 @@ type WaitlistCommands interface {
 	Reject(ctx context.Context, m Mutation, id identity.WaitlistEntryID, input WaitlistRejection) (WaitlistEntry, error)
 	// Delete removes an entry, so its email may join again.
 	Delete(ctx context.Context, m Mutation, id identity.WaitlistEntryID) error
+	// Prune deletes up to config.WaitlistPruneBatch completed and rejected
+	// entries decided longer ago than the retention (see
+	// WaitlistRepository.PruneWaitlist) and reports how many went; a full
+	// batch means more may be left. Pending and approved entries stay.
+	Prune(ctx context.Context) (int, error)
 }
 
 // WaitlistQueries read the waitlist.
@@ -393,6 +403,11 @@ type WaitlistRepository interface {
 	// token; errors as ApproveWaitlist.
 	RejectWaitlist(ctx context.Context, m Mutation, id identity.WaitlistEntryID) (WaitlistEntry, error)
 	DeleteWaitlist(ctx context.Context, m Mutation, id identity.WaitlistEntryID) error
+	// PruneWaitlist deletes up to limit completed or rejected entries
+	// whose decided_at (the approval time for completed ones, as
+	// completing sets none; created_at when absent) is before the cutoff.
+	// No audit row, no event.
+	PruneWaitlist(ctx context.Context, before time.Time, limit int) (int, error)
 }
 
 // SignupTransaction is the storage of self-registration, one transaction.

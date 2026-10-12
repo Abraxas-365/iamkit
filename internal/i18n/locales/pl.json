@@ -121,6 +121,10 @@
   "hosted.test.nameid_format": "NameID format",
   "hosted.test.attributes": "Attributes received",
   "hosted.test.none": "not sent",
+  "hosted.title.test_start": "Testowe logowanie",
+  "hosted.test.start_intro": "Testowe logowanie dla połączenia jednokrotnego logowania jest gotowe.",
+  "hosted.test.start_note": "Zostaniesz przekierowany do dostawcy tożsamości. Nic nie zostanie utworzone: ani sesja, ani użytkownik, ani powiązanie. Kontynuuj tylko wtedy, gdy ten test został zlecony przez Ciebie.",
+  "hosted.test.start_button": "Rozpocznij testowe logowanie",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",
   "hosted.title.sign_out_failed": "Nie udało się wylogować",
 

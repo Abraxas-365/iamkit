@@ -121,6 +121,10 @@
   "hosted.test.nameid_format": "NameID format",
   "hosted.test.attributes": "Attributes received",
   "hosted.test.none": "not sent",
+  "hosted.title.test_start": "테스트 로그인",
+  "hosted.test.start_intro": "싱글 사인온 연결의 테스트 로그인이 준비되었습니다.",
+  "hosted.test.start_note": "ID 공급자로 이동합니다. 세션, 사용자, 연결 등 아무것도 생성되지 않습니다. 이 테스트를 직접 요청한 경우에만 계속하세요.",
+  "hosted.test.start_button": "테스트 로그인 시작",
   "hosted.test.no_session": "This was a test: no session, user or linked identity was created. You can close this tab.",
   "hosted.title.sign_out_failed": "로그아웃하지 못했습니다",
 
