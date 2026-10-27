@@ -48,6 +48,17 @@ func TestMain(m *testing.M) {
 		os.Exit(m.Run()) // every test skips itself
 	}
 	ctx := context.Background()
+	// IAMKIT_TEST_ADMIN_DSN points the suite at an existing server (a
+	// superuser's maintenance database) instead of a container.
+	if adminDSN = os.Getenv("IAMKIT_TEST_ADMIN_DSN"); adminDSN != "" {
+		if err := prepareTemplate(ctx); err != nil {
+			fmt.Fprintln(os.Stderr, "template:", err)
+			os.Exit(1)
+		}
+		code := m.Run()
+		reportContract()
+		os.Exit(code)
+	}
 	pg, err := postgres.Run(ctx, "postgres:16-alpine",
 		postgres.WithDatabase("iamkit_test"), postgres.WithUsername("test"), postgres.WithPassword("test"),
 		postgres.BasicWaitStrategies())
@@ -77,6 +88,10 @@ func prepareTemplate(ctx context.Context) error {
 		return err
 	}
 	defer admin.Close()
+	// A reused server keeps the previous run's template.
+	if _, err = admin.Exec(`DROP DATABASE IF EXISTS ` + templateDB + ` WITH (FORCE)`); err != nil {
+		return err
+	}
 	if _, err = admin.Exec(`CREATE DATABASE ` + templateDB); err != nil {
 		return err
 	}

@@ -146,6 +146,12 @@ To follow the log, start with `After` pointing at `0` and pass `Next` back as
 entity's [change history](../events.md#change-history) and
 `ExportEvents(ctx, filter, func(Event) error)` streams the
 [export](../events.md#export) oldest first.
+Protected resources ([protect an MCP server](../../guides/applications/protect-mcp-server.md);
+`iamclient.Environment`): `ProtectedResources`, `ProtectedResource`,
+`CreateProtectedResource(ctx, ProtectedResourceCreate{ApplicationID, ResourceID, Name, DefaultScopes, IdleTTLSeconds, MaxTTLSeconds})`
+(the `URI` is the resource's audience),
+`UpdateProtectedResource` (nil fields keep), `DeleteProtectedResource`,
+`ProtectedResourcePolicy` and `SetProtectedResourcePolicy`.
 ### Audit logs and log streams
 
 [App audit logs](../../guides/audit-logs.md) and [log streams](../../guides/platform/log-streams.md)

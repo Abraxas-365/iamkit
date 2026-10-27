@@ -14,6 +14,7 @@ module's version imports it. In this checkout the runnable example uses a local
 | `authclient/httpauth` | Framework-neutral `net/http` authorization middleware |
 | `scimclient` | Scoped SCIM user operations |
 | `apierror` | Structured ordinary API errors |
+| `resourceserver` | OAuth resource servers (MCP): RFC 9728 metadata (`Mount`), `Protect`/`Require` with `WWW-Authenticate` challenges, `Verify`, `FromContext`; see [protect an MCP server](../../guides/applications/protect-mcp-server.md) |
 
 Pass a context with a deadline and an HTTP client with a timeout. The shared
 transport refuses credential-carrying redirects, caps decoded response bodies at

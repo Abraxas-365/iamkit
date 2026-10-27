@@ -39,6 +39,32 @@ hint); an unusable hint shows the ordinary sign-in. Clients reached through
 it from their `initiate_login_uri`.
 No implicit or password grant is advertised. `prompt` (`none`, `login`, `consent`, `select_account`, listed in `prompt_values_supported`) and `max_age` are supported at `/oauth/authorize`; see [OAuth and OIDC](../../guides/applications/oauth-oidc.md#prompt-and-max_age).
 
+`GET /.well-known/oauth-authorization-server` (RFC 8414) answers the same
+document as `/.well-known/openid-configuration`. The discovery documents, the
+JWKS, `/oauth/token` and `/oauth/revoke` accept requests from any origin
+without credentials (CORS `*`).
+
+**Resource indicators (RFC 8707).** A `resource` parameter at authorize
+enters the protected resource flow when it is the `uri` of an active
+[protected resource](../../guides/applications/protect-mcp-server.md) of the
+client's resource. Any other value, or a repeated `resource`, is
+`invalid_target`, sent to the redirect URI once the client and redirect are
+known. Without `resource` nothing changes. In the flow:
+
+- `scope` lists the resource's permissions (`notes:read`), and may add OIDC
+  scopes. With no `scope`, the protected resource's `default_scopes` apply.
+  Permissions the user does not hold are dropped, and the token response's
+  `scope` lists the granted ones.
+- `openid` and `nonce` are optional. `state` and S256 PKCE are required.
+- A client with the `refresh_token` grant gets `offline_access` implicitly.
+- Tokens carry `aud` = the URI and `scope`/`scp` = the granted scopes. Each
+  refresh grants the consented scopes the user still holds.
+- The session lives the protected resource's `max_ttl_seconds`, and each
+  refresh token `idle_ttl_seconds`.
+- `resource` at `/oauth/token` (code or refresh) must equal the
+  authorization's, else `invalid_target`. When absent, the authorization's
+  applies.
+
 Discovery advertises `userinfo_endpoint`, `introspection_endpoint`,
 `end_session_endpoint`, `revocation_endpoint`, `claims_supported`,
 `backchannel_logout_supported`, `backchannel_logout_session_supported` and

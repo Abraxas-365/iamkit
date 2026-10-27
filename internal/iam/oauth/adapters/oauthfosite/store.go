@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -32,7 +33,18 @@ func (s *Store) Client(ctx context.Context, id string) (*oauth.Client, error) {
 	return s.Clients.FindActive(ctx, s.Environment, clientID)
 }
 func clientDTO(c *oauth.Client) *fosite.DefaultOpenIDConnectClient {
-	return authClient(&fosite.DefaultClient{ID: c.ID.String(), Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: []string{"openid", "profile", "email", "phone", "offline_access"}, Public: c.Public, Audience: []string{c.Audience}, GrantTypes: grantTypes(c), ResponseTypes: []string{"code"}}, c.Auth)
+	return authClient(&fosite.DefaultClient{ID: c.ID.String(), Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: clientScopes(c), Public: c.Public, Audience: []string{c.Audience}, GrantTypes: grantTypes(c), ResponseTypes: []string{"code"}}, c.Auth)
+}
+
+// clientScopes are what the client may ask for: the OpenID Connect scopes
+// and, when its resource is a protected resource, the resource's
+// permissions (ScopeStrategy matches them exactly: they hold no wildcard).
+func clientScopes(c *oauth.Client) []string {
+	scopes := slices.Clone(oauth.OIDCScopes)
+	if c.Protected != nil {
+		scopes = append(scopes, c.Protected.Scopes...)
+	}
+	return scopes
 }
 
 // grantTypes are the client's grants (the defaults for a client built

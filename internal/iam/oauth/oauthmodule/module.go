@@ -49,6 +49,9 @@ type Module struct {
 	// its user side; wire oauthhttp.Handler.Devices to enable it).
 	Devices oauth.Devices
 	HTTP    *oauthhttp.Handler
+	// ProtectedResources serves …/protected-resources and
+	// …/protected-resource-policy.
+	ProtectedResources *oauthhttp.ProtectedResources
 }
 
 func New(deps Deps) Module {
@@ -64,8 +67,10 @@ func New(deps Deps) Module {
 	handler.Accounts(oauthfosite.NewAccounts(deps.DB, clients, deps.Issuer, fetcher))
 	handler.Exchanges(service)
 	logouts := oauthsvc.NewLogouts(clients, oauthfosite.NewLogoutSender(deps.Keys, deps.Issuer, deps.Transport))
-	return Module{Commands: service, Queries: service, Flows: service, Devices: service, HTTP: handler, Logouts: oauthhttp.NewLogouts(logouts, logouts, deps.ActorID), Dispatcher: logouts, Jobs: []worker.Job{
-		{Name: "logout_delivery", Interval: config.LogoutDispatchInterval, Run: logouts.DispatchRound, Lag: logouts.Lag},
-		{Name: "logout_prune", Interval: time.Hour, Run: logouts.Prune},
-	}}
+	protected := oauthsvc.NewProtectedResources(oauthpg.NewProtectedResources(deps.DB))
+	return Module{Commands: service, Queries: service, Flows: service, Devices: service, HTTP: handler, Logouts: oauthhttp.NewLogouts(logouts, logouts, deps.ActorID), Dispatcher: logouts,
+		ProtectedResources: oauthhttp.NewProtectedResources(protected, protected, deps.ActorID), Jobs: []worker.Job{
+			{Name: "logout_delivery", Interval: config.LogoutDispatchInterval, Run: logouts.DispatchRound, Lag: logouts.Lag},
+			{Name: "logout_prune", Interval: time.Hour, Run: logouts.Prune},
+		}}
 }

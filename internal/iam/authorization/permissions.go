@@ -51,6 +51,10 @@ const (
 	// The sign-up waitlist: list entries, approve, reject and delete them.
 	PermWaitlistRead  = "iam:waitlist:read"
 	PermWaitlistWrite = "iam:waitlist:write"
+	// Protected resources (RFC 9728 resource servers such as remote MCP
+	// servers) and the environment's protected resource policy.
+	PermProtectedResourcesRead  = "iam:protected-resources:read"
+	PermProtectedResourcesWrite = "iam:protected-resources:write"
 )
 
 // Organization-bound permissions. They only open the
@@ -113,6 +117,7 @@ var IAMResourcePermissions = append([]string{
 	PermAPIKeysRead, PermAPIKeysWrite,
 	PermSecurityRead, PermSecurityWrite,
 	PermWaitlistRead, PermWaitlistWrite,
+	PermProtectedResourcesRead, PermProtectedResourcesWrite,
 }, OrgPermissions...)
 
 // Built-in roles of the IAM resource (roles.system_role). Every environment

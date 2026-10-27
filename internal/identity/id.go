@@ -134,6 +134,7 @@ type (
 	attemptTag       struct{} // sign-in attempt (risk signals)
 	restrictionTag   struct{} // risk allow/deny restriction
 	waitlistTag      struct{} // waitlist entry
+	protectedTag     struct{} // protected resource (RFC 9728 resource server)
 )
 
 // tagName returns a human-readable name for error messages.
@@ -214,6 +215,8 @@ func tagName[T any]() string {
 		return "restriction_id"
 	case waitlistTag:
 		return "waitlist_entry_id"
+	case protectedTag:
+		return "protected_resource_id"
 	default:
 		return "id"
 	}
@@ -272,6 +275,9 @@ type (
 	RestrictionID = ID[restrictionTag]
 	// WaitlistEntryID names a sign-up waitlist entry.
 	WaitlistEntryID = ID[waitlistTag]
+	// ProtectedResourceID names a protected resource (an OAuth resource
+	// server such as a remote MCP server).
+	ProtectedResourceID = ID[protectedTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -303,18 +309,19 @@ func NewFactorID() FactorID             { return NewID[factorTag]() }
 func NewServiceProviderID() ServiceProviderID {
 	return NewID[spTag]()
 }
-func NewResourceGrantID() ResourceGrantID { return NewID[resourceGrantTag]() }
-func NewAPIKeyID() APIKeyID               { return NewID[apiKeyTag]() }
-func NewUserKeyID() UserKeyID             { return NewID[userKeyTag]() }
-func NewSubscriptionID() SubscriptionID   { return NewID[subscriptionTag]() }
-func NewTargetID() TargetID               { return NewID[targetTag]() }
-func NewSetupLinkID() SetupLinkID         { return NewID[setupLinkTag]() }
-func NewAuditActionID() AuditActionID     { return NewID[auditActionTag]() }
-func NewAuditEventID() AuditEventID       { return NewID[auditEventTag]() }
-func NewLogStreamID() LogStreamID         { return NewID[logStreamTag]() }
-func NewSignInAttemptID() SignInAttemptID { return NewID[attemptTag]() }
-func NewRestrictionID() RestrictionID     { return NewID[restrictionTag]() }
-func NewWaitlistEntryID() WaitlistEntryID { return NewID[waitlistTag]() }
+func NewResourceGrantID() ResourceGrantID         { return NewID[resourceGrantTag]() }
+func NewAPIKeyID() APIKeyID                       { return NewID[apiKeyTag]() }
+func NewUserKeyID() UserKeyID                     { return NewID[userKeyTag]() }
+func NewSubscriptionID() SubscriptionID           { return NewID[subscriptionTag]() }
+func NewTargetID() TargetID                       { return NewID[targetTag]() }
+func NewSetupLinkID() SetupLinkID                 { return NewID[setupLinkTag]() }
+func NewAuditActionID() AuditActionID             { return NewID[auditActionTag]() }
+func NewAuditEventID() AuditEventID               { return NewID[auditEventTag]() }
+func NewLogStreamID() LogStreamID                 { return NewID[logStreamTag]() }
+func NewSignInAttemptID() SignInAttemptID         { return NewID[attemptTag]() }
+func NewRestrictionID() RestrictionID             { return NewID[restrictionTag]() }
+func NewWaitlistEntryID() WaitlistEntryID         { return NewID[waitlistTag]() }
+func NewProtectedResourceID() ProtectedResourceID { return NewID[protectedTag]() }
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -359,6 +366,9 @@ func ParseLogStreamID(raw string) (LogStreamID, error)         { return ParseID[
 func ParseSignInAttemptID(raw string) (SignInAttemptID, error) { return ParseID[attemptTag](raw) }
 func ParseRestrictionID(raw string) (RestrictionID, error)     { return ParseID[restrictionTag](raw) }
 func ParseWaitlistEntryID(raw string) (WaitlistEntryID, error) { return ParseID[waitlistTag](raw) }
+func ParseProtectedResourceID(raw string) (ProtectedResourceID, error) {
+	return ParseID[protectedTag](raw)
+}
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.
 func MustParseEnvironmentID(raw string) EnvironmentID   { return MustParseID[environmentTag](raw) }

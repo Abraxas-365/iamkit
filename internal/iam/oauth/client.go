@@ -35,6 +35,9 @@ type Client struct {
 	// InitiateLoginURI is the client's sign-in endpoint for third-party
 	// initiated logins (empty: none).
 	InitiateLoginURI string
+	// Protected is the protected resource behind the client's resource
+	// (nil: none, or inactive): the target of RFC 8707 resource requests.
+	Protected *ProtectedTarget
 }
 
 // Access token formats of an OAuth client. Opaque tokens are resolved only

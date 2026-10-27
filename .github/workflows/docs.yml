@@ -86,6 +86,12 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+      - name: MCP server example typechecks and passes its tests
+        working-directory: examples/mcp-server
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
 
   python:
     # The Python SDK (iamkit): lint, strict types and tests on the oldest and newest supported Pythons.

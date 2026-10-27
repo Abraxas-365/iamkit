@@ -50,6 +50,7 @@ class IAMKit:
         self.audit_logs = r.AuditLogs(self._core)
         self.risk = r.Risk(self._core)
         self.waitlist = r.Waitlist(self._core)
+        self.protected_resources = r.ProtectedResources(self._core)
 
     @property
     def environment_id(self) -> str | None:
@@ -116,6 +117,7 @@ class AsyncIAMKit:
         self.audit_logs = a.AuditLogs(self._core)
         self.risk = a.Risk(self._core)
         self.waitlist = a.Waitlist(self._core)
+        self.protected_resources = a.ProtectedResources(self._core)
 
     @property
     def environment_id(self) -> str | None:

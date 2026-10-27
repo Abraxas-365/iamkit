@@ -6239,6 +6239,27 @@
         ],
         "type": "object"
       },
+      "PaginatedProtectedResource": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProtectedResource"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object"
+      },
       "PaginatedResource": {
         "properties": {
           "items": {
@@ -7191,6 +7212,174 @@
           },
           "org_unit_id": {
             "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ProtectedResource": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "application_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "default_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "environment_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "idle_ttl_seconds": {
+            "type": "integer"
+          },
+          "max_ttl_seconds": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "active",
+          "application_id",
+          "created_at",
+          "default_scopes",
+          "environment_id",
+          "id",
+          "idle_ttl_seconds",
+          "max_ttl_seconds",
+          "name",
+          "resource_id",
+          "uri"
+        ],
+        "type": "object"
+      },
+      "ProtectedResourceCreateInput": {
+        "properties": {
+          "application_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "default_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "idle_ttl_seconds": {
+            "type": "integer"
+          },
+          "max_ttl_seconds": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProtectedResourceImpact": {
+        "properties": {
+          "active_sessions": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active_sessions"
+        ],
+        "type": "object"
+      },
+      "ProtectedResourcePolicy": {
+        "properties": {
+          "max_idle_ttl_seconds": {
+            "type": "integer"
+          },
+          "max_lifetime_ttl_seconds": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_idle_ttl_seconds",
+          "max_lifetime_ttl_seconds"
+        ],
+        "type": "object"
+      },
+      "ProtectedResourcePolicyInput": {
+        "properties": {
+          "max_idle_ttl_seconds": {
+            "type": "integer"
+          },
+          "max_lifetime_ttl_seconds": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "ProtectedResourceUpdateInput": {
+        "properties": {
+          "active": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "default_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "idle_ttl_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "max_ttl_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
             "type": [
               "string",
               "null"
@@ -11040,6 +11229,26 @@
                       "type": "null"
                     }
                   ]
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "tags": [
+          "OAuth 2.0 / OpenID Connect"
+        ]
+      }
+    },
+    "/.well-known/oauth-authorization-server": {
+      "get": {
+        "operationId": "getWellKnownOauthAuthorizationServer",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Discovery"
                 }
               }
             },
@@ -24000,6 +24209,520 @@
             "accessToken": []
           }
         ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resource-policy": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentProtectedResourcePolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResourcePolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "put": {
+        "operationId": "putApiEnvironmentsbyEnvironmentProtectedResourcePolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedResourcePolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResourcePolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentProtectedResources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedProtectedResource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentProtectedResources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedResourceCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResource"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentProtectedResourcesbyId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentProtectedResourcesbyId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "patch": {
+        "operationId": "patchApiEnvironmentsbyEnvironmentProtectedResourcesbyId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedResourceUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/impact": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResourceImpact"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "impact returns the live sessions deactivating or deleting the resource would end, so the console can warn before either.",
         "tags": [
           "Scoped API"
         ]
@@ -48754,6 +49477,544 @@
           }
         ],
         "summary": "Set replaces the policy with the complete body.",
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resource-policy": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResourcePolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResourcePolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "put": {
+        "operationId": "putManagementEnvironmentsbyEnvironmentProtectedResourcePolicy",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedResourcePolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResourcePolicy"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedProtectedResource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentProtectedResources",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedResourceCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResource"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentProtectedResourcesbyId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResourcesbyId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "patch": {
+        "operationId": "patchManagementEnvironmentsbyEnvironmentProtectedResourcesbyId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProtectedResourceUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResource"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/impact": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtectedResourceImpact"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "impact returns the live sessions deactivating or deleting the resource would end, so the console can warn before either.",
         "tags": [
           "Management API"
         ]

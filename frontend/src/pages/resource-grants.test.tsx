@@ -39,6 +39,8 @@ beforeEach(() => {
                     { id: 'r9', name: 'Other', resource_id: 'res9' },
                   ]) :
                     path === `${env}/resources` ? page([resource, { id: 'iam1', name: 'IAM', prefix: 'iam', audience: 'urn:iamkit:environment:env1', permissions: ['iam:users:read'] }]) :
+                    path === `${env}/protected-resources` ? page([{ id: 'pr1', resource_id: 'res1', uri: 'https://mcp.example/mcp', name: 'Invoices MCP', default_scopes: ['invoices:read'], idle_ttl_seconds: 604800, max_ttl_seconds: 2592000, active: true, created_at: '2026-01-01T00:00:00Z' }]) :
+                    path === `${env}/protected-resources/pr1/impact` ? { active_sessions: 7 } :
                     path === `${env}/resource-grants` ? page(url.includes('organization_id=o2') ? [grants[0]] : grants) : []
     return Response.json(data)
   })
@@ -108,6 +110,18 @@ it('offers no edit for the built-in IAM resource', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Actions for IAM' }))
   expect(await screen.findByRole('menuitem', { name: 'Open' })).toBeTruthy()
   expect(screen.queryByRole('menuitem', { name: 'Edit' })).toBeNull()
+})
+
+it('warns how many sessions deactivating the MCP server ends', async () => {
+  open('/resources/res1')
+  expect(await screen.findByRole('heading', { name: 'MCP server' })).toBeTruthy()
+  await userEvent.click(screen.getByRole('button', { name: 'Deactivate' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(within(dialog).getByText(/7 active sessions of its clients end at once/)).toBeTruthy()
+  expect(calls('PATCH')).toHaveLength(0)
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Deactivate' }))
+  await waitFor(() => expect(calls('PATCH')).toHaveLength(1))
+  expect(calls('PATCH')[0]).toMatchObject({ url: expect.stringContaining(`${env}/protected-resources/pr1`), body: { active: false } })
 })
 
 it('hides write actions from viewers', async () => {

@@ -92,6 +92,14 @@ const (
 	// /oauth/authorize and completion; the hosted login pages (identify,
 	// verify, choose organization) run inside this window.
 	OAuthAuthorizationTicketTTL = 10 * time.Minute
+	// Protected resources (RFC 8707/9728 resource servers such as remote
+	// MCP servers): a resource's default refresh inactivity window and
+	// absolute authorization lifetime, and the environment ceilings that
+	// apply while the environment saved no policy.
+	ProtectedResourceIdleTTL         = 7 * 24 * time.Hour
+	ProtectedResourceMaxTTL          = 30 * 24 * time.Hour
+	ProtectedResourceIdleCeiling     = 30 * 24 * time.Hour
+	ProtectedResourceLifetimeCeiling = 90 * 24 * time.Hour
 	// FederationStateTTL bounds a round trip to an external identity
 	// provider (state row and browser binding cookie).
 	FederationStateTTL = 5 * time.Minute

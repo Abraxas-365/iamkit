@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, PageHeader, SwitchField, Time } from '@/components/library/patterns'
 import { HistorySection } from './history'
 import { ApiKeyAllowlist } from './resource-api-keys'
+import { ProtectedResourceSection } from './resource-protected'
 import { rich, t } from '@/lib/i18n'
 
 export interface Resource {
@@ -166,6 +167,8 @@ export default function ResourceDetailPage() {
     </div>}
 
     <ApiKeyAllowlist base={base} resource={resource} canWrite={canWrite} system={system} onSaved={load} />
+
+    {!system && <ProtectedResourceSection base={base} resource={resource.id} canWrite={canWrite} />}
 
     {!system && <HistorySection path={`${base}/resources/${resource.id}`} refresh={resource} />}
 

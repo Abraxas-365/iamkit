@@ -3,10 +3,13 @@ package server
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthhttp"
 	"github.com/gofiber/fiber/v2"
 )
 
@@ -61,8 +64,11 @@ func TestCORSScopes(t *testing.T) {
 	cases := []struct{ path, origin, want string }{
 		{"/identity/v1/login", "https://login.example", "https://login.example"},
 		{"/oauth/authorize/complete", "https://login.example", "https://login.example"},
-		{"/.well-known/openid-configuration", "https://login.example", "https://login.example"},
-		{"/.well-known/jwks.json", "https://evil.example", ""},
+		{"/.well-known/openid-configuration", "https://login.example", "*"},
+		{"/.well-known/oauth-authorization-server", "https://evil.example", "*"},
+		{"/.well-known/jwks.json", "https://evil.example", "*"},
+		{"/oauth/token", "https://login.example", "https://login.example"},
+		{"/oauth/token", "https://evil.example", ""},
 		{"/management/v1/projects", "https://login.example", ""},
 		{"/api/v1/environments/x/users", "https://login.example", ""},
 		{"/identity/v1/login", "https://console.example", "https://console.example"},
@@ -74,7 +80,51 @@ func TestCORSScopes(t *testing.T) {
 			t.Errorf("%s from %s: %q, want %q", c.path, c.origin, got, c.want)
 		}
 	}
-	if (&Server{}).corsMiddleware() != nil {
-		t.Fatal("CORS without any origin source")
+}
+
+// TestPublicCORS: the discovery documents are open to every origin and the
+// token endpoint's answer only to public clients, never with credentials,
+// even with no configured origin.
+func TestPublicCORS(t *testing.T) {
+	app := fiber.New()
+	app.Use((&Server{}).corsMiddleware())
+	app.Post("/oauth/token", func(c *fiber.Ctx) error {
+		if c.FormValue("client_id") == "public" {
+			c.Locals(oauthhttp.PublicClientLocal, true)
+		}
+		return c.SendStatus(200)
+	})
+	app.All("/*", func(c *fiber.Ctx) error { return c.SendStatus(200) })
+	send := func(method, path, body string, headers map[string]string) *http.Response {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Origin", "https://inspector.example")
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		res, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+	pre := map[string]string{"Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type,mcp-protocol-version"}
+	for _, path := range []string{"/.well-known/oauth-authorization-server", "/oauth/token", "/oauth/revoke"} {
+		res := send("OPTIONS", path, "", pre)
+		if res.StatusCode != 204 || res.Header.Get("Access-Control-Allow-Origin") != "*" || !strings.Contains(res.Header.Get("Access-Control-Allow-Headers"), "MCP-Protocol-Version") || res.Header.Get("Access-Control-Allow-Credentials") != "" {
+			t.Errorf("preflight %s: %d %v", path, res.StatusCode, res.Header)
+		}
+	}
+	if res := send("GET", "/.well-known/jwks.json", "", nil); res.Header.Get("Access-Control-Allow-Origin") != "*" || res.Header.Get("Access-Control-Allow-Credentials") != "" {
+		t.Errorf("jwks: %v", res.Header)
+	}
+	if res := send("POST", "/oauth/token", "client_id=public", nil); res.Header.Get("Access-Control-Allow-Origin") != "*" {
+		t.Errorf("public client answer: %v", res.Header)
+	}
+	if res := send("POST", "/oauth/token", "client_id=confidential", nil); res.Header.Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("confidential client answer readable: %v", res.Header)
+	}
+	if res := send("GET", "/management/v1/projects", "", nil); res.Header.Get("Access-Control-Allow-Origin") != "" {
+		t.Errorf("management open: %v", res.Header)
 	}
 }

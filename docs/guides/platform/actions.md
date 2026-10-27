@@ -131,7 +131,7 @@ Answer `204` (or `200` with an empty body or `{}`) to change nothing. A
   `at_hash`, `c_hash`, `sid`, `act`, `scope`, `scp`, `client_id`,
   `environment_id`, `organization_id`, `application_id`, `resource_id`,
   `permissions`, `purpose`, `oauth_client_id`, `token_use`, `token_type`,
-  `cnf`, `may_act` — as is any claim the token already carries (profile
+  `cnf`, `may_act`, `resource` — as is any claim the token already carries (profile
   claims, `email`, …). Claims from `pre_access_token` are recomputed on every
   refresh.
 - **`patch`** replaces the listed string fields, then the request is

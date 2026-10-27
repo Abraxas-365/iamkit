@@ -3,11 +3,13 @@ package server
 import (
 	"context"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
+	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthhttp"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 )
@@ -46,8 +48,109 @@ func corsConfig(origins string) cors.Config {
 
 // corsMiddleware is CORS for the deployment's origins on every route and,
 // on browser-facing routes, also for the origins clients allow (looked up
-// through a short cache). Nil when neither is configured.
+// through a short cache); the public discovery documents and the token and
+// revocation endpoints are also open to any origin without credentials
+// (MCP clients running in a browser).
 func (s *Server) corsMiddleware() fiber.Handler {
+	credentialed := s.credentialedCORS()
+	return func(c *fiber.Ctx) error {
+		path := c.Path()
+		if publicDocument(path) {
+			return openCORS(c)
+		}
+		if publicEndpoint(path) {
+			return endpointCORS(c, credentialed)
+		}
+		if credentialed != nil {
+			return credentialed(c)
+		}
+		return c.Next()
+	}
+}
+
+// publicDocument are the discovery documents any origin may read (an MCP
+// client in a browser, such as MCP Inspector, reads them before it has a
+// client): Access-Control-Allow-Origin *, never credentials.
+func publicDocument(path string) bool {
+	switch path {
+	case "/.well-known/oauth-authorization-server", "/.well-known/openid-configuration", "/.well-known/jwks.json":
+		return true
+	}
+	return false
+}
+
+// publicEndpoint are the OAuth endpoints public clients call from a
+// browser of any origin: the preflight is open, the answer readable only
+// when the client is public (oauthhttp.PublicClientLocal).
+func publicEndpoint(path string) bool {
+	return path == "/oauth/token" || path == "/oauth/revoke"
+}
+
+// publicHeaders are the request headers an open preflight admits.
+const publicHeaders = "Content-Type,Authorization,MCP-Protocol-Version,X-Request-Id,traceparent,tracestate"
+
+func preflight(c *fiber.Ctx) bool {
+	return c.Method() == fiber.MethodOptions && c.Get(fiber.HeaderAccessControlRequestMethod) != ""
+}
+
+func openPreflight(c *fiber.Ctx, methods string) {
+	c.Set(fiber.HeaderAccessControlAllowOrigin, "*")
+	c.Set(fiber.HeaderAccessControlAllowMethods, methods)
+	c.Set(fiber.HeaderAccessControlAllowHeaders, publicHeaders)
+	c.Set(fiber.HeaderAccessControlMaxAge, strconv.Itoa(config.CORSMaxAge))
+}
+
+// openCORS answers any origin without credentials.
+func openCORS(c *fiber.Ctx) error {
+	if c.Get(fiber.HeaderOrigin) == "" {
+		return c.Next()
+	}
+	if preflight(c) {
+		openPreflight(c, "GET,HEAD,OPTIONS")
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+	c.Set(fiber.HeaderAccessControlAllowOrigin, "*")
+	c.Set(fiber.HeaderAccessControlExposeHeaders, "X-Request-Id")
+	return c.Next()
+}
+
+// endpointCORS keeps the configured origins' credentialed CORS on the
+// token and revocation endpoints and, for every other origin, opens the
+// preflight and exposes the answer only to public clients.
+func endpointCORS(c *fiber.Ctx, credentialed fiber.Handler) error {
+	if c.Get(fiber.HeaderOrigin) == "" {
+		return c.Next()
+	}
+	if preflight(c) {
+		if credentialed != nil {
+			err := credentialed(c)
+			if len(c.Response().Header.Peek(fiber.HeaderAccessControlAllowOrigin)) > 0 {
+				return err
+			}
+		}
+		openPreflight(c, "POST,OPTIONS")
+		return c.SendStatus(fiber.StatusNoContent)
+	}
+	var err error
+	if credentialed != nil {
+		err = credentialed(c)
+	} else {
+		err = c.Next()
+	}
+	c.Vary(fiber.HeaderOrigin)
+	if len(c.Response().Header.Peek(fiber.HeaderAccessControlAllowOrigin)) == 0 {
+		if public, _ := c.Locals(oauthhttp.PublicClientLocal).(bool); public {
+			c.Set(fiber.HeaderAccessControlAllowOrigin, "*")
+			c.Set(fiber.HeaderAccessControlExposeHeaders, "X-Request-Id")
+		}
+	}
+	return err
+}
+
+// credentialedCORS is CORS for the deployment's origins on every route
+// and, on browser-facing routes, also for the origins clients allow (nil
+// when neither is configured).
+func (s *Server) credentialedCORS() fiber.Handler {
 	var global fiber.Handler
 	if s.AllowedOrigins != "" {
 		global = cors.New(corsConfig(s.AllowedOrigins))

@@ -256,6 +256,14 @@ const (
 	WaitlistRejected  = "waitlist.rejected"
 	WaitlistDeleted   = "waitlist.deleted"
 	WaitlistCompleted = "waitlist.completed"
+	// Protected resources (RFC 9728 resource servers, e.g. remote MCP
+	// servers): created / updated / deleted (data uri, resource_id,
+	// application_id); the environment's TTL ceilings changed
+	// (protected_resource_policy.updated, data the ceilings and trimmed).
+	ProtectedResourceCreated       = "protected_resource.created"
+	ProtectedResourceUpdated       = "protected_resource.updated"
+	ProtectedResourceDeleted       = "protected_resource.deleted"
+	ProtectedResourcePolicyUpdated = "protected_resource_policy.updated"
 	// RiskDetected: a sign-in fired detections whose action is log or
 	// stronger; subject = the sign-in attempt, data user_id, detections,
 	// action, outcome, ip, country, method, surface.

@@ -63,8 +63,12 @@ type Authorization interface {
 	// Session is the end-user session an authorization completes with.
 	Session(ctx context.Context, session identity.SessionID) (SessionInfo, error)
 	// Bind records the client the session was authorized for; a session
-	// keeps the first client it was bound to.
-	Bind(ctx context.Context, session identity.SessionID, client identity.ClientID) error
+	// keeps the first client it was bound to. A positive lifetime (a
+	// protected resource's) also ends the session that long after it began
+	// when this call binds it. It returns this grant's deadline: the
+	// session's end, capped at lifetime (or config.SessionTTL without one)
+	// from the session's start, so a reused session never widens a grant.
+	Bind(ctx context.Context, session identity.SessionID, client identity.ClientID, lifetime time.Duration) (time.Time, error)
 	Consume(ctx context.Context, hash []byte) error
 	// ApproveDevice marks the pending device authorization of a device
 	// ticket approved with login and audits oauth.device_approved.
@@ -211,6 +215,49 @@ type LogoutRepository interface {
 type Secrets interface {
 	Generate(prefix string) (string, []byte, error)
 	Hash(raw string) []byte
+}
+
+// ProtectedResourceCommands and ProtectedResourceQueries manage an
+// environment's protected resources (OAuth resource servers such as remote
+// MCP servers) and its TTL policy for them.
+type ProtectedResourceCommands interface {
+	CreateProtectedResource(ctx context.Context, m Mutation, input ProtectedResourceCreate) (identity.ProtectedResourceID, error)
+	UpdateProtectedResource(ctx context.Context, m Mutation, resource identity.ProtectedResourceID, input ProtectedResourceUpdate) error
+	DeleteProtectedResource(ctx context.Context, m Mutation, resource identity.ProtectedResourceID) error
+	SetProtectedResourcePolicy(ctx context.Context, m Mutation, policy ProtectedResourcePolicy) error
+}
+type ProtectedResourceQueries interface {
+	ListProtectedResources(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[ProtectedResource], error)
+	FindProtectedResource(ctx context.Context, environment identity.EnvironmentID, resource identity.ProtectedResourceID) (ProtectedResource, error)
+	// ProtectedResourceImpact counts what deactivating or deleting the
+	// resource would end (the console's warning).
+	ProtectedResourceImpact(ctx context.Context, environment identity.EnvironmentID, resource identity.ProtectedResourceID) (ProtectedResourceImpact, error)
+	// ProtectedResourcePolicy is the saved policy, else the default.
+	ProtectedResourcePolicy(ctx context.Context, environment identity.EnvironmentID) (ProtectedResourcePolicy, error)
+}
+
+// ProtectedResourceRepository persists protected resources; writes are
+// audited with m in the same transaction.
+type ProtectedResourceRepository interface {
+	// ProtectedResourceSource reads the application's resource (not found
+	// when the resource is not linked to the application).
+	ProtectedResourceSource(ctx context.Context, environment identity.EnvironmentID, application identity.ApplicationID, resource identity.ResourceID) (ProtectedResourceSource, error)
+	// CreateProtectedResource fails with a conflict when the URI or the
+	// resource already has one.
+	CreateProtectedResource(ctx context.Context, m Mutation, id identity.ProtectedResourceID, uri string, input ProtectedResourceCreate) error
+	SaveProtectedResource(ctx context.Context, m Mutation, resource ProtectedResource) error
+	DeleteProtectedResource(ctx context.Context, m Mutation, resource identity.ProtectedResourceID) error
+	ListProtectedResources(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[ProtectedResource], error)
+	FindProtectedResource(ctx context.Context, environment identity.EnvironmentID, resource identity.ProtectedResourceID) (ProtectedResource, error)
+	// ProtectedResourceImpact counts the live sessions that
+	// DeleteProtectedResource or a deactivation would end (not found when
+	// the resource is not in the environment).
+	ProtectedResourceImpact(ctx context.Context, environment identity.EnvironmentID, resource identity.ProtectedResourceID) (ProtectedResourceImpact, error)
+	// ProtectedResourcePolicy is nil when the environment saved none.
+	ProtectedResourcePolicy(ctx context.Context, environment identity.EnvironmentID) (*ProtectedResourcePolicy, error)
+	// SetProtectedResourcePolicy saves the policy and trims the TTLs of the
+	// environment's protected resources above it.
+	SetProtectedResourcePolicy(ctx context.Context, m Mutation, policy ProtectedResourcePolicy) error
 }
 type Passwords interface {
 	Hash(password string) (string, error)

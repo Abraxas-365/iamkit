@@ -228,6 +228,12 @@ var actions = map[string]named{
 	"waitlist.approve": {WaitlistApproved, "waitlist_entry"},
 	"waitlist.reject":  {WaitlistRejected, "waitlist_entry"},
 	"waitlist.delete":  {WaitlistDeleted, "waitlist_entry"},
+	// Protected resources (oauth.ActionProtectedResource*; target = the
+	// protected resource id, or the environment for the policy).
+	"protected_resource.create":        {ProtectedResourceCreated, "protected_resource"},
+	"protected_resource.update":        {ProtectedResourceUpdated, "protected_resource"},
+	"protected_resource.delete":        {ProtectedResourceDeleted, "protected_resource"},
+	"protected_resource_policy.update": {ProtectedResourcePolicyUpdated, "environment"},
 	// Ends a session: the trigger writes session.revoked.
 	"oauth.logout": {},
 }

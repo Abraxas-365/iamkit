@@ -257,5 +257,8 @@ type Login struct {
 type SessionInfo struct {
 	Expires       time.Time
 	Authenticated time.Time
-	AMR           []string
+	// Started is when the session was created (a resource grant's lifetime
+	// counts from it).
+	Started time.Time
+	AMR     []string
 }

@@ -1,6 +1,8 @@
 package oauth
 
 import (
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -23,11 +25,17 @@ func ValidateAuthorization(issuer string, client *Client, query map[string][]str
 		return v[0]
 	}
 	for key, v := range query {
-		if len(v) != 1 || key == "request" || key == "request_uri" {
+		// Several resource values are invalid_target, answered at the
+		// redirect once it is known to be the client's.
+		if (len(v) != 1 && key != "resource") || key == "request" || key == "request_uri" {
 			return errx.Validation("invalid authorization request")
 		}
 	}
-	if !client.RedirectRegistered(get("redirect_uri")) || get("response_type") != "code" || get("code_challenge_method") != "S256" || get("code_challenge") == "" || get("state") == "" || get("nonce") == "" || (get("response_mode") != "" && get("response_mode") != "query") {
+	// nonce binds an ID token: a resource server's client that asks for no
+	// openid gets none, so it needs no nonce (state still guards the
+	// redirect).
+	nonce := get("nonce") != "" || (len(query["resource"]) > 0 && !slices.Contains(strings.Fields(get("scope")), "openid"))
+	if !client.RedirectRegistered(get("redirect_uri")) || get("response_type") != "code" || get("code_challenge_method") != "S256" || get("code_challenge") == "" || get("state") == "" || !nonce || (get("response_mode") != "" && get("response_mode") != "query") {
 		return errx.Validation("code, exact redirect, S256, state and nonce required")
 	}
 	if _, err := ConnectionHint(query); err != nil {

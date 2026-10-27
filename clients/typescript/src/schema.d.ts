@@ -20,6 +20,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/.well-known/oauth-authorization-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getWellKnownOauthAuthorizationServer"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/.well-known/openid-configuration": {
         parameters: {
             query?: never;
@@ -1887,6 +1903,71 @@ export interface paths {
             cookie?: never;
         };
         get: operations["getApiEnvironmentsbyEnvironmentOrganizationsbyOrganizationTree"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resource-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentProtectedResourcePolicy"];
+        put: operations["putApiEnvironmentsbyEnvironmentProtectedResourcePolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentProtectedResources"];
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentProtectedResources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentProtectedResourcesbyId"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentProtectedResourcesbyId"];
+        options?: never;
+        head?: never;
+        patch: operations["patchApiEnvironmentsbyEnvironmentProtectedResourcesbyId"];
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** impact returns the live sessions deactivating or deleting the resource would end, so the console can warn before either. */
+        get: operations["getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdImpact"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5617,6 +5698,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/management/v1/environments/{environment}/protected-resource-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentProtectedResourcePolicy"];
+        put: operations["putManagementEnvironmentsbyEnvironmentProtectedResourcePolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentProtectedResources"];
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentProtectedResources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentProtectedResourcesbyId"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentProtectedResourcesbyId"];
+        options?: never;
+        head?: never;
+        patch: operations["patchManagementEnvironmentsbyEnvironmentProtectedResourcesbyId"];
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** impact returns the live sessions deactivating or deleting the resource would end, so the console can warn before either. */
+        get: operations["getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdImpact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/management/v1/environments/{environment}/provisioned-identities": {
         parameters: {
             query?: never;
@@ -8945,6 +9091,10 @@ export interface components {
             items: components["schemas"]["MemberView"][] | null;
             page: components["schemas"]["Page"];
         };
+        PaginatedProtectedResource: {
+            items: components["schemas"]["ProtectedResource"][] | null;
+            page: components["schemas"]["Page"];
+        };
         PaginatedResource: {
             items: components["schemas"]["Resource"][] | null;
             page: components["schemas"]["Page"];
@@ -9191,6 +9341,52 @@ export interface components {
             manager_id?: string | null;
             /** @description UUID (empty when unset) */
             org_unit_id?: string | null;
+        };
+        ProtectedResource: {
+            active: boolean;
+            /** @description UUID (empty when unset) */
+            application_id: string;
+            /** Format: date-time */
+            created_at: string;
+            default_scopes: string[] | null;
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            idle_ttl_seconds: number;
+            max_ttl_seconds: number;
+            name: string;
+            /** @description UUID (empty when unset) */
+            resource_id: string;
+            uri: string;
+        };
+        ProtectedResourceCreateInput: {
+            /** @description UUID (empty when unset) */
+            application_id?: string;
+            default_scopes?: string[] | null;
+            idle_ttl_seconds?: number;
+            max_ttl_seconds?: number;
+            name?: string;
+            /** @description UUID (empty when unset) */
+            resource_id?: string;
+        };
+        ProtectedResourceImpact: {
+            active_sessions: number;
+        };
+        ProtectedResourcePolicy: {
+            max_idle_ttl_seconds: number;
+            max_lifetime_ttl_seconds: number;
+        };
+        ProtectedResourcePolicyInput: {
+            max_idle_ttl_seconds?: number;
+            max_lifetime_ttl_seconds?: number;
+        };
+        ProtectedResourceUpdateInput: {
+            active?: boolean | null;
+            default_scopes?: string[] | null;
+            idle_ttl_seconds?: number | null;
+            max_ttl_seconds?: number | null;
+            name?: string | null;
         };
         ProvisioningCredential: {
             /** @description UUID (empty when unset) */
@@ -10236,6 +10432,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown | null;
+                };
+            };
+        };
+    };
+    getWellKnownOauthAuthorizationServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Discovery"];
                 };
             };
         };
@@ -18043,6 +18259,352 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentProtectedResourcePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourcePolicy"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putApiEnvironmentsbyEnvironmentProtectedResourcePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProtectedResourcePolicyInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourcePolicy"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentProtectedResources: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedProtectedResource"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentProtectedResources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProtectedResourceCreateInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResource"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentProtectedResourcesbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResource"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentProtectedResourcesbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchApiEnvironmentsbyEnvironmentProtectedResourcesbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProtectedResourceUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResource"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdImpact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourceImpact"];
                 };
             };
             /** @description Client error */
@@ -33386,6 +33948,352 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentProtectedResourcePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourcePolicy"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putManagementEnvironmentsbyEnvironmentProtectedResourcePolicy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProtectedResourcePolicyInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourcePolicy"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentProtectedResources: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedProtectedResource"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentProtectedResources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProtectedResourceCreateInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResource"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentProtectedResourcesbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResource"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentProtectedResourcesbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    patchManagementEnvironmentsbyEnvironmentProtectedResourcesbyId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ProtectedResourceUpdateInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResource"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdImpact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourceImpact"];
+                };
             };
             /** @description Client error */
             "4XX": {

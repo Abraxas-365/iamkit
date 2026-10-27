@@ -148,7 +148,7 @@ type Result struct {
 
 // Claim names reserved by the tokens IAMKit issues; a target cannot set them.
 var ReservedClaims = []string{"iss", "sub", "aud", "exp", "iat", "nbf", "jti", "auth_time", "nonce", "acr", "amr", "azp", "at_hash", "c_hash", "sid", "act", "scope", "scp", "client_id",
-	"environment_id", "organization_id", "application_id", "resource_id", "permissions", "purpose", "oauth_client_id", "token_use", "token_type", "cnf", "may_act"}
+	"environment_id", "organization_id", "application_id", "resource_id", "permissions", "purpose", "oauth_client_id", "token_use", "token_type", "cnf", "may_act", "resource"}
 
 // claimName: a plain or namespaced (URL-style) claim name.
 var claimName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_.:/-]{0,127}$`)

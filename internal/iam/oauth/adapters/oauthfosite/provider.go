@@ -26,6 +26,15 @@ type Session struct {
 	// Injected names the access claims actions added, so a refresh drops
 	// them and asks the actions again.
 	Injected []string `json:"injected,omitempty"`
+	// Resource is the protected resource (RFC 8707) the grant is for
+	// (empty: a plain OpenID Connect grant); Consented its permissions the
+	// user agreed to, intersected with their current ones at every issuance.
+	Resource  string   `json:"resource,omitempty"`
+	Consented []string `json:"consented,omitempty"`
+	// Started is when the session of a resource grant began: every refresh
+	// holds the grant to Started + the resource's current lifetime, so a
+	// lowered ceiling also shortens grants already issued.
+	Started time.Time `json:"started,omitempty"`
 }
 
 func NewSession() *Session {
@@ -67,7 +76,7 @@ func NewProvider(store *Store, issuer string, secret []byte, keys signing.Keyrin
 	if len(secret) < 32 || keys == nil {
 		return nil, errx.Internal("OIDC signing configuration is invalid")
 	}
-	cfg := &fosite.Config{GlobalSecret: secret, AuthorizeCodeLifespan: config.OAuthAuthorizeCodeLifespan, AccessTokenLifespan: config.OAuthAccessTokenLifespan, RefreshTokenLifespan: config.OAuthRefreshTokenLifespan, RefreshTokenScopes: []string{"offline_access"}, IDTokenLifespan: config.OAuthIDTokenLifespan, IDTokenIssuer: issuer, AccessTokenIssuer: issuer, EnforcePKCE: true, EnablePKCEPlainChallengeMethod: false, SendDebugMessagesToClients: false, TokenURL: issuer + "/oauth/token", JWKSFetcherStrategy: fetcher, ScopeStrategy: scopeStrategy}
+	cfg := &fosite.Config{GlobalSecret: secret, AuthorizeCodeLifespan: config.OAuthAuthorizeCodeLifespan, AccessTokenLifespan: config.OAuthAccessTokenLifespan, RefreshTokenLifespan: config.OAuthRefreshTokenLifespan, RefreshTokenScopes: []string{"offline_access"}, IDTokenLifespan: config.OAuthIDTokenLifespan, IDTokenIssuer: issuer, AccessTokenIssuer: issuer, EnforcePKCE: true, EnablePKCEPlainChallengeMethod: false, SendDebugMessagesToClients: false, TokenURL: issuer + "/oauth/token", JWKSFetcherStrategy: fetcher, ScopeStrategy: scopeStrategy, JWTScopeClaimKey: jwt.JWTScopeFieldBoth}
 	signer := Signer{Keys: keys, Environment: store.Environment}
 	hmac := compose.NewOAuth2HMACStrategy(cfg)
 	strategy := &compose.CommonStrategy{

@@ -87,6 +87,9 @@ type APIHandlerSet struct {
 	Usage *usagehttp.Handler
 	// Waitlist serves the sign-up waitlist (iam:waitlist:read/write).
 	Waitlist *authhttp.WaitlistHandler
+	// ProtectedResources serves protected resources and their policy
+	// (iam:protected-resources:read/write).
+	ProtectedResources *oauthhttp.ProtectedResources
 }
 
 type Server struct {
@@ -158,6 +161,9 @@ type Server struct {
 	LogStreamDispatcher logstream.Dispatcher
 	// LogoutDeliveries is the back-channel logout delivery log.
 	LogoutDeliveries *oauthhttp.Logouts
+	// ProtectedResources serves …/protected-resources and
+	// …/protected-resource-policy.
+	ProtectedResources *oauthhttp.ProtectedResources
 	// LogoutDispatcher sends due back-channel logout notifications once
 	// (the worker runs it periodically; tests call it directly).
 	LogoutDispatcher oauth.Dispatcher
@@ -372,10 +378,9 @@ func (s *Server) App() *fiber.App {
 	}
 
 	// CORS — the deployment's origins everywhere, client origins on the
-	// browser-facing routes (cors.go); none when neither is configured.
-	if handler := s.corsMiddleware(); handler != nil {
-		app.Use(handler)
-	}
+	// browser-facing routes, the public discovery documents and token
+	// endpoints open to any origin without credentials (cors.go).
+	app.Use(s.corsMiddleware())
 	app.Get("/health", func(c *fiber.Ctx) error {
 		if err := s.Health(c.UserContext()); err != nil {
 			unavailable := errx.Wrap(err, "database unavailable", errx.TypeInternal)

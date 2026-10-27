@@ -18,6 +18,7 @@ export const sidebar = [
     page('guides/applications/custom-sign-in-ui', 'Custom sign-in UI'),
     page('guides/applications/oauth-oidc', 'OAuth and OpenID Connect'),
     page('guides/applications/saml-apps', 'SAML applications'),
+    page('guides/applications/protect-mcp-server', 'Protect an MCP server'),
     page('guides/sign-in/sessions', 'Manage user sessions'),
     page('guides/applications/signing-keys', 'Signing keys'),
   ]),

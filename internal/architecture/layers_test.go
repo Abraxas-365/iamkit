@@ -28,6 +28,12 @@ import (
 // modulePath is the Go module path + "/internal/".
 const modulePath = "github.com/Abraxas-365/iamkit/internal/"
 
+// sdkModule is the separate client SDK module (sdk/go.mod). The server
+// never imports it: go.work would hide the missing requirement locally, and
+// the root module must build without it (GOWORK=off). Rules the server and
+// an SDK both implement (RFC 8707 canonicalization) share test vectors.
+const sdkModule = "github.com/Abraxas-365/iamkit/sdk"
+
 // foundation packages (first path segment under internal/) import no domain.
 var foundation = map[string]bool{
 	"errx": true, "identity": true, "query": true, "config": true,
@@ -142,6 +148,10 @@ func importViolations(files []goFile) []string {
 						out = append(out, pos+": "+from.kind+" "+from.dir+" must not import "+p+" (transport/SQL belong in adapters)")
 					}
 				}
+			}
+			if p == sdkModule || strings.HasPrefix(p, sdkModule+"/") {
+				out = append(out, pos+": the server must not import the SDK module "+p+" (its own go.mod; share behaviour through test vectors like sdk/resourceserver/testdata/canonical.json)")
+				continue
 			}
 			if !strings.HasPrefix(p, modulePath) {
 				continue
@@ -345,12 +355,14 @@ import (_ "` + m + `widget/widgetsvc"; _ "` + m + `widget/adapters/widgetpg")`,
 		"order/ports.go":                `package order; type Status string; func Helper() {}`,                                 // ports with non-interfaces
 		"widget/widget_boot.go":         `package widget; import _ "` + m + `bootstrap"`,                                       // domain → wiring
 		"order/adapters/orderpg/r.go":   `package orderpg; import "` + m + `identity"; func f() { _ = identity.NewOrderID() }`, // repository generates an ID
+		"order/adapters/orderhttp/s.go": `package orderhttp; import _ "github.com/Abraxas-365/iamkit/sdk/resourceserver"`,      // server → SDK module
 	})
 	expectViolations(t, importViolations(files),
 		"identity/id.go: foundation packages import no domain code",
 		"order/ordersvc/s.go: depend on the Commands/Queries ports in widget",
 		"order/orderdb.go: domain order must not import github.com/jmoiron/sqlx",
 		"order/adapters/orderhttp/h.go: adapters are wired by the assembler",
+		"order/adapters/orderhttp/s.go: the server must not import the SDK module",
 		"order/ordermodule/m.go: only the composition root imports assemblers",
 		"widget/widget_boot.go: only the composition root (and cmd) may import bootstrap",
 	)

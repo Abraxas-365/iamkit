@@ -59,6 +59,7 @@ GET/HEAD select the read permission; mutations select write.
 | Event log (`GET /events`, `GET /events/export`, see [event log](../events.md)) | `iam:events:read` |
 | Entity history (`GET /users/:id/history`, also `organizations`, `applications`, `roles`, `resources`; see [change history](../events.md#change-history)) | `iam:events:read` and the collection's read permission |
 | Event webhooks (`/webhooks…`, see [event webhooks](../event-webhooks.md)) | `iam:webhooks:read` / `iam:webhooks:write` |
+| Protected resources (`/protected-resources…`, `/protected-resource-policy`; see [protect an MCP server](../../guides/applications/protect-mcp-server.md)) | `iam:protected-resources:read` / `iam:protected-resources:write` |
 | Log streams (`/log-streams…`, see [log streams](../../guides/platform/log-streams.md)) | `iam:audit-logs:read` / `iam:audit-logs:manage` |
 | Bot protection and risk (`/captcha`, `POST /captcha/test`, `/risk-policy`, `/risk-restrictions`, `/sign-in-attempts`, `/users/:id/devices`, `GET /risk/status`; see [bot protection](../../guides/sign-in/bot-protection.md) and [risk signals](../../guides/sign-in/risk-signals.md)) | `iam:security:read` (`GET`), `iam:security:write` (others) |
 | Daily usage (`GET /usage`, see [usage and limits](../../guides/platform/usage-limits.md)) | `iam:usage:read` |

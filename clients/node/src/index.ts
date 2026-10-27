@@ -153,3 +153,12 @@ export {
   type WaitlistList,
   type WaitlistStatus,
 } from "./waitlist.js";
+export {
+  ProtectedResourcesClient,
+  type ProtectedResource,
+  type ProtectedResourceCreate,
+  type ProtectedResourceList,
+  type ProtectedResourcePolicy,
+  type ProtectedResourcesClientOptions,
+  type ProtectedResourceUpdate,
+} from "./protected-resources.js";

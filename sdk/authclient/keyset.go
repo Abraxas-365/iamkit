@@ -60,14 +60,22 @@ func (k *KeySet) Key(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 			return nil, err
 		}
 	}
+	if k.keys == nil {
+		// Still in the outage that kept the first fetch from succeeding.
+		return nil, unavailable()
+	}
 	if key, ok := k.keys[kid]; ok {
 		return key, nil
 	}
 	return nil, &apierror.Error{Code: "UNAUTHORIZED", Message: "unknown signing key", HTTPStatus: 401}
 }
 
+func unavailable() error {
+	return &apierror.Error{Code: "JWKS_UNAVAILABLE", Message: "signing keys could not be fetched", HTTPStatus: 503}
+}
+
 func (k *KeySet) refresh(ctx context.Context) error {
-	failed := &apierror.Error{Code: "JWKS_UNAVAILABLE", Message: "signing keys could not be fetched", HTTPStatus: 503}
+	failed := unavailable()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, k.url, nil)
 	if err != nil {
 		return failed

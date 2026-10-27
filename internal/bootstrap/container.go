@@ -321,6 +321,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.OAuth = oauthModule.HTTP
 	s.ClientOrigins = oauthModule.Queries
 	s.LogoutDeliveries = oauthModule.Logouts
+	s.ProtectedResources = oauthModule.ProtectedResources
 	s.LogoutDispatcher = oauthModule.Dispatcher
 	eventModule := eventmodule.New(eventmodule.Deps{DB: db, Retention: o.retention, Cipher: o.sealer, Transport: o.webhooks, ActorID: server.OperatorID})
 	s.Events = eventModule.HTTP
@@ -432,14 +433,15 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 			Templates(authenticationModule.DeliveryService, authenticationModule.DeliveryService),
 		SMS:      authhttp.NewSMSHandler(authenticationModule.SMS, authenticationModule.SMSQueries, actor),
 		OrgAdmin: orgAdmin.HTTP, SetupLinks: orgadminhttp.NewSetupLinks(orgAdmin.SetupLinkCommands, orgAdmin.SetupLinkQueries, actor),
-		Events:          eventModule.HTTP,
-		AuditLogEvents:  auditLogModule.Events,
-		AuditLogActions: auditLogModule.Actions.WithActor(actor),
-		Webhooks:        eventModule.Webhooks.WithActor(actor),
-		LogStreams:      logStreamModule.HTTP.WithActor(actor),
-		Usage:           usageModule.HTTP,
-		Security:        riskModule.HTTP.WithActor(actor),
-		Waitlist:        authenticationModule.WaitlistHTTP.WithActor(actor),
+		Events:             eventModule.HTTP,
+		AuditLogEvents:     auditLogModule.Events,
+		AuditLogActions:    auditLogModule.Actions.WithActor(actor),
+		Webhooks:           eventModule.Webhooks.WithActor(actor),
+		LogStreams:         logStreamModule.HTTP.WithActor(actor),
+		Usage:              usageModule.HTTP,
+		Security:           riskModule.HTTP.WithActor(actor),
+		Waitlist:           authenticationModule.WaitlistHTTP.WithActor(actor),
+		ProtectedResources: oauthModule.ProtectedResources.WithActor(actor),
 	}
 	s.OrgAdminPortal = orgAdmin.PortalHTTP
 	s.SetupLinks = orgAdmin.SetupLinkHTTP

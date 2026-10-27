@@ -238,14 +238,37 @@ func (t *authorization) Session(ctx context.Context, id identity.SessionID) (oau
 	var row struct {
 		Expires       time.Time      `db:"expires_at"`
 		Authenticated time.Time      `db:"authenticated_at"`
+		Created       time.Time      `db:"created_at"`
 		AMR           pq.StringArray `db:"amr"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT expires_at,authenticated_at,amr FROM sessions WHERE id=$1 AND revoked_at IS NULL`, id)
-	return oauth.SessionInfo{Expires: row.Expires, Authenticated: row.Authenticated, AMR: []string(row.AMR)}, lookup(err)
+	err := t.tx.GetContext(ctx, &row, `SELECT expires_at,authenticated_at,created_at,amr FROM sessions WHERE id=$1 AND revoked_at IS NULL`, id)
+	return oauth.SessionInfo{Expires: row.Expires, Authenticated: row.Authenticated, Started: row.Created, AMR: []string(row.AMR)}, lookup(err)
 }
-func (t *authorization) Bind(ctx context.Context, session identity.SessionID, client identity.ClientID) error {
-	_, err := t.tx.ExecContext(ctx, `UPDATE sessions SET oauth_client_id=$2 WHERE id=$1 AND oauth_client_id IS NULL`, session, client)
-	return failure(err)
+func (t *authorization) Bind(ctx context.Context, session identity.SessionID, client identity.ClientID, lifetime time.Duration) (time.Time, error) {
+	// The first binding to a protected resource's client gives the session
+	// the resource's lifetime from its start; the sign-in's own identity
+	// refresh tokens end then, so only this grant lives that long.
+	res, err := t.tx.ExecContext(ctx, `UPDATE sessions SET oauth_client_id=$2, expires_at=CASE WHEN $3::bigint>0 THEN created_at+($3::bigint*interval '1 millisecond') ELSE expires_at END WHERE id=$1 AND oauth_client_id IS NULL`, session, client, lifetime.Milliseconds())
+	if err != nil {
+		return time.Time{}, failure(err)
+	}
+	if n, _ := res.RowsAffected(); n == 1 && lifetime > 0 {
+		if _, err = t.tx.ExecContext(ctx, `UPDATE refresh_tokens SET expires_at=now() WHERE session_id=$1 AND used_at IS NULL AND expires_at>now()`, session); err != nil {
+			return time.Time{}, failure(err)
+		}
+	}
+	// Each grant ends within its own window from the sign-in: a resource
+	// grant its lifetime, any other the ordinary session window. A session
+	// reused by a second authorization (custom sign-in UI) therefore never
+	// lends a resource's longer lifetime to a plain OIDC grant, nor more
+	// than the resource's to a resource grant.
+	window := config.SessionTTL
+	if lifetime > 0 {
+		window = lifetime
+	}
+	var deadline time.Time
+	err = t.tx.GetContext(ctx, &deadline, `SELECT LEAST(expires_at, created_at+($2::bigint*interval '1 millisecond')) FROM sessions WHERE id=$1`, session, window.Milliseconds())
+	return deadline, lookup(err)
 }
 func (t *authorization) Consume(ctx context.Context, hash []byte) error {
 	_, err := t.tx.ExecContext(ctx, `UPDATE oauth_authorizations SET consumed_at=now() WHERE secret_hash=$1`, hash)

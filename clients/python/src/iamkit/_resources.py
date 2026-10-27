@@ -719,3 +719,65 @@ class Waitlist(_Resource):
             if not (out or {}).get("more") or not done:
                 result: JSON = {"approved": approved, "skipped": skipped}
                 return result
+
+
+class ProtectedResources(_Resource):
+    """RFC 8707 protected resources (MCP servers): clients ask for one with ``resource=<uri>`` and get tokens
+    with ``aud`` = uri and the resource's permissions as scopes.
+    """
+
+    def list(self, *, limit: int | None = None, offset: int | None = None) -> JSON:
+        """One page: ``{"items": [...], "page": {"total", "limit", "offset"}}``."""
+        params = compact({"limit": limit, "offset": offset})
+        return self._c.request("GET", f"{self._c.env()}/protected-resources", params=params)  # type: ignore[no-any-return]
+
+    def iterate(self, *, page_size: int = MAX_PAGE_SIZE) -> Iterator[JSON]:
+        return self._offset_pages(f"{self._c.env()}/protected-resources", {}, page_size)
+
+    def get(self, protected_id: str) -> JSON:
+        return self._c.request("GET", f"{self._c.env()}/protected-resources/{seg(protected_id)}")  # type: ignore[no-any-return]
+
+    def create(
+        self,
+        application_id: str,
+        resource_id: str,
+        name: str,
+        *,
+        default_scopes: Sequence[str] | None = None,
+        idle_ttl_seconds: int | None = None,
+        max_ttl_seconds: int | None = None,
+    ) -> JSON:
+        """Registers a resource linked to the application; its audience must be its canonical URL.
+
+        TTLs left out take the defaults (7 days idle, 30 days in all).
+        """
+        body = compact(
+            {
+                "application_id": application_id,
+                "resource_id": resource_id,
+                "name": name,
+                "default_scopes": list(default_scopes) if default_scopes is not None else None,
+                "idle_ttl_seconds": idle_ttl_seconds,
+                "max_ttl_seconds": max_ttl_seconds,
+            }
+        )
+        return self._c.request("POST", f"{self._c.env()}/protected-resources", json=body)  # type: ignore[no-any-return]
+
+    def update(self, protected_id: str, **fields: Any) -> JSON:
+        """Patches ``name``, ``default_scopes``, ``idle_ttl_seconds``, ``max_ttl_seconds`` or ``active``
+        (``active=False`` ends every authorization)."""
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}"
+        return self._c.request("PATCH", path, json=fields)  # type: ignore[no-any-return]
+
+    def delete(self, protected_id: str) -> None:
+        """Removes the registration and ends its authorizations; the resource stays."""
+        self._c.request("DELETE", f"{self._c.env()}/protected-resources/{seg(protected_id)}")
+
+    def policy(self) -> JSON:
+        """The environment's ceilings: ``{"max_idle_ttl_seconds", "max_lifetime_ttl_seconds"}``."""
+        return self._c.request("GET", f"{self._c.env()}/protected-resource-policy")  # type: ignore[no-any-return]
+
+    def set_policy(self, *, max_idle_ttl_seconds: int, max_lifetime_ttl_seconds: int) -> JSON:
+        """Replaces the ceilings; resources above a lowered ceiling are trimmed to it."""
+        body = {"max_idle_ttl_seconds": max_idle_ttl_seconds, "max_lifetime_ttl_seconds": max_lifetime_ttl_seconds}
+        return self._c.request("PUT", f"{self._c.env()}/protected-resource-policy", json=body)  # type: ignore[no-any-return]

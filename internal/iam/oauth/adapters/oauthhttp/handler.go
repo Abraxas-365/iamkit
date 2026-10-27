@@ -240,9 +240,12 @@ func response(c *fiber.Ctx, w *httptest.ResponseRecorder) error {
 	return c.Status(w.Code).Send(w.Body.Bytes())
 }
 func (h *Handler) Register(app *fiber.App) {
-	app.Get("/.well-known/openid-configuration", func(c *fiber.Ctx) error {
+	discovery := func(c *fiber.Ctx) error {
 		return c.JSON(oauth.NewDiscovery(h.issuer))
-	})
+	}
+	app.Get("/.well-known/openid-configuration", discovery)
+	// RFC 8414: the same document (MCP clients look here first).
+	app.Get("/.well-known/oauth-authorization-server", discovery)
 	app.Get("/oauth/authorize", h.authorize)
 	app.Post("/oauth/authorize/complete", h.complete)
 	app.Post("/oauth/token", endpointErrors, h.token)
@@ -270,8 +273,24 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	if err != nil {
 		return authorizeError(err)
 	}
-	if !ar.GetRequestedScopes().Has("openid") {
-		return errx.Validation("openid scope required")
+	// RFC 8707: a resource names the client's protected resource; anything
+	// else is answered at the (validated) redirect with state.
+	target, err := oauth.ResolveResource(client, q["resource"])
+	if err != nil {
+		w := httptest.NewRecorder()
+		p.WriteAuthorizeError(c.UserContext(), w, ar, invalidTarget(err))
+		return response(c, w)
+	}
+	scopes := []string(ar.GetRequestedScopes())
+	if target == nil {
+		if !ar.GetRequestedScopes().Has("openid") {
+			return errx.Validation("openid scope required")
+		}
+		if err = oauth.PlainScopes(scopes); err != nil {
+			return err
+		}
+	} else {
+		scopes = oauth.ResourceScopes(target, scopes, client.Allows(oauth.GrantRefreshToken))
 	}
 	if interaction, _ := oauth.ParseInteraction(q); interaction.None {
 		// No browser session survives between authorize requests, so a
@@ -288,7 +307,7 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	if client.HostedLogin {
 		return c.Redirect("/hosted/login?"+url.Values{"ticket": {ticket}}.Encode(), fiber.StatusSeeOther)
 	}
-	return c.JSON(fiber.Map{"authorization_ticket": ticket, "client_id": client.ID, "environment_id": client.Environment, "application_id": client.Application, "resource_id": client.Resource, "audience": client.Audience, "scopes": ar.GetRequestedScopes()})
+	return c.JSON(fiber.Map{"authorization_ticket": ticket, "client_id": client.ID, "environment_id": client.Environment, "application_id": client.Application, "resource_id": client.Resource, "audience": client.Audience, "scopes": scopes})
 }
 
 // loginRequired answers a prompt=none request with the login_required error
@@ -413,7 +432,7 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 			if _, err = tx.Session(c.UserContext(), access.Session); err != nil {
 				return err
 			}
-			if err = tx.Bind(c.UserContext(), access.Session, client.ID); err != nil {
+			if _, err = tx.Bind(c.UserContext(), access.Session, client.ID, 0); err != nil {
 				return err
 			}
 			device = client
@@ -424,7 +443,18 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		if err != nil {
 			return errx.Validation("invalid authorization request")
 		}
-		for _, scope := range ar.GetRequestedScopes() {
+		// The resource was resolved at /oauth/authorize; resolving again
+		// refuses a protected resource removed meanwhile.
+		form, _ := url.ParseQuery(row.Form)
+		target, err := oauth.ResolveResource(client, form["resource"])
+		if err != nil {
+			return errx.Validation("invalid authorization request: " + err.Error())
+		}
+		scopes := []string(ar.GetRequestedScopes())
+		if target != nil {
+			scopes = oauth.ResourceScopes(target, scopes, client.Allows(oauth.GrantRefreshToken))
+		}
+		for _, scope := range scopes {
 			ar.GrantScope(scope)
 		}
 		ar.GrantAudience(client.Audience)
@@ -445,6 +475,20 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 			return nil
 		}
 		session = h.session(client, access, info, requested)
+		if target != nil {
+			// What the user agreed to; every issuance grants what of it they
+			// still hold.
+			session.Resource = target.URI
+			session.Started = info.Started
+			session.Consented = oauth.Consented(target, ar.GetGrantedScopes())
+			effective := oauth.EffectiveScopes(session.Consented, access.Permissions)
+			session.AccessClaims.Extra["permissions"] = effective
+			// Only resource flow tokens carry the indicator: resource
+			// servers refuse tokens without it (plain OpenID Connect tokens
+			// of the same client hold every permission, unconsented).
+			session.AccessClaims.Extra[oauth.ClaimResourceIndicator] = target.URI
+			grantScopes(ar, oauth.GrantedScopes(ar.GetGrantedScopes(), session.Consented, effective))
+		}
 		addClaims(session, h.customClaims(c.UserContext(), client.Environment, access.User, ar.GetGrantedScopes()))
 		// A token hook refusing is answered to the client like any other
 		// authorization error (access_denied with the target's message);
@@ -452,7 +496,13 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		if refused = h.tokenHooks(c.UserContext(), client, session, access.User, access.Organization, info.AMR, ar.GetGrantedScopes()); refused != nil {
 			return nil
 		}
-		return tx.Bind(c.UserContext(), access.Session, client.ID)
+		var lifetime time.Duration
+		if target != nil {
+			lifetime = target.Lifetime
+		}
+		deadline, err := tx.Bind(c.UserContext(), access.Session, client.ID, lifetime)
+		session.Deadline = deadline
+		return err
 	})
 	if err != nil {
 		return err
@@ -508,8 +558,10 @@ func tokenClient(req *http.Request) (string, error) {
 	if len(req.URL.Query()) > 0 {
 		return "", errx.Validation("query parameters forbidden")
 	}
-	for _, v := range req.PostForm {
-		if len(v) != 1 {
+	for key, v := range req.PostForm {
+		// Several resource values of a code or refresh grant are
+		// invalid_target (RFC 8707), answered by the grant.
+		if len(v) != 1 && (key != "resource" || !resourceGrant(req.PostForm.Get("grant_type"))) {
 			return "", errx.Validation("duplicate parameter")
 		}
 	}
@@ -584,6 +636,7 @@ func (h *Handler) token(c *fiber.Ctx) error {
 	if err != nil {
 		return clientError(c, err)
 	}
+	markPublic(c, client)
 	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID.String())
 	req = req.WithContext(ctx)
 	kind, raw := "code", req.PostForm.Get("code")
@@ -594,6 +647,12 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		w := httptest.NewRecorder()
 		ar, err := p.NewAccessRequest(ctx, req, oauthfosite.NewSession())
 		if err != nil {
+			// A refresh that names no scope asks for the grant's own: the
+			// client no longer has them (its protected resource was
+			// deactivated or deleted), so the grant has ended.
+			if grant == "refresh_token" && req.PostForm.Get("scope") == "" && errors.Is(err, fosite.ErrInvalidScope) {
+				err = endedGrant
+			}
 			p.WriteAccessError(ctx, w, ar, err)
 			return response(c, w)
 		}
@@ -620,7 +679,50 @@ func (h *Handler) token(c *fiber.Ctx) error {
 			p.WriteAccessError(ctx, w, ar, endedGrant)
 			return response(c, w)
 		}
+		stored := stringList(extra["permissions"])
 		extra["permissions"] = []string(access.Permissions)
+		if session.Resource != "" || len(req.PostForm["resource"]) > 0 {
+			// RFC 8707: the grant's resource, or none at all (then the
+			// grant's applies).
+			if err = grantResource(client, session, req.PostForm["resource"]); err != nil {
+				p.WriteAccessError(ctx, w, ar, err)
+				return response(c, w)
+			}
+			// The resource's current lifetime and the environment's current
+			// ceiling bound the grant from its session's start: a lowered
+			// ceiling ends older grants at their next refresh.
+			session.Deadline = client.Protected.Deadline(session.Started, session.Deadline)
+			if oauth.ValidateSession(session.Deadline) != nil {
+				p.WriteAccessError(ctx, w, ar, endedGrant)
+				return response(c, w)
+			}
+			if grant == "authorization_code" {
+				// The code carries the scopes finish granted; a permission
+				// lost in the minutes since means authorizing again.
+				if len(oauth.EffectiveScopes(stored, access.Permissions)) != len(stored) {
+					p.WriteAccessError(ctx, w, ar, endedGrant)
+					return response(c, w)
+				}
+				extra["permissions"] = stored
+			} else {
+				// Every refresh grants the consented permissions the user
+				// still holds (D12), narrowed to the request's scope when it
+				// names one (RFC 6749 §6); the refresh token keeps the
+				// consent.
+				effective := oauth.EffectiveScopes(session.Consented, access.Permissions)
+				if requested := strings.Fields(req.PostForm.Get("scope")); len(requested) > 0 {
+					for _, s := range requested {
+						if !slices.Contains(ar.GetGrantedScopes(), s) && !slices.Contains(session.Consented, s) {
+							p.WriteAccessError(ctx, w, ar, fosite.ErrInvalidScope.WithHintf("The scope '%s' was not granted to this refresh token.", s))
+							return response(c, w)
+						}
+					}
+					effective = oauth.EffectiveScopes(effective, requested)
+				}
+				extra["permissions"] = effective
+				grantScopes(ar, oauth.GrantedScopes(ar.GetGrantedScopes(), session.Consented, effective))
+			}
+		}
 		// The code exchange issues what finish decided; a refresh asks
 		// pre_access_token again.
 		if grant == "refresh_token" {
@@ -633,7 +735,13 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		}
 		session.AccessClaims.IssuedAt = time.Now()
 		session.AccessClaims.JTI = ""
-		session.SetExpiresAt(fosite.RefreshToken, session.Deadline)
+		if session.Resource != "" {
+			// A resource's refresh token lapses after its inactivity window,
+			// never past the session's lifetime.
+			session.SetExpiresAt(fosite.RefreshToken, client.Protected.RefreshExpiry(time.Now(), session.Deadline))
+		} else {
+			session.SetExpiresAt(fosite.RefreshToken, session.Deadline)
+		}
 		out, err := p.NewAccessResponse(ctx, ar)
 		if err != nil {
 			p.WriteAccessError(ctx, w, ar, err)
@@ -711,6 +819,7 @@ func (h *Handler) revoke(c *fiber.Ctx) error {
 	if err != nil {
 		return clientError(c, err)
 	}
+	markPublic(c, client)
 	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID.String())
 	req = req.WithContext(ctx)
 	raw := req.PostForm.Get("token")

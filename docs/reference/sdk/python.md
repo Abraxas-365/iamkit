@@ -125,8 +125,11 @@ delete, revoke_sessions, unlock, require_password_change, history),
 `organizations` (organizations, members, invitations), `roles` (roles,
 assignments, grants), `api_keys`, `events` (list, iterate, export),
 `webhooks` (subscriptions, deliveries, replay, rotate_secret), `audit_logs`
-(emit with `idempotency_key`, list, iterate, export, actions) and `risk`
-(policy, restrictions, sign-in attempts, CAPTCHA). Answers are the decoded JSON
+(emit with `idempotency_key`, list, iterate, export, actions), `risk`
+(policy, restrictions, sign-in attempts, CAPTCHA) and `protected_resources`
+(list, get, create, update, delete, policy, set_policy; see
+[protect an MCP server](../../guides/applications/protect-mcp-server.md)).
+Answers are the decoded JSON
 documents of the [OpenAPI document](../api/openapi.md); `iterate` walks
 offset-paged lists (`{items, page}`) and cursor logs (`{items, next}`) for you
 and `paginate(fetch)` does the same for any list endpoint. The management key

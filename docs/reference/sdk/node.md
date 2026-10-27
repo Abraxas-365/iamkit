@@ -21,6 +21,8 @@ webhook and action verification, plus typed REST clients generated from the
 | Devices without a browser | `OAuthClient.authorizeDevice` + `waitForDevice` |
 | Receive events and actions | `verifyWebhook`, `verifyAction`, `deny` |
 | Emit and read [app audit logs](../../guides/audit-logs.md) | `AuditLogsClient` (`createEvent` with `idempotencyKey`, `listEvents`, `getEvent`, `exportEvents` + `decodeAuditLogEvents`) |
+| Protect an OAuth resource server (MCP) | `@iamkit/node/resource-server`: `createResourceServer` (`metadataHandler`, `protect`, `require`, `verify`), `resourceClaimsOf`; see [protect an MCP server](../../guides/applications/protect-mcp-server.md) |
+| Register protected resources | `ProtectedResourcesClient` (`list`, `get`, `create`, `update`, `delete`, `policy`, `setPolicy`) |
 | Administer an environment | `createManagementClient` (`X-API-Key`), `createApiClient` (bearer, `/api/v1` and SCIM) |
 
 ## Verification rules
