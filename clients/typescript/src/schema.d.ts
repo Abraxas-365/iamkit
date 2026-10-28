@@ -8195,9 +8195,11 @@ export interface components {
         };
         Discovery: {
             authorization_endpoint: string;
+            authorization_response_iss_parameter_supported: boolean;
             backchannel_logout_session_supported: boolean;
             backchannel_logout_supported: boolean;
             claims_supported: string[] | null;
+            client_id_metadata_document_supported: boolean;
             code_challenge_methods_supported: string[] | null;
             device_authorization_endpoint: string;
             end_session_endpoint: string;
@@ -22725,21 +22727,30 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/html": unknown;
+                    "text/plain": unknown;
+                };
             };
             /** @description Server error */
             "5XX": {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/html": unknown;
+                };
             };
             /** @description Success */
             default: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "text/html": unknown;
+                };
             };
         };
     };

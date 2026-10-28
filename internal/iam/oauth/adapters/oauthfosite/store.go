@@ -22,18 +22,45 @@ type Store struct {
 	DB          *sqlx.DB
 	Environment identity.EnvironmentID
 	Clients     oauth.ClientRepository
+	// Bound is the client the request was resolved to (nil: none). It is
+	// served as is (with a loopback redirect oauth.Client.AdmitRedirect
+	// admitted), and it is the only client a client_id URL names: an
+	// external client has a row per protected resource, and the handler
+	// picked this one.
+	Bound *oauth.Client
 }
 
 func (s *Store) Client(ctx context.Context, id string) (*oauth.Client, error) {
+	if b := s.Bound; b != nil && (id == b.PublicID() || id == b.ID.String()) {
+		return b, nil
+	}
 	clientID, err := identity.ParseClientID(id)
 	if err != nil {
 		return nil, errx.NotFound("client not found")
 	}
-	_ = clientID
 	return s.Clients.FindActive(ctx, s.Environment, clientID)
 }
-func clientDTO(c *oauth.Client) *fosite.DefaultOpenIDConnectClient {
-	return authClient(&fosite.DefaultClient{ID: c.ID.String(), Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: clientScopes(c), Public: c.Public, Audience: []string{c.Audience}, GrantTypes: grantTypes(c), ResponseTypes: []string{"code"}}, c.Auth)
+
+// Client is fosite's view of a client: its ID is the client_id the client
+// sends (oauth.Client.PublicID, the document URL of an external client),
+// and it carries the row's uuid for storage (RowID).
+type Client struct {
+	*fosite.DefaultOpenIDConnectClient
+	Row identity.ClientID
+}
+
+// RowID is the oauth_clients id behind a fosite client (zero for a client
+// this package did not build).
+func RowID(c fosite.Client) identity.ClientID {
+	if dto, ok := c.(*Client); ok {
+		return dto.Row
+	}
+	id, _ := identity.ParseClientID(c.GetID())
+	return id
+}
+
+func clientDTO(c *oauth.Client) *Client {
+	return &Client{authClient(&fosite.DefaultClient{ID: c.PublicID(), Secret: c.Secret, RedirectURIs: c.Redirects, Scopes: clientScopes(c), Public: c.Public, Audience: []string{c.Audience}, GrantTypes: grantTypes(c), ResponseTypes: []string{"code"}}, c.Auth), c.ID}
 }
 
 // clientScopes are what the client may ask for: the OpenID Connect scopes
@@ -67,10 +94,20 @@ func (s *Store) GetClient(ctx context.Context, id string) (fosite.Client, error)
 	return clientDTO(c), nil
 }
 func (s *Store) ClientAssertionJWTValid(ctx context.Context, jti string) error {
-	return Assertions{s.DB}.Valid(ctx, jti)
+	return Assertions{s.DB}.Valid(s.assertionContext(ctx), jti)
 }
 func (s *Store) SetClientAssertionJWT(ctx context.Context, jti string, expires time.Time) error {
-	return Assertions{s.DB}.Use(ctx, jti, expires)
+	return Assertions{s.DB}.Use(s.assertionContext(ctx), jti, expires)
+}
+
+// assertionContext keys an external client's spent jti values by its
+// client_id URL (D18): one document materialized at several protected
+// resources is one client, and an assertion it signed is spent once.
+func (s *Store) assertionContext(ctx context.Context) context.Context {
+	if s.Bound != nil && s.Bound.External() {
+		return context.WithValue(ctx, ClientContextKey{}, s.Bound.ExternalID)
+	}
+	return ctx
 }
 func SignatureHash(signature string) string {
 	h := sha256.Sum256([]byte(signature))
@@ -97,14 +134,14 @@ func encodeRequest(r fosite.Requester) ([]byte, error) {
 			form[key] = values
 		}
 	}
-	return json.Marshal(storedRequest{r.GetID(), r.GetClient().GetID(), r.GetRequestedAt(), r.GetRequestedScopes(), r.GetGrantedScopes(), r.GetRequestedAudience(), r.GetGrantedAudience(), form, session})
+	return json.Marshal(storedRequest{r.GetID(), RowID(r.GetClient()).String(), r.GetRequestedAt(), r.GetRequestedScopes(), r.GetGrantedScopes(), r.GetRequestedAudience(), r.GetGrantedAudience(), form, session})
 }
 func decodeRequest(data []byte, client fosite.Client, session fosite.Session) (fosite.Requester, error) {
 	var r storedRequest
 	if err := json.Unmarshal(data, &r); err != nil {
 		return nil, err
 	}
-	if session == nil || r.ClientID != client.GetID() {
+	if session == nil || r.ClientID != RowID(client).String() {
 		return nil, fosite.ErrInvalidRequest
 	}
 	// Storage reads must never overwrite the live issuance session: Fosite may
@@ -123,7 +160,7 @@ func (s *Store) put(ctx context.Context, kind, key string, r fosite.Requester, t
 	if err != nil {
 		return errx.Wrap(err, "encode OAuth request", errx.TypeInternal)
 	}
-	_, err = s.executor(ctx).ExecContext(ctx, `INSERT INTO oauth_requests(environment_id,kind,signature_hash,client_id,request_id,data,expires_at) VALUES($1,$2,$3,$4,$5,$6,clock_timestamp()+($7*interval '1 millisecond'))`, s.Environment, kind, SignatureHash(key), r.GetClient().GetID(), r.GetID(), string(data), ttl.Milliseconds())
+	_, err = s.executor(ctx).ExecContext(ctx, `INSERT INTO oauth_requests(environment_id,kind,signature_hash,client_id,request_id,data,expires_at) VALUES($1,$2,$3,$4,$5,$6,clock_timestamp()+($7*interval '1 millisecond'))`, s.Environment, kind, SignatureHash(key), RowID(r.GetClient()), r.GetID(), string(data), ttl.Milliseconds())
 	return wrap(err, "persist OAuth request")
 }
 func (s *Store) get(ctx context.Context, kind, key string, session fosite.Session) (fosite.Requester, error) {

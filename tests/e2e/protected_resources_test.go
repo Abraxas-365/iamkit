@@ -72,7 +72,7 @@ func (b *browser) signIn(start page) string {
 	tk := b.get(start.Location).field("ticket")
 	done := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {b.e.AliceEmail}, "password": {b.e.Pass}})
 	loc, err := url.Parse(done.Location)
-	if done.Status != 303 || err != nil || loc.Query().Get("code") == "" || loc.Query().Get("state") != "unpredictable-state-123456" {
+	if done.Status != 303 || err != nil || loc.Query().Get("code") == "" || loc.Query().Get("state") != "unpredictable-state-123456" || loc.Query().Get("iss") != testIssuer {
 		b.t.Fatalf("finish: %d %q %s", done.Status, done.Location, done.Body)
 	}
 	return loc.Query().Get("code")
@@ -164,7 +164,7 @@ func TestProtectedResources(t *testing.T) {
 	} {
 		p := e.browser().get(query)
 		loc, _ := url.Parse(p.Location)
-		if p.Status != 303 || loc == nil || loc.Query().Get("error") != "invalid_target" || loc.Query().Get("state") != "unpredictable-state-123456" {
+		if p.Status != 303 || loc == nil || loc.Query().Get("error") != "invalid_target" || loc.Query().Get("state") != "unpredictable-state-123456" || loc.Query().Get("iss") != testIssuer {
 			t.Fatalf("%s: %d %q %s", name, p.Status, p.Location, p.Body)
 		}
 	}

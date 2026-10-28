@@ -2692,6 +2692,9 @@
           "authorization_endpoint": {
             "type": "string"
           },
+          "authorization_response_iss_parameter_supported": {
+            "type": "boolean"
+          },
           "backchannel_logout_session_supported": {
             "type": "boolean"
           },
@@ -2706,6 +2709,9 @@
               "array",
               "null"
             ]
+          },
+          "client_id_metadata_document_supported": {
+            "type": "boolean"
           },
           "code_challenge_methods_supported": {
             "items": {
@@ -2842,9 +2848,11 @@
         },
         "required": [
           "authorization_endpoint",
+          "authorization_response_iss_parameter_supported",
           "backchannel_logout_session_supported",
           "backchannel_logout_supported",
           "claims_supported",
+          "client_id_metadata_document_supported",
           "code_challenge_methods_supported",
           "device_authorization_endpoint",
           "end_session_endpoint",
@@ -31267,12 +31275,32 @@
             "description": "Redirect"
           },
           "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/html": {},
+              "text/plain": {}
+            },
             "description": "Client error"
           },
           "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/html": {}
+            },
             "description": "Server error"
           },
           "default": {
+            "content": {
+              "text/html": {}
+            },
             "description": "Success"
           }
         },

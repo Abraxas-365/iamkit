@@ -17,10 +17,12 @@ type Service struct {
 	secrets    oauth.Secrets
 	passwords  oauth.Passwords
 	hints      oauth.Hints
+	documents  oauth.MetadataDocuments
+	features   oauth.Features
 }
 
 func New(r oauth.Repository, s oauth.Secrets, p oauth.Passwords, h oauth.Hints) *Service {
-	return &Service{r, s, p, h}
+	return &Service{repository: r, secrets: s, passwords: p, hints: h}
 }
 func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input oauth.Registration) (identity.ClientID, string, error) {
 	if err := input.Validate(); err != nil {

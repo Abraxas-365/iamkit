@@ -25,6 +25,7 @@ func TestLoopbackIssuerHostedLogin(t *testing.T) {
 				t.Fatalf("discovery issuer = %v", discovery.JSON["issuer"])
 			}
 			b := e.browser()
+			b.issuer = issuer
 			login := b.authorize(client)
 			cookie := b.cookies["__Host-iamkit-authorization"]
 			if !cookie.Secure || !cookie.HttpOnly || cookie.Path != "/" || cookie.Domain != "" {

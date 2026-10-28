@@ -204,7 +204,7 @@ func TestActions(t *testing.T) {
 	receiver.answer("function:pre_access_token", `{"deny":true,"message":"No tokens today"}`)
 	b = e.browser()
 	tk = b.authorize(client).field("ticket")
-	if p := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}}); p.Status != 303 || !strings.Contains(p.Location, "error=access_denied") || !strings.Contains(p.Location, "No+tokens+today") {
+	if p := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}}); p.Status != 303 || !strings.Contains(p.Location, "error=access_denied") || !strings.Contains(p.Location, "No+tokens+today") || !strings.Contains(p.Location, "iss=https%3A%2F%2Fiam.example") {
 		t.Fatalf("token deny: %d %q %s", p.Status, p.Location, p.Body)
 	}
 	receiver.answer("function:pre_access_token", "")

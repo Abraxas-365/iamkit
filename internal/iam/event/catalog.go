@@ -76,9 +76,13 @@ const (
 	ApplicationLinked   = "application.resource_linked"
 	ApplicationUnlinked = "application.resource_unlinked"
 
-	OAuthClientCreated     = "oauth_client.created"
-	OAuthClientUpdated     = "oauth_client.updated"
-	OAuthClientDisabled    = "oauth_client.disabled"
+	OAuthClientCreated  = "oauth_client.created"
+	OAuthClientUpdated  = "oauth_client.updated"
+	OAuthClientDisabled = "oauth_client.disabled"
+	// OAuthClientDiscovered: a client identified by a metadata document URL
+	// asked for a protected resource for the first time (actor system;
+	// data: client_id URL, protected_resource_id, admission).
+	OAuthClientDiscovered  = "oauth_client.discovered"
 	OrgAdminPortalEnabled  = "org_admin_portal.enabled"
 	OrgAdminPortalDisabled = "org_admin_portal.disabled"
 	// OrgSetupLink*: an organization setup link was created or revoked

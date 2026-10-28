@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
@@ -30,6 +31,12 @@ type clientRow struct {
 	TokenFormat string                 `db:"access_token_format"`
 	Grants      pq.StringArray         `db:"grant_types"`
 	Initiate    string                 `db:"initiate_login_uri"`
+	Source      string                 `db:"source"`
+	ExternalID  sql.NullString         `db:"external_id"`
+	Name        string                 `db:"client_name"`
+	Admission   string                 `db:"admission"`
+	Expires     *time.Time             `db:"admission_expires_at"`
+	AnyPort     bool                   `db:"loopback_any_port"`
 	authRow
 	protectedRow
 }
@@ -59,14 +66,17 @@ func (p protectedRow) target() *oauth.ProtectedTarget {
 
 func (r *Repository) FindActive(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID) (*oauth.Client, error) {
 	var row clientRow
-	err := r.db.GetContext(ctx, &row, `SELECT c.id,c.environment_id,c.application_id,c.resource_id,c.redirect_uris,c.public,c.secret_hash,c.hosted_login,c.post_logout_redirect_uris,c.token_endpoint_auth_method,c.token_endpoint_auth_signing_alg,c.jwks,c.jwks_uri,c.access_token_format,c.grant_types,c.initiate_login_uri,r.audience,r.permissions,pr.id AS protected_id,pr.uri AS protected_uri,pr.default_scopes AS protected_default_scopes,pr.idle_ttl_seconds AS protected_idle,pr.max_ttl_seconds AS protected_max,pp.max_idle_ttl_seconds AS policy_idle,pp.max_lifetime_ttl_seconds AS policy_lifetime FROM oauth_clients c JOIN applications a ON a.id=c.application_id AND a.environment_id=c.environment_id JOIN resources r ON r.id=c.resource_id AND r.environment_id=c.environment_id LEFT JOIN protected_resources pr ON pr.resource_id=c.resource_id AND pr.environment_id=c.environment_id AND pr.application_id=c.application_id AND pr.active LEFT JOIN protected_resource_policies pp ON pp.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND c.active AND a.active`, id, environment)
+	// An external client exists only through its protected resource: it is
+	// found while that resource is active.
+	err := r.db.GetContext(ctx, &row, `SELECT c.id,c.environment_id,c.application_id,c.resource_id,c.redirect_uris,c.public,c.secret_hash,c.hosted_login,c.post_logout_redirect_uris,c.token_endpoint_auth_method,c.token_endpoint_auth_signing_alg,c.jwks,c.jwks_uri,c.access_token_format,c.grant_types,c.initiate_login_uri,c.source,c.external_id,c.client_name,c.admission,c.admission_expires_at,c.loopback_any_port,r.audience,r.permissions,pr.id AS protected_id,pr.uri AS protected_uri,pr.default_scopes AS protected_default_scopes,pr.idle_ttl_seconds AS protected_idle,pr.max_ttl_seconds AS protected_max,pp.max_idle_ttl_seconds AS policy_idle,pp.max_lifetime_ttl_seconds AS policy_lifetime FROM oauth_clients c JOIN applications a ON a.id=c.application_id AND a.environment_id=c.environment_id JOIN resources r ON r.id=c.resource_id AND r.environment_id=c.environment_id LEFT JOIN protected_resources pr ON pr.resource_id=c.resource_id AND pr.environment_id=c.environment_id AND pr.application_id=c.application_id AND pr.active AND (c.protected_resource_id IS NULL OR pr.id=c.protected_resource_id) LEFT JOIN protected_resource_policies pp ON pp.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND c.active AND a.active AND (c.protected_resource_id IS NULL OR pr.id IS NOT NULL)`, id, environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errx.NotFound("OAuth client not found")
 	}
 	if err != nil {
 		return nil, errx.Wrap(err, "load OAuth client", errx.TypeInternal)
 	}
-	return &oauth.Client{ID: row.ID, Environment: row.Environment, Application: row.Application, Resource: row.Resource, Audience: row.Audience, Redirects: []string(row.Redirects), Public: row.Public, Secret: row.Secret, HostedLogin: row.HostedLogin, PostLogoutRedirects: []string(row.PostLogout), Auth: row.auth(), AccessTokenFormat: row.TokenFormat, GrantTypes: []string(row.Grants), InitiateLoginURI: row.Initiate, Protected: row.target()}, nil
+	return &oauth.Client{ID: row.ID, Environment: row.Environment, Application: row.Application, Resource: row.Resource, Audience: row.Audience, Redirects: []string(row.Redirects), Public: row.Public, Secret: row.Secret, HostedLogin: row.HostedLogin, PostLogoutRedirects: []string(row.PostLogout), Auth: row.auth(), AccessTokenFormat: row.TokenFormat, GrantTypes: []string(row.Grants), InitiateLoginURI: row.Initiate, Protected: row.target(),
+		Source: row.Source, ExternalID: row.ExternalID.String, Name: row.Name, Admission: row.Admission, AdmissionExpiresAt: row.Expires, LoopbackAnyPort: row.AnyPort}, nil
 }
 
 func (r *Repository) FindAccount(ctx context.Context, id identity.AccountID) (*oauth.Account, error) {

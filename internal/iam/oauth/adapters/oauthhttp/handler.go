@@ -219,6 +219,33 @@ func (h *Handler) loadFromString(c *fiber.Ctx, raw string) (fosite.OAuth2Provide
 	}
 	return h.load(c, id)
 }
+
+// tokenEndpointClient is the client of a token or revocation request. A
+// registered client is named by its uuid; a client_id URL names one row
+// per protected resource, so the grant presented (token, of one of kinds)
+// picks it. fosite then authenticates the client as usual.
+func (h *Handler) tokenEndpointClient(c *fiber.Ctx, rawID, token string, kinds ...string) (fosite.OAuth2Provider, *oauth.Client, *oauthfosite.Store, error) {
+	if !oauth.ExternalClientID(rawID) {
+		return h.loadFromString(c, rawID)
+	}
+	parts := strings.Split(token, ".")
+	signature := parts[len(parts)-1]
+	if signature == "" {
+		return nil, nil, nil, errx.Unauthorized("invalid OAuth client")
+	}
+	var client *oauth.Client
+	var err error
+	for _, kind := range kinds {
+		if client, err = h.flows.GrantClient(c.UserContext(), rawID, kind, oauthfosite.SignatureHash(signature)); err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	p, store, err := h.provider(client)
+	return p, client, store, err
+}
 func request(c *fiber.Ctx) *http.Request {
 	req := httptest.NewRequest(c.Method(), "https://iamkit.invalid"+c.OriginalURL(), strings.NewReader(string(c.Body())))
 	c.Request().Header.VisitAll(func(k, v []byte) { req.Header.Set(string(k), string(v)) })
@@ -239,6 +266,18 @@ func response(c *fiber.Ctx, w *httptest.ResponseRecorder) error {
 	c.Set("Cache-Control", "no-store")
 	return c.Status(w.Code).Send(w.Body.Bytes())
 }
+
+// authorizeResponse is response for the answers of an authorization request
+// at the client's (validated) redirect URI, success and error alike: RFC
+// 9207 adds the issuer to each, so a client talking to several
+// authorization servers can tell which one answered (fosite does not).
+func (h *Handler) authorizeResponse(c *fiber.Ctx, w *httptest.ResponseRecorder) error {
+	if location := w.Header().Get("Location"); location != "" {
+		w.Header().Set("Location", oauth.WithIssuer(location, h.issuer))
+	}
+	return response(c, w)
+}
+
 func (h *Handler) Register(app *fiber.App) {
 	discovery := func(c *fiber.Ctx) error {
 		return c.JSON(oauth.NewDiscovery(h.issuer))
@@ -262,13 +301,29 @@ func (h *Handler) Register(app *fiber.App) {
 func (h *Handler) authorize(c *fiber.Ctx) error {
 	req := request(c)
 	q := req.URL.Query()
-	p, client, _, err := h.loadFromString(c, q.Get("client_id"))
+	var p fosite.OAuth2Provider
+	var client *oauth.Client
+	var err error
+	if oauth.ExternalClientID(q.Get("client_id")) {
+		// A client_id URL names a metadata document: its errors are pages
+		// (nothing is redirected before the document is read and checked).
+		if client, err = h.flows.ExternalClient(c.UserContext(), q.Get("client_id"), q["resource"]); err != nil {
+			return err
+		}
+		p, _, err = h.provider(client)
+	} else {
+		p, client, _, err = h.loadFromString(c, q.Get("client_id"))
+		if err != nil {
+			return authorizeClientError(err)
+		}
+	}
 	if err != nil {
-		return authorizeClientError(err)
+		return err
 	}
 	if err = oauth.ValidateAuthorization(h.issuer, client, q); err != nil {
 		return err
 	}
+	client.AdmitRedirect(q.Get("redirect_uri"))
 	ar, err := p.NewAuthorizeRequest(req.Context(), req)
 	if err != nil {
 		return authorizeError(err)
@@ -279,7 +334,7 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 	if err != nil {
 		w := httptest.NewRecorder()
 		p.WriteAuthorizeError(c.UserContext(), w, ar, invalidTarget(err))
-		return response(c, w)
+		return h.authorizeResponse(c, w)
 	}
 	scopes := []string(ar.GetRequestedScopes())
 	if target == nil {
@@ -317,7 +372,7 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 func (h *Handler) loginRequired(c *fiber.Ctx, p fosite.OAuth2Provider, ar fosite.AuthorizeRequester, asJSON bool) error {
 	w := httptest.NewRecorder()
 	p.WriteAuthorizeError(c.UserContext(), w, ar, fosite.ErrLoginRequired.WithHint("prompt=none was requested but no session can be reused: the user must sign in."))
-	if err := response(c, w); err != nil {
+	if err := h.authorizeResponse(c, w); err != nil {
 		return err
 	}
 	location := c.GetRespHeader(fiber.HeaderLocation)
@@ -418,9 +473,16 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		if err != nil {
 			return err
 		}
+		form, _ := url.ParseQuery(row.Form)
+		client.AdmitRedirect(form.Get("redirect_uri"))
 		access, err := login(client)
 		if err != nil {
 			return err
+		}
+		// An external client waiting for IT (or whose approval expired)
+		// gets no code.
+		if !client.Admitted(time.Now()) {
+			return oauth.ErrAdmissionPending()
 		}
 		// An authorization that named its organization completes only there.
 		if hint := oauth.FormOrganization(row.Form); !hint.IsZero() && access.Organization != hint {
@@ -445,7 +507,6 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		}
 		// The resource was resolved at /oauth/authorize; resolving again
 		// refuses a protected resource removed meanwhile.
-		form, _ := url.ParseQuery(row.Form)
 		target, err := oauth.ResolveResource(client, form["resource"])
 		if err != nil {
 			return errx.Validation("invalid authorization request: " + err.Error())
@@ -514,11 +575,11 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 	w := httptest.NewRecorder()
 	if stale {
 		p.WriteAuthorizeError(c.UserContext(), w, ar, fosite.ErrLoginRequired.WithHint("the sign-in is older than this authorization request: sign in again."))
-		return response(c, w)
+		return h.authorizeResponse(c, w)
 	}
 	if refused != nil {
 		p.WriteAuthorizeError(c.UserContext(), w, ar, hookError(refused))
-		return response(c, w)
+		return h.authorizeResponse(c, w)
 	}
 	out, err := p.NewAuthorizeResponse(c.UserContext(), ar, session)
 	if err != nil {
@@ -526,7 +587,7 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 	} else {
 		p.WriteAuthorizeResponse(c.UserContext(), w, ar, out)
 	}
-	return response(c, w)
+	return h.authorizeResponse(c, w)
 }
 
 // session is the token session of a login for client: the ID token and
@@ -617,6 +678,13 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		return oauthError(c, "invalid_request", 400)
 	}
 	grant := req.PostForm.Get("grant_type")
+	// D16/D18: a client named by a metadata document URL reaches the code
+	// and refresh grants only; client_credentials, device, token exchange,
+	// jwt-bearer and impersonation never see it (oauth.Client.Delegable,
+	// TestExternalClientsNotDelegable).
+	if oauth.ExternalClientID(rawID) && grant != oauth.GrantAuthorizationCode && grant != oauth.GrantRefreshToken {
+		return oauthError(c, oauth.CodeUnauthorizedClient, 400)
+	}
 	if grant == "client_credentials" && h.accounts != nil {
 		return h.clientCredentials(c, req, rawID)
 	}
@@ -632,17 +700,22 @@ func (h *Handler) token(c *fiber.Ctx) error {
 	if grant != "authorization_code" && grant != "refresh_token" {
 		return oauthError(c, "unsupported_grant_type", 400)
 	}
-	p, client, store, err := h.loadFromString(c, rawID)
-	if err != nil {
-		return clientError(c, err)
-	}
-	markPublic(c, client)
-	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID.String())
-	req = req.WithContext(ctx)
 	kind, raw := "code", req.PostForm.Get("code")
 	if grant == "refresh_token" {
 		kind, raw = "refresh", req.PostForm.Get("refresh_token")
 	}
+	p, client, store, err := h.tokenEndpointClient(c, rawID, raw, kind)
+	if err != nil {
+		return clientError(c, err)
+	}
+	markPublic(c, client)
+	if !client.Admitted(time.Now()) {
+		// Blocked, or an approval that expired: sign in again once IT
+		// approves.
+		return oauthError(c, "invalid_grant", 400)
+	}
+	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID.String())
+	req = req.WithContext(ctx)
 	return store.WithTokenLock(ctx, raw, kind, client.ID.String(), func() error {
 		w := httptest.NewRecorder()
 		ar, err := p.NewAccessRequest(ctx, req, oauthfosite.NewSession())
@@ -815,18 +888,20 @@ func (h *Handler) revoke(c *fiber.Ctx) error {
 	if err != nil {
 		return oauthError(c, "invalid_request", 400)
 	}
-	p, client, store, err := h.loadFromString(c, rawID)
+	raw := req.PostForm.Get("token")
+	kind := "refresh"
+	if strings.Count(raw, ".") == 2 {
+		kind = "access"
+	}
+	// RFC 7009: the token may be either kind; a client_id URL is found
+	// through whichever grant holds it.
+	p, client, store, err := h.tokenEndpointClient(c, rawID, raw, "refresh", "access")
 	if err != nil {
 		return clientError(c, err)
 	}
 	markPublic(c, client)
 	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID.String())
 	req = req.WithContext(ctx)
-	raw := req.PostForm.Get("token")
-	kind := "refresh"
-	if strings.Count(raw, ".") == 2 {
-		kind = "access"
-	}
 	return store.WithTokenLock(ctx, raw, kind, client.ID.String(), func() error {
 		err := p.NewRevocationRequest(ctx, req)
 		w := httptest.NewRecorder()
@@ -888,8 +963,8 @@ func (h *Handler) liveIntrospection(c *fiber.Ctx, caller *oauth.Client, ir fosit
 	if oauth.ValidateSession(session.Deadline) != nil {
 		return false
 	}
-	owner, err := identity.ParseClientID(ar.GetClient().GetID())
-	if err != nil {
+	owner := oauthfosite.RowID(ar.GetClient())
+	if owner.IsZero() {
 		return false
 	}
 	client, err := h.flows.Client(c.UserContext(), owner)
@@ -1000,7 +1075,7 @@ func (h *Handler) opaqueToken(c *fiber.Ctx, key, raw string) (authentication.Tok
 		return authentication.Token{}, invalid
 	}
 	session, ok := ar.GetSession().(*oauthfosite.Session)
-	if !ok || session.AccessClaims == nil || oauth.ValidateSession(session.Deadline) != nil || ar.GetClient().GetID() != client.ID.String() {
+	if !ok || session.AccessClaims == nil || oauth.ValidateSession(session.Deadline) != nil || oauthfosite.RowID(ar.GetClient()) != client.ID {
 		return authentication.Token{}, invalid
 	}
 	extra := session.AccessClaims.Extra

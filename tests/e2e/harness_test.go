@@ -159,6 +159,9 @@ type Harness struct {
 	// IdP routes identity-provider traffic of sealed-secret connections;
 	// tests point it at their TLS provider (see fakeIdP).
 	IdP *switchTransport
+	// CIMD routes Client ID Metadata Document and jwks_uri reads; tests
+	// serve documents from it (see metadataHost).
+	CIMD *switchTransport
 	// Server exposes background work tests drive synchronously
 	// (LogoutDispatcher).
 	Server *server.Server
@@ -187,6 +190,9 @@ func (s *switchTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return next.RoundTrip(r)
 }
 
+// testIssuer is the harness deployment's issuer (RFC 9207 iss).
+const testIssuer = "https://iam.example"
+
 // testEncryptionKey is the harness IAMKIT_ENCRYPTION_KEY.
 var testEncryptionKey = base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
 
@@ -214,15 +220,15 @@ func newHarnessWith(t *testing.T, configure func(*server.Server), opts ...bootst
 	if err != nil {
 		t.Fatal(err)
 	}
-	idp := &switchTransport{}
-	opts = append([]bootstrap.Option{bootstrap.WithResolver(dns), bootstrap.WithSealer(sealer), bootstrap.WithFederationTransport(idp)}, opts...)
-	s := bootstrap.New(db, key, "https://iam.example", mail, opts...)
+	idp, cimd := &switchTransport{}, &switchTransport{}
+	opts = append([]bootstrap.Option{bootstrap.WithResolver(dns), bootstrap.WithSealer(sealer), bootstrap.WithFederationTransport(idp), bootstrap.WithClientMetadataTransport(cimd)}, opts...)
+	s := bootstrap.New(db, key, testIssuer, mail, opts...)
 	if configure != nil {
 		configure(s)
 	}
 	app := s.App()
 	t.Cleanup(func() { app.Shutdown() })
-	return &Harness{t: t, DB: db, App: contracted(t, app, s.WaitDeliveries), Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp, Server: s}
+	return &Harness{t: t, DB: db, App: contracted(t, app, s.WaitDeliveries), Key: key, Mail: mail, DNS: dns, Owner: owner, IdP: idp, CIMD: cimd, Server: s}
 }
 
 // fakeDNS serves TXT records for domain verification; names in fail return

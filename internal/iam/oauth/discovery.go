@@ -36,6 +36,11 @@ type Discovery struct {
 	BackchannelLogoutSessionSupported bool `json:"backchannel_logout_session_supported"`
 	// RFC 8628 device authorization grant.
 	DeviceAuthorizationEndpoint string `json:"device_authorization_endpoint"`
+	// RFC 9207: every authorization response carries iss.
+	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
+	// draft-ietf-oauth-client-id-metadata-document: an https client_id URL
+	// is accepted on protected resources that allow it (MCP 2025-11-25).
+	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
 }
 
 // NewDiscovery is the metadata for issuer.
@@ -66,6 +71,8 @@ func NewDiscovery(issuer string) Discovery {
 		BackchannelLogoutSupported:                      true,
 		BackchannelLogoutSessionSupported:               true,
 		DeviceAuthorizationEndpoint:                     issuer + "/oauth/device_authorization",
+		AuthorizationResponseIssParameterSupported:      true,
+		ClientIDMetadataDocumentSupported:               true,
 	}
 }
 

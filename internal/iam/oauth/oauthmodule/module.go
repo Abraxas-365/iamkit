@@ -5,9 +5,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/cache"
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/cryptox"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
+	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthcimd"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthfosite"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth/adapters/oauthpg"
@@ -29,6 +31,15 @@ type Deps struct {
 	// Transport reaches clients' jwks_uri and back-channel logout URIs
 	// (nil: public addresses only).
 	Transport http.RoundTripper
+	// ClientMetadataTransport reaches Client ID Metadata Documents and
+	// their jwks_uri (nil: public addresses only, no redirects).
+	ClientMetadataTransport http.RoundTripper
+	// Cache keeps fetched metadata documents and key sets across replicas
+	// (REDIS_URL; nil: this process only).
+	Cache cache.Store
+	// Features gates client_id URLs per environment (feature.Queries; nil:
+	// always on).
+	Features oauth.Features
 	// Tokens reads, signs and answers IAMKit's own bearer tokens
 	// (authhttp.Tokens).
 	Tokens  oauthhttp.Tokens
@@ -58,9 +69,17 @@ func New(deps Deps) Module {
 	clients := oauthpg.New(deps.DB)
 	service := oauthsvc.New(clients, cryptox.Generator{}, deps.Passwords, oauthfosite.Hints{Keys: deps.Keys, Issuer: deps.Issuer})
 	fetcher := oauthfosite.NewKeyFetcher(deps.Transport)
+	documents := oauthcimd.New(deps.ClientMetadataTransport, deps.Cache)
+	service.SetExternalClients(documents, deps.Features)
 	provider := func(client *oauth.Client) (fosite.OAuth2Provider, *oauthfosite.Store, error) {
-		store := &oauthfosite.Store{DB: deps.DB, Environment: client.Environment, Clients: clients}
-		p, err := oauthfosite.NewProvider(store, deps.Issuer, []byte(deps.HMACSecret()), deps.Keys, fetcher, client.AccessTokenFormat == oauth.TokenFormatOpaque)
+		store := &oauthfosite.Store{DB: deps.DB, Environment: client.Environment, Clients: clients, Bound: client}
+		// An external client's keys are on its document's origin: the same
+		// guarded, size-capped, cached reads as the document.
+		var keys fosite.JWKSFetcherStrategy = fetcher
+		if client.External() {
+			keys = documents
+		}
+		p, err := oauthfosite.NewProvider(store, deps.Issuer, []byte(deps.HMACSecret()), deps.Keys, keys, client.AccessTokenFormat == oauth.TokenFormatOpaque)
 		return p, store, err
 	}
 	handler := oauthhttp.New(service, service, service, provider, deps.Tokens, deps.Issuer, deps.ActorID)

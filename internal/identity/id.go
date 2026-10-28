@@ -135,6 +135,7 @@ type (
 	restrictionTag   struct{} // risk allow/deny restriction
 	waitlistTag      struct{} // waitlist entry
 	protectedTag     struct{} // protected resource (RFC 9728 resource server)
+	allowlistTag     struct{} // OAuth client metadata document allowlist entry
 )
 
 // tagName returns a human-readable name for error messages.
@@ -217,6 +218,8 @@ func tagName[T any]() string {
 		return "waitlist_entry_id"
 	case protectedTag:
 		return "protected_resource_id"
+	case allowlistTag:
+		return "allowlist_entry_id"
 	default:
 		return "id"
 	}
@@ -278,6 +281,9 @@ type (
 	// ProtectedResourceID names a protected resource (an OAuth resource
 	// server such as a remote MCP server).
 	ProtectedResourceID = ID[protectedTag]
+	// AllowlistEntryID names an entry of the OAuth client metadata document
+	// allowlist.
+	AllowlistEntryID = ID[allowlistTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -322,6 +328,7 @@ func NewSignInAttemptID() SignInAttemptID         { return NewID[attemptTag]() }
 func NewRestrictionID() RestrictionID             { return NewID[restrictionTag]() }
 func NewWaitlistEntryID() WaitlistEntryID         { return NewID[waitlistTag]() }
 func NewProtectedResourceID() ProtectedResourceID { return NewID[protectedTag]() }
+func NewAllowlistEntryID() AllowlistEntryID       { return NewID[allowlistTag]() }
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -368,6 +375,9 @@ func ParseRestrictionID(raw string) (RestrictionID, error)     { return ParseID[
 func ParseWaitlistEntryID(raw string) (WaitlistEntryID, error) { return ParseID[waitlistTag](raw) }
 func ParseProtectedResourceID(raw string) (ProtectedResourceID, error) {
 	return ParseID[protectedTag](raw)
+}
+func ParseAllowlistEntryID(raw string) (AllowlistEntryID, error) {
+	return ParseID[allowlistTag](raw)
 }
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.

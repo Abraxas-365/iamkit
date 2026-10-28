@@ -43,6 +43,14 @@ const (
 	// FeatureRiskSignals records sign-in attempts and known devices and
 	// applies the risk policy and restrictions; off skips all of it.
 	FeatureRiskSignals = "risk_signals"
+	// FeatureClientMetadataDocuments accepts OAuth clients whose client_id
+	// is the https URL of a Client ID Metadata Document (MCP clients) on
+	// the environment's protected resources; off answers an error page.
+	FeatureClientMetadataDocuments = "client_metadata_documents"
+	// FeatureDevelopmentClients offers the development-only client presets
+	// (MCP Inspector); off by default, turn it on in development
+	// environments only.
+	FeatureDevelopmentClients = "development_clients"
 )
 
 // Flags is the registry, in display order.
@@ -52,6 +60,8 @@ var Flags = []Flag{
 	{Name: FeatureActions, Default: true, Scope: FeatureEnvironment, Description: "Call the environment's actions (sign-in, token and request hooks)"},
 	{Name: FeatureCaptcha, Default: true, Scope: FeatureEnvironment, Description: "Require the environment's CAPTCHA (bot protection) where it is configured"},
 	{Name: FeatureRiskSignals, Default: true, Scope: FeatureEnvironment, Description: "Record sign-in attempts and apply the environment's risk policy and restrictions"},
+	{Name: FeatureClientMetadataDocuments, Default: true, Scope: FeatureEnvironment, Description: "Accept MCP clients identified by a Client ID Metadata Document URL on protected resources"},
+	{Name: FeatureDevelopmentClients, Default: false, Scope: FeatureEnvironment, Description: "Offer development-only client presets such as MCP Inspector (development environments only)"},
 }
 
 // FindFlag returns the registered flag called name.

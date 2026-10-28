@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/identity"
@@ -38,6 +39,32 @@ type Client struct {
 	// Protected is the protected resource behind the client's resource
 	// (nil: none, or inactive): the target of RFC 8707 resource requests.
 	Protected *ProtectedTarget
+	// Source is SourceRegistered (operator-registered, named by its uuid)
+	// or SourceCIMD (a Client ID Metadata Document, named outside IAMKit by
+	// ExternalID, its URL). "" reads as registered.
+	Source string
+	// ExternalID is the client_id URL of an external client ("" otherwise).
+	ExternalID string
+	// Name is the document's client_name ("" for registered clients).
+	Name string
+	// Admission and AdmissionExpiresAt gate an external client (Admitted).
+	Admission          string
+	AdmissionExpiresAt *time.Time
+	// LoopbackAnyPort lets registered http://localhost redirect URIs match
+	// on any port (external clients always may, RFC 8252 §7.3).
+	LoopbackAnyPort bool
+}
+
+// External reports whether the client comes from a metadata document.
+func (c Client) External() bool { return c.Source != "" && c.Source != SourceRegistered }
+
+// PublicID is the client_id the client uses outside IAMKit: the document
+// URL of an external client, else the uuid.
+func (c Client) PublicID() string {
+	if c.External() {
+		return c.ExternalID
+	}
+	return c.ID.String()
 }
 
 // Access token formats of an OAuth client. Opaque tokens are resolved only
@@ -60,13 +87,22 @@ func ValidateTokenFormat(format string) error {
 // redirect_uri is one the client registered: an exact match, or for a
 // registered http://127.0.0.1 or http://[::1] URI the same URI on any port
 // (RFC 8252 §7.3: native apps listen on an ephemeral port). http://localhost
-// matches exactly only, like fosite.
+// matches on any port too for external clients and clients with
+// LoopbackAnyPort, else exactly only, like fosite. A loopback host never
+// matches another (localhost ≠ 127.0.0.1, D14).
 func (c Client) RedirectRegistered(requested string) bool {
 	if slices.Contains(c.Redirects, requested) {
 		return true
 	}
 	r, err := url.Parse(requested)
-	if err != nil || r.Scheme != "http" || net.ParseIP(r.Hostname()) == nil || !net.ParseIP(r.Hostname()).IsLoopback() {
+	if err != nil || r.Scheme != "http" || r.User != nil || r.Fragment != "" {
+		return false
+	}
+	ip := net.ParseIP(r.Hostname())
+	switch {
+	case ip != nil && ip.IsLoopback():
+	case r.Hostname() == "localhost" && (c.External() || c.LoopbackAnyPort):
+	default:
 		return false
 	}
 	for _, raw := range c.Redirects {

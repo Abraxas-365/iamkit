@@ -36,6 +36,17 @@ type Queries interface {
 }
 type Flows interface {
 	Client(ctx context.Context, client identity.ClientID) (*Client, error)
+	// ExternalClient is the client a client_id URL (a Client ID Metadata
+	// Document) names at the protected resource of an authorization
+	// request: its document is read (cached), validated and materialized,
+	// and a blocked client is refused. Errors are for the user's browser:
+	// nothing is redirected before the client is known.
+	ExternalClient(ctx context.Context, clientID string, resource []string) (*Client, error)
+	// GrantClient is the external client named clientID that holds the
+	// stored grant of kind ("code", "refresh", "access") whose signature
+	// hash is given: the token and revocation endpoints carry no
+	// environment, the grant does.
+	GrantClient(ctx context.Context, clientID, kind, signatureHash string) (*Client, error)
 	// AccessTokenClient is the live client holding an opaque access token
 	// (key: its stored signature hash).
 	AccessTokenClient(ctx context.Context, key string) (*Client, error)
@@ -103,6 +114,7 @@ type Repository interface {
 	LogoutRepository
 	DeviceRepository
 	ExchangeRepository
+	ExternalRepository
 }
 
 // Devices is the device authorization grant (RFC 8628): the device side

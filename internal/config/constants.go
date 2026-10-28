@@ -82,6 +82,26 @@ const (
 	ClientAssertionMaxAge     = time.Hour
 )
 
+// OAuth Client ID Metadata Documents (MCP clients whose client_id is an
+// https URL) and the jwks_uri of those that sign with private_key_jwt:
+// fetched with the guarded transport, no redirects, within
+// ClientMetadataTimeout; a document fits ClientMetadataMaxBytes (a key set
+// ClientJWKSMaxBytes). Both are cached for their Cache-Control max-age held
+// to [ClientMetadataMinTTL, ClientMetadataMaxTTL] (no-store, no-cache or no
+// header: the minimum); a failed fetch is remembered for
+// ClientMetadataFailureTTL. An environment holds at most
+// ClientMetadataMaxPending clients waiting for review, and a user's access
+// request event repeats at most every ClientAccessRequestInterval.
+const (
+	ClientMetadataTimeout       = 5 * time.Second
+	ClientMetadataMaxBytes      = 5 * 1024
+	ClientMetadataMinTTL        = 5 * time.Minute
+	ClientMetadataMaxTTL        = 24 * time.Hour
+	ClientMetadataFailureTTL    = time.Minute
+	ClientMetadataMaxPending    = 200
+	ClientAccessRequestInterval = 24 * time.Hour
+)
+
 // OAuth 2.0 / OIDC lifespans (fosite).
 const (
 	OAuthAuthorizeCodeLifespan = 5 * time.Minute

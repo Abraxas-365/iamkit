@@ -15,7 +15,7 @@ import (
 // user's permissions on the target resource (optionally narrowed by
 // scope), in a child session that ends with the original one.
 func (s *Service) ExchangeResource(ctx context.Context, client *oauth.Client, input oauth.Exchange) (oauth.Exchanged, error) {
-	if client.Public || !client.Allows(oauth.GrantTokenExchange) {
+	if client.Delegable() != nil || client.Public || !client.Allows(oauth.GrantTokenExchange) {
 		return oauth.Exchanged{}, oauth.ExchangeError(oauth.ExchangeUnauthorizedClient, "the client may not exchange tokens")
 	}
 	if err := input.Validate(client); err != nil {

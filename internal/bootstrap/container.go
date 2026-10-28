@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/cache"
+	"github.com/Abraxas-365/iamkit/internal/cache/cachememory"
 	"github.com/Abraxas-365/iamkit/internal/cache/cacheredis"
 	"github.com/Abraxas-365/iamkit/internal/iam/usage/adapters/usagememory"
 
@@ -96,6 +97,7 @@ type options struct {
 	resolver       organization.Resolver
 	sealer         *cryptox.Sealer
 	transport      http.RoundTripper
+	clientMetadata http.RoundTripper
 	mail           authmodule.Mail
 	sso            *OperatorSSO
 	breaches       authentication.Breaches
@@ -225,6 +227,24 @@ func WithFederationTransport(t http.RoundTripper) Option {
 	return func(o *options) { o.transport = t }
 }
 
+// WithClientMetadataTransport replaces the guarded transport that reads
+// OAuth Client ID Metadata Documents and their jwks_uri (MCP clients), so
+// tests can serve them from a loopback address.
+func WithClientMetadataTransport(t http.RoundTripper) Option {
+	return func(o *options) { o.clientMetadata = t }
+}
+
+// metadataCache keeps Client ID Metadata Documents in the shared cache, or
+// in this process without Redis: unlike other cached reads they come from
+// the clients' hosts, not the database, and must not be fetched per
+// request.
+func metadataCache(shared cache.Store) cache.Store {
+	if shared != nil {
+		return shared
+	}
+	return cachememory.New()
+}
+
 func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authentication.Delivery, opts ...Option) *server.Server {
 	var o options
 	for _, opt := range opts {
@@ -317,7 +337,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Provisioning = provisioningModule.HTTP
 	applicationModule := appmodule.New(appmodule.Deps{DB: db, Quota: usageModule.Commands, ActorID: server.OperatorID})
 	s.Applications = applicationModule.HTTP
-	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, Tokens: s.Tokens, ActorID: server.OperatorID})
+	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, ClientMetadataTransport: o.clientMetadata, Cache: metadataCache(shared), Features: featureModule.Queries, Tokens: s.Tokens, ActorID: server.OperatorID})
 	s.OAuth = oauthModule.HTTP
 	s.ClientOrigins = oauthModule.Queries
 	s.LogoutDeliveries = oauthModule.Logouts

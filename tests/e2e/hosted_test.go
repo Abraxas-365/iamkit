@@ -22,6 +22,9 @@ type browser struct {
 	t       *testing.T
 	e       *Env
 	cookies map[string]*http.Cookie
+	// issuer is the deployment's issuer the redirects carry as iss (RFC
+	// 9207); testIssuer unless a test serves another.
+	issuer string
 }
 
 type page struct {
@@ -32,7 +35,7 @@ type page struct {
 }
 
 func (e *Env) browser() *browser {
-	return &browser{t: e.t, e: e, cookies: map[string]*http.Cookie{}}
+	return &browser{t: e.t, e: e, cookies: map[string]*http.Cookie{}, issuer: testIssuer}
 }
 
 func (b *browser) do(method, path string, form url.Values) page {
@@ -126,7 +129,7 @@ func (b *browser) authorize(client string) page {
 func (b *browser) exchange(client string, done page) map[string]any {
 	b.t.Helper()
 	location, err := url.Parse(done.Location)
-	if done.Status != 303 || err != nil || !strings.HasPrefix(done.Location, "https://app.example/callback") || location.Query().Get("code") == "" || location.Query().Get("state") != "unpredictable-state-123456" {
+	if done.Status != 303 || err != nil || !strings.HasPrefix(done.Location, "https://app.example/callback") || location.Query().Get("code") == "" || location.Query().Get("state") != "unpredictable-state-123456" || location.Query().Get("iss") != b.issuer {
 		b.t.Fatalf("finish: %d %q %s", done.Status, done.Location, done.Body)
 	}
 	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {client}, "redirect_uri": {"https://app.example/callback"}, "code": {location.Query().Get("code")}, "code_verifier": {hostedVerifier}}

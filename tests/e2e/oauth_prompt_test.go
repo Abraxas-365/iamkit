@@ -35,6 +35,9 @@ func TestAuthorizePromptAndMaxAge(t *testing.T) {
 	if got := strs(disc["prompt_values_supported"]); !equal(got, []string{"none", "login", "consent", "select_account"}) {
 		t.Fatalf("prompt_values_supported = %v", got)
 	}
+	if disc["authorization_response_iss_parameter_supported"] != true {
+		t.Fatalf("authorization_response_iss_parameter_supported = %v", disc["authorization_response_iss_parameter_supported"])
+	}
 
 	// Malformed values are invalid_request, before any ticket exists.
 	for name, extra := range map[string]url.Values{
@@ -59,7 +62,7 @@ func TestAuthorizePromptAndMaxAge(t *testing.T) {
 		p := b.get(authorizeQuery(client, url.Values{"prompt": {"none"}}))
 		loc, err := url.Parse(p.Location)
 		if p.Status != 303 || err != nil || loc.Scheme+"://"+loc.Host+loc.Path != "https://app.example/callback" ||
-			loc.Query().Get("error") != "login_required" || loc.Query().Get("state") != "unpredictable-state-123456" || loc.Query().Get("code") != "" {
+			loc.Query().Get("error") != "login_required" || loc.Query().Get("state") != "unpredictable-state-123456" || loc.Query().Get("code") != "" || loc.Query().Get("iss") != testIssuer {
 			t.Fatalf("prompt=none: %d %q %s", p.Status, p.Location, p.Body)
 		}
 		if _, ok := b.cookies["__Host-iamkit-authorization"]; ok {
@@ -76,7 +79,7 @@ func TestAuthorizePromptAndMaxAge(t *testing.T) {
 	var done map[string]string
 	json.NewDecoder(res.Body).Decode(&done)
 	res.Body.Close()
-	if res.StatusCode != 200 || res.Header.Get("Location") != "" || !strings.Contains(done["redirect_to"], "error=login_required") {
+	if res.StatusCode != 200 || res.Header.Get("Location") != "" || !strings.Contains(done["redirect_to"], "error=login_required") || !strings.Contains(done["redirect_to"], "iss=https%3A%2F%2Fiam.example") {
 		t.Fatalf("prompt=none as JSON: %d %v", res.StatusCode, done)
 	}
 
@@ -137,7 +140,7 @@ func TestAuthorizePromptAndMaxAge(t *testing.T) {
 		var begin map[string]any
 		json.Unmarshal([]byte(b.get(authorizeQuery(custom, extra)).Body), &begin)
 		stale := complete(b, begin["authorization_ticket"].(string), older)
-		if loc, _ := url.Parse(stale.Location); stale.Status != 303 || loc.Query().Get("error") != "login_required" || loc.Query().Get("code") != "" {
+		if loc, _ := url.Parse(stale.Location); stale.Status != 303 || loc.Query().Get("error") != "login_required" || loc.Query().Get("code") != "" || loc.Query().Get("iss") != testIssuer {
 			t.Fatalf("stale sign-in with %v: %d %q", extra, stale.Status, stale.Location)
 		}
 		b = e.browser()
