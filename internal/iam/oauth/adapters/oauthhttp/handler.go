@@ -46,6 +46,10 @@ type AccountAuthenticator interface {
 	Authenticate(ctx context.Context, account identity.AccountID, r *http.Request) (identity.AccountID, error)
 }
 type Handler struct {
+	refuse func(c *fiber.Ctx, err error) error
+	// offers says what discovery may advertise (nil: only what the
+	// document always holds).
+	offers   oauth.Capabilities
 	commands oauth.Commands
 	queries  oauth.Queries
 	flows    oauth.Flows
@@ -87,6 +91,13 @@ func (h *Handler) Usage(u oauth.Usage) { h.usage = u }
 
 // issued counts one access token of client's environment.
 func (h *Handler) issued(ctx context.Context, client *oauth.Client) {
+	if client.External() {
+		// last_used_at tells IT which discovered clients are in use; a
+		// failure to write it never fails the token.
+		if err := h.flows.Used(ctx, client); err != nil {
+			slog.WarnContext(ctx, "iamkit: client last_used_at", "error", err)
+		}
+	}
 	if h.usage != nil {
 		h.usage.Count(ctx, client.Environment, usage.MetricTokens, 1)
 	}
@@ -207,11 +218,19 @@ func (h *Handler) list(c *fiber.Ctx) error {
 func (h *Handler) load(c *fiber.Ctx, id identity.ClientID) (fosite.OAuth2Provider, *oauth.Client, *oauthfosite.Store, error) {
 	client, err := h.flows.Client(c.UserContext(), id)
 	if err != nil {
+		// Refusals keep their own message (N-11).
+		var known *errx.Error
+		if errx.As(err, &known) {
+			return nil, nil, nil, err
+		}
 		return nil, nil, nil, errx.Wrap(err, "OAuth client lookup failed", errx.TypeInternal)
 	}
 	p, store, err := h.provider(client)
 	return p, client, store, err
 }
+
+// loadFromString is the registered client a uuid names (H-1: a client named
+// by a metadata document is reached by its URL only).
 func (h *Handler) loadFromString(c *fiber.Ctx, raw string) (fosite.OAuth2Provider, *oauth.Client, *oauthfosite.Store, error) {
 	id, err := identity.ParseClientID(raw)
 	if err != nil {
@@ -231,7 +250,7 @@ func (h *Handler) tokenEndpointClient(c *fiber.Ctx, rawID, token string, kinds .
 	parts := strings.Split(token, ".")
 	signature := parts[len(parts)-1]
 	if signature == "" {
-		return nil, nil, nil, errx.Unauthorized("invalid OAuth client")
+		return nil, nil, nil, errUnknownGrant
 	}
 	var client *oauth.Client
 	var err error
@@ -241,11 +260,21 @@ func (h *Handler) tokenEndpointClient(c *fiber.Ctx, rawID, token string, kinds .
 		}
 	}
 	if err != nil {
-		return nil, nil, nil, err
+		if errx.IsServerError(err) {
+			return nil, nil, nil, err
+		}
+		return nil, nil, nil, errUnknownGrant
 	}
 	p, store, err := h.provider(client)
 	return p, client, store, err
 }
+
+// errUnknownGrant: no grant of the client_id URL holds the presented token
+// (never issued, expired and pruned, or the client is gone): the token
+// endpoint answers invalid_grant, not a client authentication failure, and
+// revocation succeeds (RFC 7009 §2.2).
+var errUnknownGrant = errors.New("no grant holds the token")
+
 func request(c *fiber.Ctx) *http.Request {
 	req := httptest.NewRequest(c.Method(), "https://iamkit.invalid"+c.OriginalURL(), strings.NewReader(string(c.Body())))
 	c.Request().Header.VisitAll(func(k, v []byte) { req.Header.Set(string(k), string(v)) })
@@ -280,7 +309,16 @@ func (h *Handler) authorizeResponse(c *fiber.Ctx, w *httptest.ResponseRecorder) 
 
 func (h *Handler) Register(app *fiber.App) {
 	discovery := func(c *fiber.Ctx) error {
-		return c.JSON(oauth.NewDiscovery(h.issuer))
+		doc := oauth.NewDiscovery(h.issuer)
+		if h.offers != nil {
+			// Not knowing what is offered advertises nothing extra.
+			if offers, err := h.offers.Offered(c.UserContext()); err != nil {
+				slog.WarnContext(c.UserContext(), "discovery capabilities unavailable", "error", err)
+			} else {
+				doc = doc.With(offers)
+			}
+		}
+		return c.JSON(doc)
 	}
 	app.Get("/.well-known/openid-configuration", discovery)
 	// RFC 8414: the same document (MCP clients look here first).
@@ -308,7 +346,7 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 		// A client_id URL names a metadata document: its errors are pages
 		// (nothing is redirected before the document is read and checked).
 		if client, err = h.flows.ExternalClient(c.UserContext(), q.Get("client_id"), q["resource"]); err != nil {
-			return err
+			return h.refused(c, err)
 		}
 		p, _, err = h.provider(client)
 	} else {
@@ -363,6 +401,21 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 		return c.Redirect("/hosted/login?"+url.Values{"ticket": {ticket}}.Encode(), fiber.StatusSeeOther)
 	}
 	return c.JSON(fiber.Map{"authorization_ticket": ticket, "client_id": client.ID, "environment_id": client.Environment, "application_id": client.Application, "resource_id": client.Resource, "audience": client.Audience, "scopes": scopes})
+}
+
+// Offers sets where discovery learns what the deployment offers.
+func (h *Handler) Offers(offers oauth.Capabilities) { h.offers = offers }
+
+// Refusals sets how a browser is told that an external client was refused
+// (waiting for IT, blocked…): a page of the hosted module, never a redirect.
+// Without it, or for a script that asked for JSON, the error is the answer.
+func (h *Handler) Refusals(show func(c *fiber.Ctx, err error) error) { h.refuse = show }
+
+func (h *Handler) refused(c *fiber.Ctx, err error) error {
+	if h.refuse == nil || wantsJSON(c) || !oauth.IsClientRefusal(err) {
+		return err
+	}
+	return h.refuse(c, err)
 }
 
 // loginRequired answers a prompt=none request with the login_required error
@@ -451,6 +504,14 @@ func wantsJSON(c *fiber.Ctx) bool {
 	return strings.Contains(accept, fiber.MIMEApplicationJSON) && !strings.Contains(accept, fiber.MIMETextHTML)
 }
 
+// accessAsk is a signed-in user asking for an external client IT has not
+// approved, recorded after Complete's transaction ends.
+type accessAsk struct {
+	client       *oauth.Client
+	user         identity.UserID
+	organization identity.OrganizationID
+}
+
 // Finish completes a hosted authorization with a session the hosted login
 // pages issued for the ticket's client, and redirects to the client.
 func (h *Handler) Finish(c *fiber.Ctx, ticket string, login oauth.Login) error {
@@ -466,13 +527,18 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 	var device *oauth.Client
 	var refused error
 	var stale bool
-	err := h.flows.Complete(c.UserContext(), ticket, c.Cookies("__Host-iamkit-authorization"), approve, func(row oauth.Ticket, tx oauth.Authorization) error {
-		var client *oauth.Client
+	var ask *accessAsk
+	var store *oauthfosite.Store
+	var bound *oauth.Client
+	err := h.flows.Complete(c.UserContext(), ticket, c.Cookies("__Host-iamkit-authorization"), approve, func(row oauth.Ticket, client *oauth.Client, tx oauth.Authorization) error {
 		var err error
-		p, client, _, err = h.load(c, row.Client)
-		if err != nil {
+		// Complete resolved the client before its transaction opened (M-5:
+		// an external client nobody approved has no row yet, and is
+		// persisted below, once its user signed in).
+		if p, store, err = h.provider(client); err != nil {
 			return err
 		}
+		bound = client
 		form, _ := url.ParseQuery(row.Form)
 		client.AdmitRedirect(form.Get("redirect_uri"))
 		access, err := login(client)
@@ -480,9 +546,17 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 			return err
 		}
 		// An external client waiting for IT (or whose approval expired)
-		// gets no code.
+		// gets no code, but its signed-in user is on record as asking for
+		// it, once the transaction is over (it needs a connection and a
+		// transaction of its own: the client, the request, the event).
+		if client.Disabled {
+			// The server (or environment) stopped taking clients named by
+			// a document: say so, and record no request for it (M-2).
+			return oauth.Refused(oauth.ErrClientDisabled(), client)
+		}
 		if !client.Admitted(time.Now()) {
-			return oauth.ErrAdmissionPending()
+			ask = &accessAsk{client: client, user: access.User, organization: access.Organization}
+			return oauth.Refused(oauth.ErrAdmissionPending(), client)
 		}
 		// An authorization that named its organization completes only there.
 		if hint := oauth.FormOrganization(row.Form); !hint.IsZero() && access.Organization != hint {
@@ -565,6 +639,13 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		session.Deadline = deadline
 		return err
 	})
+	if err != nil && ask != nil {
+		// The refusal stands unless recording the request is refused too
+		// (backlog, per-user limit) or fails.
+		if recorded := h.flows.RequestAccess(c.UserContext(), ask.client, ask.user, ask.organization); recorded != nil {
+			return oauth.Refused(recorded, ask.client)
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -581,13 +662,44 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		p.WriteAuthorizeError(c.UserContext(), w, ar, hookError(refused))
 		return h.authorizeResponse(c, w)
 	}
-	out, err := p.NewAuthorizeResponse(c.UserContext(), ar, session)
+	out, err := h.issueCode(c.UserContext(), p, store, bound, ar, session)
+	if oauth.IsClientRefusal(err) {
+		return err
+	}
 	if err != nil {
 		p.WriteAuthorizeError(c.UserContext(), w, ar, err)
 	} else {
 		p.WriteAuthorizeResponse(c.UserContext(), w, ar, out)
 	}
 	return h.authorizeResponse(c, w)
+}
+
+// issueCode stores the authorization code (and its PKCE and OpenID rows)
+// in one store transaction that, for an external client, first locks the
+// client's row and reads its admission (W5-1), as every token transaction
+// does. A block, demotion or delete that committed after the sign-in's
+// transaction is seen here and refused with its hosted page; one that
+// comes later waits for this transaction and revokes the code with the
+// rest of the client's grants. Stored outside it, a delete that went first
+// failed the code's insert (server_error) and a block left a code behind.
+func (h *Handler) issueCode(ctx context.Context, p fosite.OAuth2Provider, store *oauthfosite.Store, client *oauth.Client, ar fosite.AuthorizeRequester, session *oauthfosite.Session) (fosite.AuthorizeResponder, error) {
+	ctx, err := store.BeginTX(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// After Commit it does nothing (sql.ErrTxDone); on any other way out,
+	// a panic included, the client's share lock goes at once (W6-3).
+	defer func() { _ = store.Rollback(ctx) }()
+	out, err := p.NewAuthorizeResponse(ctx, ar, session)
+	if err != nil {
+		// Deleted with its server, demoted or forgotten: the waiting page
+		// (no access request is recorded here; the next sign-in asks).
+		if errors.Is(err, oauthfosite.ErrNotAdmitted) {
+			return nil, oauth.Refused(store.Refusal(ctx), client)
+		}
+		return nil, err
+	}
+	return out, store.Commit(ctx)
 }
 
 // session is the token session of a login for client: the ID token and
@@ -665,6 +777,16 @@ func endpointErrors(c *fiber.Ctx) error {
 	return nil
 }
 
+// issueError is what a token response that failed to issue answers: a
+// client no longer admitted when its token was stored (blocked or demoted
+// while the request ran) has an ended grant, not a server error.
+func issueError(err error) error {
+	if errors.Is(err, oauthfosite.ErrNotAdmitted) {
+		return endedGrant
+	}
+	return err
+}
+
 // endedGrant refuses a code or refresh token whose session ended, whose
 // access was lost or that belongs to another client's resource: RFC 6749
 // §5.2 invalid_grant (400), which tells the client to sign the user in
@@ -705,6 +827,9 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		kind, raw = "refresh", req.PostForm.Get("refresh_token")
 	}
 	p, client, store, err := h.tokenEndpointClient(c, rawID, raw, kind)
+	if errors.Is(err, errUnknownGrant) {
+		return oauthError(c, "invalid_grant", 400)
+	}
 	if err != nil {
 		return clientError(c, err)
 	}
@@ -817,7 +942,7 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		}
 		out, err := p.NewAccessResponse(ctx, ar)
 		if err != nil {
-			p.WriteAccessError(ctx, w, ar, err)
+			p.WriteAccessError(ctx, w, ar, issueError(err))
 		} else {
 			p.WriteAccessResponse(ctx, w, ar, out)
 			h.issued(ctx, client)
@@ -896,6 +1021,9 @@ func (h *Handler) revoke(c *fiber.Ctx) error {
 	// RFC 7009: the token may be either kind; a client_id URL is found
 	// through whichever grant holds it.
 	p, client, store, err := h.tokenEndpointClient(c, rawID, raw, "refresh", "access")
+	if errors.Is(err, errUnknownGrant) {
+		return c.SendStatus(200)
+	}
 	if err != nil {
 		return clientError(c, err)
 	}
@@ -932,7 +1060,12 @@ func (h *Handler) introspect(c *fiber.Ctx) error {
 	if err != nil {
 		return clientError(c, err)
 	}
-	if client.Public {
+	// Introspection reads other clients' tokens: only registered
+	// confidential clients may (H-1). A client named by a metadata document
+	// is anonymous by design (IT approved its redirects, not a reach into
+	// the environment's tokens); the lookup by uuid already finds none, and
+	// this refuses one that got here anyway (not admitted either way).
+	if client.Public || client.External() || !client.Admitted(time.Now()) {
 		return oauthError(c, "invalid_client", 401)
 	}
 	w := httptest.NewRecorder()
@@ -967,8 +1100,14 @@ func (h *Handler) liveIntrospection(c *fiber.Ctx, caller *oauth.Client, ir fosit
 	if owner.IsZero() {
 		return false
 	}
-	client, err := h.flows.Client(c.UserContext(), owner)
+	// The owner of a stored grant is a row the server wrote: either kind.
+	client, err := h.flows.Holder(c.UserContext(), owner)
 	if err != nil || client.Environment != caller.Environment {
+		return false
+	}
+	// A blocked client, or one whose approval expired, holds no live token
+	// (the revocation is eager; this is the check at use).
+	if !client.Admitted(time.Now()) {
 		return false
 	}
 	extra := session.AccessClaims.Extra
@@ -1064,6 +1203,9 @@ func (h *Handler) opaqueToken(c *fiber.Ctx, key, raw string) (authentication.Tok
 	invalid := errx.Unauthorized("invalid OAuth token")
 	client, err := h.flows.AccessTokenClient(c.UserContext(), key)
 	if err != nil {
+		return authentication.Token{}, invalid
+	}
+	if !client.Admitted(time.Now()) {
 		return authentication.Token{}, invalid
 	}
 	p, _, err := h.provider(client)

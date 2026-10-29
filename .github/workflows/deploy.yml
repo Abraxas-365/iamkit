@@ -70,7 +70,7 @@ jobs:
       - uses: helm/kind-action@v1
         with:
           cluster_name: iamkit-ct
-      - name: Prerequisites (PostgreSQL, Secrets)
+      - name: Prerequisites (PostgreSQL, Redis, Secrets)
         run: |
           kind load docker-image iamkit:ci --name iamkit-ct
           kubectl create namespace iamkit-ct
@@ -78,6 +78,7 @@ jobs:
           openssl genrsa -out "$RUNNER_TEMP/jwt.pem" 2048
           kubectl -n iamkit-ct create secret generic iamkit-ci-signing --from-file=jwt.pem="$RUNNER_TEMP/jwt.pem"
           kubectl -n iamkit-ct rollout status deploy/iamkit-ci-postgres --timeout=180s
+          kubectl -n iamkit-ct rollout status deploy/iamkit-ci-redis --timeout=180s
       - name: Install
         run: >-
           ct install --config deploy/helm/ct.yaml --charts deploy/helm/iamkit --namespace iamkit-ct

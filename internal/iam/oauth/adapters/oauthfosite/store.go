@@ -30,8 +30,11 @@ type Store struct {
 	Bound *oauth.Client
 }
 
+// Client is the client a client_id names: the bound client by the id it
+// sends (PublicID: the document URL of an external client, never its row
+// uuid, H-1), or a registered client by its uuid.
 func (s *Store) Client(ctx context.Context, id string) (*oauth.Client, error) {
-	if b := s.Bound; b != nil && (id == b.PublicID() || id == b.ID.String()) {
+	if b := s.Bound; b != nil && id == b.PublicID() {
 		return b, nil
 	}
 	clientID, err := identity.ParseClientID(id)
@@ -39,6 +42,20 @@ func (s *Store) Client(ctx context.Context, id string) (*oauth.Client, error) {
 		return nil, errx.NotFound("client not found")
 	}
 	return s.Clients.FindActive(ctx, s.Environment, clientID)
+}
+
+// holder is the client a stored request names by row uuid (the server wrote
+// it, so either kind): the bound client, or another live client (a token
+// being introspected belongs to a client other than the caller).
+func (s *Store) holder(ctx context.Context, row string) (*oauth.Client, error) {
+	if b := s.Bound; b != nil && row == b.ID.String() {
+		return b, nil
+	}
+	clientID, err := identity.ParseClientID(row)
+	if err != nil {
+		return nil, errx.NotFound("client not found")
+	}
+	return s.Clients.FindHolder(ctx, s.Environment, clientID)
 }
 
 // Client is fosite's view of a client: its ID is the client_id the client
@@ -83,7 +100,12 @@ func grantTypes(c *oauth.Client) []string {
 	return c.GrantTypes
 }
 func (s *Store) GetClient(ctx context.Context, id string) (fosite.Client, error) {
-	c, err := s.Client(ctx, id)
+	return s.dto(ctx, id, s.Client)
+}
+
+// dto is the fosite view of the client find returns, not found as fosite's.
+func (s *Store) dto(ctx context.Context, id string, find func(context.Context, string) (*oauth.Client, error)) (fosite.Client, error) {
+	c, err := find(ctx, id)
 	if err != nil {
 		var custom *errx.Error
 		if errors.As(err, &custom) && custom != nil && custom.HTTPStatus == 404 {
@@ -156,6 +178,9 @@ func (s *Store) put(ctx context.Context, kind, key string, r fosite.Requester, t
 	if _, err := s.GetClient(ctx, r.GetClient().GetID()); err != nil {
 		return err
 	}
+	if err := s.admittedInTx(ctx); err != nil {
+		return err
+	}
 	data, err := encodeRequest(r)
 	if err != nil {
 		return errx.Wrap(err, "encode OAuth request", errx.TypeInternal)
@@ -180,7 +205,7 @@ func (s *Store) get(ctx context.Context, kind, key string, session fosite.Sessio
 	if expected != "" && expected != row.Client {
 		return nil, fosite.ErrNotFound
 	}
-	client, err := s.GetClient(ctx, row.Client)
+	client, err := s.dto(ctx, row.Client, s.holder)
 	if err != nil {
 		return nil, err
 	}
@@ -216,6 +241,9 @@ func (s *Store) GetAuthorizeCodeSession(ctx context.Context, key string, session
 	return s.get(ctx, "code", key, session)
 }
 func (s *Store) InvalidateAuthorizeCodeSession(ctx context.Context, key string) error {
+	if err := s.admittedInTx(ctx); err != nil {
+		return err
+	}
 	res, err := s.executor(ctx).ExecContext(ctx, `UPDATE oauth_requests SET active=false WHERE environment_id=$1 AND kind='code' AND signature_hash=$2 AND active AND expires_at>clock_timestamp()`, s.Environment, SignatureHash(key))
 	if err != nil {
 		return wrap(err, "consume code")
@@ -266,6 +294,9 @@ func (s *Store) GetRefreshTokenSession(ctx context.Context, key string, session 
 }
 func (s *Store) DeleteRefreshTokenSession(context.Context, string) error { return nil }
 func (s *Store) RotateRefreshToken(ctx context.Context, id, key string) error {
+	if err := s.admittedInTx(ctx); err != nil {
+		return err
+	}
 	if err := s.lock(ctx, id); err != nil {
 		return err
 	}
@@ -302,18 +333,100 @@ func (s *Store) RevokeAccessToken(ctx context.Context, id string) error {
 
 type txKey struct{ store *Store }
 
+// admittedKey holds, in a transaction of an external client, whether the
+// client's row (locked by BeginTX) admits it.
+type admittedKey struct{ store *Store }
+
+// ErrNotAdmitted is what a token transaction of an external client answers
+// when, in the transaction, the client is no longer admitted (blocked,
+// demoted, expired, forgotten or its server gone). The token endpoint
+// answers it as an ended grant (invalid_grant).
+var ErrNotAdmitted = errors.New("the client is not admitted")
+
+// admittedInTx refuses, in a token transaction of an external client, a
+// client its locked row no longer admits. It runs before the transaction
+// spends a code, rotates a refresh token or stores a token: an operator's
+// change that committed first is seen here (and has already revoked the
+// rows it would touch); one that comes later waits for this transaction
+// and revokes what it issued.
+func (s *Store) admittedInTx(ctx context.Context) error {
+	if admitted, ok := ctx.Value(admittedKey{s}).(bool); ok && !admitted {
+		return ErrNotAdmitted
+	}
+	return nil
+}
+
 func (s *Store) executor(ctx context.Context) sqlx.ExtContext {
 	if tx, ok := ctx.Value(txKey{s}).(*sqlx.Tx); ok {
 		return tx
 	}
 	return s.DB
 }
+
+// BeginTX opens fosite's transaction. For an external client it first
+// locks the client's row (FOR SHARE) and reads its admission: the one lock
+// order of IAMKit (the client row, then its tickets, token rows and
+// sessions), which an operator's block, demotion or delete takes too. A
+// token transaction that held a token row first and then met the client
+// row through the foreign key of its insert would deadlock with them
+// (W4-1).
 func (s *Store) BeginTX(ctx context.Context) (context.Context, error) {
 	tx, err := s.DB.BeginTxx(ctx, nil)
 	if err != nil {
 		return ctx, wrap(err, "begin OAuth transaction")
 	}
-	return context.WithValue(ctx, txKey{s}, tx), nil
+	ctx = context.WithValue(ctx, txKey{s}, tx)
+	if b := s.Bound; b != nil && b.External() && !b.ID.IsZero() {
+		admitted, state, err := s.admitted(ctx, tx, b.ID)
+		if err != nil {
+			_ = tx.Rollback()
+			return ctx, err
+		}
+		ctx = context.WithValue(ctx, admittedKey{s}, admitted)
+		ctx = context.WithValue(ctx, stateKey{s}, state)
+	}
+	return ctx, nil
+}
+
+// stateKey holds the admission BeginTX read for an external client (nil:
+// its row is gone).
+type stateKey struct{ store *Store }
+
+// Refusal is the hosted refusal of an external client its transaction
+// found not admitted: blocked, documents off, or pending (demoted,
+// expired, forgotten or deleted with its server).
+func (s *Store) Refusal(ctx context.Context) error {
+	state, _ := ctx.Value(stateKey{s}).(*oauth.AdmissionState)
+	switch {
+	case state != nil && state.Disabled:
+		return oauth.ErrClientDisabled()
+	case state != nil && state.Admission == oauth.AdmissionBlocked:
+		return oauth.ErrClientBlocked()
+	}
+	return oauth.ErrAdmissionPending()
+}
+
+// admitted locks an external client's row in tx and reports whether it
+// admits the client now, with the state it read; a row that is gone does
+// not (nil state). It does not read the client_metadata_documents feature
+// (W5-4): the handler's at-use Client.Admitted check does, and a flag
+// turned off between that check and this transaction is caught by the
+// client_documents_reconcile job, which demotes and revokes.
+func (s *Store) admitted(ctx context.Context, tx *sqlx.Tx, client identity.ClientID) (bool, *oauth.AdmissionState, error) {
+	var row struct {
+		Admission string     `db:"admission"`
+		Expires   *time.Time `db:"admission_expires_at"`
+		Allow     bool       `db:"allow_client_metadata"`
+	}
+	err := tx.GetContext(ctx, &row, `SELECT c.admission,c.admission_expires_at,pr.allow_client_metadata FROM oauth_clients c JOIN protected_resources pr ON pr.id=c.protected_resource_id AND pr.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND c.source='cimd' AND c.active FOR SHARE OF c`, client, s.Environment)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil, nil
+	}
+	if err != nil {
+		return false, nil, wrap(err, "lock OAuth client")
+	}
+	state := &oauth.AdmissionState{Admission: row.Admission, Expires: row.Expires, Disabled: !row.Allow}
+	return state.Admitted(time.Now()), state, nil
 }
 func (s *Store) Commit(ctx context.Context) error {
 	tx, ok := ctx.Value(txKey{s}).(*sqlx.Tx)

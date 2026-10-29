@@ -2,6 +2,8 @@ package oauth
 
 import (
 	"slices"
+	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -61,5 +63,47 @@ func TestWarnings(t *testing.T) {
 	}
 	if w := Warnings([]string{"https://a.example/cb"}, nil); w == nil || len(w) != 0 {
 		t.Fatalf("no warnings = %#v", w)
+	}
+}
+
+// L5: AdmitRedirect never writes through to the slice the client was built
+// from, so clients that share one (a cache, a template) never see each
+// other's loopback ports, however many requests run at once.
+func TestAdmitRedirectDoesNotLeakAcrossClients(t *testing.T) {
+	shared := make([]string, 1, 8) // spare capacity: an append would write into it
+	shared[0] = "http://localhost/callback"
+	const n = 64
+	clients := make([]*Client, n)
+	ports := make([]string, n)
+	var wg sync.WaitGroup
+	for i := range clients {
+		clients[i] = &Client{Source: SourceCIMD, Redirects: shared}
+		ports[i] = "http://localhost:" + strconv.Itoa(40000+i) + "/callback"
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			clients[i].AdmitRedirect(ports[i])
+		}()
+	}
+	wg.Wait()
+	for i, c := range clients {
+		if !slices.Contains(c.Redirects, ports[i]) {
+			t.Errorf("client %d lost its own port", i)
+		}
+		for j, other := range ports {
+			if j != i && slices.Contains(c.Redirects, other) {
+				t.Fatalf("client %d holds the port of client %d", i, j)
+			}
+		}
+	}
+	if len(shared) != 1 || shared[0] != "http://localhost/callback" || slices.Contains(shared[:cap(shared)], ports[0]) {
+		t.Fatalf("the shared slice was written: %v", shared[:cap(shared)])
+	}
+	// A URI nothing registered is never admitted.
+	c := &Client{Source: SourceCIMD, Redirects: []string{"http://localhost/callback"}}
+	c.AdmitRedirect("http://localhost:5000/other")
+	c.AdmitRedirect("https://evil.example/callback")
+	if len(c.Redirects) != 1 {
+		t.Fatalf("admitted %v", c.Redirects)
 	}
 }

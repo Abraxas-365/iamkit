@@ -240,5 +240,18 @@
   "hosted.error.choose_organization": "Scegli un’organizzazione.",
   "hosted.error.organization_chosen": "Hai già scelto un’organizzazione per questo accesso. Accedi di nuovo per sceglierne un’altra.",
   "hosted.error.factor_required": "Verifica prima il secondo fattore.",
-  "hosted.error.factor_not_allowed": "La tua organizzazione non consente alcun secondo fattore che tu possa aggiungere. Contatta l’amministratore."
+  "hosted.error.factor_not_allowed": "La tua organizzazione non consente alcun secondo fattore che tu possa aggiungere. Contatta l’amministratore.",
+  "hosted.client.title.pending": "In attesa di approvazione",
+  "hosted.client.title.blocked": "Applicazione bloccata",
+  "hosted.client.title.unavailable": "Applicazione non disponibile",
+  "hosted.client.pending": "La tua richiesta è stata inviata all'IT. Questa applicazione potrà farti accedere quando verrà approvata per questo server. Riprova più tardi.",
+  "hosted.client.blocked": "L'IT ha bloccato questa applicazione per questo server. Contatta il tuo amministratore.",
+  "hosted.client.backlog": "Troppe applicazioni sono in attesa di approvazione su questo server. Riprova più tardi.",
+  "hosted.client.request_limit": "Hai troppe richieste in attesa di approvazione. Riprova quando l'IT avrà risposto ad alcune di esse.",
+  "hosted.client.registered_only": "Questo server accetta solo applicazioni registrate. Chiedi al tuo amministratore di abilitare questa.",
+  "hosted.client.disabled": "Questo ambiente non accetta applicazioni identificate da un indirizzo web. Contatta il tuo amministratore.",
+  "hosted.client.next_step": "Chiedi al tuo amministratore un ID client creato da un modello per questo server, poi inseriscilo nelle impostazioni dell'applicazione (ad esempio con l'opzione --client-id).",
+  "hosted.client.host": "Applicazione su",
+  "hosted.client.verified": "{name} (verificata)",
+  "hosted.client.unverified": "{name} (non verificata: l'applicazione si dichiara da sola)"
 }

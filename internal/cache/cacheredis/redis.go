@@ -110,6 +110,19 @@ func (s Store) Set(ctx context.Context, key string, value []byte, ttl time.Durat
 	return nil
 }
 
+// SetNX is SET key value NX PX ttl: atomic across the replicas sharing the
+// Redis.
+func (s Store) SetNX(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	ctx, cancel := bounded(ctx)
+	defer cancel()
+	stored, err := s.c.rdb.SetNX(ctx, Prefix+key, value, ttl).Result()
+	if err != nil {
+		s.c.failed(ctx, "setnx", err)
+		return false, err
+	}
+	return stored, nil
+}
+
 func (s Store) Delete(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil

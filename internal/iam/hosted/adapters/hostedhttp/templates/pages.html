@@ -289,6 +289,18 @@
 
 {{define "message/content"}}{{end}}
 
+{{define "client/content"}}
+{{with .Application}}
+<div class="application">
+{{if .Logo}}<img src="{{.Logo}}" alt="" referrerpolicy="no-referrer">{{end}}
+<p class="muted">{{$.T "hosted.client.host"}}</p>
+<p class="host"><strong>{{.Host}}</strong></p>
+{{with .Label $}}<p class="muted">{{if $.Application.Verified}}&#10003; {{end}}{{.}}</p>{{end}}
+</div>
+{{end}}
+{{with .NextStep}}<p class="muted">{{.}}</p>{{end}}
+{{end}}
+
 {{define "test/content"}}
 {{with .Test}}
 <p class="muted">{{$.T "hosted.test.connection"}}: <strong>{{.ConnectionName}}</strong> ({{.Provider}})</p>

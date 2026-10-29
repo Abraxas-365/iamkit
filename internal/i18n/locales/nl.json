@@ -240,5 +240,18 @@
   "hosted.error.choose_organization": "Kies een organisatie.",
   "hosted.error.organization_chosen": "Je hebt al een organisatie gekozen voor deze aanmelding. Log opnieuw in om een andere te kiezen.",
   "hosted.error.factor_required": "Verifieer eerst je tweede factor.",
-  "hosted.error.factor_not_allowed": "Je organisatie staat geen tweede factor toe die je kunt toevoegen. Neem contact op met je beheerder."
+  "hosted.error.factor_not_allowed": "Je organisatie staat geen tweede factor toe die je kunt toevoegen. Neem contact op met je beheerder.",
+  "hosted.client.title.pending": "Wacht op goedkeuring",
+  "hosted.client.title.blocked": "Applicatie geblokkeerd",
+  "hosted.client.title.unavailable": "Applicatie niet beschikbaar",
+  "hosted.client.pending": "Je verzoek is naar IT gestuurd. Deze applicatie kan je aanmelden zodra deze voor deze server is goedgekeurd. Probeer het later opnieuw.",
+  "hosted.client.blocked": "IT heeft deze applicatie voor deze server geblokkeerd. Neem contact op met je beheerder.",
+  "hosted.client.backlog": "Te veel applicaties wachten op goedkeuring bij deze server. Probeer het later opnieuw.",
+  "hosted.client.request_limit": "Je hebt te veel verzoeken die op goedkeuring wachten. Probeer het opnieuw wanneer IT er enkele heeft beantwoord.",
+  "hosted.client.registered_only": "Deze server accepteert alleen geregistreerde applicaties. Vraag je beheerder deze in te schakelen.",
+  "hosted.client.disabled": "Deze omgeving accepteert geen applicaties die met een webadres worden geïdentificeerd. Neem contact op met je beheerder.",
+  "hosted.client.next_step": "Vraag je beheerder om een client-ID die uit een sjabloon voor deze server is gemaakt en voer die in bij de instellingen van de applicatie (bijvoorbeeld met de optie --client-id).",
+  "hosted.client.host": "Applicatie op",
+  "hosted.client.verified": "{name} (geverifieerd)",
+  "hosted.client.unverified": "{name} (niet geverifieerd: de applicatie noemt zichzelf zo)"
 }

@@ -3,6 +3,7 @@ package oauthsvc
 import (
 	"context"
 	"crypto/subtle"
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
@@ -10,6 +11,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/query"
 	"slices"
 	"strings"
+	"time"
 )
 
 type Service struct {
@@ -19,10 +21,15 @@ type Service struct {
 	hints      oauth.Hints
 	documents  oauth.MetadataDocuments
 	features   oauth.Features
+	throttle   oauth.Throttle
+	maxPending int
+	// maxPerUser and maxPerOrg cap a user's, and an organization's, live
+	// access requests for pending clients (M-3).
+	maxPerUser, maxPerOrg int
 }
 
 func New(r oauth.Repository, s oauth.Secrets, p oauth.Passwords, h oauth.Hints) *Service {
-	return &Service{repository: r, secrets: s, passwords: p, hints: h}
+	return &Service{repository: r, secrets: s, passwords: p, hints: h, maxPending: config.ClientMetadataMaxPending, maxPerUser: config.ClientAccessRequestsPerUser, maxPerOrg: config.ClientAccessRequestsPerOrg}
 }
 func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID, input oauth.Registration) (identity.ClientID, string, error) {
 	if err := input.Validate(); err != nil {
@@ -212,6 +219,15 @@ func (s *Service) OriginAllowed(ctx context.Context, origin string) (bool, error
 	return s.repository.OriginAllowed(ctx, normalized[0])
 }
 func (s *Service) Client(ctx context.Context, id identity.ClientID) (*oauth.Client, error) {
+	return s.lookup(ctx, id, s.repository.FindActive)
+}
+
+// Holder: see oauth.Flows.
+func (s *Service) Holder(ctx context.Context, id identity.ClientID) (*oauth.Client, error) {
+	return s.lookup(ctx, id, s.repository.FindHolder)
+}
+
+func (s *Service) lookup(ctx context.Context, id identity.ClientID, find func(context.Context, identity.EnvironmentID, identity.ClientID) (*oauth.Client, error)) (*oauth.Client, error) {
 	if id.IsZero() {
 		return nil, errx.Validation("invalid client")
 	}
@@ -219,7 +235,27 @@ func (s *Service) Client(ctx context.Context, id identity.ClientID) (*oauth.Clie
 	if err != nil {
 		return nil, err
 	}
-	return s.repository.FindActive(ctx, environment, id)
+	client, err := find(ctx, environment, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.gated(ctx, client)
+}
+
+// gated marks an external client Disabled while the environment's
+// client_metadata_documents feature is off, so every use of the client
+// (refresh, introspection, opaque tokens, tickets) is refused at once
+// without waiting for the reconcile job (M-2).
+func (s *Service) gated(ctx context.Context, client *oauth.Client) (*oauth.Client, error) {
+	if client == nil || !client.External() || s.features == nil {
+		return client, nil
+	}
+	on, err := s.features.Enabled(ctx, client.Environment, config.FeatureClientMetadataDocuments)
+	if err != nil {
+		return nil, err
+	}
+	client.Disabled = client.Disabled || !on
+	return client, nil
 }
 
 // AccessTokenClient is the live client an opaque access token was issued
@@ -232,7 +268,11 @@ func (s *Service) AccessTokenClient(ctx context.Context, key string) (*oauth.Cli
 	if err != nil {
 		return nil, err
 	}
-	return s.repository.FindActive(ctx, environment, id)
+	client, err := s.repository.FindHolder(ctx, environment, id)
+	if err != nil {
+		return nil, err
+	}
+	return s.gated(ctx, client)
 }
 func (s *Service) Start(ctx context.Context, client *oauth.Client, form string) (string, string, error) {
 	ticket, hash, err := s.secrets.Generate("ik_authorize_")
@@ -257,41 +297,110 @@ func (s *Service) Pending(ctx context.Context, ticket, binding string) (oauth.Pe
 	if subtle.ConstantTimeCompare(row.Binding, s.secrets.Hash(binding)) != 1 {
 		return oauth.Pending{}, invalidTicket()
 	}
-	client, err := s.Client(ctx, row.Client)
+	client, err := s.TicketClient(ctx, row)
 	if err != nil {
 		return oauth.Pending{}, err
 	}
-	return oauth.Pending{Client: client, Form: row.Form}, nil
+	return oauth.Pending{Client: client, Form: row.Form, Ticket: row}, nil
 }
 
 func invalidTicket() error {
 	return errx.Unauthorized("invalid authorization ticket or browser binding")
 }
 
-func (s *Service) Complete(ctx context.Context, ticket, binding string, approve bool, prepare func(oauth.Ticket, oauth.Authorization) error) error {
+func (s *Service) Complete(ctx context.Context, ticket, binding string, approve bool, prepare func(oauth.Ticket, *oauth.Client, oauth.Authorization) error) error {
 	if !approve {
 		return errx.Forbidden("authorization was not approved")
+	}
+	// Before the transaction (M-5): peek the ticket without a lock and
+	// resolve its client, which may read the client's document and persist
+	// the client. Nothing here holds the ticket or a connection.
+	hash := s.secrets.Hash(ticket)
+	peek, err := s.repository.PendingTicket(ctx, hash)
+	if err != nil {
+		return invalidTicket()
+	}
+	// The browser binding before anything else (N-3): a ticket without its
+	// browser reads no document and persists nothing. Checked again on the
+	// locked row below.
+	if subtle.ConstantTimeCompare(peek.Binding, s.secrets.Hash(binding)) != 1 {
+		return invalidTicket()
+	}
+	client, err := s.TicketClient(ctx, peek)
+	if err != nil {
+		// A refusal (blocked, budget, bad document) keeps its own message
+		// for the page (N-11); only an unexpected failure is wrapped.
+		var known *errx.Error
+		if errx.As(err, &known) {
+			return err
+		}
+		return errx.Wrap(err, "OAuth client lookup failed", errx.TypeInternal)
 	}
 	tx, err := s.repository.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	row, err := tx.Ticket(ctx, s.secrets.Hash(ticket))
+	// Lock order (N-1): the client row before the ticket, as block, demote
+	// and forget take them (client, then its tickets). Database reads only:
+	// an external client blocked, or whose approval ended, since it was
+	// resolved is refused here, and its row is held against a block until
+	// this transaction ends. A client not persisted yet (ID zero) is
+	// pending, which prepare refuses.
+	var state *oauth.AdmissionState
+	if client.External() && !client.ID.IsZero() {
+		got, err := tx.Admission(ctx, client.ID)
+		if err != nil {
+			return err
+		}
+		state = &got
+	}
+	row, err := tx.Ticket(ctx, hash)
 	if err != nil {
 		return err
 	}
 	if subtle.ConstantTimeCompare(row.Binding, s.secrets.Hash(binding)) != 1 {
-		return errx.Unauthorized("invalid authorization ticket or browser binding")
+		return invalidTicket()
 	}
-	if err = prepare(row, tx); err != nil {
+	if !sameClient(row, peek) {
+		return invalidTicket()
+	}
+	if state != nil && !state.Admitted(time.Now()) {
+		if state.Disabled {
+			return oauth.Refused(oauth.ErrClientDisabled(), client)
+		}
+		if state.Admission == oauth.AdmissionBlocked {
+			return oauth.Refused(oauth.ErrClientBlocked(), client)
+		}
+		// Admitted when it was resolved, pending now: refused here. One
+		// that was pending already is refused by prepare, which records
+		// that this user asked for it.
+		if client.Admitted(time.Now()) {
+			return oauth.Refused(oauth.ErrAdmissionPending(), client)
+		}
+	}
+	if err = prepare(row, client, tx); err != nil {
 		return err
 	}
-	if err = tx.Consume(ctx, s.secrets.Hash(ticket)); err != nil {
+	if err = tx.Consume(ctx, hash); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
+
+// sameClient reports whether the locked ticket names the client the peek
+// resolved (the ticket row never changes, but the check keeps Complete
+// from spending a ticket for a client it did not resolve).
+func sameClient(row, peek oauth.Ticket) bool {
+	if row.Client != peek.Client || row.Protected != peek.Protected {
+		return false
+	}
+	if (row.External == nil) != (peek.External == nil) {
+		return false
+	}
+	return row.External == nil || *row.External == *peek.External
+}
+
 func (s *Service) Access(ctx context.Context, client *oauth.Client, subject identity.UserID, session identity.SessionID, organization identity.OrganizationID) (authentication.Access, error) {
 	if session.IsZero() || organization.IsZero() {
 		return authentication.Access{}, errx.Unauthorized("invalid session context")

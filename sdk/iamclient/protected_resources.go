@@ -17,11 +17,27 @@ type ProtectedResource struct {
 	URI  string `json:"uri"`
 	Name string `json:"name"`
 	// DefaultScopes are granted when a client asks for no scope.
-	DefaultScopes  []string  `json:"default_scopes"`
-	IdleTTLSeconds int64     `json:"idle_ttl_seconds"`
-	MaxTTLSeconds  int64     `json:"max_ttl_seconds"`
-	Active         bool      `json:"active"`
-	CreatedAt      time.Time `json:"created_at"`
+	DefaultScopes  []string `json:"default_scopes"`
+	IdleTTLSeconds int64    `json:"idle_ttl_seconds"`
+	MaxTTLSeconds  int64    `json:"max_ttl_seconds"`
+	Active         bool     `json:"active"`
+	// AllowClientMetadata lets clients named by an https client_id URL (a
+	// Client ID Metadata Document) ask for this server.
+	AllowClientMetadata bool `json:"allow_client_metadata"`
+	// ClientAdmission is ClientAdmissionAllowlist or ClientAdmissionOpen:
+	// how such clients are admitted the first time.
+	ClientAdmission string    `json:"client_admission"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+// ProtectedResourceImpact is what deactivating or deleting a protected
+// resource would end.
+type ProtectedResourceImpact struct {
+	// ActiveSessions are the live OAuth sessions of its resource.
+	ActiveSessions int `json:"active_sessions"`
+	// ExternalClients are the clients named by a metadata document it
+	// knows; deleting the server forgets them and their grants.
+	ExternalClients int `json:"external_clients"`
 }
 
 // ProtectedResourceCreate registers a resource linked to the application.
@@ -43,6 +59,11 @@ type ProtectedResourceUpdate struct {
 	IdleTTLSeconds *int64    `json:"idle_ttl_seconds,omitempty"`
 	MaxTTLSeconds  *int64    `json:"max_ttl_seconds,omitempty"`
 	Active         *bool     `json:"active,omitempty"`
+	// AllowClientMetadata turns clients named by a metadata document on or
+	// off for this server; ClientAdmission is ClientAdmissionAllowlist or
+	// ClientAdmissionOpen (open admits any such client without review).
+	AllowClientMetadata *bool   `json:"allow_client_metadata,omitempty"`
+	ClientAdmission     *string `json:"client_admission,omitempty"`
 }
 
 // ProtectedResourcePolicy are the environment's TTL ceilings for its
@@ -78,6 +99,14 @@ func (e Environment) UpdateProtectedResource(ctx context.Context, id string, inp
 // authorizations; the resource itself stays.
 func (e Environment) DeleteProtectedResource(ctx context.Context, id string) error {
 	return e.operation(ctx, "DELETE", []string{"protected-resources", id}, nil, nil)
+}
+
+// ProtectedResourceImpact counts what deactivating or deleting the
+// resource would end, so a caller can warn first.
+func (e Environment) ProtectedResourceImpact(ctx context.Context, id string) (ProtectedResourceImpact, error) {
+	var out ProtectedResourceImpact
+	err := e.operation(ctx, "GET", []string{"protected-resources", id, "impact"}, nil, &out)
+	return out, err
 }
 
 func (e Environment) ProtectedResourcePolicy(ctx context.Context) (ProtectedResourcePolicy, error) {

@@ -127,7 +127,7 @@ assignments, grants), `api_keys`, `events` (list, iterate, export),
 `webhooks` (subscriptions, deliveries, replay, rotate_secret), `audit_logs`
 (emit with `idempotency_key`, list, iterate, export, actions), `risk`
 (policy, restrictions, sign-in attempts, CAPTCHA) and `protected_resources`
-(list, get, create, update, delete, policy, set_policy; see
+(list, get, create, update, delete, impact, policy, set_policy; client admission: clients, iterate_clients, client, client_requests, approve_client, block_client, unblock_client, forget_client, create_client_from_template, allowlist, create_allowlist_entry, delete_allowlist_entry, presets, apply_preset; see
 [protect an MCP server](../../guides/applications/protect-mcp-server.md)).
 Answers are the decoded JSON
 documents of the [OpenAPI document](../api/openapi.md); `iterate` walks

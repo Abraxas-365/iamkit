@@ -32,7 +32,9 @@ func portal(ctx context.Context, q sqlx.QueryerContext, environment identity.Env
 	var row portalRow
 	statement := `SELECT id,application_id,active FROM oauth_clients WHERE environment_id=$1 AND system=$2`
 	if lock {
-		statement += ` FOR UPDATE`
+		// NO KEY: the portal never deletes its client, and token inserts
+		// of the client (their foreign key's key-share lock) pass.
+		statement += ` FOR NO KEY UPDATE`
 	}
 	err := sqlx.GetContext(ctx, q, &row, statement, environment, orgadmin.SystemClient)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -69,7 +71,7 @@ func (r *Portal) EnablePortal(ctx context.Context, m orgadmin.PortalMutation, ap
 		if _, err = tx.ExecContext(ctx, `UPDATE applications SET active=true WHERE environment_id=$1 AND id=$2`, m.Environment, row.Application); err != nil {
 			return orgadmin.Portal{}, failure(err)
 		}
-		if _, err = tx.ExecContext(ctx, `UPDATE oauth_clients SET active=true,redirect_uris=$3,post_logout_redirect_uris=$4 WHERE environment_id=$1 AND id=$2`, m.Environment, row.Client, callback, signedOut); err != nil {
+		if _, err = tx.ExecContext(ctx, `UPDATE oauth_clients SET active=true,redirect_uris=$3,post_logout_redirect_uris=$4 WHERE environment_id=$1 AND id=$2 AND source='registered'`, m.Environment, row.Client, callback, signedOut); err != nil {
 			return orgadmin.Portal{}, failure(err)
 		}
 		application, client = row.Application, row.Client
@@ -113,7 +115,7 @@ func (r *Portal) DisablePortal(ctx context.Context, m orgadmin.PortalMutation) e
 	if !found {
 		return errx.NotFound("the organization admin portal is not enabled")
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, row.Client); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2 AND source='registered'`, m.Environment, row.Client); err != nil {
 		return failure(err)
 	}
 	if _, err = tx.ExecContext(ctx, `UPDATE applications SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, row.Application); err != nil {

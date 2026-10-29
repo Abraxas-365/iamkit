@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/Abraxas-365/iamkit/internal/bootstrap"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -36,6 +37,13 @@ func (h *metadataHost) Put(location string, doc any) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.docs[location] = doc
+}
+
+// Delete makes the host answer 404 for location.
+func (h *metadataHost) Delete(location string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.docs, location)
 }
 
 func (h *metadataHost) Reads(location string) int {
@@ -91,12 +99,27 @@ func TestExternalClients(t *testing.T) {
 	if p := e.browser().get(authorize(claudeCodeID, url.Values{"resource": nil})); p.Status != 400 || p.Location != "" {
 		t.Fatalf("no resource: %d %q", p.Status, p.Location)
 	}
-	// Not on the allowlist: discovered as pending, and the sign-in ends on
-	// a page, never at the client with a code.
+	var before int
+	e.DB.Get(&before, `SELECT count(*) FROM events`)
+	// Not on the allowlist: the sign-in ends on a page, never at the client
+	// with a code.
 	b := e.browser()
 	start := b.get(authorize(claudeCodeID, nil))
 	if start.Status != 303 || !strings.HasPrefix(start.Location, "/hosted/login?ticket=") {
 		t.Fatalf("authorize: %d %q %s", start.Status, start.Location, start.Body)
+	}
+	// H1: an anonymous request writes nothing; the client is persisted,
+	// pending, when its user signs in, with the access request.
+	var rows, events int
+	e.DB.Get(&rows, `SELECT count(*) FROM oauth_clients WHERE external_id=$1`, claudeCodeID)
+	e.DB.Get(&events, `SELECT count(*) FROM events`)
+	if rows != 0 || events != before {
+		t.Fatalf("anonymous authorize wrote %d rows, %d events", rows, events-before)
+	}
+	tk := b.get(start.Location).field("ticket")
+	done := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}})
+	if done.Status != 403 || done.Location != "" {
+		t.Fatalf("pending client: %d %q %s", done.Status, done.Location, done.Body)
 	}
 	var admission, rowID string
 	e.DB.Get(&admission, `SELECT admission FROM oauth_clients WHERE external_id=$1 AND protected_resource_id=$2`, claudeCodeID, protected)
@@ -104,15 +127,27 @@ func TestExternalClients(t *testing.T) {
 	if admission != "pending" {
 		t.Fatalf("admission = %q", admission)
 	}
-	tk := b.get(start.Location).field("ticket")
-	done := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {e.AliceEmail}, "password": {e.Pass}})
-	if done.Status != 403 || done.Location != "" {
-		t.Fatalf("pending client: %d %q %s", done.Status, done.Location, done.Body)
-	}
-	var discovered int
+	var discovered, requested int
 	e.DB.Get(&discovered, `SELECT count(*) FROM events WHERE type='oauth_client.discovered' AND subject_id=$1`, rowID)
-	if discovered != 1 {
-		t.Fatalf("discovered events = %d", discovered)
+	e.DB.Get(&requested, `SELECT count(*) FROM events WHERE type='oauth_client.access_requested' AND subject_id=$1`, rowID)
+	if discovered != 1 || requested != 1 {
+		t.Fatalf("discovered = %d, access_requested = %d", discovered, requested)
+	}
+	var data string
+	e.DB.Get(&data, `SELECT data::text FROM events WHERE type='oauth_client.access_requested' AND subject_id=$1`, rowID)
+	if !strings.Contains(data, claudeCodeID) || !strings.Contains(data, `"host": "claude.ai"`) || !strings.Contains(data, e.Alice) || strings.Contains(data, "ik_") {
+		t.Fatalf("access_requested data = %s", data)
+	}
+	// The same user asking again within the interval adds nothing.
+	b2 := e.browser()
+	again := b2.get(authorize(claudeCodeID, nil))
+	tk2 := b2.get(again.Location).field("ticket")
+	if done := b2.post("/hosted/login/password", url.Values{"ticket": {tk2}, "email": {e.AliceEmail}, "password": {e.Pass}}); done.Status != 403 {
+		t.Fatalf("second request: %d", done.Status)
+	}
+	e.DB.Get(&requested, `SELECT count(*) FROM events WHERE type='oauth_client.access_requested' AND subject_id=$1`, rowID)
+	if requested != 1 {
+		t.Fatalf("access_requested after repeat = %d", requested)
 	}
 
 	// Approved: the full flow, client_id = the URL throughout.
@@ -143,9 +178,14 @@ func TestExternalClients(t *testing.T) {
 			t.Errorf("%s: %d %v", grant, status, out)
 		}
 	}
-	// Another URL cannot use this client's refresh token.
-	if status, _, _ := e.tokenCall(refreshForm("https://claude.ai/oauth/other", refreshed["refresh_token"].(string)), ""); status != 401 {
-		t.Fatalf("foreign client_id refresh: %d", status)
+	// Another URL cannot use this client's refresh token: no grant of that
+	// client holds it (M4: invalid_grant, not a client authentication error).
+	if status, out, _ := e.tokenCall(refreshForm("https://claude.ai/oauth/other", refreshed["refresh_token"].(string)), ""); status != 400 || out["error"] != "invalid_grant" {
+		t.Fatalf("foreign client_id refresh: %d %v", status, out)
+	}
+	// Revoking a token the URL does not hold succeeds (RFC 7009).
+	if rev := httpForm(t, e, "/oauth/revoke", url.Values{"client_id": {"https://claude.ai/oauth/other"}, "token": {refreshed["refresh_token"].(string)}}); rev != 200 {
+		t.Fatalf("foreign revoke: %d", rev)
 	}
 	// Revocation by client_id URL; the refresh token is gone.
 	rev := httpForm(t, e, "/oauth/revoke", url.Values{"client_id": {claudeCodeID}, "token": {refreshed["refresh_token"].(string)}})
@@ -219,13 +259,13 @@ func TestExternalClients(t *testing.T) {
 
 	// The feature flag and the server's switch refuse URL clients.
 	e.Must("PUT", e.Base+"/features/client_metadata_documents", e.Owner, fiber.Map{"enabled": false}, 200)
-	if p := e.browser().get(authorize(chatGPTID, nil)); p.Status != 403 {
-		t.Fatalf("feature off: %d %q", p.Status, p.Location)
+	if p := e.browser().get(authorize(chatGPTID, nil)); p.Status != 403 || !strings.Contains(p.Body, "--client-id") {
+		t.Fatalf("feature off: %d %q %s", p.Status, p.Location, p.Body)
 	}
 	e.Must("PUT", e.Base+"/features/client_metadata_documents", e.Owner, fiber.Map{"enabled": true}, 200)
 	e.DB.MustExec(`UPDATE protected_resources SET allow_client_metadata=false WHERE id=$1`, protected)
-	if p := e.browser().get(authorize(chatGPTID, nil)); p.Status != 403 {
-		t.Fatalf("registered clients only: %d %q", p.Status, p.Location)
+	if p := e.browser().get(authorize(chatGPTID, nil)); p.Status != 403 || !strings.Contains(p.Body, "--client-id") {
+		t.Fatalf("registered clients only: %d %q %s", p.Status, p.Location, p.Body)
 	}
 }
 
@@ -356,5 +396,58 @@ func TestExternalClientConstraint(t *testing.T) {
 	}
 	if _, err := tx.Exec(q, e.EnvID, e.Client, resource, protected); err == nil || !strings.Contains(err.Error(), "oauth_clients_external_key") {
 		t.Fatalf("duplicate external client: %v", err)
+	}
+}
+
+// Discovery says client_id metadata documents are supported only when a
+// client could use them: the feature is on in some environment that has an
+// active protected resource allowing them.
+func TestDiscoveryReflectsClientMetadataDocuments(t *testing.T) {
+	cache := newFlushable()
+	e := newEnv(t, bootstrap.WithClientMetadataCache(cache))
+	supported := func() any {
+		t.Helper()
+		cache.Flush() // the offers are cached briefly
+		var out any
+		for _, path := range []string{"/.well-known/oauth-authorization-server", "/.well-known/openid-configuration"} {
+			got := e.Must("GET", path, "", nil, 200).JSON["client_id_metadata_document_supported"]
+			if out != nil && got != out {
+				t.Fatalf("documents disagree: %v %v", out, got)
+			}
+			out = got
+		}
+		return out
+	}
+	absent := func(v any) bool { return v == nil || v == false }
+
+	// No protected resource: nothing a client could use.
+	if v := supported(); !absent(v) {
+		t.Fatalf("no protected resource: %v", v)
+	}
+	_, protected, _ := e.mcpServer(fiber.Map{})
+	if v := supported(); v != true {
+		t.Fatalf("protected resource allowing documents: %v", v)
+	}
+	// The feature off in the only environment that has one.
+	e.Must("PUT", e.Base+"/features/client_metadata_documents", e.Owner, fiber.Map{"enabled": false}, 200)
+	if v := supported(); !absent(v) {
+		t.Fatalf("feature off: %v", v)
+	}
+	e.Must("PUT", e.Base+"/features/client_metadata_documents", e.Owner, fiber.Map{"enabled": true}, 200)
+	if v := supported(); v != true {
+		t.Fatalf("feature back on: %v", v)
+	}
+	// The resource stops allowing them, or is deactivated.
+	e.Must("PATCH", e.Base+"/protected-resources/"+protected, e.Owner, fiber.Map{"allow_client_metadata": false}, 200)
+	if v := supported(); !absent(v) {
+		t.Fatalf("resource registered-only: %v", v)
+	}
+	e.Must("PATCH", e.Base+"/protected-resources/"+protected, e.Owner, fiber.Map{"allow_client_metadata": true}, 200)
+	if v := supported(); v != true {
+		t.Fatalf("resource allows again: %v", v)
+	}
+	e.DB.MustExec(`UPDATE protected_resources SET active=false WHERE id=$1`, protected)
+	if v := supported(); !absent(v) {
+		t.Fatalf("resource inactive: %v", v)
 	}
 }

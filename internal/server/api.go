@@ -233,6 +233,12 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 		h.ResourceRoutes(e.Group("/protected-resources", perms))
 		h.PolicyRoutes(e.Group("/protected-resource-policy", perms))
 	}
+	if h := s.APIHandlers.Admissions; h != nil {
+		perms := apiauth.ReadWrite(authorization.PermProtectedResourcesRead, authorization.PermProtectedResourcesWrite)
+		h.ResourceRoutes(e.Group("/protected-resources", perms))
+		h.AllowlistRoutes(e.Group("/oauth-client-allowlist", perms))
+		h.PresetRoutes(e.Group("/oauth-client-presets", perms))
+	}
 	if h := s.APIHandlers.SMS; h != nil {
 		sms := e.Group("/sms", apiauth.ReadWrite(authorization.PermDeliveryRead, authorization.PermDeliveryWrite))
 		sms.Get("/", h.Get)

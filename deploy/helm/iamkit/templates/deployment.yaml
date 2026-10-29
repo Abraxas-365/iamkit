@@ -86,6 +86,8 @@ spec:
                   name: {{ .Values.redis.existingSecret }}
                   key: {{ .Values.redis.key }}
             {{- end }}
+            - name: IAMKIT_REPLICAS
+              value: {{ include "iamkit.replicas" . | quote }}
             - name: IAMKIT_WORKERS
               value: {{ .Values.workers.enabled | quote }}
             {{- with .Values.trustedProxies }}

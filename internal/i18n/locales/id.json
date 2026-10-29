@@ -239,5 +239,18 @@
   "hosted.error.choose_organization": "Pilih organisasi.",
   "hosted.error.organization_chosen": "Anda sudah memilih organisasi untuk proses masuk ini. Masuk lagi untuk memilih yang lain.",
   "hosted.error.factor_required": "Verifikasi faktor kedua Anda terlebih dahulu.",
-  "hosted.error.factor_not_allowed": "Organisasi Anda tidak mengizinkan faktor kedua yang dapat Anda tambahkan. Hubungi administrator."
+  "hosted.error.factor_not_allowed": "Organisasi Anda tidak mengizinkan faktor kedua yang dapat Anda tambahkan. Hubungi administrator.",
+  "hosted.client.title.pending": "Menunggu persetujuan",
+  "hosted.client.title.blocked": "Aplikasi diblokir",
+  "hosted.client.title.unavailable": "Aplikasi tidak tersedia",
+  "hosted.client.pending": "Permintaan Anda telah dikirim ke tim IT. Aplikasi ini dapat memasukkan Anda setelah disetujui untuk server ini. Coba lagi nanti.",
+  "hosted.client.blocked": "Tim IT memblokir aplikasi ini untuk server ini. Hubungi administrator Anda.",
+  "hosted.client.backlog": "Terlalu banyak aplikasi menunggu persetujuan di server ini. Coba lagi nanti.",
+  "hosted.client.request_limit": "Anda memiliki terlalu banyak permintaan yang menunggu persetujuan. Coba lagi setelah tim IT menjawab sebagian.",
+  "hosted.client.registered_only": "Server ini hanya menerima aplikasi terdaftar. Minta administrator Anda mengaktifkan yang ini.",
+  "hosted.client.disabled": "Lingkungan ini tidak menerima aplikasi yang diidentifikasi dengan alamat web. Hubungi administrator Anda.",
+  "hosted.client.next_step": "Minta administrator Anda membuat ID klien dari templat untuk server ini, lalu masukkan di pengaturan aplikasi (misalnya dengan opsi --client-id).",
+  "hosted.client.host": "Aplikasi di",
+  "hosted.client.verified": "{name} (terverifikasi)",
+  "hosted.client.unverified": "{name} (belum terverifikasi: aplikasi menyebut dirinya sendiri)"
 }

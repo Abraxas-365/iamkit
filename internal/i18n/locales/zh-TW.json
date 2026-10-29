@@ -239,5 +239,18 @@
   "hosted.error.choose_organization": "請選擇組織。",
   "hosted.error.organization_chosen": "你已為此次登入選擇組織。若要選擇其他組織，請重新登入。",
   "hosted.error.factor_required": "請先驗證第二因素。",
-  "hosted.error.factor_not_allowed": "你的組織不允許新增任何可用的第二因素。請聯絡管理員。"
+  "hosted.error.factor_not_allowed": "你的組織不允許新增任何可用的第二因素。請聯絡管理員。",
+  "hosted.client.title.pending": "等待核准",
+  "hosted.client.title.blocked": "應用程式已被封鎖",
+  "hosted.client.title.unavailable": "應用程式無法使用",
+  "hosted.client.pending": "您的請求已傳送給 IT 部門。此應用程式獲得該伺服器的核准後即可讓您登入。請稍後再試。",
+  "hosted.client.blocked": "IT 部門已在此伺服器上封鎖該應用程式。請聯絡管理員。",
+  "hosted.client.backlog": "此伺服器上等待核准的應用程式過多。請稍後再試。",
+  "hosted.client.request_limit": "您有太多等待核准的請求。請在 IT 部門處理其中一些後再試。",
+  "hosted.client.registered_only": "此伺服器僅接受已註冊的應用程式。請請管理員啟用該應用程式。",
+  "hosted.client.disabled": "此環境不接受以網址識別的應用程式。請聯絡管理員。",
+  "hosted.client.next_step": "請向管理員索取為此伺服器依範本建立的用戶端 ID，並填入應用程式的設定中（例如使用 --client-id 選項）。",
+  "hosted.client.host": "應用程式位址",
+  "hosted.client.verified": "{name}（已驗證）",
+  "hosted.client.unverified": "{name}（未驗證：該應用程式自行宣告名稱）"
 }

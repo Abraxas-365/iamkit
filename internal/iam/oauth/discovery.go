@@ -40,6 +40,8 @@ type Discovery struct {
 	AuthorizationResponseIssParameterSupported bool `json:"authorization_response_iss_parameter_supported"`
 	// draft-ietf-oauth-client-id-metadata-document: an https client_id URL
 	// is accepted on protected resources that allow it (MCP 2025-11-25).
+	// Only true where a client could use it (Offers.ClientMetadataDocuments);
+	// NewDiscovery leaves it false and Discovery.With sets it.
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
 }
 
@@ -72,7 +74,6 @@ func NewDiscovery(issuer string) Discovery {
 		BackchannelLogoutSessionSupported:               true,
 		DeviceAuthorizationEndpoint:                     issuer + "/oauth/device_authorization",
 		AuthorizationResponseIssParameterSupported:      true,
-		ClientIDMetadataDocumentSupported:               true,
 	}
 }
 

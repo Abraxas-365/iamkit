@@ -29,10 +29,17 @@ type ProtectedResource struct {
 	DefaultScopes []string `json:"default_scopes"`
 	// IdleTTLSeconds bounds the inactivity between two refreshes;
 	// MaxTTLSeconds the whole authorization (its session).
-	IdleTTLSeconds int64     `json:"idle_ttl_seconds"`
-	MaxTTLSeconds  int64     `json:"max_ttl_seconds"`
-	Active         bool      `json:"active"`
-	CreatedAt      time.Time `json:"created_at"`
+	IdleTTLSeconds int64 `json:"idle_ttl_seconds"`
+	MaxTTLSeconds  int64 `json:"max_ttl_seconds"`
+	Active         bool  `json:"active"`
+	// AllowClientMetadata lets clients identified by a metadata document
+	// (client_id = https URL) ask for this server; off: registered clients
+	// only.
+	AllowClientMetadata bool `json:"allow_client_metadata"`
+	// ClientAdmission is ClientAdmissionAllowlist (a document client waits
+	// for IT unless an allowlist entry admits it) or ClientAdmissionOpen.
+	ClientAdmission string    `json:"client_admission"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 // ProtectedResourceImpact is what deactivating or deleting a protected
@@ -40,6 +47,9 @@ type ProtectedResource struct {
 // flow and plain OpenID Connect grants of its clients alike).
 type ProtectedResourceImpact struct {
 	ActiveSessions int `json:"active_sessions"`
+	// ExternalClients are the clients identified by a metadata document
+	// the server knows; deleting the server forgets them and their grants.
+	ExternalClients int `json:"external_clients"`
 }
 
 // ProtectedResourceCreate registers a resource of an application as a
@@ -88,9 +98,16 @@ type ProtectedResourceUpdate struct {
 	IdleTTLSeconds *int64    `json:"idle_ttl_seconds"`
 	MaxTTLSeconds  *int64    `json:"max_ttl_seconds"`
 	Active         *bool     `json:"active"`
+	// AllowClientMetadata and ClientAdmission set the server's policy for
+	// clients identified by a metadata document.
+	AllowClientMetadata *bool   `json:"allow_client_metadata"`
+	ClientAdmission     *string `json:"client_admission"`
 }
 
 func (u ProtectedResourceUpdate) Validate() error {
+	if u.ClientAdmission != nil && *u.ClientAdmission != ClientAdmissionAllowlist && *u.ClientAdmission != ClientAdmissionOpen {
+		return errx.Validation("client_admission must be allowlist or open")
+	}
 	if u.Name != nil {
 		if err := validateProtectedName(*u.Name); err != nil {
 			return err
@@ -124,6 +141,12 @@ func (u ProtectedResourceUpdate) Apply(current ProtectedResource) ProtectedResou
 	if u.Active != nil {
 		current.Active = *u.Active
 	}
+	if u.AllowClientMetadata != nil {
+		current.AllowClientMetadata = *u.AllowClientMetadata
+	}
+	if u.ClientAdmission != nil {
+		current.ClientAdmission = *u.ClientAdmission
+	}
 	return current
 }
 
@@ -131,6 +154,9 @@ func (u ProtectedResourceUpdate) Apply(current ProtectedResource) ProtectedResou
 func (r ProtectedResource) Validate() error {
 	if err := validateProtectedName(r.Name); err != nil {
 		return err
+	}
+	if r.ClientAdmission != ClientAdmissionAllowlist && r.ClientAdmission != ClientAdmissionOpen {
+		return errx.Validation("client_admission must be allowlist or open")
 	}
 	return validateTTLs(r.IdleTTLSeconds, r.MaxTTLSeconds)
 }

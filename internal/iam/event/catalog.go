@@ -82,9 +82,46 @@ const (
 	// OAuthClientDiscovered: a client identified by a metadata document URL
 	// asked for a protected resource for the first time (actor system;
 	// data: client_id URL, protected_resource_id, admission).
-	OAuthClientDiscovered  = "oauth_client.discovered"
-	OrgAdminPortalEnabled  = "org_admin_portal.enabled"
-	OrgAdminPortalDisabled = "org_admin_portal.disabled"
+	OAuthClientDiscovered = "oauth_client.discovered"
+	// OAuthClientAccessRequested: a signed-in user asked for a client
+	// identified by a metadata document that IT has not approved (actor the
+	// user, at most one per client and user per
+	// config.ClientAccessRequestInterval; data: client_id URL, host,
+	// protected_resource_id, user_id, organization_id). Nothing is written
+	// before the sign-in: anonymous requests leave no row and no event.
+	OAuthClientAccessRequested = "oauth_client.access_requested"
+	// OAuthClientApproved: IT approved an external client for a protected
+	// resource (actor the operator; data: protected_resource_id,
+	// admission_source, expires_at). An allowlist entry created later also
+	// approves the pending clients it matches (source allowlist or preset).
+	OAuthClientApproved = "oauth_client.approved"
+	// OAuthClientBlocked: IT blocked an external client; its token
+	// families and sessions were revoked in the same transaction
+	// (data: protected_resource_id, revoked_sessions).
+	OAuthClientBlocked = "oauth_client.blocked"
+	// OAuthClientUnblocked: a blocked external client waits for IT again.
+	OAuthClientUnblocked = "oauth_client.unblocked"
+	// OAuthClientExpired: an approval reached its expiry; the
+	// client_admission_expire job revoked its grants and the client waits
+	// for IT again (actor system).
+	OAuthClientExpired = "oauth_client.expired"
+	// OAuthClientDemoted: an approved external client lost its approval
+	// because the policy behind it ended (actor the operator, or system for
+	// the reconcile job; data: protected_resource_id, reason, admission_source
+	// = how it had been approved). Its grants were revoked in the same
+	// transaction and it waits for IT again. reason is one of
+	// oauth.Demotion*.
+	OAuthClientDemoted = "oauth_client.demoted"
+	// OAuthClientForgotten: IT deleted an external client with its grants;
+	// it is discovered afresh if it asks again.
+	OAuthClientForgotten = "oauth_client.forgotten"
+	// OAuthClientAllowlist*: an allowlist entry admitting client metadata
+	// documents without review was created or deleted (data: origin,
+	// path_prefix, preset, protected_resource_id).
+	OAuthClientAllowlistCreated = "oauth_client_allowlist.created"
+	OAuthClientAllowlistDeleted = "oauth_client_allowlist.deleted"
+	OrgAdminPortalEnabled       = "org_admin_portal.enabled"
+	OrgAdminPortalDisabled      = "org_admin_portal.disabled"
 	// OrgSetupLink*: an organization setup link was created or revoked
 	// (actor: the operator or owner) or exchanged for a session (actor: the
 	// link itself); subject = the link.

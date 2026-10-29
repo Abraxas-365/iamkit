@@ -33,3 +33,18 @@ func TestDiscoveryAdvertisesIssuerParameter(t *testing.T) {
 		t.Fatal("authorization_response_iss_parameter_supported must be true")
 	}
 }
+
+// Discovery advertises client_id metadata documents only when the
+// deployment offers them.
+func TestDiscoveryClientMetadataDocuments(t *testing.T) {
+	d := NewDiscovery("https://iam.example")
+	if d.ClientIDMetadataDocumentSupported {
+		t.Fatal("advertised by default")
+	}
+	if !d.With(Offers{ClientMetadataDocuments: true}).ClientIDMetadataDocumentSupported {
+		t.Fatal("offered but not advertised")
+	}
+	if d.With(Offers{}).ClientIDMetadataDocumentSupported {
+		t.Fatal("not offered but advertised")
+	}
+}

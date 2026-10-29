@@ -80,12 +80,12 @@ func (r *Repository) Update(ctx context.Context, m oauth.Mutation, id identity.C
 		origins = pq.StringArray(nonNil(*input.AllowedOrigins))
 	}
 	if auth != nil {
-		return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($11,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($12,backchannel_logout_session_required), grant_types=COALESCE($13,grant_types), allowed_origins=COALESCE($14,allowed_origins), initiate_login_uri=COALESCE($15,initiate_login_uri), token_endpoint_auth_method=$7, token_endpoint_auth_signing_alg=$8, jwks=$9, jwks_uri=$10 WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI)
+		return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($11,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($12,backchannel_logout_session_required), grant_types=COALESCE($13,grant_types), allowed_origins=COALESCE($14,allowed_origins), initiate_login_uri=COALESCE($15,initiate_login_uri), token_endpoint_auth_method=$7, token_endpoint_auth_signing_alg=$8, jwks=$9, jwks_uri=$10 WHERE environment_id=$1 AND id=$2 AND active AND source='registered'`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI)
 	}
-	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($7,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($8,backchannel_logout_session_required), grant_types=COALESCE($9,grant_types), allowed_origins=COALESCE($10,allowed_origins), initiate_login_uri=COALESCE($11,initiate_login_uri) WHERE environment_id=$1 AND id=$2 AND active`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI)
+	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($7,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($8,backchannel_logout_session_required), grant_types=COALESCE($9,grant_types), allowed_origins=COALESCE($10,allowed_origins), initiate_login_uri=COALESCE($11,initiate_login_uri) WHERE environment_id=$1 AND id=$2 AND active AND source='registered'`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI)
 }
 func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
-	return r.audited(ctx, m, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2`, m.Environment, id)
+	return r.audited(ctx, m, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2 AND source='registered'`, m.Environment, id)
 }
 
 // audited runs a single-client change together with its audit event.
@@ -208,7 +208,17 @@ func (row authRow) auth() identity.ClientAuth {
 	return out
 }
 func (r *Repository) SaveTicket(ctx context.Context, hash, binding []byte, client *oauth.Client, form string) error {
-	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_authorizations(secret_hash,environment_id,client_id,binding_hash,request_form,expires_at) VALUES($1,$2,$3,$4,$5,now()+make_interval(secs => $6))`, hash, client.Environment, client.ID, binding, form, ticketTTL())
+	// A client with no row yet (external, not approved: nothing is written
+	// before its user signs in) is named by URL and protected resource.
+	var row, protected any = client.ID, nil
+	var external any
+	if client.ID.IsZero() {
+		if client.Protected == nil || client.ExternalID == "" {
+			return errx.Internal("authorization ticket without a client")
+		}
+		row, external, protected = nil, client.ExternalID, client.Protected.ID
+	}
+	_, err := r.db.ExecContext(ctx, `INSERT INTO oauth_authorizations(secret_hash,environment_id,client_id,external_id,protected_resource_id,binding_hash,request_form,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,now()+make_interval(secs => $8))`, hash, client.Environment, row, external, protected, binding, form, ticketTTL())
 	return failure(err)
 }
 
@@ -216,7 +226,7 @@ func (r *Repository) SaveTicket(ctx context.Context, hash, binding []byte, clien
 func ticketTTL() float64 { return config.OAuthAuthorizationTicketTTL.Seconds() }
 func (r *Repository) PendingTicket(ctx context.Context, hash []byte) (oauth.Ticket, error) {
 	var row oauth.Ticket
-	err := r.db.GetContext(ctx, &row, `SELECT client_id,binding_hash,request_form,requested_at,device_hash FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL`, hash)
+	err := r.db.GetContext(ctx, &row, `SELECT client_id,external_id,protected_resource_id,binding_hash,request_form,requested_at,device_hash FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL`, hash)
 	return row, lookup(err)
 }
 
@@ -231,8 +241,19 @@ func (r *Repository) Begin(ctx context.Context) (oauth.Authorization, error) {
 }
 func (t *authorization) Ticket(ctx context.Context, hash []byte) (oauth.Ticket, error) {
 	var row oauth.Ticket
-	err := t.tx.GetContext(ctx, &row, `SELECT client_id,binding_hash,request_form,requested_at,device_hash FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL FOR UPDATE`, hash)
+	err := t.tx.GetContext(ctx, &row, `SELECT client_id,external_id,protected_resource_id,binding_hash,request_form,requested_at,device_hash FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL FOR UPDATE`, hash)
 	return row, lookup(err)
+}
+func (t *authorization) Admission(ctx context.Context, client identity.ClientID) (oauth.AdmissionState, error) {
+	var row struct {
+		Admission string     `db:"admission"`
+		Expires   *time.Time `db:"admission_expires_at"`
+		Allow     bool       `db:"allow_client_metadata"`
+	}
+	// FOR SHARE: a block of the client waits for this transaction and then
+	// revokes what it issued.
+	err := t.tx.GetContext(ctx, &row, `SELECT c.admission,c.admission_expires_at,pr.allow_client_metadata FROM oauth_clients c JOIN protected_resources pr ON pr.id=c.protected_resource_id AND pr.environment_id=c.environment_id WHERE c.id=$1 AND c.source='cimd' AND c.active FOR SHARE OF c`, client)
+	return oauth.AdmissionState{Admission: row.Admission, Expires: row.Expires, Disabled: !row.Allow}, lookup(err)
 }
 func (t *authorization) Session(ctx context.Context, id identity.SessionID) (oauth.SessionInfo, error) {
 	var row struct {

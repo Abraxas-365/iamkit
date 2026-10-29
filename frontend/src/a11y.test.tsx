@@ -36,6 +36,8 @@ const fixtures: Record<string, unknown> = {
   [`${env}/login-settings/texts/catalog`]: { locale: 'en', items: [{ key: 'hosted.form.continue', default: 'Continue', placeholders: [], max_length: 80 }] },
   [`${env}/login-settings/texts/en`]: { locale: 'en', texts: {} },
   [`${env}/events`]: { items: [{ id: 7, type: 'organization.updated', actor: { kind: 'operator', id: 'op1' }, subject: { kind: 'organization', id: 'o1' }, occurred_at: '2026-09-27T00:00:00Z' }], next: 0 },
+  [`${env}/oauth-client-allowlist`]: page([{ id: 'a1', environment_id: 'env1', protected_resource_id: null, origin: 'https://claude.ai', path_prefix: '/oauth/', preset: 'claude', created_at: '2026-09-01T00:00:00Z' }]),
+  [`${env}/oauth-client-presets`]: { items: [{ key: 'claude', name: 'Claude', mechanism: 'metadata_document', network: 'public', source_ranges: ['160.79.104.0/21'], development_only: false, warnings: [] }, { key: 'cursor', name: 'Cursor', mechanism: 'template', network: 'local', development_only: false, warnings: [] }] },
   [`${env}/audit-events`]: page([{ id: 'e1', actor: 'owner@example.com', action: 'organization.updated', target_id: 'o1', target_label: 'Acme', created_at: '2026-09-27T00:00:00Z' }]),
 }
 
@@ -75,6 +77,7 @@ const pages: [string, string, string][] = [
   ['activity events', `${base}/audit-events`, 'Organization updated'],
   ['branding editor', `${base}/hosted-login/default`, 'Default style'],
   ['sign-in texts', `${base}/hosted-login/texts`, 'hosted.form.continue'],
+  ['MCP client allowlist', `${base}/mcp-clients`, 'https://claude.ai'],
   ['operators', '/operators', 'ops@example.com'],
 ]
 

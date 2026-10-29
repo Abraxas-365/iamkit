@@ -240,5 +240,18 @@
   "hosted.error.choose_organization": "Välj en organisation.",
   "hosted.error.organization_chosen": "Du har redan valt en organisation för den här inloggningen. Logga in igen för att välja en annan.",
   "hosted.error.factor_required": "Verifiera din andra faktor först.",
-  "hosted.error.factor_not_allowed": "Din organisation tillåter ingen andra faktor som du kan lägga till. Kontakta administratören."
+  "hosted.error.factor_not_allowed": "Din organisation tillåter ingen andra faktor som du kan lägga till. Kontakta administratören.",
+  "hosted.client.title.pending": "Väntar på godkännande",
+  "hosted.client.title.blocked": "Applikationen är blockerad",
+  "hosted.client.title.unavailable": "Applikationen är inte tillgänglig",
+  "hosted.client.pending": "Din begäran har skickats till IT. Applikationen kan logga in dig när den har godkänts för den här servern. Försök igen senare.",
+  "hosted.client.blocked": "IT har blockerat applikationen för den här servern. Kontakta din administratör.",
+  "hosted.client.backlog": "För många applikationer väntar på godkännande på den här servern. Försök igen senare.",
+  "hosted.client.request_limit": "Du har för många förfrågningar som väntar på godkännande. Försök igen när IT har besvarat några av dem.",
+  "hosted.client.registered_only": "Den här servern accepterar bara registrerade applikationer. Be din administratör aktivera den här.",
+  "hosted.client.disabled": "Den här miljön accepterar inte applikationer som identifieras med en webbadress. Kontakta din administratör.",
+  "hosted.client.next_step": "Be din administratör om ett klient-ID skapat från en mall för den här servern och ange det i programmets inställningar (till exempel med flaggan --client-id).",
+  "hosted.client.host": "Applikation på",
+  "hosted.client.verified": "{name} (verifierad)",
+  "hosted.client.unverified": "{name} (overifierad: applikationen anger sitt eget namn)"
 }

@@ -10,6 +10,9 @@ image:
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 
+# More than one replica (replicaCount, or autoscaling.maxReplicas when the
+# HPA is on) needs redis.existingSecret: the chart refuses to render without
+# it, and the pods start with IAMKIT_REPLICAS so the server refuses too.
 replicaCount: 2
 
 # Public HTTPS origin; tokens name it as their issuer. Required. Changing it
@@ -39,7 +42,9 @@ secrets:
     key: IAMKIT_ENCRYPTION_KEY
     keyOld: ""
 
-# Optional Redis (REDIS_URL): shared rate limits and caches across replicas.
+# Redis (REDIS_URL): shared rate limits, usage windows, caches and refetch
+# throttles across replicas. Required for more than one replica; optional
+# for a single one.
 redis:
   existingSecret: ""
   key: REDIS_URL

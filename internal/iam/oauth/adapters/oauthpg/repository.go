@@ -34,9 +34,12 @@ type clientRow struct {
 	Source      string                 `db:"source"`
 	ExternalID  sql.NullString         `db:"external_id"`
 	Name        string                 `db:"client_name"`
+	LogoURI     string                 `db:"logo_uri"`
 	Admission   string                 `db:"admission"`
 	Expires     *time.Time             `db:"admission_expires_at"`
 	AnyPort     bool                   `db:"loopback_any_port"`
+	AllowMeta   sql.NullBool           `db:"allow_client_metadata"`
+	Fetched     sql.NullTime           `db:"metadata_fetched_at"`
 	authRow
 	protectedRow
 }
@@ -64,11 +67,31 @@ func (p protectedRow) target() *oauth.ProtectedTarget {
 	return oauth.NewProtectedTarget(oauth.ProtectedResource{ID: *p.ProtectedID, URI: p.ProtectedURI.String, DefaultScopes: []string(p.ProtectedScope), IdleTTLSeconds: p.ProtectedIdle.Int64, MaxTTLSeconds: p.ProtectedMax.Int64}, []string(p.Permissions), policy)
 }
 
+// FindActive is the registered client with row id in environment. A client
+// named by a metadata document is never found here: its uuid is not a
+// client_id anyone may present (H-1); FindExternal serves it.
 func (r *Repository) FindActive(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID) (*oauth.Client, error) {
+	return r.findClient(ctx, environment, id, oauth.SourceRegistered)
+}
+
+// FindExternal is the live external client with row id in environment: the
+// row a client_id URL, a stored grant or a ticket names. TestClientLookupsFilterBySource
+// keeps the source filter in the statement.
+func (r *Repository) FindExternal(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID) (*oauth.Client, error) {
+	return r.findClient(ctx, environment, id, oauth.SourceCIMD)
+}
+
+// FindHolder is the live client of either source: the owner of a grant or
+// ticket the server stored.
+func (r *Repository) FindHolder(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID) (*oauth.Client, error) {
+	return r.findClient(ctx, environment, id, "")
+}
+
+func (r *Repository) findClient(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID, source string) (*oauth.Client, error) {
 	var row clientRow
 	// An external client exists only through its protected resource: it is
 	// found while that resource is active.
-	err := r.db.GetContext(ctx, &row, `SELECT c.id,c.environment_id,c.application_id,c.resource_id,c.redirect_uris,c.public,c.secret_hash,c.hosted_login,c.post_logout_redirect_uris,c.token_endpoint_auth_method,c.token_endpoint_auth_signing_alg,c.jwks,c.jwks_uri,c.access_token_format,c.grant_types,c.initiate_login_uri,c.source,c.external_id,c.client_name,c.admission,c.admission_expires_at,c.loopback_any_port,r.audience,r.permissions,pr.id AS protected_id,pr.uri AS protected_uri,pr.default_scopes AS protected_default_scopes,pr.idle_ttl_seconds AS protected_idle,pr.max_ttl_seconds AS protected_max,pp.max_idle_ttl_seconds AS policy_idle,pp.max_lifetime_ttl_seconds AS policy_lifetime FROM oauth_clients c JOIN applications a ON a.id=c.application_id AND a.environment_id=c.environment_id JOIN resources r ON r.id=c.resource_id AND r.environment_id=c.environment_id LEFT JOIN protected_resources pr ON pr.resource_id=c.resource_id AND pr.environment_id=c.environment_id AND pr.application_id=c.application_id AND pr.active AND (c.protected_resource_id IS NULL OR pr.id=c.protected_resource_id) LEFT JOIN protected_resource_policies pp ON pp.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND c.active AND a.active AND (c.protected_resource_id IS NULL OR pr.id IS NOT NULL)`, id, environment)
+	err := r.db.GetContext(ctx, &row, `SELECT c.id,c.environment_id,c.application_id,c.resource_id,c.redirect_uris,c.public,c.secret_hash,c.hosted_login,c.post_logout_redirect_uris,c.token_endpoint_auth_method,c.token_endpoint_auth_signing_alg,c.jwks,c.jwks_uri,c.access_token_format,c.grant_types,c.initiate_login_uri,c.source,c.external_id,c.client_name,c.logo_uri,c.admission,c.admission_expires_at,c.metadata_fetched_at,c.loopback_any_port,r.audience,r.permissions,pr.allow_client_metadata,pr.id AS protected_id,pr.uri AS protected_uri,pr.default_scopes AS protected_default_scopes,pr.idle_ttl_seconds AS protected_idle,pr.max_ttl_seconds AS protected_max,pp.max_idle_ttl_seconds AS policy_idle,pp.max_lifetime_ttl_seconds AS policy_lifetime FROM oauth_clients c JOIN applications a ON a.id=c.application_id AND a.environment_id=c.environment_id JOIN resources r ON r.id=c.resource_id AND r.environment_id=c.environment_id LEFT JOIN protected_resources pr ON pr.resource_id=c.resource_id AND pr.environment_id=c.environment_id AND pr.application_id=c.application_id AND pr.active AND (c.protected_resource_id IS NULL OR pr.id=c.protected_resource_id) LEFT JOIN protected_resource_policies pp ON pp.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND ($3='' OR c.source=$3) AND c.active AND a.active AND (c.protected_resource_id IS NULL OR pr.id IS NOT NULL)`, id, environment, source)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errx.NotFound("OAuth client not found")
 	}
@@ -76,7 +99,9 @@ func (r *Repository) FindActive(ctx context.Context, environment identity.Enviro
 		return nil, errx.Wrap(err, "load OAuth client", errx.TypeInternal)
 	}
 	return &oauth.Client{ID: row.ID, Environment: row.Environment, Application: row.Application, Resource: row.Resource, Audience: row.Audience, Redirects: []string(row.Redirects), Public: row.Public, Secret: row.Secret, HostedLogin: row.HostedLogin, PostLogoutRedirects: []string(row.PostLogout), Auth: row.auth(), AccessTokenFormat: row.TokenFormat, GrantTypes: []string(row.Grants), InitiateLoginURI: row.Initiate, Protected: row.target(),
-		Source: row.Source, ExternalID: row.ExternalID.String, Name: row.Name, Admission: row.Admission, AdmissionExpiresAt: row.Expires, LoopbackAnyPort: row.AnyPort}, nil
+		Source: row.Source, ExternalID: row.ExternalID.String, Name: row.Name, LogoURI: row.LogoURI, Admission: row.Admission, AdmissionExpiresAt: row.Expires, MetadataFetched: row.Fetched.Time, LoopbackAnyPort: row.AnyPort,
+		// The server stopped taking clients named by a document (M-2).
+		Disabled: row.Source == oauth.SourceCIMD && !row.AllowMeta.Bool}, nil
 }
 
 func (r *Repository) FindAccount(ctx context.Context, id identity.AccountID) (*oauth.Account, error) {

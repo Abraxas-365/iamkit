@@ -24,4 +24,53 @@ describe("ProtectedResourcesClient", () => {
     expect(calls[0].headers.get("authorization")).toBe("Bearer at");
     await expect(client.get("e1", "../x")).rejects.toThrow();
   });
+
+  it("manages external clients, the allowlist and presets", async () => {
+    const { fetch, calls } = fakeFetch((call) => {
+      const path = new URL(call.url).pathname;
+      if (call.method === "DELETE") return { status: 204, body: undefined };
+      if (path.endsWith("/impact")) return { body: { active_sessions: 3, external_clients: 2 } };
+      if (path.endsWith("/oauth-client-presets") && call.method === "GET") return { body: { items: null } };
+      if (path.endsWith("/clients")) return { body: { items: null, page: { total: 0, limit: 50, offset: 0 } } };
+      return { body: { id: "x", admission: "approved" } };
+    });
+    const client = new ProtectedResourcesClient({ baseUrl: issuer, token: "at", fetch });
+    expect(await client.impact("e1", "p1")).toEqual({ active_sessions: 3, external_clients: 2 });
+    expect((await client.clients("e1", "p1", { admission: "pending", limit: 20 })).items).toEqual([]);
+    await client.client("e1", "p1", "c1");
+    await client.approveClient("e1", "p1", "c1", { metadata_hash: "h1", expires_at: "2027-01-01T00:00:00Z" });
+    await client.blockClient("e1", "p1", "c1");
+    await client.unblockClient("e1", "p1", "c1");
+    await client.forgetClient("e1", "p1", "c1");
+    await client.createClientFromTemplate("e1", "p1", "gemini_cli");
+    await client.createAllowlistEntry("e1", { origin: "https://tools.example", path_prefix: "/oauth" });
+    await client.deleteAllowlistEntry("e1", "en1");
+    expect(await client.presets("e1")).toEqual([]);
+    await client.applyPreset("e1", { preset: "claude_code" });
+    await client.update("e1", "p1", { allow_client_metadata: true, client_admission: "open" });
+    expect(calls.map((c) => `${c.method} ${new URL(c.url).pathname}`)).toEqual([
+      "GET /api/v1/environments/e1/protected-resources/p1/impact",
+      "GET /api/v1/environments/e1/protected-resources/p1/clients",
+      "GET /api/v1/environments/e1/protected-resources/p1/clients/c1",
+      "POST /api/v1/environments/e1/protected-resources/p1/clients/c1/approve",
+      "POST /api/v1/environments/e1/protected-resources/p1/clients/c1/block",
+      "POST /api/v1/environments/e1/protected-resources/p1/clients/c1/unblock",
+      "DELETE /api/v1/environments/e1/protected-resources/p1/clients/c1",
+      "POST /api/v1/environments/e1/protected-resources/p1/client-templates",
+      "POST /api/v1/environments/e1/oauth-client-allowlist",
+      "DELETE /api/v1/environments/e1/oauth-client-allowlist/en1",
+      "GET /api/v1/environments/e1/oauth-client-presets",
+      "POST /api/v1/environments/e1/oauth-client-presets",
+      "PATCH /api/v1/environments/e1/protected-resources/p1",
+    ]);
+    const query = new URL(calls[1].url).searchParams;
+    expect(query.get("admission")).toBe("pending");
+    expect(query.get("limit")).toBe("20");
+    expect(JSON.parse(calls[3].body)).toEqual({ metadata_hash: "h1", expires_at: "2027-01-01T00:00:00Z" });
+    expect(JSON.parse(calls[7].body)).toEqual({ preset: "gemini_cli" });
+    expect(JSON.parse(calls[8].body)).toEqual({ origin: "https://tools.example", path_prefix: "/oauth" });
+    expect(JSON.parse(calls[12].body)).toEqual({ allow_client_metadata: true, client_admission: "open" });
+    await expect(client.approveClient("e1", "p1", "a/b", { metadata_hash: "h1" })).rejects.toThrow();
+    await expect(client.deleteAllowlistEntry("e1", "..")).rejects.toThrow();
+  });
 });

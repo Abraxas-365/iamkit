@@ -11,8 +11,18 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/query"
 )
 
+// ClientRepository reads live clients by row id. Which kind of client a
+// row id may name depends on who sends it (H-1): a client_id the caller
+// presents is a uuid only for a registered client, and a document client
+// is named by its URL, so FindActive (registered) and Repository.FindExternal are split by source
+// (TestClientLookupsFilterBySource); only a row id the server itself
+// stored (a grant, a ticket) may name either kind.
 type ClientRepository interface {
+	// FindActive is the registered client with this row id.
 	FindActive(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (*Client, error)
+	// FindHolder is the live client of either kind that holds a grant or a
+	// ticket the server stored; never for a row id a caller sent.
+	FindHolder(ctx context.Context, environment identity.EnvironmentID, client identity.ClientID) (*Client, error)
 }
 
 // AccountRepository reads service accounts for client_credentials; only
@@ -35,7 +45,12 @@ type Queries interface {
 	OriginAllowed(ctx context.Context, origin string) (bool, error)
 }
 type Flows interface {
+	// Client is the registered client with this uuid (never a client named by
+	// a metadata document: its uuid is not a client_id, H-1).
 	Client(ctx context.Context, client identity.ClientID) (*Client, error)
+	// Holder is the live client of either kind that a stored grant names
+	// (the owner of a token being introspected).
+	Holder(ctx context.Context, client identity.ClientID) (*Client, error)
 	// ExternalClient is the client a client_id URL (a Client ID Metadata
 	// Document) names at the protected resource of an authorization
 	// request: its document is read (cached), validated and materialized,
@@ -50,11 +65,32 @@ type Flows interface {
 	// AccessTokenClient is the live client holding an opaque access token
 	// (key: its stored signature hash).
 	AccessTokenClient(ctx context.Context, key string) (*Client, error)
+	// TicketClient is the client of an unfinished authorization: its row, or
+	// for an external client that has none yet, its document read again
+	// (admitted and persisted now when the server's policy approves it).
+	// It may fetch the document: never call it with a transaction open.
+	TicketClient(ctx context.Context, ticket Ticket) (*Client, error)
+	// RequestAccess records that user, signed in for an external client IT
+	// has not approved, asks for it (event oauth_client.access_requested),
+	// persisting the client now if no row exists from the document client
+	// holds (it reads nothing). A server holding too many pending clients,
+	// or a user too many pending requests, refuses (ErrAdmissionBacklog,
+	// ErrAccessRequestLimit) and persists nothing.
+	RequestAccess(ctx context.Context, client *Client, user identity.UserID, organization identity.OrganizationID) error
+	// Used records that a token was issued to an external client
+	// (last_used_at, throttled).
+	Used(ctx context.Context, client *Client) error
 	Start(ctx context.Context, client *Client, form string) (string, string, error)
 	// Pending checks an unfinished authorization ticket and its browser
 	// binding without consuming it (hosted login pages).
 	Pending(ctx context.Context, ticket, binding string) (Pending, error)
-	Complete(ctx context.Context, ticket, binding string, approve bool, prepare func(Ticket, Authorization) error) error
+	// Complete spends the ticket in one transaction: prepare runs inside it,
+	// with the ticket locked, and issues what the authorization grants.
+	// The ticket's client is resolved first, before the transaction opens
+	// (M-5: documents are fetched and rows persisted there, never while the
+	// ticket is locked) and handed to prepare; the transaction only
+	// re-checks its admission, with reads on its own connection.
+	Complete(ctx context.Context, ticket, binding string, approve bool, prepare func(Ticket, *Client, Authorization) error) error
 	Access(ctx context.Context, client *Client, subject identity.UserID, session identity.SessionID, organization identity.OrganizationID) (authentication.Access, error)
 	// Logout ends the session an id_token_hint names (RP-initiated logout)
 	// and returns where the browser goes next (empty: the signed-out page)
@@ -81,6 +117,9 @@ type Authorization interface {
 	// from the session's start, so a reused session never widens a grant.
 	Bind(ctx context.Context, session identity.SessionID, client identity.ClientID, lifetime time.Duration) (time.Time, error)
 	Consume(ctx context.Context, hash []byte) error
+	// Admission reads the admission of an external client's row, holding it
+	// against a concurrent block until the transaction ends.
+	Admission(ctx context.Context, client identity.ClientID) (AdmissionState, error)
 	// ApproveDevice marks the pending device authorization of a device
 	// ticket approved with login and audits oauth.device_approved.
 	ApproveDevice(ctx context.Context, environment identity.EnvironmentID, device []byte, login Login) error
@@ -115,6 +154,7 @@ type Repository interface {
 	DeviceRepository
 	ExchangeRepository
 	ExternalRepository
+	CapabilityRepository
 }
 
 // Devices is the device authorization grant (RFC 8628): the device side
@@ -257,7 +297,10 @@ type ProtectedResourceRepository interface {
 	// CreateProtectedResource fails with a conflict when the URI or the
 	// resource already has one.
 	CreateProtectedResource(ctx context.Context, m Mutation, id identity.ProtectedResourceID, uri string, input ProtectedResourceCreate) error
-	SaveProtectedResource(ctx context.Context, m Mutation, resource ProtectedResource) error
+	// UpdateProtectedResource writes only the fields input sets, on the row
+	// locked in its transaction, so concurrent updates of other fields are
+	// never reverted (N-9); the policy reconciliation reads the result.
+	UpdateProtectedResource(ctx context.Context, m Mutation, resource identity.ProtectedResourceID, input ProtectedResourceUpdate) error
 	DeleteProtectedResource(ctx context.Context, m Mutation, resource identity.ProtectedResourceID) error
 	ListProtectedResources(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[ProtectedResource], error)
 	FindProtectedResource(ctx context.Context, environment identity.EnvironmentID, resource identity.ProtectedResourceID) (ProtectedResource, error)

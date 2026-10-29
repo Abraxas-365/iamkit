@@ -242,5 +242,18 @@
   "hosted.error.choose_organization": "Wybierz organizację.",
   "hosted.error.organization_chosen": "Organizacja dla tego logowania została już wybrana. Zaloguj się ponownie, aby wybrać inną.",
   "hosted.error.factor_required": "Najpierw zweryfikuj drugi składnik.",
-  "hosted.error.factor_not_allowed": "Twoja organizacja nie zezwala na żaden drugi składnik, który możesz dodać. Skontaktuj się z administratorem."
+  "hosted.error.factor_not_allowed": "Twoja organizacja nie zezwala na żaden drugi składnik, który możesz dodać. Skontaktuj się z administratorem.",
+  "hosted.client.title.pending": "Oczekiwanie na zatwierdzenie",
+  "hosted.client.title.blocked": "Aplikacja zablokowana",
+  "hosted.client.title.unavailable": "Aplikacja niedostępna",
+  "hosted.client.pending": "Twoja prośba została wysłana do działu IT. Aplikacja będzie mogła Cię zalogować po zatwierdzeniu dla tego serwera. Spróbuj ponownie później.",
+  "hosted.client.blocked": "Dział IT zablokował tę aplikację dla tego serwera. Skontaktuj się z administratorem.",
+  "hosted.client.backlog": "Zbyt wiele aplikacji czeka na zatwierdzenie na tym serwerze. Spróbuj ponownie później.",
+  "hosted.client.request_limit": "Masz zbyt wiele próśb oczekujących na zatwierdzenie. Spróbuj ponownie, gdy dział IT odpowie na część z nich.",
+  "hosted.client.registered_only": "Ten serwer przyjmuje tylko zarejestrowane aplikacje. Poproś administratora o włączenie tej aplikacji.",
+  "hosted.client.disabled": "To środowisko nie przyjmuje aplikacji identyfikowanych adresem internetowym. Skontaktuj się z administratorem.",
+  "hosted.client.next_step": "Poproś administratora o identyfikator klienta utworzony z szablonu dla tego serwera i wpisz go w ustawieniach aplikacji (na przykład opcją --client-id).",
+  "hosted.client.host": "Aplikacja pod adresem",
+  "hosted.client.verified": "{name} (zweryfikowana)",
+  "hosted.client.unverified": "{name} (niezweryfikowana: aplikacja sama podaje swoją nazwę)"
 }

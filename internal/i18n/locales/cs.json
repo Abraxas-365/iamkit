@@ -241,5 +241,18 @@
   "hosted.error.choose_organization": "Vyberte organizaci.",
   "hosted.error.organization_chosen": "Pro toto přihlášení už jste organizaci vybrali. Chcete-li vybrat jinou, přihlaste se znovu.",
   "hosted.error.factor_required": "Nejprve ověřte druhý faktor.",
-  "hosted.error.factor_not_allowed": "Vaše organizace nepovoluje žádný druhý faktor, který byste mohli přidat. Obraťte se na správce."
+  "hosted.error.factor_not_allowed": "Vaše organizace nepovoluje žádný druhý faktor, který byste mohli přidat. Obraťte se na správce.",
+  "hosted.client.title.pending": "Čeká na schválení",
+  "hosted.client.title.blocked": "Aplikace je zablokována",
+  "hosted.client.title.unavailable": "Aplikace není dostupná",
+  "hosted.client.pending": "Vaše žádost byla odeslána IT. Aplikace vás bude moci přihlásit, jakmile ji pro tento server schválí. Zkuste to později.",
+  "hosted.client.blocked": "IT tuto aplikaci pro tento server zablokovalo. Obraťte se na správce.",
+  "hosted.client.backlog": "Na tomto serveru čeká na schválení příliš mnoho aplikací. Zkuste to později.",
+  "hosted.client.request_limit": "Máte příliš mnoho žádostí čekajících na schválení. Zkuste to znovu, až IT některé z nich vyřídí.",
+  "hosted.client.registered_only": "Tento server přijímá pouze registrované aplikace. Požádejte správce o povolení této aplikace.",
+  "hosted.client.disabled": "Toto prostředí nepřijímá aplikace identifikované webovou adresou. Obraťte se na správce.",
+  "hosted.client.next_step": "Požádejte správce o ID klienta vytvořené ze šablony pro tento server a zadejte je v nastavení aplikace (například volbou --client-id).",
+  "hosted.client.host": "Aplikace na adrese",
+  "hosted.client.verified": "{name} (ověřeno)",
+  "hosted.client.unverified": "{name} (neověřeno: aplikace se pojmenovává sama)"
 }

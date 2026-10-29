@@ -91,15 +91,50 @@ const (
 // header: the minimum); a failed fetch is remembered for
 // ClientMetadataFailureTTL. An environment holds at most
 // ClientMetadataMaxPending clients waiting for review, and a user's access
-// request event repeats at most every ClientAccessRequestInterval.
+// request event repeats at most every ClientAccessRequestInterval; a user
+// keeps at most ClientAccessRequestsPerUser, and an organization
+// ClientAccessRequestsPerOrg, requests for clients still waiting
+// for review made within that interval. An
+// environment's servers fetch at most ClientMetadataFetchesPerMinute
+// documents a minute, one address's requests make at most
+// ClientMetadataFetchesPerIPPerMinute of them (cache hits are free); a pending client nobody used
+// for ClientPendingRetention is deleted by the client_pending_prune job
+// (ClientPendingPruneBatch rows a round); last_used_at is written at most
+// every ClientUsedInterval; /oauth/authorize answers each address at most
+// Server.RateLimitPerMinute / OAuthAuthorizeRateDivisor requests a minute.
 const (
-	ClientMetadataTimeout       = 5 * time.Second
-	ClientMetadataMaxBytes      = 5 * 1024
-	ClientMetadataMinTTL        = 5 * time.Minute
-	ClientMetadataMaxTTL        = 24 * time.Hour
-	ClientMetadataFailureTTL    = time.Minute
-	ClientMetadataMaxPending    = 200
-	ClientAccessRequestInterval = 24 * time.Hour
+	ClientMetadataTimeout          = 5 * time.Second
+	ClientMetadataMaxBytes         = 5 * 1024
+	ClientMetadataMinTTL           = 5 * time.Minute
+	ClientMetadataMaxTTL           = 24 * time.Hour
+	ClientMetadataFailureTTL       = time.Minute
+	ClientMetadataMaxPending       = 200
+	ClientAccessRequestInterval    = 24 * time.Hour
+	ClientAccessRequestsPerUser    = 5
+	ClientAccessRequestsPerOrg     = 50
+	ClientMetadataFetchesPerMinute = 60
+	// ClientMetadataFetchesPerIPPerMinute bounds the network reads one
+	// address makes an environment do in a minute, and
+	// ClientMetadataNewFetchesPerMinute those for documents of clients
+	// IAMKit has no approved row for: the rest of ClientMetadataFetchesPerMinute
+	// is reserved for approved clients, so a flood of new URLs cannot keep
+	// them from refreshing their documents (M-4).
+	ClientMetadataFetchesPerIPPerMinute = 10
+	ClientMetadataNewFetchesPerMinute   = 45
+	// ClientMetadataStaleFor is how long past the longest cache life
+	// (ClientMetadataMaxTTL after the fetch) the stored metadata of an
+	// approved client stands in for a document that cannot be read now
+	// (host down, error status, fetch budget spent).
+	ClientMetadataStaleFor    = 24 * time.Hour
+	ClientPendingRetention    = 30 * 24 * time.Hour
+	ClientPendingPruneBatch   = 500
+	ClientUsedInterval        = time.Hour
+	OAuthAuthorizeRateDivisor = 2
+	// ClientExpireInterval and ClientExpireBatch pace the
+	// client_admission_expire job, which revokes the grants of external
+	// clients whose approval expired (ClientExpireBatch clients a round).
+	ClientExpireInterval = time.Minute
+	ClientExpireBatch    = 100
 )
 
 // OAuth 2.0 / OIDC lifespans (fosite).
@@ -290,6 +325,11 @@ const RequestHeaderLimit = 16 * 1024
 // ClientOriginCacheTTL is how long an answer about an OAuth client's
 // allowed origin is reused: a removed origin stops working within it.
 const ClientOriginCacheTTL = time.Minute
+
+// CapabilityCacheTTL is how long discovery reuses what the deployment
+// offers (is any protected resource taking client metadata documents?): a
+// change shows in /.well-known/oauth-authorization-server within it.
+const CapabilityCacheTTL = time.Minute
 
 // Bot protection (CAPTCHA) and risk signals.
 const (

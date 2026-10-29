@@ -245,5 +245,18 @@
   "hosted.error.choose_organization": "اختر مؤسسة.",
   "hosted.error.organization_chosen": "اخترت مؤسسة لتسجيل الدخول هذا بالفعل. سجّل الدخول مرة أخرى لاختيار مؤسسة أخرى.",
   "hosted.error.factor_required": "تحقق من العامل الثاني أولًا.",
-  "hosted.error.factor_not_allowed": "لا تسمح مؤسستك بأي عامل ثانٍ يمكنك إضافته. تواصل مع المسؤول."
+  "hosted.error.factor_not_allowed": "لا تسمح مؤسستك بأي عامل ثانٍ يمكنك إضافته. تواصل مع المسؤول.",
+  "hosted.client.title.pending": "بانتظار الموافقة",
+  "hosted.client.title.blocked": "التطبيق محظور",
+  "hosted.client.title.unavailable": "التطبيق غير متاح",
+  "hosted.client.pending": "أُرسل طلبك إلى قسم تقنية المعلومات. سيتمكن هذا التطبيق من تسجيل دخولك بعد الموافقة عليه لهذا الخادم. حاول مرة أخرى لاحقًا.",
+  "hosted.client.blocked": "حظر قسم تقنية المعلومات هذا التطبيق لهذا الخادم. تواصل مع المسؤول.",
+  "hosted.client.backlog": "هناك عدد كبير من التطبيقات بانتظار الموافقة على هذا الخادم. حاول مرة أخرى لاحقًا.",
+  "hosted.client.request_limit": "لديك عدد كبير من الطلبات بانتظار الموافقة. حاول مرة أخرى بعد أن يرد قسم تقنية المعلومات على بعضها.",
+  "hosted.client.registered_only": "يقبل هذا الخادم التطبيقات المسجلة فقط. اطلب من المسؤول تفعيل هذا التطبيق.",
+  "hosted.client.disabled": "لا تقبل هذه البيئة التطبيقات المعرّفة بعنوان ويب. تواصل مع المسؤول.",
+  "hosted.client.next_step": "اطلب من المسؤول معرّف عميل أُنشئ من قالب لهذا الخادم، ثم أدخله في إعدادات التطبيق (مثلًا بالخيار --client-id).",
+  "hosted.client.host": "التطبيق على",
+  "hosted.client.verified": "{name} (موثّق)",
+  "hosted.client.unverified": "{name} (غير موثّق: التطبيق يسمّي نفسه)"
 }

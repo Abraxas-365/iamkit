@@ -151,7 +151,16 @@ Protected resources ([protect an MCP server](../../guides/applications/protect-m
 `CreateProtectedResource(ctx, ProtectedResourceCreate{ApplicationID, ResourceID, Name, DefaultScopes, IdleTTLSeconds, MaxTTLSeconds})`
 (the `URI` is the resource's audience),
 `UpdateProtectedResource` (nil fields keep), `DeleteProtectedResource`,
-`ProtectedResourcePolicy` and `SetProtectedResourcePolicy`.
+`ProtectedResourceImpact` (active sessions and `ExternalClients`),
+`ProtectedResourcePolicy` and `SetProtectedResourcePolicy`. Clients named by a
+metadata document: `ExternalClients(ctx, resource, admission, Page)`,
+`ExternalClient`, `ExternalClientAccessRequests`, `ApproveExternalClient(…,
+ClientApproval{ExpiresAt})`, `BlockExternalClient`, `UnblockExternalClient`,
+`ForgetExternalClient` and `CreateClientFromTemplate(ctx, resource, preset)`;
+for the environment, `OAuthClientAllowlist`, `CreateOAuthClientAllowlistEntry`,
+`DeleteOAuthClientAllowlistEntry`, `OAuthClientPresets` and
+`ApplyOAuthClientPreset`. `UpdateProtectedResource` also takes
+`AllowClientMetadata` and `ClientAdmission`.
 ### Audit logs and log streams
 
 [App audit logs](../../guides/audit-logs.md) and [log streams](../../guides/platform/log-streams.md)

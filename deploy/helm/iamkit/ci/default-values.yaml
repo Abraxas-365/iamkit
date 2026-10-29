@@ -11,6 +11,8 @@ secrets:
     existingSecret: iamkit-ci
   encryption:
     existingSecret: iamkit-ci
+redis:
+  existingSecret: iamkit-ci
 trustedProxies: [10.244.0.0/16]
 metrics:
   enabled: true

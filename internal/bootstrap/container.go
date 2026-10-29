@@ -94,25 +94,28 @@ type invitations struct {
 }
 
 type options struct {
-	resolver       organization.Resolver
-	sealer         *cryptox.Sealer
-	transport      http.RoundTripper
-	clientMetadata http.RoundTripper
-	mail           authmodule.Mail
-	sso            *OperatorSSO
-	breaches       authentication.Breaches
-	noBreach       bool
-	origins        []string
-	ldapDial       fedldap.Dialer
-	retention      time.Duration
-	auditRetention time.Duration
-	webhooks       http.RoundTripper
-	logStreams     http.RoundTripper
-	samlLogouts    http.RoundTripper
-	actions        http.RoundTripper
-	features       feature.Deployment
-	limits         usage.Values
-	redis          *cacheredis.Client
+	resolver                              organization.Resolver
+	sealer                                *cryptox.Sealer
+	transport                             http.RoundTripper
+	clientMetadata                        http.RoundTripper
+	clientPending                         int
+	clientUserRequests, clientOrgRequests int
+	metadataCache                         cache.Store
+	mail                                  authmodule.Mail
+	sso                                   *OperatorSSO
+	breaches                              authentication.Breaches
+	noBreach                              bool
+	origins                               []string
+	ldapDial                              fedldap.Dialer
+	retention                             time.Duration
+	auditRetention                        time.Duration
+	webhooks                              http.RoundTripper
+	logStreams                            http.RoundTripper
+	samlLogouts                           http.RoundTripper
+	actions                               http.RoundTripper
+	features                              feature.Deployment
+	limits                                usage.Values
+	redis                                 *cacheredis.Client
 	// Phase 5: bot protection and risk signals (wired by riskmodule).
 	captcha          http.RoundTripper
 	attemptRetention time.Duration
@@ -227,6 +230,27 @@ func WithFederationTransport(t http.RoundTripper) Option {
 	return func(o *options) { o.transport = t }
 }
 
+// WithClientMetadataMaxPending sets how many external clients waiting for
+// review an environment keeps (default config.ClientMetadataMaxPending;
+// tests lower it).
+func WithClientMetadataMaxPending(n int) Option {
+	return func(o *options) { o.clientPending = n }
+}
+
+// WithClientAccessRequestCaps sets how many requests for clients waiting for
+// review a user, and an organization, may have within a day (defaults
+// config.ClientAccessRequestsPerUser / PerOrg; tests lower them).
+func WithClientAccessRequestCaps(user, organization int) Option {
+	return func(o *options) { o.clientUserRequests, o.clientOrgRequests = user, organization }
+}
+
+// WithClientMetadataCache keeps fetched Client ID Metadata Documents in
+// store instead of the shared or process cache (tests drop entries to make
+// a changed document be read again).
+func WithClientMetadataCache(store cache.Store) Option {
+	return func(o *options) { o.metadataCache = store }
+}
+
 // WithClientMetadataTransport replaces the guarded transport that reads
 // OAuth Client ID Metadata Documents and their jwks_uri (MCP clients), so
 // tests can serve them from a loopback address.
@@ -238,6 +262,13 @@ func WithClientMetadataTransport(t http.RoundTripper) Option {
 // in this process without Redis: unlike other cached reads they come from
 // the clients' hosts, not the database, and must not be fetched per
 // request.
+func metadataStore(override, shared cache.Store) cache.Store {
+	if override != nil {
+		return override
+	}
+	return metadataCache(shared)
+}
+
 func metadataCache(shared cache.Store) cache.Store {
 	if shared != nil {
 		return shared
@@ -337,11 +368,17 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Provisioning = provisioningModule.HTTP
 	applicationModule := appmodule.New(appmodule.Deps{DB: db, Quota: usageModule.Commands, ActorID: server.OperatorID})
 	s.Applications = applicationModule.HTTP
-	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, ClientMetadataTransport: o.clientMetadata, Cache: metadataCache(shared), Features: featureModule.Queries, Tokens: s.Tokens, ActorID: server.OperatorID})
+	// Document fetches are counted per process without Redis.
+	fetchWindow := window
+	if fetchWindow == nil {
+		fetchWindow = usagememory.New()
+	}
+	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, ClientMetadataTransport: o.clientMetadata, Cache: metadataStore(o.metadataCache, shared), Window: fetchWindow, MaxPending: o.clientPending, MaxRequestsPerUser: o.clientUserRequests, MaxRequestsPerOrganization: o.clientOrgRequests, Features: featureModule.Queries, Tokens: s.Tokens, ActorID: server.OperatorID})
 	s.OAuth = oauthModule.HTTP
 	s.ClientOrigins = oauthModule.Queries
 	s.LogoutDeliveries = oauthModule.Logouts
 	s.ProtectedResources = oauthModule.ProtectedResources
+	s.Admissions = oauthModule.Admissions
 	s.LogoutDispatcher = oauthModule.Dispatcher
 	eventModule := eventmodule.New(eventmodule.Deps{DB: db, Retention: o.retention, Cipher: o.sealer, Transport: o.webhooks, ActorID: server.OperatorID})
 	s.Events = eventModule.HTTP
@@ -387,6 +424,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	samlModule.HTTP.PostForm(hostedModule.HTTP.PostForm)
 	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
 	oauthModule.HTTP.SignedOut(hostedModule.HTTP.SignedOut)
+	oauthModule.HTTP.Refusals(hostedModule.HTTP.Refusal)
 	// SAML single logout (SP side): end_session continues at the identity
 	// provider that opened the session; its answers come back to /slo.
 	federationModule.HTTP.Logout(federationModule.Logout, hostedModule.HTTP.PostForm)
@@ -462,6 +500,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Security:           riskModule.HTTP.WithActor(actor),
 		Waitlist:           authenticationModule.WaitlistHTTP.WithActor(actor),
 		ProtectedResources: oauthModule.ProtectedResources.WithActor(actor),
+		Admissions:         oauthModule.Admissions.WithActor(actor),
 	}
 	s.OrgAdminPortal = orgAdmin.PortalHTTP
 	s.SetupLinks = orgAdmin.SetupLinkHTTP
@@ -618,6 +657,11 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 	}
 	opts := []Option{WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso), WithWebAuthnOrigins(list(os.Getenv("IAMKIT_WEBAUTHN_ORIGINS"))), WithEventRetention(retention), WithAuditLogRetention(auditRetention), WithFeatures(features), WithLimits(limits),
 		WithSignInAttemptRetention(attemptRetention), WithWaitlistRetention(waitlistRetention), WithGeoIP(strings.TrimSpace(os.Getenv("IAMKIT_GEOIP_DB")), geoHeader)}
+	if warning, err := checkReplicas(os.Getenv("IAMKIT_REPLICAS"), os.Getenv("REDIS_URL") != ""); err != nil {
+		return nil, err
+	} else if warning != "" {
+		slog.Warn(warning)
+	}
 	var redis *cacheredis.Client
 	if v := os.Getenv("REDIS_URL"); v != "" {
 		if redis, err = cacheredis.Open(context.Background(), v); err != nil {
@@ -650,4 +694,30 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 	}
 	return s, nil
 }
+
+// checkReplicas guards a deployment of several replicas without the shared
+// store. Per-IP and per-minute limits, the metadata documents cache, the
+// key-set refetch throttle and the fetch budget of Client ID Metadata
+// Documents are per process without Redis, so N replicas multiply every
+// limit by N. IAMKIT_REPLICAS (the number of replicas the operator runs; the
+// Helm chart sets it from replicaCount / the HPA ceiling) makes that a
+// start-up error instead of a silent weakening; unset, the server cannot
+// know and warns.
+func checkReplicas(value string, redis bool) (warning string, err error) {
+	if value == "" {
+		if redis {
+			return "", nil
+		}
+		return "REDIS_URL is not set: rate limits, usage windows and the client metadata caches and throttles are per process. Running more than one replica multiplies every limit; set REDIS_URL (and IAMKIT_REPLICAS to the replica count) before scaling out", nil
+	}
+	n, convErr := strconv.Atoi(strings.TrimSpace(value))
+	if convErr != nil || n < 1 {
+		return "", errx.Validation("IAMKIT_REPLICAS must be a whole number of replicas, 1 or more")
+	}
+	if n > 1 && !redis {
+		return "", errx.Validation("IAMKIT_REPLICAS=" + strconv.Itoa(n) + " needs REDIS_URL: without a shared Redis every replica keeps its own rate limits, caches and throttles")
+	}
+	return "", nil
+}
+
 func GenerateKey() (*rsa.PrivateKey, error) { return rsa.GenerateKey(rand.Reader, 2048) }

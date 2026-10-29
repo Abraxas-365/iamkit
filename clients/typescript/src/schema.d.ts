@@ -666,6 +666,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/oauth-client-allowlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentOauthClientAllowlist"];
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentOauthClientAllowlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/oauth-client-allowlist/{entry}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentOauthClientAllowlistbyEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/oauth-client-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentOauthClientPresets"];
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentOauthClientPresets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/organizations": {
         parameters: {
             query?: never;
@@ -1957,6 +2005,118 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["patchApiEnvironmentsbyEnvironmentProtectedResourcesbyId"];
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}/client-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientTemplates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClients"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientApprove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientBlock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/unblock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientUnblock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/environments/{environment}/protected-resources/{id}/impact": {
@@ -5097,6 +5257,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/management/v1/environments/{environment}/oauth-client-allowlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentOauthClientAllowlist"];
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentOauthClientAllowlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/oauth-client-allowlist/{entry}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentOauthClientAllowlistbyEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/oauth-client-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentOauthClientPresets"];
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentOauthClientPresets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/management/v1/environments/{environment}/oauth-clients": {
         parameters: {
             query?: never;
@@ -5744,6 +5952,118 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["patchManagementEnvironmentsbyEnvironmentProtectedResourcesbyId"];
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}/client-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientTemplates"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClients"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientApprove"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/block": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientBlock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/unblock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientUnblock"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/management/v1/environments/{environment}/protected-resources/{id}/impact": {
@@ -7563,6 +7883,14 @@ export interface components {
             /** @description UUID (empty when unset) */
             user_id: string;
         };
+        AccessRequestView: {
+            email: string;
+            name: string;
+            /** Format: date-time */
+            requested_at: string;
+            /** @description UUID (empty when unset) */
+            user_id: string;
+        };
         Account: {
             /** @description UUID (empty when unset) */
             application_id: string;
@@ -7637,12 +7965,37 @@ export interface components {
             id?: string;
             kind: string;
         };
+        AllowlistCreateInput: {
+            origin?: string;
+            path_prefix?: string;
+            preset?: string;
+            /** @description UUID (empty when unset) */
+            protected_resource_id?: string | null;
+        };
+        AllowlistEntry: {
+            /** Format: date-time */
+            created_at: string;
+            /** @description UUID (empty when unset) */
+            environment_id: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            origin: string;
+            path_prefix: string;
+            preset: string;
+            /** @description UUID (empty when unset) */
+            protected_resource_id: string | null;
+        };
         Application: {
             active: boolean;
             /** @description UUID (empty when unset) */
             id: string;
             name: string;
             redirect_uris: string[] | null;
+        };
+        ApprovalInput: {
+            /** Format: date-time */
+            expires_at?: string | null;
+            metadata_hash?: string;
         };
         AssignmentInput: {
             /** @description UUID (empty when unset) */
@@ -8324,6 +8677,34 @@ export interface components {
         };
         ExecutionSetInput: {
             targets?: string[] | null;
+        };
+        ExternalClientView: {
+            access_requests: number;
+            admission: string;
+            /** Format: date-time */
+            admission_expires_at: string | null;
+            admission_source: string;
+            client_id: string;
+            client_name: string;
+            client_uri: string;
+            /** Format: date-time */
+            created_at: string;
+            host: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            jwks_uri: string;
+            /** Format: date-time */
+            last_used_at: string | null;
+            logo_uri: string;
+            /** Format: date-time */
+            metadata_fetched_at: string | null;
+            metadata_hash: string;
+            preset: string;
+            preset_name: string;
+            /** @description UUID (empty when unset) */
+            protected_resource_id: string;
+            redirect_uris: string[] | null;
+            token_endpoint_auth_method: string;
         };
         ExternalIdentityView: {
             /** @description UUID (empty when unset) */
@@ -9025,8 +9406,16 @@ export interface components {
             items: components["schemas"]["APIKey"][] | null;
             page: components["schemas"]["Page"];
         };
+        PaginatedAccessRequestView: {
+            items: components["schemas"]["AccessRequestView"][] | null;
+            page: components["schemas"]["Page"];
+        };
         PaginatedAccount: {
             items: components["schemas"]["Account"][] | null;
+            page: components["schemas"]["Page"];
+        };
+        PaginatedAllowlistEntry: {
+            items: components["schemas"]["AllowlistEntry"][] | null;
             page: components["schemas"]["Page"];
         };
         PaginatedApplication: {
@@ -9055,6 +9444,10 @@ export interface components {
         };
         PaginatedEvent: {
             items: components["schemas"]["OrgadminEvent"][] | null;
+            page: components["schemas"]["Page"];
+        };
+        PaginatedExternalClientView: {
+            items: components["schemas"]["ExternalClientView"][] | null;
             page: components["schemas"]["Page"];
         };
         PaginatedExternalIdentityView: {
@@ -9300,6 +9693,33 @@ export interface components {
         PreferencesInput: {
             locale?: string | null;
         };
+        PresetApplyInput: {
+            preset?: string;
+            /** @description UUID (empty when unset) */
+            protected_resource_id?: string | null;
+        };
+        PresetResult: {
+            allowlist_entry: components["schemas"]["AllowlistEntry"] | null;
+            client: components["schemas"]["TemplateClient"] | null;
+            mechanism: string;
+            name: string;
+            network: string;
+            preset: string;
+            warnings: string[] | null;
+        };
+        PresetView: {
+            development_only: boolean;
+            key: string;
+            loopback_any_port?: boolean;
+            mechanism: string;
+            metadata_url?: string;
+            name: string;
+            network: string;
+            notes?: string;
+            redirect_uris?: string[] | null;
+            source_ranges?: string[] | null;
+            warnings: string[] | null;
+        };
         Preview: {
             html: string;
             subject: string;
@@ -9346,8 +9766,10 @@ export interface components {
         };
         ProtectedResource: {
             active: boolean;
+            allow_client_metadata: boolean;
             /** @description UUID (empty when unset) */
             application_id: string;
+            client_admission: string;
             /** Format: date-time */
             created_at: string;
             default_scopes: string[] | null;
@@ -9374,6 +9796,7 @@ export interface components {
         };
         ProtectedResourceImpact: {
             active_sessions: number;
+            external_clients: number;
         };
         ProtectedResourcePolicy: {
             max_idle_ttl_seconds: number;
@@ -9385,6 +9808,8 @@ export interface components {
         };
         ProtectedResourceUpdateInput: {
             active?: boolean | null;
+            allow_client_metadata?: boolean | null;
+            client_admission?: string | null;
             default_scopes?: string[] | null;
             idle_ttl_seconds?: number | null;
             max_ttl_seconds?: number | null;
@@ -10109,6 +10534,13 @@ export interface components {
             name?: string | null;
             timeout_ms?: number | null;
             url?: string | null;
+        };
+        TemplateClient: {
+            /** @description UUID (empty when unset) */
+            client_id: string;
+            created: boolean;
+            loopback_any_port: boolean;
+            redirect_uris: string[] | null;
         };
         TemplateSummary: {
             customized: boolean;
@@ -13059,6 +13491,225 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOauthClientAllowlist: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                protected_resource_id?: string;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAllowlistEntry"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOauthClientAllowlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AllowlistCreateInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AllowlistEntry"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentOauthClientAllowlistbyEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                entry: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentOauthClientPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["PresetView"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentOauthClientPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PresetApplyInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetResult"];
+                };
             };
             /** @description Client error */
             "4XX": {
@@ -18566,6 +19217,393 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProtectedResource"];
                 };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PresetApplyInput"];
+            };
+        };
+        responses: {
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"] | components["schemas"]["PresetResult"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"] | components["schemas"]["PresetResult"];
+                };
+            };
+            /** @description Success */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetResult"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClients: {
+        parameters: {
+            query?: {
+                admission?: string;
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedExternalClientView"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientApprove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApprovalInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientBlock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientRequests: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAccessRequestView"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientUnblock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Client error */
             "4XX": {
@@ -31038,6 +32076,225 @@ export interface operations {
             };
         };
     };
+    getManagementEnvironmentsbyEnvironmentOauthClientAllowlist: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                protected_resource_id?: string;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAllowlistEntry"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentOauthClientAllowlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AllowlistCreateInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AllowlistEntry"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentOauthClientAllowlistbyEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                entry: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentOauthClientPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["PresetView"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentOauthClientPresets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PresetApplyInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetResult"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getManagementEnvironmentsbyEnvironmentOauthClients: {
         parameters: {
             query?: {
@@ -34263,6 +35520,393 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProtectedResource"];
                 };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PresetApplyInput"];
+            };
+        };
+        responses: {
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"] | components["schemas"]["PresetResult"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"] | components["schemas"]["PresetResult"];
+                };
+            };
+            /** @description Success */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetResult"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClients: {
+        parameters: {
+            query?: {
+                admission?: string;
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedExternalClientView"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientApprove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ApprovalInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientBlock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientRequests: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+                search?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAccessRequestView"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientUnblock: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientView"];
+                };
+            };
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Client error */
             "4XX": {
@@ -40268,6 +41912,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Response 400 */
             400: {
                 headers: {

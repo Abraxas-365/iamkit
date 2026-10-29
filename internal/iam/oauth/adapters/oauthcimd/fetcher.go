@@ -39,8 +39,8 @@ type Fetcher struct {
 	store  cache.Store
 	now    func() time.Time
 	group  singleflight.Group
-	// refreshed throttles key set refetches forced by an unknown kid
-	// (per replica, like oauthfosite.KeyFetcher).
+	// refreshed throttles key set refetches forced by an unknown kid while
+	// the shared store is unavailable (normally the store's SetNX does).
 	mu        sync.Mutex
 	refreshed map[string]time.Time
 }
@@ -64,19 +64,30 @@ func New(transport http.RoundTripper, store cache.Store) *Fetcher {
 
 var _ oauth.MetadataDocuments = (*Fetcher)(nil)
 
-// noCache keeps nothing.
+// noCache keeps nothing. Its SetNX claims nothing either: it fails, so
+// mayRefresh falls back to the per-process throttle (N-7) instead of
+// letting every unknown kid refetch.
 type noCache struct{}
 
 func (noCache) Get(context.Context, string) ([]byte, bool, error)        { return nil, false, nil }
 func (noCache) Set(context.Context, string, []byte, time.Duration) error { return nil }
-func (noCache) Delete(context.Context, ...string) error                  { return nil }
+func (noCache) SetNX(context.Context, string, []byte, time.Duration) (bool, error) {
+	return false, errNoStore
+}
+func (noCache) Delete(context.Context, ...string) error { return nil }
+
+var errNoStore = errors.New("no cache store")
 
 // cached is a cache entry: a document or key set body, or the reason the
 // last fetch failed.
 type cached struct {
 	Body    json.RawMessage `json:"body,omitempty"`
 	Failure string          `json:"failure,omitempty"`
-	Fetched time.Time       `json:"fetched"`
+	// Unavailable marks a failure that says nothing about the document
+	// (the host did not answer, or answered an error status): see
+	// oauth.ErrDocumentUnavailable.
+	Unavailable bool      `json:"unavailable,omitempty"`
+	Fetched     time.Time `json:"fetched"`
 }
 
 func key(prefix, location string) string {
@@ -86,9 +97,11 @@ func key(prefix, location string) string {
 
 // Document returns the validated document at clientID (oauth.ParseClientIDURL
 // already checked) and when it was fetched. A document that does not
-// validate is never cached; the failure is, briefly.
-func (f *Fetcher) Document(ctx context.Context, clientID *url.URL) (oauth.ExternalClient, time.Time, error) {
-	entry, err := f.read(ctx, key("cimd:", clientID.String()), clientID.String(), config.ClientMetadataMaxBytes, false, func(body []byte) error {
+// validate is never cached; the failure is, briefly. admit (nil: always) is
+// asked once per network read, not for cached answers or callers waiting on
+// another's read; its refusal is returned and cached nowhere.
+func (f *Fetcher) Document(ctx context.Context, clientID *url.URL, admit oauth.Fetch) (oauth.ExternalClient, time.Time, error) {
+	entry, err := f.read(ctx, key("cimd:", clientID.String()), clientID.String(), config.ClientMetadataMaxBytes, false, admit, func(body []byte) error {
 		m, err := oauth.ParseClientMetadata(body)
 		if err != nil {
 			return err
@@ -112,19 +125,8 @@ func (f *Fetcher) Document(ctx context.Context, clientID *url.URL) (oauth.Extern
 // origin). ignoreCache (fosite found no key for the assertion's kid)
 // refetches at most once per config.ClientJWKSRefreshInterval.
 func (f *Fetcher) Resolve(ctx context.Context, location string, ignoreCache bool) (*jose.JSONWebKeySet, error) {
-	refresh := false
-	if ignoreCache {
-		f.mu.Lock()
-		if last, ok := f.refreshed[location]; !ok || f.now().Sub(last) >= config.ClientJWKSRefreshInterval {
-			if len(f.refreshed) > config.ClientJWKSCacheEntries {
-				f.refreshed = map[string]time.Time{}
-			}
-			f.refreshed[location] = f.now()
-			refresh = true
-		}
-		f.mu.Unlock()
-	}
-	entry, err := f.read(ctx, key("cimdjwks:", location), location, config.ClientJWKSMaxBytes, refresh, func(body []byte) error {
+	refresh := ignoreCache && f.mayRefresh(ctx, location)
+	entry, err := f.read(ctx, key("cimdjwks:", location), location, config.ClientJWKSMaxBytes, refresh, nil, func(body []byte) error {
 		_, err := parseKeys(body)
 		return err
 	})
@@ -132,6 +134,27 @@ func (f *Fetcher) Resolve(ctx context.Context, location string, ignoreCache bool
 		return nil, err
 	}
 	return parseKeys(entry.Body)
+}
+
+// mayRefresh claims the right to refetch location's key set: one claim per
+// config.ClientJWKSRefreshInterval across every replica sharing the store
+// (SetNX), so an unknown kid cannot make the fleet hammer a client's server.
+// While the store is down the claim is per process.
+func (f *Fetcher) mayRefresh(ctx context.Context, location string) bool {
+	claimed, err := f.store.SetNX(ctx, key("cimdrefresh:", location), []byte("1"), config.ClientJWKSRefreshInterval)
+	if err == nil {
+		return claimed
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if last, ok := f.refreshed[location]; ok && f.now().Sub(last) < config.ClientJWKSRefreshInterval {
+		return false
+	}
+	if len(f.refreshed) > config.ClientJWKSCacheEntries {
+		f.refreshed = map[string]time.Time{}
+	}
+	f.refreshed[location] = f.now()
+	return true
 }
 
 // parseKeys reads a key set, keeping the public signing keys (keys without
@@ -157,7 +180,7 @@ func parseKeys(body []byte) (*jose.JSONWebKeySet, error) {
 // concurrent caller (singleflight), caching a body check accepts for its
 // max-age and a failure for config.ClientMetadataFailureTTL. fresh skips a
 // cached body (never a cached failure).
-func (f *Fetcher) read(ctx context.Context, key, location string, limit int64, fresh bool, check func([]byte) error) (cached, error) {
+func (f *Fetcher) read(ctx context.Context, key, location string, limit int64, fresh bool, admit oauth.Fetch, check func([]byte) error) (cached, error) {
 	var prior cached
 	if raw, found, err := f.store.Get(ctx, key); err == nil && found {
 		if json.Unmarshal(raw, &prior) == nil && (prior.Failure != "" || !fresh) {
@@ -165,6 +188,11 @@ func (f *Fetcher) read(ctx context.Context, key, location string, limit int64, f
 		}
 	}
 	v, err, _ := f.group.Do(key, func() (any, error) {
+		if admit != nil {
+			if err := admit(ctx); err != nil {
+				return cached{}, err
+			}
+		}
 		// The fetch outlives a caller that gives up: the others wait on it.
 		fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), config.ClientMetadataTimeout)
 		defer cancel()
@@ -178,7 +206,8 @@ func (f *Fetcher) read(ctx context.Context, key, location string, limit int64, f
 		}
 		entry := cached{Body: body, Fetched: f.now()}
 		if err != nil {
-			entry, ttl = cached{Failure: failureText(err), Fetched: f.now()}, config.ClientMetadataFailureTTL
+			text, unavailable := failureText(err)
+			entry, ttl = cached{Failure: text, Unavailable: unavailable, Fetched: f.now()}, config.ClientMetadataFailureTTL
 		}
 		if raw, merr := json.Marshal(entry); merr == nil {
 			_ = f.store.Set(context.WithoutCancel(ctx), key, raw, ttl)
@@ -190,20 +219,29 @@ func (f *Fetcher) read(ctx context.Context, key, location string, limit int64, f
 }
 
 func (c cached) err() error {
-	if c.Failure != "" {
-		return errx.Validation(c.Failure)
+	switch {
+	case c.Failure == "":
+		return nil
+	case c.Unavailable:
+		return oauth.ErrDocumentUnavailable(c.Failure)
 	}
-	return nil
+	return errx.Validation(c.Failure)
 }
 
 // failureText keeps a validation message and names a transport cause only
-// (never an address, a header or the body).
-func failureText(err error) string {
+// (never an address, a header or the body). unavailable reports a failure
+// that is not the document's fault: a transport error or an error status.
+func failureText(err error) (text string, unavailable bool) {
 	var e *errx.Error
-	if errors.As(err, &e) && e.Type == errx.TypeValidation {
-		return e.Message
+	if errors.As(err, &e) {
+		if e.Code == oauth.CodeDocumentUnavailable {
+			return e.Message, true
+		}
+		if e.Type == errx.TypeValidation {
+			return e.Message, false
+		}
 	}
-	return "the client metadata document could not be read: " + netx.Reason(err)
+	return "the client metadata document could not be read: " + netx.Reason(err), true
 }
 
 // fetch GETs location: 200, a JSON media type, at most limit bytes. It
@@ -220,7 +258,7 @@ func (f *Fetcher) fetch(ctx context.Context, location string, limit int64) ([]by
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, 0, errx.Validation("the client metadata document could not be read: the host answered " + strconv.Itoa(res.StatusCode))
+		return nil, 0, oauth.ErrDocumentUnavailable("the client metadata document could not be read: the host answered " + strconv.Itoa(res.StatusCode))
 	}
 	if media, _, err := mime.ParseMediaType(res.Header.Get("Content-Type")); err != nil || !(media == "application/json" || strings.HasSuffix(media, "+json")) {
 		return nil, 0, errx.Validation("the client metadata document is not served as application/json")

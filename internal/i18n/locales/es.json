@@ -239,5 +239,18 @@
   "hosted.error.choose_organization": "Elige una organización.",
   "hosted.error.organization_chosen": "Ya elegiste una organización para este inicio de sesión. Vuelve a iniciar sesión para elegir otra.",
   "hosted.error.factor_required": "Primero verifica tu segundo factor.",
-  "hosted.error.factor_not_allowed": "Tu organización no permite ningún segundo factor que puedas agregar. Contacta a tu administrador."
+  "hosted.error.factor_not_allowed": "Tu organización no permite ningún segundo factor que puedas agregar. Contacta a tu administrador.",
+  "hosted.client.title.pending": "Esperando aprobación",
+  "hosted.client.title.blocked": "Aplicación bloqueada",
+  "hosted.client.title.unavailable": "Aplicación no disponible",
+  "hosted.client.pending": "Tu solicitud se envió a TI. Esta aplicación podrá iniciar tu sesión cuando la aprueben para este servidor. Inténtalo más tarde.",
+  "hosted.client.blocked": "TI bloqueó esta aplicación para este servidor. Contacta a tu administrador.",
+  "hosted.client.backlog": "Demasiadas aplicaciones esperan aprobación en este servidor. Inténtalo más tarde.",
+  "hosted.client.request_limit": "Tienes demasiadas solicitudes esperando aprobación. Inténtalo de nuevo cuando TI haya respondido a algunas.",
+  "hosted.client.registered_only": "Este servidor solo acepta aplicaciones registradas. Pide a tu administrador que habilite esta.",
+  "hosted.client.disabled": "Este entorno no acepta aplicaciones identificadas por una dirección web. Contacta a tu administrador.",
+  "hosted.client.next_step": "Pide a tu administrador un ID de cliente creado a partir de una plantilla para este servidor y configúralo en la aplicación (por ejemplo con su opción --client-id).",
+  "hosted.client.host": "Aplicación en",
+  "hosted.client.verified": "{name} (verificada)",
+  "hosted.client.unverified": "{name} (sin verificar: la aplicación se nombra a sí misma)"
 }

@@ -13,11 +13,21 @@ to relying parties' logout URLs must be allowed (public addresses only).
 Rate limits are process-local unless `REDIS_URL` is set (below), and key on
 the client address, which behind a proxy needs `IAMKIT_TRUSTED_PROXIES`
 ([forwarded headers](reverse-proxy.md#forwarded-headers)) — otherwise all
-clients share the proxy's limit.
+clients share the proxy's limit. This includes the Client ID Metadata
+Document fetch budget: 10 network reads of documents a minute per client
+address (IPv6 per /64) — every read counts, a refresh of a known client's
+document as much as a new one; a document served from the cache costs
+nothing. Without trusted proxies the whole environment shares those 10, so
+MCP clients signing in for the first time get 429
+`CLIENT_METADATA_FETCH_BUDGET` under modest load.
 `RATE_LIMIT_PER_MINUTE` controls authenticated management/scoped API requests
 (default 120 per IP per minute); login/challenge endpoints have separate limits.
 Without Redis, increasing replicas increases aggregate allowed traffic unless
-ingress provides a shared limit. Implement per-account and endpoint-specific
+ingress provides a shared limit. Several replicas without `REDIS_URL` is
+therefore a configuration error, not a tuning choice: set
+`IAMKIT_REPLICAS` to the number of replicas you run (the Helm chart does) and
+IAMKit **refuses to start** with a value above 1 and no `REDIS_URL`; unset,
+it cannot know and logs a warning at start-up when `REDIS_URL` is missing. Implement per-account and endpoint-specific
 abuse policy where your exposure requires it.
 
 Device authorization user codes have 20⁸ (≈2.6×10¹⁰) values and live ten
@@ -43,6 +53,12 @@ With `REDIS_URL`, every replica uses one Redis for:
   overrides and action bindings (30 seconds) and identity providers' OIDC
   discovery documents (15 minutes). A management change deletes the entry, so
   every replica sees it on the next request; Redis only holds copies.
+- **Client metadata documents and key sets** (fetched Client ID Metadata
+  Documents, `jwks_uri` sets, the discovery capability read) and the
+  **refetch throttle** of unknown key ids: one `SET NX` claim per key set per
+  `config.ClientJWKSRefreshInterval` across all replicas, so a client sending
+  unknown `kid`s cannot make N replicas fetch its URL N times. Without Redis
+  each replica keeps its own copy and throttle.
 
 Only these reads are cached because they were measured: a PostgreSQL point read
 costs about 0.5 ms from the application and a Redis read about 0.2 ms, so

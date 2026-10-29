@@ -90,6 +90,9 @@ type APIHandlerSet struct {
 	// ProtectedResources serves protected resources and their policy
 	// (iam:protected-resources:read/write).
 	ProtectedResources *oauthhttp.ProtectedResources
+	// Admissions serves the external-client admission API, the allowlist
+	// and the presets.
+	Admissions *oauthhttp.Admissions
 }
 
 type Server struct {
@@ -164,6 +167,9 @@ type Server struct {
 	// ProtectedResources serves …/protected-resources and
 	// …/protected-resource-policy.
 	ProtectedResources *oauthhttp.ProtectedResources
+	// Admissions serves the external-client admission API, the allowlist
+	// and the presets.
+	Admissions *oauthhttp.Admissions
 	// LogoutDispatcher sends due back-channel logout notifications once
 	// (the worker runs it periodically; tests call it directly).
 	LogoutDispatcher oauth.Dispatcher
@@ -487,6 +493,9 @@ func (s *Server) App() *fiber.App {
 	// call introspection and userinfo often, so theirs are wider. Some
 	// answer HTML (signed out, device approved): none may be framed.
 	app.Use("/oauth/", oauthHeaders)
+	// Authorize starts a tab that may read a client's metadata document:
+	// each address gets a share of the budget (config.OAuthAuthorizeRateDivisor).
+	app.Use("/oauth/authorize", s.rateLimiter(max(1, rateLimit/config.OAuthAuthorizeRateDivisor)))
 	app.Use("/oauth/token", countTokens, s.rateLimiter(rateLimit*5))
 	app.Use("/oauth/device_authorization", s.rateLimiter(rateLimit))
 	app.Use("/oauth/introspect", s.rateLimiter(rateLimit*5))

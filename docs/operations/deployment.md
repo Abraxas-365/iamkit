@@ -133,7 +133,11 @@ What the chart sets up:
 - **Scaling**: `replicaCount` 2, optional HPA (`autoscaling.enabled`), a PDB
   (`minAvailable: 1`). Background jobs run on every replica and coordinate in
   the database; `workers.enabled=false` turns them off for a release (keep one
-  release with them). Set `redis.existingSecret` for shared rate limits.
+  release with them). **More than one replica** (`replicaCount`, or
+  `autoscaling.maxReplicas` with the HPA) **requires `redis.existingSecret`**:
+  the chart fails to render without it, and the pods get `IAMKIT_REPLICAS` so
+  the server refuses to start too. A single replica (`replicaCount: 1`,
+  HPA off) runs without Redis.
 - **GeoIP** (optional): `geoip.enabled=true` with `geoip.existingSecret` (a
   Secret holding `GEOIPUPDATE_ACCOUNT_ID` and `GEOIPUPDATE_LICENSE_KEY`) adds a
   MaxMind `geoipupdate` sidecar to every pod that keeps a GeoLite2 database in a

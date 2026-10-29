@@ -43,6 +43,13 @@ func (s *Store) Set(_ context.Context, key string, value []byte, ttl time.Durati
 	now := s.now()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.sweep(now)
+	s.entries[key] = entry{value: append([]byte(nil), value...), expires: now.Add(ttl)}
+	return nil
+}
+
+// sweep drops expired entries, at most once a minute (mu held).
+func (s *Store) sweep(now time.Time) {
 	if now.Sub(s.swept) > time.Minute {
 		for k, e := range s.entries {
 			if !now.Before(e.expires) {
@@ -51,8 +58,18 @@ func (s *Store) Set(_ context.Context, key string, value []byte, ttl time.Durati
 		}
 		s.swept = now
 	}
+}
+
+func (s *Store) SetNX(ctx context.Context, key string, value []byte, ttl time.Duration) (bool, error) {
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e, ok := s.entries[key]; ok && now.Before(e.expires) {
+		return false, nil
+	}
+	s.sweep(now)
 	s.entries[key] = entry{value: append([]byte(nil), value...), expires: now.Add(ttl)}
-	return nil
+	return true, nil
 }
 
 func (s *Store) Delete(_ context.Context, keys ...string) error {

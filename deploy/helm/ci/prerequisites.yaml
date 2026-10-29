@@ -9,6 +9,7 @@ stringData:
   DATABASE_URL: postgres://iamkit:ci-only@iamkit-ci-postgres:5432/iamkit?sslmode=disable
   OIDC_HMAC_SECRET: ci-only-hmac-secret-0123456789abcdef
   IAMKIT_ENCRYPTION_KEY: Y2ktb25seS0zMi1ieXRlLWtleS0wMTIzNDU2Nzg5YWI=
+  REDIS_URL: redis://iamkit-ci-redis:6379/0
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -50,3 +51,37 @@ spec:
     app: iamkit-ci-postgres
   ports:
     - port: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iamkit-ci-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: iamkit-ci-redis
+  template:
+    metadata:
+      labels:
+        app: iamkit-ci-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: iamkit-ci-redis
+spec:
+  selector:
+    app: iamkit-ci-redis
+  ports:
+    - port: 6379

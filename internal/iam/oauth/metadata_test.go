@@ -17,6 +17,7 @@ func TestParseClientIDURL(t *testing.T) {
 		"https://chatgpt.com/oauth/client.json",
 		"https://vscode.dev/oauth/client-metadata.json",
 		"https://a-b.example.com/x",
+		"https://xn--bcher-kva.example/client.json",
 	} {
 		if _, err := ParseClientIDURL(ok); err != nil {
 			t.Errorf("%s: %v", ok, err)
@@ -41,6 +42,10 @@ func TestParseClientIDURL(t *testing.T) {
 		"https://claude.ai/a/../b",
 		"https://claude.ai/./b",
 		"https://claude_ai.com/a",
+		"https://claude.ai./a",
+		"https://CLAUDE.AI/a",
+		"https://bücher.example/a",
+		"https://-claude.ai/a",
 		"https://claude.ai/" + strings.Repeat("a", 250),
 	} {
 		if _, err := ParseClientIDURL(bad); err == nil {
@@ -71,6 +76,10 @@ func TestClientMetadataValidate(t *testing.T) {
 	if err != nil || ext.Public() || ext.Auth.Method != identity.AuthPrivateKeyJWT || ext.Auth.JWKSURI != "https://chatgpt.com/oauth/jwks.json" {
 		t.Fatalf("chatgpt: %+v %v", ext, err)
 	}
+	// A native app's reverse-DNS private-use scheme (RFC 8252 §7.1).
+	if _, err = (ClientMetadata{ClientID: claude.String(), RedirectURIs: []string{"com.example.app:/oauth2redirect"}}).Validate(claude); err != nil {
+		t.Fatalf("private scheme: %v", err)
+	}
 	// Defaults: none, RS256, code + refresh.
 	ext, err = ClientMetadata{ClientID: claude.String(), RedirectURIs: []string{"http://127.0.0.1/callback", "http://localhost/callback"}}.Validate(claude)
 	if err != nil || ext.Auth.Method != identity.AuthNone || ext.Auth.SigningAlg != "RS256" || len(ext.GrantTypes) != 2 {
@@ -92,7 +101,10 @@ func TestClientMetadataValidate(t *testing.T) {
 		"no redirects":            {ClientID: claude.String()},
 		"too many redirects":      {ClientID: claude.String(), RedirectURIs: strings.Split(strings.Repeat("https://claude.ai/cb,", 11), ",")[:11]},
 		"http redirect":           {ClientID: claude.String(), RedirectURIs: []string{"http://claude.ai/cb"}},
-		"custom scheme":           {ClientID: claude.String(), RedirectURIs: []string{"cursor://cb"}},
+		"bare custom scheme":      {ClientID: claude.String(), RedirectURIs: []string{"cursor://cb"}},
+		"javascript redirect":     {ClientID: claude.String(), RedirectURIs: []string{"javascript:alert(1)"}},
+		"data redirect":           {ClientID: claude.String(), RedirectURIs: []string{"data:text/html,x"}},
+		"long redirect":           {ClientID: claude.String(), RedirectURIs: []string{"https://claude.ai/" + strings.Repeat("a", 260)}},
 		"fragment redirect":       {ClientID: claude.String(), RedirectURIs: []string{"https://claude.ai/cb#x"}},
 		"secret method":           {ClientID: claude.String(), RedirectURIs: []string{"https://claude.ai/cb"}, TokenEndpointAuthMethod: "client_secret_basic"},
 		"client secret":           {ClientID: claude.String(), RedirectURIs: []string{"https://claude.ai/cb"}, ClientSecret: "x"},
@@ -164,6 +176,9 @@ func TestAdmitted(t *testing.T) {
 		{Client{Source: SourceCIMD, Admission: AdmissionApproved, AdmissionExpiresAt: &past}, false},
 		{Client{Source: SourceCIMD, Admission: AdmissionPending}, false},
 		{Client{Source: SourceCIMD, Admission: AdmissionBlocked}, false},
+		// M-2: documents turned off at the server or the environment.
+		{Client{Source: SourceCIMD, Admission: AdmissionApproved, Disabled: true}, false},
+		{Client{Source: SourceCIMD, Admission: AdmissionApproved, AdmissionExpiresAt: &future, Disabled: true}, false},
 	} {
 		if got := tc.c.Admitted(now); got != tc.want {
 			t.Errorf("%+v: %v", tc.c, got)
@@ -190,6 +205,9 @@ func TestAllowlistMatches(t *testing.T) {
 		"https://claude.ai/other":                         false,
 		"https://evil.claude.ai/oauth/x":                  false,
 		"https://claude.ai.evil.example/oauth/x":          false,
+		"https://CLAUDE.ai/oauth/x":                       true,
+		"https://claude.ai./oauth/x":                      true,
+		"https://claude.ai:8443/oauth/x":                  false,
 	} {
 		u, _ := url.Parse(raw)
 		if got := e.Matches(u); got != want {
@@ -245,11 +263,22 @@ func TestAllowlistCreateResolve(t *testing.T) {
 	if _, err := (AllowlistCreate{Origin: "https://tools.example", PathPrefix: "/mcp"}).Resolve(false); err != nil {
 		t.Fatal(err)
 	}
+	// One spelling per host: case, a trailing dot and IDNs are canonicalized.
+	for in, want := range map[string]string{
+		"https://Tools.Example":         "https://tools.example",
+		"https://tools.example.":        "https://tools.example",
+		"https://BÜCHER.example":        "https://xn--bcher-kva.example",
+		"https://xn--bcher-kva.example": "https://xn--bcher-kva.example",
+	} {
+		got, err := AllowlistCreate{Origin: in, PathPrefix: "/"}.Resolve(false)
+		if err != nil || got.Origin != want {
+			t.Errorf("%q = %q, %v; want %q", in, got.Origin, err, want)
+		}
+	}
 	for name, in := range map[string]AllowlistCreate{
 		"http":       {Origin: "http://tools.example", PathPrefix: "/"},
 		"path":       {Origin: "https://tools.example/x", PathPrefix: "/"},
 		"port":       {Origin: "https://tools.example:8443", PathPrefix: "/"},
-		"upper":      {Origin: "https://Tools.example", PathPrefix: "/"},
 		"no slash":   {Origin: "https://tools.example", PathPrefix: "mcp"},
 		"dot dot":    {Origin: "https://tools.example", PathPrefix: "/a/../b"},
 		"query":      {Origin: "https://tools.example", PathPrefix: "/a?b"},
@@ -259,6 +288,27 @@ func TestAllowlistCreateResolve(t *testing.T) {
 		if _, err := in.Resolve(true); err == nil {
 			t.Errorf("%s accepted", name)
 		}
+	}
+}
+
+// The redirect URIs templates ship come from the vendors' documentation
+// (see presets): a change here is a deliberate edit with a new source.
+func TestPresetRedirects(t *testing.T) {
+	for key, want := range map[string]string{
+		"cursor":      "http://localhost:8787/callback https://www.cursor.com/agents/mcp/oauth/callback",
+		"antigravity": "https://antigravity.google/oauth-callback",
+		"gemini_cli":  "http://localhost/oauth/callback",
+	} {
+		p, ok := FindPreset(key)
+		if !ok || strings.Join(p.Redirects, " ") != want || p.Network != NetworkLocal {
+			t.Errorf("%s: %+v", key, p)
+		}
+	}
+	if p, _ := FindPreset("gemini_cli"); !p.LoopbackAnyPort {
+		t.Error("gemini_cli listens on a random port")
+	}
+	if p, _ := FindPreset("cursor"); !strings.Contains(p.Notes, "internet") {
+		t.Errorf("cursor must warn that the web callback needs public reachability: %q", p.Notes)
 	}
 }
 
@@ -290,7 +340,7 @@ func TestPresets(t *testing.T) {
 				t.Errorf("%s: %v", p.Key, err)
 			}
 		case PresetTemplate:
-			if p.MetadataURL != "" || len(p.Redirects) == 0 || ValidateClientShape(DefaultGrantTypes, true, p.Redirects) != nil {
+			if p.MetadataURL != "" || len(p.Redirects) == 0 || ValidateClientShape(DefaultGrantTypes, true, p.Redirects) != nil || identity.ValidateClientRedirects(p.Redirects) != nil {
 				t.Errorf("%s: bad template", p.Key)
 			}
 		}
@@ -318,10 +368,109 @@ func TestPresets(t *testing.T) {
 func TestApprovalValidate(t *testing.T) {
 	now := time.Now()
 	past, future := now.Add(-time.Second), now.Add(time.Hour)
-	if (Approval{}).Validate(now) != nil || (Approval{ExpiresAt: &future}).Validate(now) != nil || (Approval{ExpiresAt: &past}).Validate(now) == nil {
+	if (Approval{MetadataHash: "h"}).Validate(now) != nil || (Approval{MetadataHash: "h", ExpiresAt: &future}).Validate(now) != nil || (Approval{MetadataHash: "h", ExpiresAt: &past}).Validate(now) == nil {
 		t.Fatal("approval expiry")
+	}
+	if (Approval{}).Validate(now) == nil || (Approval{MetadataHash: " "}).Validate(now) == nil {
+		t.Fatal("approval without the reviewed metadata_hash")
 	}
 	if (ExternalClientFilter{Admission: "x"}).Validate() == nil || (ExternalClientFilter{Admission: AdmissionPending}).Validate() != nil {
 		t.Fatal("filter")
+	}
+}
+
+func TestMetadataHash(t *testing.T) {
+	base := MetadataHash([]string{"https://a.example/cb", "http://localhost/cb"}, "", "none")
+	if base != MetadataHash([]string{"http://localhost/cb", "https://a.example/cb"}, "", "none") {
+		t.Fatal("redirect order must not matter")
+	}
+	for name, other := range map[string]string{
+		"redirect added": MetadataHash([]string{"https://a.example/cb", "http://localhost/cb", "https://evil.example/cb"}, "", "none"),
+		"redirect moved": MetadataHash([]string{"https://a.example/cb", "http://localhost/other"}, "", "none"),
+		"jwks_uri":       MetadataHash([]string{"https://a.example/cb", "http://localhost/cb"}, "https://a.example/jwks", "none"),
+		"method":         MetadataHash([]string{"https://a.example/cb", "http://localhost/cb"}, "", "private_key_jwt"),
+	} {
+		if other == base {
+			t.Errorf("%s did not change the hash", name)
+		}
+	}
+	// Fields are delimited: moving a character across them differs.
+	if MetadataHash([]string{"a"}, "bc", "") == MetadataHash([]string{"ab"}, "c", "") {
+		t.Fatal("ambiguous encoding")
+	}
+	doc := ExternalClient{Redirects: []string{"https://a.example/cb"}, Auth: identity.ClientAuth{Method: "none"}, Name: "A"}
+	renamed := doc
+	renamed.Name = "B"
+	if doc.Hash() != renamed.Hash() {
+		t.Fatal("a name is not vouched for")
+	}
+}
+
+func TestAdmissionSource(t *testing.T) {
+	u := mustURL(t, "https://claude.ai/oauth/claude-code-client-metadata")
+	listed := ExternalTarget{ClientAdmission: ClientAdmissionAllowlist, Allowlist: []AllowlistEntry{{Origin: "https://claude.ai", PathPrefix: "/oauth/claude-code-client-metadata"}}}
+	if got := listed.AdmissionSource(u); got != SourceAllowlist {
+		t.Fatalf("allowlist = %q", got)
+	}
+	listed.Allowlist[0].Preset = "claude_code"
+	if got := listed.AdmissionSource(u); got != SourcePreset {
+		t.Fatalf("preset = %q", got)
+	}
+	if got := (ExternalTarget{ClientAdmission: ClientAdmissionOpen}).AdmissionSource(u); got != SourceOpen {
+		t.Fatalf("open = %q", got)
+	}
+	if got := (ExternalTarget{ClientAdmission: ClientAdmissionAllowlist}).AdmissionSource(u); got != "" {
+		t.Fatalf("unlisted = %q", got)
+	}
+}
+
+func TestAdmissionBacklog(t *testing.T) {
+	var e *errx.Error
+	if !errors.As(ErrAdmissionBacklog(), &e) || e.Code != "CLIENT_ADMISSION_BACKLOG" || e.HTTPStatus != 429 {
+		t.Fatalf("backlog = %#v", e)
+	}
+}
+
+// M-3: the per-user limit is its own code, 429, and a hosted-page refusal.
+func TestAccessRequestLimit(t *testing.T) {
+	var e *errx.Error
+	if !errors.As(ErrAccessRequestLimit(), &e) || e.Code != CodeClientRequestLimit || e.HTTPStatus != 429 || e.Code == CodeClientBacklog {
+		t.Fatalf("limit = %#v", e)
+	}
+	if !IsClientRefusal(ErrAccessRequestLimit()) || !IsClientRefusal(ErrAdmissionBacklog()) || IsClientRefusal(errx.Validation("x")) {
+		t.Fatal("IsClientRefusal")
+	}
+}
+
+// One canonicalizer: whatever spelling an allowlist entry is created with,
+// it matches exactly the client_id URLs ParseClientIDURL accepts for that
+// host, and ParseClientIDURL refuses every spelling that is not canonical.
+func TestHostCanonicalizerAgrees(t *testing.T) {
+	for _, tc := range []struct{ entry, canonical string }{
+		{"https://Tools.Example", "tools.example"},
+		{"https://tools.example.", "tools.example"},
+		{"https://BÜCHER.example", "xn--bcher-kva.example"},
+	} {
+		created, err := AllowlistCreate{Origin: tc.entry, PathPrefix: "/"}.Resolve(false)
+		if err != nil || created.Origin != "https://"+tc.canonical {
+			t.Fatalf("%s: %q %v", tc.entry, created.Origin, err)
+		}
+		entry := AllowlistEntry{Origin: created.Origin, PathPrefix: created.PathPrefix}
+		u, err := ParseClientIDURL("https://" + tc.canonical + "/c.json")
+		if err != nil || !entry.Matches(u) {
+			t.Fatalf("%s: canonical client_id not matched: %v", tc.canonical, err)
+		}
+		// The non-canonical spelling is not a client_id, but a URL that skipped
+		// the parser still matches the same entry, never another.
+		raw := strings.TrimPrefix(tc.entry, "https://")
+		if raw != tc.canonical {
+			if _, err := ParseClientIDURL("https://" + raw + "/c.json"); err == nil {
+				t.Errorf("%q accepted as a client_id", raw)
+			}
+			skipped, _ := url.Parse("https://" + raw + "/c.json")
+			if !entry.Matches(skipped) {
+				t.Errorf("%q does not match its own entry", raw)
+			}
+		}
 	}
 }

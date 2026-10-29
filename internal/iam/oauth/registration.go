@@ -77,6 +77,10 @@ type Registration struct {
 	// AllowedOrigins are browser origins (scheme://host[:port]) allowed to
 	// call /identity/v1 and the browser-facing /oauth endpoints with CORS.
 	AllowedOrigins []string `json:"allowed_origins"`
+	// Preset and LoopbackAnyPort mark a client made from a template preset
+	// (never read from a request body).
+	Preset          string `json:"-"`
+	LoopbackAnyPort bool   `json:"-"`
 	// ClientAuth defaults to none (public) or client_secret_basic.
 	identity.ClientAuth
 }
@@ -228,10 +232,15 @@ type Mutation struct {
 	Target      string
 }
 type Ticket struct {
-	Client    identity.ClientID `db:"client_id"`
-	Binding   []byte            `db:"binding_hash"`
-	Form      string            `db:"request_form"`
-	Requested time.Time         `db:"requested_at"`
+	// Client is the client's row; zero for the ticket of an external client
+	// not persisted yet (anonymous authorizations of clients IT has not
+	// approved write no row): External names it then, at Protected.
+	Client    identity.ClientID            `db:"client_id"`
+	External  *string                      `db:"external_id"`
+	Protected identity.ProtectedResourceID `db:"protected_resource_id"`
+	Binding   []byte                       `db:"binding_hash"`
+	Form      string                       `db:"request_form"`
+	Requested time.Time                    `db:"requested_at"`
 	// Device is the hash of the device code a device ticket approves (nil
 	// for authorize requests).
 	Device []byte `db:"device_hash"`
@@ -242,6 +251,24 @@ type Ticket struct {
 type Pending struct {
 	Client *Client
 	Form   string
+	// Ticket is the row read (without a lock): Complete spends it.
+	Ticket Ticket
+}
+
+// AdmissionState is the admission of an external client's row as a
+// transaction reads it (Authorization.Admission).
+type AdmissionState struct {
+	Admission string
+	Expires   *time.Time
+	// Disabled: the protected resource takes registered clients only
+	// (allow_client_metadata off).
+	Disabled bool
+}
+
+// Admitted reports whether the state lets the client finish an
+// authorization at now (Client.Admitted).
+func (a AdmissionState) Admitted(now time.Time) bool {
+	return Client{Source: SourceCIMD, Admission: a.Admission, AdmissionExpiresAt: a.Expires, Disabled: a.Disabled}.Admitted(now)
 }
 
 // Login is the session a hosted login completes an authorization with.

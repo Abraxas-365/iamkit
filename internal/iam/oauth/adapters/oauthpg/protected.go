@@ -22,7 +22,7 @@ func NewProtectedResources(db *sqlx.DB) *ProtectedResources { return &ProtectedR
 
 var _ oauth.ProtectedResourceRepository = (*ProtectedResources)(nil)
 
-const protectedColumns = `id,environment_id,application_id,resource_id,uri,name,default_scopes,idle_ttl_seconds,max_ttl_seconds,active,created_at`
+const protectedColumns = `id,environment_id,application_id,resource_id,uri,name,default_scopes,idle_ttl_seconds,max_ttl_seconds,active,allow_client_metadata,client_admission,created_at`
 
 type protectedResourceRow struct {
 	ID          identity.ProtectedResourceID `db:"id"`
@@ -35,6 +35,8 @@ type protectedResourceRow struct {
 	Idle        int64                        `db:"idle_ttl_seconds"`
 	Max         int64                        `db:"max_ttl_seconds"`
 	Active      bool                         `db:"active"`
+	AllowMeta   bool                         `db:"allow_client_metadata"`
+	Admission   string                       `db:"client_admission"`
 	CreatedAt   time.Time                    `db:"created_at"`
 }
 
@@ -43,7 +45,7 @@ func (r protectedResourceRow) domain() oauth.ProtectedResource {
 	if scopes == nil {
 		scopes = []string{}
 	}
-	return oauth.ProtectedResource{ID: r.ID, Environment: r.Environment, Application: r.Application, Resource: r.Resource, URI: r.URI, Name: r.Name, DefaultScopes: scopes, IdleTTLSeconds: r.Idle, MaxTTLSeconds: r.Max, Active: r.Active, CreatedAt: r.CreatedAt}
+	return oauth.ProtectedResource{ID: r.ID, Environment: r.Environment, Application: r.Application, Resource: r.Resource, URI: r.URI, Name: r.Name, DefaultScopes: scopes, IdleTTLSeconds: r.Idle, MaxTTLSeconds: r.Max, Active: r.Active, AllowClientMetadata: r.AllowMeta, ClientAdmission: r.Admission, CreatedAt: r.CreatedAt}
 }
 
 // protectedConflict maps the table's constraints to their meaning.
@@ -57,6 +59,9 @@ func protectedConflict(err error) error {
 		return errx.Conflict("a protected resource with this URI already exists")
 	case "protected_resources_resource_key":
 		return errx.Conflict("the resource already has a protected resource")
+	case "protected_resources_ttl_check":
+		// Only reachable when a concurrent update changed the other bound.
+		return errx.Conflict("idle_ttl_seconds cannot exceed max_ttl_seconds")
 	}
 	if pg.Code.Class() == "23" {
 		return errx.Conflict("invalid application/resource binding")
@@ -87,15 +92,47 @@ func (r *ProtectedResources) CreateProtectedResource(ctx context.Context, m oaut
 	})
 }
 
-func (r *ProtectedResources) SaveProtectedResource(ctx context.Context, m oauth.Mutation, p oauth.ProtectedResource) error {
+func (r *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oauth.Mutation, id identity.ProtectedResourceID, input oauth.ProtectedResourceUpdate) error {
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
-		res, err := tx.ExecContext(ctx, `UPDATE protected_resources SET name=$3,default_scopes=$4,idle_ttl_seconds=$5,max_ttl_seconds=$6,active=$7 WHERE id=$1 AND environment_id=$2`,
-			p.ID, m.Environment, p.Name, pq.StringArray(p.DefaultScopes), p.IdleTTLSeconds, p.MaxTTLSeconds, p.Active)
-		if err != nil {
+		// The settings the update replaces: what the policy was decides what
+		// the change takes back or lets in (M-2, L-3).
+		var before struct {
+			Allow     bool   `db:"allow_client_metadata"`
+			Admission string `db:"client_admission"`
+		}
+		if err := tx.GetContext(ctx, &before, `SELECT allow_client_metadata,client_admission FROM protected_resources WHERE id=$1 AND environment_id=$2 FOR NO KEY UPDATE`, id, m.Environment); errors.Is(err, sql.ErrNoRows) {
+			return errx.NotFound("protected resource not found")
+		} else if err != nil {
+			return failure(err)
+		}
+		// Only the fields the update sets (N-9): a concurrent update of
+		// another field, committed before the lock, stays.
+		var scopes any
+		if input.DefaultScopes != nil {
+			// A pointer to a nil slice is "no default scopes" too (W4-6):
+			// an empty array, never NULL (which keeps the old value).
+			list := *input.DefaultScopes
+			if list == nil {
+				list = []string{}
+			}
+			scopes = pq.StringArray(list)
+		}
+		var row protectedResourceRow
+		err := tx.GetContext(ctx, &row, `UPDATE protected_resources SET name=COALESCE($3,name),default_scopes=COALESCE($4::text[],default_scopes),
+			idle_ttl_seconds=COALESCE($5,idle_ttl_seconds),max_ttl_seconds=COALESCE($6,max_ttl_seconds),active=COALESCE($7,active),
+			allow_client_metadata=COALESCE($8,allow_client_metadata),client_admission=COALESCE($9,client_admission)
+			WHERE id=$1 AND environment_id=$2 RETURNING `+protectedColumns,
+			id, m.Environment, input.Name, scopes, input.IdleTTLSeconds, input.MaxTTLSeconds, input.Active, input.AllowClientMetadata, input.ClientAdmission)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errx.NotFound("protected resource not found")
+		} else if err != nil {
 			return protectedConflict(err)
 		}
-		if n, _ := res.RowsAffected(); n == 0 {
-			return errx.NotFound("protected resource not found")
+		p := row.domain()
+		// The clients first, then the sessions (W4-3): the lock order of a
+		// block and of Complete.
+		if err = reconcileAdmission(ctx, tx, m, p, before.Allow, before.Admission); err != nil {
+			return err
 		}
 		if !p.Active {
 			if err = endProtectedGrants(ctx, tx, m.Environment, p.ID); err != nil {
@@ -104,6 +141,39 @@ func (r *ProtectedResources) SaveProtectedResource(ctx context.Context, m oauth.
 		}
 		return eventpg.Audit(ctx, tx, m.Environment, m.Actor, m.Action, m.Target)
 	})
+}
+
+// reconcileAdmission applies a change of a server's document-client
+// settings to the clients it already holds, in the update's transaction:
+//   - allow_client_metadata turned off: every approved client (manual too)
+//     returns to pending and loses its grants (M-2);
+//   - client_admission left open, or an allowlist narrowed elsewhere: the
+//     clients that policy admitted lose their approval unless an allowlist
+//     entry still admits them (M-2);
+//   - allow_client_metadata turned on, or the server turned open: pending
+//     clients that policy now admits are approved, as a new allowlist entry
+//     does (L-3).
+//
+// One update can do both of the last two (allow_client_metadata on and
+// open → allowlist, W-5): what policy took back is reconciled, then what
+// it admits is let in.
+func reconcileAdmission(ctx context.Context, tx *sqlx.Tx, m oauth.Mutation, p oauth.ProtectedResource, wasAllowed bool, wasAdmission string) error {
+	if wasAllowed && !p.AllowClientMetadata {
+		_, err := demoteApproved(ctx, tx, m.Environment, m.Actor, &p.ID, 1<<30, oauth.DemotionDocumentsOff, true)
+		return err
+	}
+	if !p.AllowClientMetadata {
+		return nil
+	}
+	if wasAdmission == oauth.ClientAdmissionOpen && p.ClientAdmission != oauth.ClientAdmissionOpen {
+		if err := reconcilePolicy(ctx, tx, m.Environment, m.Actor, &p.ID, ""); err != nil {
+			return err
+		}
+	}
+	if !wasAllowed || (wasAdmission != oauth.ClientAdmissionOpen && p.ClientAdmission == oauth.ClientAdmissionOpen) {
+		return admitByPolicy(ctx, tx, m, &p.ID, "", nil)
+	}
+	return nil
 }
 
 // endProtectedGrants revokes the OAuth sessions of the resource behind a
@@ -118,7 +188,25 @@ func endProtectedGrants(ctx context.Context, tx *sqlx.Tx, environment identity.E
 
 func (r *ProtectedResources) DeleteProtectedResource(ctx context.Context, m oauth.Mutation, id identity.ProtectedResourceID) error {
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
+		// Lock order: the server first, as an update does (W4-2), then its
+		// external clients, as an authorization in progress (Complete) or a
+		// token request holds a client before its ticket or token rows
+		// (N-1, W4-1). Their token rows, tickets and device codes reference
+		// them without cascading: they go before the clients, which cascade.
+		var found int
+		if err := tx.GetContext(ctx, &found, `SELECT 1 FROM protected_resources WHERE id=$1 AND environment_id=$2 FOR UPDATE`, id, m.Environment); errors.Is(err, sql.ErrNoRows) {
+			return errx.NotFound("protected resource not found")
+		} else if err != nil {
+			return failure(err)
+		}
+		var clients []string
+		if err := tx.SelectContext(ctx, &clients, `SELECT id::text FROM oauth_clients WHERE environment_id=$1 AND protected_resource_id=$2 ORDER BY id FOR UPDATE`, m.Environment, id); err != nil {
+			return failure(err)
+		}
 		if err := endProtectedGrants(ctx, tx, m.Environment, id); err != nil {
+			return err
+		}
+		if _, err := revokeClients(ctx, tx, m.Environment, clients, true); err != nil {
 			return err
 		}
 		var uri string
@@ -164,17 +252,19 @@ func (r *ProtectedResources) ProtectedResourceImpact(ctx context.Context, enviro
 	var out struct {
 		Found    bool `db:"found"`
 		Sessions int  `db:"sessions"`
+		External int  `db:"external"`
 	}
 	err := r.db.GetContext(ctx, &out, `SELECT EXISTS(SELECT 1 FROM protected_resources WHERE id=$2 AND environment_id=$1) AS found,
 		(SELECT count(*) FROM sessions s JOIN protected_resources p ON p.id=$2 AND p.environment_id=$1
-		WHERE s.environment_id=$1 AND s.resource_id=p.resource_id AND s.oauth_client_id IS NOT NULL AND s.revoked_at IS NULL AND s.expires_at>now()) AS sessions`, environment, id)
+		WHERE s.environment_id=$1 AND s.resource_id=p.resource_id AND s.oauth_client_id IS NOT NULL AND s.revoked_at IS NULL AND s.expires_at>now()) AS sessions,
+		(SELECT count(*) FROM oauth_clients c WHERE c.environment_id=$1 AND c.protected_resource_id=$2) AS external`, environment, id)
 	if err != nil {
 		return oauth.ProtectedResourceImpact{}, failure(err)
 	}
 	if !out.Found {
 		return oauth.ProtectedResourceImpact{}, errx.NotFound("protected resource not found")
 	}
-	return oauth.ProtectedResourceImpact{ActiveSessions: out.Sessions}, nil
+	return oauth.ProtectedResourceImpact{ActiveSessions: out.Sessions, ExternalClients: out.External}, nil
 }
 
 func (r *ProtectedResources) ProtectedResourcePolicy(ctx context.Context, environment identity.EnvironmentID) (*oauth.ProtectedResourcePolicy, error) {

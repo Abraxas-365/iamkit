@@ -764,14 +764,119 @@ class ProtectedResources(_Resource):
         return self._c.request("POST", f"{self._c.env()}/protected-resources", json=body)  # type: ignore[no-any-return]
 
     def update(self, protected_id: str, **fields: Any) -> JSON:
-        """Patches ``name``, ``default_scopes``, ``idle_ttl_seconds``, ``max_ttl_seconds`` or ``active``
-        (``active=False`` ends every authorization)."""
+        """Patches ``name``, ``default_scopes``, ``idle_ttl_seconds``, ``max_ttl_seconds``, ``active``
+        (``active=False`` ends every authorization), ``allow_client_metadata`` or ``client_admission``
+        (``"allowlist"`` or ``"open"``: open admits any client named by a metadata document)."""
         path = f"{self._c.env()}/protected-resources/{seg(protected_id)}"
         return self._c.request("PATCH", path, json=fields)  # type: ignore[no-any-return]
 
     def delete(self, protected_id: str) -> None:
         """Removes the registration and ends its authorizations; the resource stays."""
         self._c.request("DELETE", f"{self._c.env()}/protected-resources/{seg(protected_id)}")
+
+    def impact(self, protected_id: str) -> JSON:
+        """What deactivating or deleting the server would end: ``{"active_sessions", "external_clients"}``."""
+        return self._c.request("GET", f"{self._c.env()}/protected-resources/{seg(protected_id)}/impact")  # type: ignore[no-any-return]
+
+    def clients(
+        self,
+        protected_id: str,
+        *,
+        admission: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> JSON:
+        """One page of the clients named by Client ID Metadata Documents (``admission``: pending, approved, blocked)."""
+        params = compact({"admission": admission, "limit": limit, "offset": offset})
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients"
+        return self._c.request("GET", path, params=params)  # type: ignore[no-any-return]
+
+    def iterate_clients(
+        self, protected_id: str, *, admission: str | None = None, page_size: int = MAX_PAGE_SIZE
+    ) -> Iterator[JSON]:
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients"
+        return self._offset_pages(path, compact({"admission": admission}), page_size)
+
+    def client(self, protected_id: str, client_id: str) -> JSON:
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}"
+        return self._c.request("GET", path)  # type: ignore[no-any-return]
+
+    def client_requests(
+        self, protected_id: str, client_id: str, *, limit: int | None = None, offset: int | None = None
+    ) -> JSON:
+        """Who asked for a client, newest first."""
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}/requests"
+        return self._c.request("GET", path, params=compact({"limit": limit, "offset": offset}))  # type: ignore[no-any-return]
+
+    def approve_client(
+        self, protected_id: str, client_id: str, *, metadata_hash: str, expires_at: str | None = None
+    ) -> JSON:
+        """Approves a pending, blocked or expired client, optionally until ``expires_at`` (RFC 3339).
+
+        ``metadata_hash`` is the one of the client you reviewed (its ``metadata_hash`` field); if the
+        document changed since, the call fails with 409 ``CLIENT_METADATA_CHANGED`` and approves nothing.
+        """
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}/approve"
+        body = compact({"metadata_hash": metadata_hash, "expires_at": expires_at})
+        return self._c.request("POST", path, json=body)  # type: ignore[no-any-return]
+
+    def block_client(self, protected_id: str, client_id: str) -> JSON:
+        """Blocks a client and ends its sessions and grants."""
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}/block"
+        return self._c.request("POST", path, json={})  # type: ignore[no-any-return]
+
+    def unblock_client(self, protected_id: str, client_id: str) -> JSON:
+        """Returns a blocked client to pending."""
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}/unblock"
+        return self._c.request("POST", path, json={})  # type: ignore[no-any-return]
+
+    def forget_client(self, protected_id: str, client_id: str) -> None:
+        """Deletes a client and its grants; it is discovered again, as pending, the next time it is used."""
+        self._c.request("DELETE", f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}")
+
+    def create_client_from_template(self, protected_id: str, preset: str) -> JSON:
+        """Creates (or returns) the fixed client of a template preset (``cursor``, ``antigravity``, ``gemini_cli``)."""
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/client-templates"
+        return self._c.request("POST", path, json={"preset": preset})  # type: ignore[no-any-return]
+
+    def allowlist(
+        self, *, protected_resource_id: str | None = None, limit: int | None = None, offset: int | None = None
+    ) -> JSON:
+        """One page of the allowlist of metadata documents admitted without review."""
+        params = compact({"protected_resource_id": protected_resource_id, "limit": limit, "offset": offset})
+        return self._c.request("GET", f"{self._c.env()}/oauth-client-allowlist", params=params)  # type: ignore[no-any-return]
+
+    def create_allowlist_entry(
+        self,
+        *,
+        origin: str | None = None,
+        path_prefix: str | None = None,
+        preset: str | None = None,
+        protected_resource_id: str | None = None,
+    ) -> JSON:
+        """Admits documents under ``origin`` (``https://host``) and ``path_prefix``, or a ``preset``'s document."""
+        body = compact(
+            {
+                "origin": origin,
+                "path_prefix": path_prefix,
+                "preset": preset,
+                "protected_resource_id": protected_resource_id,
+            }
+        )
+        return self._c.request("POST", f"{self._c.env()}/oauth-client-allowlist", json=body)  # type: ignore[no-any-return]
+
+    def delete_allowlist_entry(self, entry_id: str) -> None:
+        """Removes an entry; clients it approved stay approved."""
+        self._c.request("DELETE", f"{self._c.env()}/oauth-client-allowlist/{seg(entry_id)}")
+
+    def presets(self) -> JSON:
+        """The catalog of known MCP clients: ``{"items": [{key, name, mechanism, network, warnings, ...}]}``."""
+        return self._c.request("GET", f"{self._c.env()}/oauth-client-presets")  # type: ignore[no-any-return]
+
+    def apply_preset(self, preset: str, *, protected_resource_id: str | None = None) -> JSON:
+        """Enables a preset: an allowlist entry (metadata document) or a client (template; needs the server)."""
+        body = compact({"preset": preset, "protected_resource_id": protected_resource_id})
+        return self._c.request("POST", f"{self._c.env()}/oauth-client-presets", json=body)  # type: ignore[no-any-return]
 
     def policy(self) -> JSON:
         """The environment's ceilings: ``{"max_idle_ttl_seconds", "max_lifetime_ttl_seconds"}``."""

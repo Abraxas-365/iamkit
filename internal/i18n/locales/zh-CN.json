@@ -239,5 +239,18 @@
   "hosted.error.choose_organization": "请选择组织。",
   "hosted.error.organization_chosen": "你已为本次登录选择了组织。如需选择其他组织，请重新登录。",
   "hosted.error.factor_required": "请先验证第二因素。",
-  "hosted.error.factor_not_allowed": "你的组织不允许添加任何可用的第二因素。请联系管理员。"
+  "hosted.error.factor_not_allowed": "你的组织不允许添加任何可用的第二因素。请联系管理员。",
+  "hosted.client.title.pending": "等待批准",
+  "hosted.client.title.blocked": "应用已被阻止",
+  "hosted.client.title.unavailable": "应用不可用",
+  "hosted.client.pending": "您的请求已发送给 IT 部门。此应用获得该服务器的批准后即可让您登录。请稍后再试。",
+  "hosted.client.blocked": "IT 部门已在此服务器上阻止了该应用。请联系管理员。",
+  "hosted.client.backlog": "此服务器上等待批准的应用过多。请稍后再试。",
+  "hosted.client.request_limit": "您有太多等待批准的请求。请在 IT 部门处理其中一些后再试。",
+  "hosted.client.registered_only": "此服务器仅接受已注册的应用。请让管理员启用该应用。",
+  "hosted.client.disabled": "此环境不接受以网址标识的应用。请联系管理员。",
+  "hosted.client.next_step": "请向管理员索取为此服务器基于模板创建的客户端 ID，并填入应用的设置中（例如使用 --client-id 选项）。",
+  "hosted.client.host": "应用地址",
+  "hosted.client.verified": "{name}（已验证）",
+  "hosted.client.unverified": "{name}（未验证：该应用自行声明名称）"
 }

@@ -40,7 +40,7 @@ var script string
 
 var pages = func() map[string]*template.Template {
 	out := map[string]*template.Template{}
-	for _, name := range []string{"identify", "password", "directory", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "test", "test-start", "signup", "signup-code", "waitlisted", "device", "device-confirm", "post"} {
+	for _, name := range []string{"identify", "password", "directory", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "client", "test", "test-start", "signup", "signup-code", "waitlisted", "device", "device-confirm", "post"} {
 		t := template.Must(template.ParseFS(files, "templates/*.html"))
 		template.Must(t.New("content").Parse(`{{template "` + name + `/content" .}}`))
 		out[name] = t
@@ -199,6 +199,10 @@ type view struct {
 	// Post is the form the "post" page submits to another site (a SAML
 	// response to the service provider's ACS).
 	Post *PostForm
+	// Application is the external client a refusal page describes;
+	// NextStep tells its user what to do about it.
+	Application *ClientApplication
+	NextStep    string
 	// Test is the test connection result the "test" page shows.
 	Test *federation.TestResult
 	// TestStart is the test connection link the "test-start" page posts.
@@ -859,7 +863,11 @@ func (h *Handler) result(c *fiber.Ctx, v view, result hosted.Result) error {
 	}
 	switch {
 	case result.Login != nil:
-		return h.finish(c, v.Ticket, *result.Login)
+		err := h.finish(c, v.Ticket, *result.Login)
+		if oauth.IsClientRefusal(err) {
+			return h.Refusal(c, err)
+		}
+		return err
 	case result.SecondFactor:
 		v.Title, v.Subtitle, v.Factors, v.RiskChallenge = v.T("hosted.title.mfa"), v.T("hosted.subtitle.mfa"), result.Factors, result.RiskChallenge
 		if result.RiskChallenge {

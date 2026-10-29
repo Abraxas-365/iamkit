@@ -240,5 +240,18 @@
   "hosted.error.choose_organization": "Válasszon szervezetet.",
   "hosted.error.organization_chosen": "Ehhez a bejelentkezéshez már választott szervezetet. Másik választásához jelentkezzen be újra.",
   "hosted.error.factor_required": "Először erősítse meg a második tényezőt.",
-  "hosted.error.factor_not_allowed": "Szervezete nem engedélyez olyan második tényezőt, amelyet hozzáadhatna. Forduljon a rendszergazdához."
+  "hosted.error.factor_not_allowed": "Szervezete nem engedélyez olyan második tényezőt, amelyet hozzáadhatna. Forduljon a rendszergazdához.",
+  "hosted.client.title.pending": "Jóváhagyásra vár",
+  "hosted.client.title.blocked": "Az alkalmazás tiltva van",
+  "hosted.client.title.unavailable": "Az alkalmazás nem érhető el",
+  "hosted.client.pending": "A kérésedet elküldtük az IT-nek. Az alkalmazás be tud léptetni, amint jóváhagyják ehhez a szerverhez. Próbáld újra később.",
+  "hosted.client.blocked": "Az IT letiltotta ezt az alkalmazást ezen a szerveren. Fordulj a rendszergazdához.",
+  "hosted.client.backlog": "Túl sok alkalmazás vár jóváhagyásra ezen a szerveren. Próbáld újra később.",
+  "hosted.client.request_limit": "Túl sok jóváhagyásra váró kérésed van. Próbáld újra, ha az IT válaszolt néhányra.",
+  "hosted.client.registered_only": "Ez a szerver csak regisztrált alkalmazásokat fogad. Kérd meg a rendszergazdát, hogy engedélyezze ezt.",
+  "hosted.client.disabled": "Ez a környezet nem fogad webcímmel azonosított alkalmazásokat. Fordulj a rendszergazdához.",
+  "hosted.client.next_step": "Kérje meg a rendszergazdát, hogy hozzon létre egy kliensazonosítót ehhez a szerverhez egy sablonból, majd adja meg az alkalmazás beállításaiban (például a --client-id kapcsolóval).",
+  "hosted.client.host": "Alkalmazás itt:",
+  "hosted.client.verified": "{name} (ellenőrzött)",
+  "hosted.client.unverified": "{name} (ellenőrizetlen: az alkalmazás önmagát nevezi meg)"
 }

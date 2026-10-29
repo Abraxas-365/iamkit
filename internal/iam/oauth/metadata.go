@@ -2,7 +2,6 @@ package oauth
 
 import (
 	"encoding/json"
-	"net"
 	"net/url"
 	"slices"
 	"strings"
@@ -69,7 +68,10 @@ func ParseClientIDURL(raw string) (*url.URL, error) {
 		return nil, invalid
 	}
 	host := u.Hostname()
-	if host == "" || host != strings.ToLower(host) || net.ParseIP(host) != nil || !strings.Contains(host, ".") || u.Port() != "" {
+	// client_id values are compared as strings, so the host must already be
+	// in the one canonical spelling (identity.DNSHost): lowercase ASCII, no
+	// trailing dot, punycode for international names.
+	if canonical, err := identity.DNSHost(host); err != nil || canonical != host || !strings.Contains(host, ".") || u.Port() != "" {
 		return nil, invalid
 	}
 	for _, r := range host {
@@ -144,8 +146,9 @@ func (e ExternalClient) Public() bool { return e.Auth.Method == identity.AuthNon
 // Validate checks a document fetched from clientID and reduces it to what
 // IAMKit honours (D16, D18):
 //   - client_id equals the URL exactly;
-//   - 1–10 redirect URIs, each https or http on a loopback host, without
-//     fragment or userinfo;
+//   - 1–10 redirect URIs of at most 255 characters, each one
+//     identity.ValidateClientRedirects accepts (https, http on a loopback
+//     host, or a reverse-DNS private-use scheme; no fragment or userinfo);
 //   - token_endpoint_auth_method none (default) or private_key_jwt with a
 //     jwks_uri on the client_id's origin; no inline jwks, no client secret;
 //   - grant_types and response_types are reduced to authorization_code +
@@ -159,10 +162,12 @@ func (m ClientMetadata) Validate(clientID *url.URL) (ExternalClient, error) {
 		return ExternalClient{}, errx.Validation("the document must list between 1 and 10 redirect_uris")
 	}
 	for _, raw := range m.RedirectURIs {
-		u, err := url.Parse(raw)
-		if err != nil || u.Fragment != "" || u.User != nil || u.Host == "" || !(u.Scheme == "https" || identity.LoopbackHTTP(u)) {
-			return ExternalClient{}, errx.Validation("redirect_uris must be https or http loopback URLs")
+		if len(raw) > maxClientIDURL {
+			return ExternalClient{}, errx.Validation("redirect_uris must be at most 255 characters")
 		}
+	}
+	if err := identity.ValidateClientRedirects(m.RedirectURIs); err != nil {
+		return ExternalClient{}, err
 	}
 	if m.JWKS != nil {
 		return ExternalClient{}, errx.Validation("the document may not embed jwks: publish a jwks_uri")
@@ -250,12 +255,12 @@ func ErrUnauthorizedClient(message string) *errx.Error {
 }
 
 // Admitted reports whether an external client may finish an authorization
-// at now: approved and not past its approval's expiry.
+// at now: approved, not past its approval's expiry and not Disabled.
 func (c Client) Admitted(now time.Time) bool {
 	if !c.External() {
 		return true
 	}
-	return c.Admission == AdmissionApproved && (c.AdmissionExpiresAt == nil || now.Before(*c.AdmissionExpiresAt))
+	return !c.Disabled && c.Admission == AdmissionApproved && (c.AdmissionExpiresAt == nil || now.Before(*c.AdmissionExpiresAt))
 }
 
 // AllowlistEntry admits client metadata documents without review: those
@@ -302,10 +307,19 @@ func (c AllowlistCreate) Resolve(development bool) (AllowlistCreate, error) {
 		c.Origin, c.PathPrefix = Origin(u), u.Path
 		return c, nil
 	}
+	invalid := errx.Validation("origin must be https://host (no port, path or query)")
 	u, err := url.Parse(c.Origin)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.User != nil || u.Fragment != "" || Origin(u) != c.Origin || c.Origin != strings.ToLower(c.Origin) || u.Port() != "" || len(c.Origin) > maxClientIDURL {
-		return c, errx.Validation("origin must be https://host (lowercase, no port, path or query)")
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.Path != "" || u.RawQuery != "" || u.User != nil || u.Fragment != "" || Origin(u) != c.Origin || u.Port() != "" || len(c.Origin) > maxClientIDURL {
+		return c, invalid
 	}
+	// The host is stored in its canonical spelling (identity.DNSHost), the
+	// one ParseClientIDURL requires of client_id URLs: Tools.Example. and
+	// tools.example are the same entry.
+	host, err := identity.DNSHost(u.Hostname())
+	if err != nil || !strings.Contains(host, ".") {
+		return c, invalid
+	}
+	c.Origin = "https://" + host
 	if !strings.HasPrefix(c.PathPrefix, "/") || len(c.PathPrefix) > maxClientIDURL || strings.ContainsAny(c.PathPrefix, "?#") || strings.Contains(c.PathPrefix, "/../") || strings.HasSuffix(c.PathPrefix, "/..") {
 		return c, errx.Validation("path_prefix must be a path starting with /")
 	}
@@ -316,7 +330,10 @@ func (c AllowlistCreate) Resolve(development bool) (AllowlistCreate, error) {
 // origin, and a path equal to the prefix or below it at a segment boundary
 // (prefix "/oauth" admits "/oauth" and "/oauth/x", never "/oauthx").
 func (e AllowlistEntry) Matches(u *url.URL) bool {
-	if Origin(u) != e.Origin {
+	// Both sides in the canonical host spelling: a stored entry or a URL
+	// that skipped ParseClientIDURL never matches by case or a trailing dot.
+	host, err := identity.DNSHost(u.Hostname())
+	if err != nil || u.Scheme+"://"+host+portSuffix(u) != e.Origin {
 		return false
 	}
 	if u.Path == e.PathPrefix || e.PathPrefix == "/" {
@@ -357,9 +374,21 @@ type ExternalClientView struct {
 	JWKSURI            string                       `json:"jwks_uri"`
 	Admission          string                       `json:"admission"`
 	AdmissionExpiresAt *time.Time                   `json:"admission_expires_at"`
-	MetadataFetchedAt  *time.Time                   `json:"metadata_fetched_at"`
-	LastUsedAt         *time.Time                   `json:"last_used_at"`
-	CreatedAt          time.Time                    `json:"created_at"`
+	// AdmissionSource is who approved the client (manual, allowlist,
+	// preset or open; "" while it is not approved).
+	AdmissionSource string `json:"admission_source"`
+	// Preset is the known client (oauth.Presets) whose metadata document
+	// URL this client_id is, "" for any other: the only verified identity.
+	Preset            string     `json:"preset"`
+	PresetName        string     `json:"preset_name"`
+	AccessRequests    int        `json:"access_requests"`
+	MetadataFetchedAt *time.Time `json:"metadata_fetched_at"`
+	// MetadataHash is the digest of the redirect URIs, jwks_uri and
+	// authentication method the row holds now (MetadataHash): the value an
+	// approval must carry (Approval.MetadataHash).
+	MetadataHash string     `json:"metadata_hash"`
+	LastUsedAt   *time.Time `json:"last_used_at"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 // ExternalClientFilter narrows the list of a protected resource's external
@@ -377,14 +406,43 @@ func (f ExternalClientFilter) Validate() error {
 }
 
 // Approval approves an external client, optionally until ExpiresAt.
+// MetadataHash is the metadata_hash of the client the operator reviewed
+// (ExternalClientView): the approval holds only if the stored document
+// still hashes to it, so a document that changed between the review and
+// the click is never approved unseen (409 CLIENT_METADATA_CHANGED).
 type Approval struct {
-	ExpiresAt *time.Time `json:"expires_at"`
+	ExpiresAt    *time.Time `json:"expires_at"`
+	MetadataHash string     `json:"metadata_hash"`
 }
 
-// Validate refuses an expiry in the past.
+// CodeClientMetadataChanged is the 409 of an approval that vouched for a
+// document the client no longer has.
+const CodeClientMetadataChanged = "CLIENT_METADATA_CHANGED"
+
+// ErrClientMetadataChanged refuses an approval of a document that changed
+// after the operator reviewed it.
+func ErrClientMetadataChanged() error {
+	e := errx.Conflict("the client's metadata changed since you reviewed it; review it again")
+	e.Code = CodeClientMetadataChanged
+	return e
+}
+
+// Validate refuses an expiry in the past or an approval that names no
+// reviewed document.
 func (a Approval) Validate(now time.Time) error {
+	if strings.TrimSpace(a.MetadataHash) == "" {
+		return errx.Validation("metadata_hash is required: send the metadata_hash of the client you reviewed")
+	}
 	if a.ExpiresAt != nil && !a.ExpiresAt.After(now) {
 		return errx.Validation("expires_at must be in the future")
 	}
 	return nil
+}
+
+// portSuffix is ":port" of an explicit port ("" when none).
+func portSuffix(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return ":" + p
+	}
+	return ""
 }

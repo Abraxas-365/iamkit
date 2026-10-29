@@ -241,5 +241,18 @@
   "hosted.error.choose_organization": "Alegeți o organizație.",
   "hosted.error.organization_chosen": "Ați ales deja o organizație pentru această conectare. Conectați-vă din nou pentru a alege alta.",
   "hosted.error.factor_required": "Verificați mai întâi al doilea factor.",
-  "hosted.error.factor_not_allowed": "Organizația dvs. nu permite niciun al doilea factor pe care să-l puteți adăuga. Contactați administratorul."
+  "hosted.error.factor_not_allowed": "Organizația dvs. nu permite niciun al doilea factor pe care să-l puteți adăuga. Contactați administratorul.",
+  "hosted.client.title.pending": "Se așteaptă aprobarea",
+  "hosted.client.title.blocked": "Aplicație blocată",
+  "hosted.client.title.unavailable": "Aplicație indisponibilă",
+  "hosted.client.pending": "Cererea ta a fost trimisă echipei IT. Aplicația te va putea autentifica după ce este aprobată pentru acest server. Încearcă din nou mai târziu.",
+  "hosted.client.blocked": "IT a blocat această aplicație pentru acest server. Contactează administratorul.",
+  "hosted.client.backlog": "Prea multe aplicații așteaptă aprobarea pe acest server. Încearcă din nou mai târziu.",
+  "hosted.client.request_limit": "Ai prea multe solicitări în așteptarea aprobării. Încearcă din nou când IT va fi răspuns la unele dintre ele.",
+  "hosted.client.registered_only": "Acest server acceptă doar aplicații înregistrate. Cere administratorului să o activeze pe aceasta.",
+  "hosted.client.disabled": "Acest mediu nu acceptă aplicații identificate printr-o adresă web. Contactează administratorul.",
+  "hosted.client.next_step": "Cere administratorului un ID de client creat dintr-un șablon pentru acest server și introdu-l în setările aplicației (de exemplu cu opțiunea --client-id).",
+  "hosted.client.host": "Aplicație la",
+  "hosted.client.verified": "{name} (verificată)",
+  "hosted.client.unverified": "{name} (neverificată: aplicația își declară singură numele)"
 }

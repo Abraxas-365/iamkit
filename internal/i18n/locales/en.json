@@ -239,5 +239,18 @@
   "hosted.error.choose_organization": "Choose an organization.",
   "hosted.error.organization_chosen": "You already chose an organization for this sign-in. Sign in again to choose another.",
   "hosted.error.factor_required": "Verify your second factor first.",
-  "hosted.error.factor_not_allowed": "Your organization allows no second factor you can add. Contact your administrator."
+  "hosted.error.factor_not_allowed": "Your organization allows no second factor you can add. Contact your administrator.",
+  "hosted.client.title.pending": "Waiting for approval",
+  "hosted.client.title.blocked": "Application blocked",
+  "hosted.client.title.unavailable": "Application not available",
+  "hosted.client.pending": "Your request was sent to IT. This application can sign you in once they approve it for this server. Try again later.",
+  "hosted.client.blocked": "IT blocked this application for this server. Contact your administrator.",
+  "hosted.client.backlog": "Too many applications are waiting for approval at this server. Try again later.",
+  "hosted.client.request_limit": "You have too many requests waiting for approval. Try again when IT has answered some of them.",
+  "hosted.client.registered_only": "This server accepts registered applications only. Ask your administrator to enable this one.",
+  "hosted.client.disabled": "This environment does not accept applications identified by a web address. Contact your administrator.",
+  "hosted.client.next_step": "Ask your administrator for a client ID made from a template for this server, then enter it in the application's settings (for example with its --client-id option).",
+  "hosted.client.host": "Application at",
+  "hosted.client.verified": "{name} (verified)",
+  "hosted.client.unverified": "{name} (unverified: the application names itself)"
 }

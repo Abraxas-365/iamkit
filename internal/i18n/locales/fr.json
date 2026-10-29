@@ -240,5 +240,18 @@
   "hosted.error.choose_organization": "Choisissez une organisation.",
   "hosted.error.organization_chosen": "Vous avez déjà choisi une organisation pour cette connexion. Reconnectez-vous pour en choisir une autre.",
   "hosted.error.factor_required": "Vérifiez d’abord votre second facteur.",
-  "hosted.error.factor_not_allowed": "Votre organisation n’autorise aucun second facteur que vous puissiez ajouter. Contactez votre administrateur."
+  "hosted.error.factor_not_allowed": "Votre organisation n’autorise aucun second facteur que vous puissiez ajouter. Contactez votre administrateur.",
+  "hosted.client.title.pending": "En attente d'approbation",
+  "hosted.client.title.blocked": "Application bloquée",
+  "hosted.client.title.unavailable": "Application indisponible",
+  "hosted.client.pending": "Votre demande a été envoyée au service informatique. Cette application pourra vous connecter une fois approuvée pour ce serveur. Réessayez plus tard.",
+  "hosted.client.blocked": "Le service informatique a bloqué cette application pour ce serveur. Contactez votre administrateur.",
+  "hosted.client.backlog": "Trop d'applications attendent une approbation sur ce serveur. Réessayez plus tard.",
+  "hosted.client.request_limit": "Vous avez trop de demandes en attente d'approbation. Réessayez lorsque le service informatique en aura traité quelques-unes.",
+  "hosted.client.registered_only": "Ce serveur n'accepte que les applications enregistrées. Demandez à votre administrateur d'activer celle-ci.",
+  "hosted.client.disabled": "Cet environnement n'accepte pas les applications identifiées par une adresse web. Contactez votre administrateur.",
+  "hosted.client.next_step": "Demandez à votre administrateur un identifiant client créé à partir d'un modèle pour ce serveur, puis saisissez-le dans les paramètres de l'application (par exemple avec son option --client-id).",
+  "hosted.client.host": "Application à l'adresse",
+  "hosted.client.verified": "{name} (vérifiée)",
+  "hosted.client.unverified": "{name} (non vérifiée : l'application se désigne elle-même)"
 }

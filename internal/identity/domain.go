@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"net"
 	"strings"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -16,20 +17,39 @@ var domainProfile = idna.New(
 	idna.VerifyDNSLength(true),
 )
 
-// Domain normalizes a DNS domain an organization can claim: lowercase ASCII
-// (internationalized names become punycode), no trailing dot, no wildcard, at
-// least two labels, at most 253 characters and not itself a public suffix
-// such as "com", "co.uk" or "github.io".
-func Domain(raw string) (string, error) {
+// DNSHost is the canonical form of a DNS host name: lowercase ASCII
+// (internationalized names become punycode), no trailing dot, letters,
+// digits, hyphens and dots only, at most 253 characters. IP literals,
+// wildcards and anything that is not a valid host name are refused. It is
+// the one canonicalizer behind client_id URLs and client allowlist
+// origins, so two spellings of a host never name two clients.
+func DNSHost(raw string) (string, error) {
 	value := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(raw)), ".")
 	if value == "" {
-		return "", errx.Validation("domain is required")
+		return "", errx.Validation("host is required")
 	}
 	if strings.Contains(value, "*") {
-		return "", errx.Validation("domain must not contain wildcards")
+		return "", errx.Validation("host must not contain wildcards")
+	}
+	if net.ParseIP(strings.Trim(value, "[]")) != nil {
+		return "", errx.Validation("host must be a DNS name, not an IP address")
 	}
 	ascii, err := domainProfile.ToASCII(value)
-	if err != nil || len(ascii) > 253 || !strings.Contains(ascii, ".") {
+	if err != nil || len(ascii) > 253 {
+		return "", errx.Validation("host must be a valid DNS name such as example.com")
+	}
+	return ascii, nil
+}
+
+// Domain normalizes a DNS domain an organization can claim: DNSHost, with at
+// least two labels and not itself a public suffix such as "com", "co.uk" or
+// "github.io".
+func Domain(raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", errx.Validation("domain is required")
+	}
+	ascii, err := DNSHost(raw)
+	if err != nil || !strings.Contains(ascii, ".") {
 		return "", errx.Validation("domain must be a valid DNS name such as example.com")
 	}
 	if suffix, _ := publicsuffix.PublicSuffix(ascii); suffix == ascii {

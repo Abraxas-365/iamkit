@@ -25,6 +25,9 @@ type browser struct {
 	// issuer is the deployment's issuer the redirects carry as iss (RFC
 	// 9207); testIssuer unless a test serves another.
 	issuer string
+	// ip, when set, is the client address sent as X-Forwarded-For (the
+	// server must trust the proxy: Server.TrustedProxies).
+	ip string
 }
 
 type page struct {
@@ -47,6 +50,9 @@ func (b *browser) do(method, path string, form url.Values) page {
 	req := httptest.NewRequest(method, path, body)
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	if b.ip != "" {
+		req.Header.Set("X-Forwarded-For", b.ip)
 	}
 	for _, c := range b.cookies {
 		req.AddCookie(c)

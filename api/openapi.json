@@ -258,6 +258,31 @@
         ],
         "type": "object"
       },
+      "AccessRequestView": {
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "user_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "requested_at",
+          "user_id"
+        ],
+        "type": "object"
+      },
       "Account": {
         "properties": {
           "application_id": {
@@ -572,6 +597,69 @@
         ],
         "type": "object"
       },
+      "AllowlistCreateInput": {
+        "properties": {
+          "origin": {
+            "type": "string"
+          },
+          "path_prefix": {
+            "type": "string"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "protected_resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AllowlistEntry": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "environment_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "path_prefix": {
+            "type": "string"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "protected_resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "created_at",
+          "environment_id",
+          "id",
+          "origin",
+          "path_prefix",
+          "preset",
+          "protected_resource_id"
+        ],
+        "type": "object"
+      },
       "Application": {
         "properties": {
           "active": {
@@ -600,6 +688,21 @@
           "name",
           "redirect_uris"
         ],
+        "type": "object"
+      },
+      "ApprovalInput": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata_hash": {
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "AssignmentInput": {
@@ -3259,6 +3362,114 @@
         },
         "type": "object"
       },
+      "ExternalClientView": {
+        "properties": {
+          "access_requests": {
+            "type": "integer"
+          },
+          "admission": {
+            "type": "string"
+          },
+          "admission_expires_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "admission_source": {
+            "type": "string"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "client_uri": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "jwks_uri": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "logo_uri": {
+            "type": "string"
+          },
+          "metadata_fetched_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "metadata_hash": {
+            "type": "string"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "preset_name": {
+            "type": "string"
+          },
+          "protected_resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "redirect_uris": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "token_endpoint_auth_method": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_requests",
+          "admission",
+          "admission_expires_at",
+          "admission_source",
+          "client_id",
+          "client_name",
+          "client_uri",
+          "created_at",
+          "host",
+          "id",
+          "jwks_uri",
+          "last_used_at",
+          "logo_uri",
+          "metadata_fetched_at",
+          "metadata_hash",
+          "preset",
+          "preset_name",
+          "protected_resource_id",
+          "redirect_uris",
+          "token_endpoint_auth_method"
+        ],
+        "type": "object"
+      },
       "ExternalIdentityView": {
         "properties": {
           "connection_id": {
@@ -5890,11 +6101,53 @@
         ],
         "type": "object"
       },
+      "PaginatedAccessRequestView": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AccessRequestView"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object"
+      },
       "PaginatedAccount": {
         "properties": {
           "items": {
             "items": {
               "$ref": "#/components/schemas/Account"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object"
+      },
+      "PaginatedAllowlistEntry": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AllowlistEntry"
             },
             "type": [
               "array",
@@ -6042,6 +6295,27 @@
           "items": {
             "items": {
               "$ref": "#/components/schemas/OrgadminEvent"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "page": {
+            "$ref": "#/components/schemas/Page"
+          }
+        },
+        "required": [
+          "items",
+          "page"
+        ],
+        "type": "object"
+      },
+      "PaginatedExternalClientView": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalClientView"
             },
             "type": [
               "array",
@@ -7077,6 +7351,140 @@
         },
         "type": "object"
       },
+      "PresetApplyInput": {
+        "properties": {
+          "preset": {
+            "type": "string"
+          },
+          "protected_resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "PresetResult": {
+        "properties": {
+          "allowlist_entry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AllowlistEntry"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "client": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemplateClient"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mechanism": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "allowlist_entry",
+          "client",
+          "mechanism",
+          "name",
+          "network",
+          "preset",
+          "warnings"
+        ],
+        "type": "object"
+      },
+      "PresetView": {
+        "properties": {
+          "development_only": {
+            "type": "boolean"
+          },
+          "key": {
+            "type": "string"
+          },
+          "loopback_any_port": {
+            "type": "boolean"
+          },
+          "mechanism": {
+            "type": "string"
+          },
+          "metadata_url": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "network": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "redirect_uris": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "source_ranges": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "development_only",
+          "key",
+          "mechanism",
+          "name",
+          "network",
+          "warnings"
+        ],
+        "type": "object"
+      },
       "Preview": {
         "properties": {
           "html": {
@@ -7233,8 +7641,14 @@
           "active": {
             "type": "boolean"
           },
+          "allow_client_metadata": {
+            "type": "boolean"
+          },
           "application_id": {
             "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "client_admission": {
             "type": "string"
           },
           "created_at": {
@@ -7277,7 +7691,9 @@
         },
         "required": [
           "active",
+          "allow_client_metadata",
           "application_id",
+          "client_admission",
           "created_at",
           "default_scopes",
           "environment_id",
@@ -7325,10 +7741,14 @@
         "properties": {
           "active_sessions": {
             "type": "integer"
+          },
+          "external_clients": {
+            "type": "integer"
           }
         },
         "required": [
-          "active_sessions"
+          "active_sessions",
+          "external_clients"
         ],
         "type": "object"
       },
@@ -7363,6 +7783,18 @@
           "active": {
             "type": [
               "boolean",
+              "null"
+            ]
+          },
+          "allow_client_metadata": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "client_admission": {
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -10043,6 +10475,36 @@
             ]
           }
         },
+        "type": "object"
+      },
+      "TemplateClient": {
+        "properties": {
+          "client_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "created": {
+            "type": "boolean"
+          },
+          "loopback_any_port": {
+            "type": "boolean"
+          },
+          "redirect_uris": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "client_id",
+          "created",
+          "loopback_any_port",
+          "redirect_uris"
+        ],
         "type": "object"
       },
       "TemplateSummary": {
@@ -15465,6 +15927,343 @@
         },
         "responses": {
           "201": {
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/oauth-client-allowlist": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentOauthClientAllowlist",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "protected_resource_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAllowlistEntry"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentOauthClientAllowlist",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllowlistCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllowlistEntry"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/oauth-client-allowlist/{entry}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentOauthClientAllowlistbyEntry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/oauth-client-presets": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentOauthClientPresets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/PresetView"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentOauthClientPresets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetApplyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetResult"
+                }
+              }
+            },
             "description": "Created"
           },
           "4XX": {
@@ -24638,6 +25437,657 @@
               }
             },
             "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/client-templates": {
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientTemplates",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetApplyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PresetResult"
+                    }
+                  ]
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PresetResult"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetResult"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClients",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "admission",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/approve": {
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientApprove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/block": {
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientBlock",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/requests": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientRequests",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAccessRequestView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/unblock": {
+      "post": {
+        "operationId": "postApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientUnblock",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "204": {
+            "description": "No content"
           },
           "4XX": {
             "content": {
@@ -44557,6 +46007,358 @@
         ]
       }
     },
+    "/management/v1/environments/{environment}/oauth-client-allowlist": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentOauthClientAllowlist",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "protected_resource_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAllowlistEntry"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentOauthClientAllowlist",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllowlistCreateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllowlistEntry"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/oauth-client-allowlist/{entry}": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentOauthClientAllowlistbyEntry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "entry",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/oauth-client-presets": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentOauthClientPresets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/PresetView"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentOauthClientPresets",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetApplyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetResult"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
     "/management/v1/environments/{environment}/oauth-clients": {
       "get": {
         "operationId": "getManagementEnvironmentsbyEnvironmentOauthClients",
@@ -49944,6 +51746,681 @@
               }
             },
             "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/client-templates": {
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientTemplates",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetApplyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PresetResult"
+                    }
+                  ]
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Error"
+                    },
+                    {
+                      "$ref": "#/components/schemas/PresetResult"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Server error"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresetResult"
+                }
+              }
+            },
+            "description": "Success"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClients",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "admission",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/approve": {
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientApprove",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/block": {
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientBlock",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/requests": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientRequests",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedAccessRequestView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/unblock": {
+      "post": {
+        "operationId": "postManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientUnblock",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientView"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "204": {
+            "description": "No content"
           },
           "4XX": {
             "content": {
@@ -59510,6 +61987,9 @@
       "post": {
         "operationId": "postOauthRevoke",
         "responses": {
+          "200": {
+            "description": "OK"
+          },
           "400": {
             "content": {
               "application/json": {

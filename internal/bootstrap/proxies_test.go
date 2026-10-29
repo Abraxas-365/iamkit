@@ -16,3 +16,28 @@ func TestTrustedProxies(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckReplicas(t *testing.T) {
+	for _, tc := range []struct {
+		value   string
+		redis   bool
+		wantErr bool
+		warns   bool
+	}{
+		{"", false, false, true},
+		{"", true, false, false},
+		{"1", false, false, false},
+		{" 1 ", false, false, false},
+		{"3", true, false, false},
+		{"2", false, true, false},
+		{"10", false, true, false},
+		{"0", true, true, false},
+		{"-1", true, true, false},
+		{"many", true, true, false},
+	} {
+		warning, err := checkReplicas(tc.value, tc.redis)
+		if (err != nil) != tc.wantErr || (warning != "") != tc.warns {
+			t.Errorf("checkReplicas(%q, %v) = %q, %v", tc.value, tc.redis, warning, err)
+		}
+	}
+}

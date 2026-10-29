@@ -240,5 +240,18 @@
   "hosted.error.choose_organization": "Wähle eine Organisation aus.",
   "hosted.error.organization_chosen": "Du hast für diese Anmeldung bereits eine Organisation gewählt. Melde dich erneut an, um eine andere zu wählen.",
   "hosted.error.factor_required": "Bestätige zuerst deinen zweiten Faktor.",
-  "hosted.error.factor_not_allowed": "Deine Organisation erlaubt keinen zweiten Faktor, den du hinzufügen kannst. Wende dich an deine Administration."
+  "hosted.error.factor_not_allowed": "Deine Organisation erlaubt keinen zweiten Faktor, den du hinzufügen kannst. Wende dich an deine Administration.",
+  "hosted.client.title.pending": "Wartet auf Genehmigung",
+  "hosted.client.title.blocked": "Anwendung gesperrt",
+  "hosted.client.title.unavailable": "Anwendung nicht verfügbar",
+  "hosted.client.pending": "Ihre Anfrage wurde an die IT gesendet. Diese Anwendung kann Sie anmelden, sobald sie für diesen Server genehmigt ist. Versuchen Sie es später erneut.",
+  "hosted.client.blocked": "Die IT hat diese Anwendung für diesen Server gesperrt. Wenden Sie sich an Ihren Administrator.",
+  "hosted.client.backlog": "Zu viele Anwendungen warten auf Genehmigung bei diesem Server. Versuchen Sie es später erneut.",
+  "hosted.client.request_limit": "Sie haben zu viele Anfragen, die auf Genehmigung warten. Versuchen Sie es erneut, wenn die IT einige beantwortet hat.",
+  "hosted.client.registered_only": "Dieser Server akzeptiert nur registrierte Anwendungen. Bitten Sie Ihren Administrator, diese freizugeben.",
+  "hosted.client.disabled": "Diese Umgebung akzeptiert keine Anwendungen, die über eine Webadresse identifiziert werden. Wenden Sie sich an Ihren Administrator.",
+  "hosted.client.next_step": "Bitten Sie Ihre Administratorin oder Ihren Administrator um eine Client-ID, die aus einer Vorlage für diesen Server erstellt wurde, und tragen Sie sie in den Einstellungen der Anwendung ein (z. B. mit der Option --client-id).",
+  "hosted.client.host": "Anwendung unter",
+  "hosted.client.verified": "{name} (verifiziert)",
+  "hosted.client.unverified": "{name} (nicht verifiziert: die Anwendung benennt sich selbst)"
 }

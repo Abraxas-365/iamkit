@@ -276,6 +276,72 @@ func ValidateRedirects(values []string) error {
 	return nil
 }
 
+// ValidateClientRedirects checks the redirect URIs of a client IAMKit did
+// not register by hand (a Client ID Metadata Document, a preset template):
+// what ValidateRedirects accepts, plus private-use URI schemes for native
+// apps (RFC 8252 §7.1). It is the single validator for documents and
+// templates.
+//
+// A private scheme must be in reverse-DNS form, "com.example.app:/cb": it
+// contains a dot and every label is a valid DNS label. RFC 8252 §7.1 asks
+// for a scheme based on a domain name the app's author controls, which is
+// what makes a scheme claim attributable. Bare names ("cursor", "vscode")
+// are not accepted: anyone can register them on a device, and a list of
+// exceptions would make the validator depend on vendors' habits; clients
+// that use them publish a loopback or https redirect instead (the vscode
+// document does). Dangerous schemes (javascript, data, file, blob, about,
+// ws, wss, ftp) have no dot or are refused by name, and plain http is
+// accepted on loopback hosts only.
+func ValidateClientRedirects(values []string) error {
+	for _, v := range values {
+		if err := validateClientRedirect(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateClientRedirect(v string) error {
+	invalid := errx.Validation("redirect URIs must be https URLs, http on localhost, 127.0.0.1 or [::1], or a reverse-DNS private-use scheme such as com.example.app:/callback, without credentials, fragments or wildcards")
+	u, err := url.Parse(v)
+	if err != nil || u.User != nil || u.Fragment != "" || strings.Contains(v, "#") || strings.ContainsAny(v, "*\\ ") {
+		return invalid
+	}
+	switch u.Scheme {
+	case "https", "http":
+		return ValidateRedirects([]string{v})
+	}
+	if !PrivateUseScheme(u.Scheme) || u.Opaque != "" || (u.Host == "" && u.Path == "") {
+		return invalid
+	}
+	return nil
+}
+
+// PrivateUseScheme reports whether scheme is a reverse-DNS private-use URI
+// scheme (RFC 8252 §7.1): at least two dot-separated labels of lowercase
+// letters, digits and hyphens, each starting with a letter or digit.
+func PrivateUseScheme(scheme string) bool {
+	labels := strings.Split(scheme, ".")
+	if len(labels) < 2 || len(scheme) > 63 {
+		return false
+	}
+	switch strings.ToLower(labels[0]) {
+	case "javascript", "data", "file", "blob", "about", "vbscript":
+		return false
+	}
+	for _, l := range labels {
+		if l == "" || l[0] == '-' || l[len(l)-1] == '-' {
+			return false
+		}
+		for _, r := range l {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+				return false
+			}
+		}
+	}
+	return scheme[0] >= 'a' && scheme[0] <= 'z'
+}
+
 // ValidateHTTPS checks URLs IAMKit or a browser must reach over TLS
 // whatever the deployment (back-channel logout, SAML ACS): absolute https
 // URLs without credentials or fragments.

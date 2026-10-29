@@ -240,5 +240,18 @@
   "hosted.error.choose_organization": "Bir kuruluş seçin.",
   "hosted.error.organization_chosen": "Bu giriş için zaten bir kuruluş seçtiniz. Başka birini seçmek için tekrar giriş yapın.",
   "hosted.error.factor_required": "Önce ikinci faktörünüzü doğrulayın.",
-  "hosted.error.factor_not_allowed": "Kuruluşunuz ekleyebileceğiniz bir ikinci faktöre izin vermiyor. Yöneticinize başvurun."
+  "hosted.error.factor_not_allowed": "Kuruluşunuz ekleyebileceğiniz bir ikinci faktöre izin vermiyor. Yöneticinize başvurun.",
+  "hosted.client.title.pending": "Onay bekleniyor",
+  "hosted.client.title.blocked": "Uygulama engellendi",
+  "hosted.client.title.unavailable": "Uygulama kullanılamıyor",
+  "hosted.client.pending": "İsteğiniz BT'ye gönderildi. Bu uygulama, bu sunucu için onaylandığında oturum açmanızı sağlayabilir. Daha sonra tekrar deneyin.",
+  "hosted.client.blocked": "BT bu uygulamayı bu sunucu için engelledi. Yöneticinizle iletişime geçin.",
+  "hosted.client.backlog": "Bu sunucuda onay bekleyen çok fazla uygulama var. Daha sonra tekrar deneyin.",
+  "hosted.client.request_limit": "Onay bekleyen çok fazla talebiniz var. BT bunlardan bazılarını yanıtladığında tekrar deneyin.",
+  "hosted.client.registered_only": "Bu sunucu yalnızca kayıtlı uygulamaları kabul eder. Yöneticinizden bunu etkinleştirmesini isteyin.",
+  "hosted.client.disabled": "Bu ortam, web adresiyle tanımlanan uygulamaları kabul etmez. Yöneticinizle iletişime geçin.",
+  "hosted.client.next_step": "Yöneticinizden bu sunucu için bir şablondan oluşturulmuş bir istemci kimliği isteyin ve uygulamanın ayarlarına girin (örneğin --client-id seçeneğiyle).",
+  "hosted.client.host": "Uygulama adresi",
+  "hosted.client.verified": "{name} (doğrulandı)",
+  "hosted.client.unverified": "{name} (doğrulanmadı: uygulama kendi adını bildiriyor)"
 }

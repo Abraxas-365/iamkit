@@ -239,5 +239,18 @@
   "hosted.error.choose_organization": "組織を選択してください。",
   "hosted.error.organization_chosen": "このサインインでは既に組織を選択済みです。別の組織を選ぶにはもう一度サインインしてください。",
   "hosted.error.factor_required": "先に 2 つ目の要素を確認してください。",
-  "hosted.error.factor_not_allowed": "組織で追加可能な 2 つ目の要素が許可されていません。管理者にお問い合わせください。"
+  "hosted.error.factor_not_allowed": "組織で追加可能な 2 つ目の要素が許可されていません。管理者にお問い合わせください。",
+  "hosted.client.title.pending": "承認待ち",
+  "hosted.client.title.blocked": "アプリケーションはブロックされています",
+  "hosted.client.title.unavailable": "アプリケーションは利用できません",
+  "hosted.client.pending": "リクエストはIT部門に送信されました。このサーバーで承認されると、このアプリケーションでサインインできます。後でもう一度お試しください。",
+  "hosted.client.blocked": "IT部門がこのサーバーでのこのアプリケーションをブロックしました。管理者にお問い合わせください。",
+  "hosted.client.backlog": "このサーバーでは承認待ちのアプリケーションが多すぎます。後でもう一度お試しください。",
+  "hosted.client.request_limit": "承認待ちのリクエストが多すぎます。IT 部門がいくつか対応してから、もう一度お試しください。",
+  "hosted.client.registered_only": "このサーバーは登録済みのアプリケーションのみ受け付けます。管理者にこのアプリケーションの有効化を依頼してください。",
+  "hosted.client.disabled": "この環境では、Webアドレスで識別されるアプリケーションは受け付けられません。管理者にお問い合わせください。",
+  "hosted.client.next_step": "このサーバー用のテンプレートから作成したクライアント ID を管理者に依頼し、アプリの設定に入力してください（例: --client-id オプション）。",
+  "hosted.client.host": "アプリケーションのアドレス",
+  "hosted.client.verified": "{name}（検証済み）",
+  "hosted.client.unverified": "{name}（未検証：アプリケーションが自己申告した名前です）"
 }

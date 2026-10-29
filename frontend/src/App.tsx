@@ -7,6 +7,7 @@ import EntitiesPage from '@/pages/entities'
 import ActivityPage from '@/pages/activity'
 import LogoutDeliveriesPage from '@/pages/logout-deliveries'
 import WaitlistPage from '@/pages/waitlist'
+import McpClientsPage from '@/pages/mcp-clients'
 import WebhooksPage, { WebhookDetailPage } from '@/pages/webhooks'
 import { KeysPage, SettingsPage } from '@/pages/settings'
 import OperatorsPage from '@/pages/operators'
@@ -76,6 +77,7 @@ export default function App() {
         <Route path="federation" element={<FederationPage />} />
         <Route path="federation/:connectionId" element={<FederationDetailPage />} />
         <Route path="oauth-clients" element={<OAuthClientsPage />} />
+        <Route path="mcp-clients" element={<McpClientsPage />} />
         <Route path="oauth-clients/:clientId" element={<OAuthClientDetailPage />} />
         <Route path="provisioning" element={<ProvisioningPage />} />
         <Route path="notifications" element={<NotificationsPage />} />

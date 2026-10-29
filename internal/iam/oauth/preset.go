@@ -1,6 +1,9 @@
 package oauth
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 // Client presets for MCP clients (D19, D20, D21): known clients IT enables
 // in one click. A metadata-document preset adds the client's document URL
@@ -50,14 +53,24 @@ type Preset struct {
 var claudeRanges = []string{"160.79.104.0/21"}
 
 // presets is the catalog, in display order. Document URLs were checked
-// against the live documents (plan §14.1).
+// against the live documents (plan §14.1); template redirect URIs come from
+// each vendor's documentation, listed here so they can be re-checked:
+//   - cursor: https://cursor.com/docs/context/mcp (desktop listens on
+//     http://localhost:8787/callback; the web/cloud agents return to
+//     https://www.cursor.com/agents/mcp/oauth/callback).
+//   - antigravity: https://antigravity.google/docs/mcp
+//     (https://antigravity.google/oauth-callback).
+//   - gemini_cli: https://github.com/google-gemini/gemini-cli
+//     docs/tools/mcp-server.md (http://localhost:<random-port>/oauth/callback,
+//     hence loopback_any_port).
+//   - mcp_inspector: https://github.com/modelcontextprotocol/inspector.
 var presets = []Preset{
 	{Key: "claude_code", Name: "Claude Code", Mechanism: PresetMetadataDocument, MetadataURL: "https://claude.ai/oauth/claude-code-client-metadata", Network: NetworkLocal},
 	{Key: "claude", Name: "Claude (web and desktop)", Mechanism: PresetMetadataDocument, MetadataURL: "https://claude.ai/oauth/mcp-oauth-client-metadata", Network: NetworkPublic, SourceRanges: claudeRanges},
 	{Key: "chatgpt", Name: "ChatGPT", Mechanism: PresetMetadataDocument, MetadataURL: "https://chatgpt.com/oauth/client.json", Network: NetworkPublic, Notes: "Signs its token requests with private_key_jwt (keys at https://chatgpt.com/oauth/jwks.json)."},
 	{Key: "codex", Name: "Codex", Mechanism: PresetMetadataDocument, MetadataURL: "https://chatgpt.com/oauth/codex/client.json", Network: NetworkLocal},
 	{Key: "vscode", Name: "Visual Studio Code", Mechanism: PresetMetadataDocument, MetadataURL: "https://vscode.dev/oauth/client-metadata.json", Network: NetworkLocal},
-	{Key: "cursor", Name: "Cursor", Mechanism: PresetTemplate, Redirects: []string{"http://localhost:8787/callback"}, Network: NetworkLocal, Notes: "Give Cursor the client_id in its MCP configuration (auth.CLIENT_ID)."},
+	{Key: "cursor", Name: "Cursor", Mechanism: PresetTemplate, Redirects: []string{"http://localhost:8787/callback", "https://www.cursor.com/agents/mcp/oauth/callback"}, Network: NetworkLocal, Notes: "Give Cursor the client_id in its MCP configuration (auth.CLIENT_ID). Cursor on the desktop returns to localhost; Cursor's web and cloud agents return to cursor.com, so for those the MCP server and IAMKit must be reachable from the internet."},
 	{Key: "antigravity", Name: "Antigravity", Mechanism: PresetTemplate, Redirects: []string{"https://antigravity.google/oauth-callback"}, Network: NetworkLocal},
 	{Key: "gemini_cli", Name: "Gemini CLI", Mechanism: PresetTemplate, Redirects: []string{"http://localhost/oauth/callback"}, LoopbackAnyPort: true, Network: NetworkLocal, Notes: "Give Gemini CLI the client_id in its MCP server settings (oauth.clientId)."},
 	{Key: "mcp_inspector", Name: "MCP Inspector", Mechanism: PresetTemplate, Redirects: []string{"http://localhost:6274/oauth/callback", "http://localhost:6274/oauth/callback/debug"}, Network: NetworkLocal, DevelopmentOnly: true},
@@ -87,4 +100,29 @@ func FindPreset(key string) (Preset, bool) {
 		}
 	}
 	return Preset{}, false
+}
+
+// PresetForClient is the metadata-document preset whose document URL is
+// clientID: the only way IAMKit verifies who a document client is.
+func PresetForClient(clientID string) (Preset, bool) {
+	for _, p := range presets {
+		if p.Mechanism == PresetMetadataDocument && p.MetadataURL == clientID {
+			p.SourceRanges = slices.Clone(p.SourceRanges)
+			return p, true
+		}
+	}
+	return Preset{}, false
+}
+
+// Warnings are what to tell the operator who enables the preset (D20): a
+// client in its vendor's cloud needs a server reachable from the internet.
+func (p Preset) Warnings() []string {
+	if p.Network != NetworkPublic {
+		return []string{}
+	}
+	w := "This client connects from its vendor's cloud: the MCP server and IAMKit must be reachable from the internet, a server on-premises behind a VPN will not work."
+	if len(p.SourceRanges) > 0 {
+		w += " Source addresses: " + strings.Join(p.SourceRanges, ", ") + "."
+	}
+	return []string{w}
 }

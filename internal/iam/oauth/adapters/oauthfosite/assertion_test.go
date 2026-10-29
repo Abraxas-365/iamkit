@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/Abraxas-365/iamkit/internal/cache/cachememory"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/ory/fosite"
 )
@@ -73,5 +74,34 @@ func TestDigest(t *testing.T) {
 	}
 	if (digest{}).Compare(context.Background(), sum[:], []byte("other")) == nil || (digest{}).Compare(context.Background(), nil, []byte("")) == nil {
 		t.Fatal("wrong secret accepted")
+	}
+}
+
+// Replicas sharing a store share the refetch limit; without one every
+// caller may refetch (the per-process interval still applies in Resolve).
+func TestKeyFetcherThrottleIsShared(t *testing.T) {
+	ctx := context.Background()
+	store := cachememory.New()
+	a, b, alone := NewKeyFetcher(nil), NewKeyFetcher(nil), NewKeyFetcher(nil)
+	a.Throttle(store)
+	b.Throttle(store)
+	if !a.refetchClaimed(ctx, "https://x.example/jwks") || b.refetchClaimed(ctx, "https://x.example/jwks") || a.refetchClaimed(ctx, "https://x.example/jwks") {
+		t.Fatal("one claim per interval across replicas")
+	}
+	if !b.refetchClaimed(ctx, "https://y.example/jwks") {
+		t.Fatal("another location has its own claim")
+	}
+	if !alone.refetchClaimed(ctx, "https://x.example/jwks") || !alone.refetchClaimed(ctx, "https://x.example/jwks") {
+		t.Fatal("without a shared store the process interval decides")
+	}
+}
+
+// The jwks_uri transport dials directly and never through HTTP(S)_PROXY.
+func TestGuardedTransportIgnoresProxyEnvironment(t *testing.T) {
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:3128")
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:3128")
+	tr, ok := GuardedTransport().(*http.Transport)
+	if !ok || tr.Proxy != nil || tr.DialContext == nil {
+		t.Fatalf("transport %T: proxy %v", GuardedTransport(), ok && tr.Proxy != nil)
 	}
 }

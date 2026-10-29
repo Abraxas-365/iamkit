@@ -19,6 +19,9 @@ func (broken) Get(context.Context, string) ([]byte, bool, error) {
 func (broken) Set(context.Context, string, []byte, time.Duration) error {
 	return errors.New("down")
 }
+func (broken) SetNX(context.Context, string, []byte, time.Duration) (bool, error) {
+	return false, errors.New("down")
+}
 func (broken) Delete(context.Context, ...string) error { return errors.New("down") }
 
 type row struct {

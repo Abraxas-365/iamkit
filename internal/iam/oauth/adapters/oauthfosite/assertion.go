@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/Abraxas-365/iamkit/internal/cache"
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/netx"
@@ -113,6 +115,9 @@ type KeyFetcher struct {
 	client *http.Client
 	mu     sync.Mutex
 	sets   map[string]fetchedKeys
+	// throttle makes the refetch limit global: with a shared store one
+	// refetch per interval across the replicas (nil: per process).
+	throttle cache.Store
 }
 type fetchedKeys struct {
 	set     *jose.JSONWebKeySet
@@ -127,6 +132,22 @@ func NewKeyFetcher(transport http.RoundTripper) *KeyFetcher {
 	return &KeyFetcher{client: &http.Client{Transport: telemetry.Transport(transport), Timeout: config.ExternalHTTPTimeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, sets: map[string]fetchedKeys{}}
 }
 
+// Throttle shares the refetch limit through store (cache.Store.SetNX), so
+// replicas together refetch a key set at most once per
+// config.ClientJWKSRefreshInterval.
+func (f *KeyFetcher) Throttle(store cache.Store) { f.throttle = store }
+
+// refetchClaimed reports whether this caller may refetch location past the
+// per-process interval: always without a shared store or while it is down.
+func (f *KeyFetcher) refetchClaimed(ctx context.Context, location string) bool {
+	if f.throttle == nil {
+		return true
+	}
+	sum := sha256.Sum256([]byte(location))
+	claimed, err := f.throttle.SetNX(ctx, "oauthjwks:"+hex.EncodeToString(sum[:]), []byte("1"), config.ClientJWKSRefreshInterval)
+	return err != nil || claimed
+}
+
 // GuardedTransport dials only public addresses, ignoring proxies.
 func GuardedTransport() http.RoundTripper {
 	return &http.Transport{DialContext: netx.GuardedDialer().DialContext, TLSHandshakeTimeout: config.ExternalHTTPTimeout, ResponseHeaderTimeout: config.ExternalHTTPTimeout, IdleConnTimeout: 90 * time.Second, ForceAttemptHTTP2: true}
@@ -139,6 +160,9 @@ func (f *KeyFetcher) Resolve(ctx context.Context, location string, ignoreCache b
 	f.mu.Unlock()
 	age := time.Since(cached.fetched)
 	if ok && (age < config.ClientJWKSRefreshInterval || (!ignoreCache && age < config.ClientJWKSCacheTTL)) {
+		return cached.set, nil
+	}
+	if ok && ignoreCache && age < config.ClientJWKSCacheTTL && !f.refetchClaimed(ctx, location) {
 		return cached.set, nil
 	}
 	set, err := f.fetch(ctx, location)

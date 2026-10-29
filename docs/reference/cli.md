@@ -179,3 +179,33 @@ only the flags you pass: `--user-keys=false`, `--organization-keys=false`,
 `--max-per-organization N`. `iam resources api-key-permissions set` replaces the
 list of each of `--user` and `--organization` you pass (empty clears) and keeps
 the other. `--permission`, `--user` and `--organization` repeat or take commas.
+
+## MCP servers and their clients
+
+[Protect an MCP server](../guides/applications/protect-mcp-server.md): the
+protected resources and the clients named by metadata documents.
+
+```sh
+iam protected-resources list
+iam protected-resources update ID --allow-client-metadata --client-admission allowlist
+iam protected-resources impact ID                      # active sessions and external clients
+
+iam protected-resources clients list ID --admission pending
+iam protected-resources clients requests ID CLIENT     # who asked, and when
+iam protected-resources clients approve ID CLIENT --expires 2027-01-31
+iam protected-resources clients block ID CLIENT        # ends its sessions and grants
+iam protected-resources clients unblock ID CLIENT
+iam protected-resources clients forget ID CLIENT
+iam protected-resources clients from-template ID cursor   # also antigravity, gemini_cli
+
+iam client-allowlist add --origin https://tools.example.com --path-prefix /oauth/
+iam client-allowlist add --preset claude_code
+iam client-allowlist list
+iam client-allowlist remove ENTRY_ID
+iam client-presets list                                # network: public or local
+iam client-presets apply claude_code
+iam client-presets apply cursor --resource ID
+```
+
+`CLIENT` is the client's IAMKit ID (the `id` of `clients list`), not its
+`client_id` URL. Add `-o json` to any of them for raw JSON.

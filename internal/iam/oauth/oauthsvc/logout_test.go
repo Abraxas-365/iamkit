@@ -26,6 +26,9 @@ func (r *logoutRepository) Environment(_ context.Context, client identity.Client
 func (r *logoutRepository) FindActive(_ context.Context, _ identity.EnvironmentID, _ identity.ClientID) (*oauth.Client, error) {
 	return r.client, nil
 }
+func (r *logoutRepository) FindHolder(context.Context, identity.EnvironmentID, identity.ClientID) (*oauth.Client, error) {
+	return r.client, nil
+}
 func (r *logoutRepository) EndSession(_ context.Context, m oauth.Mutation, _ identity.UserID, _ identity.SessionID) (bool, error) {
 	r.ended = append(r.ended, m)
 	return true, nil

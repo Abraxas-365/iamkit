@@ -86,7 +86,9 @@ func (s *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oaut
 		}
 	}
 	m.Action, m.Target = oauth.ActionProtectedResourceUpdate, id.String()
-	return s.repository.SaveProtectedResource(ctx, m, next)
+	// next only validates: every check above is per field (idle ≤ max is a
+	// table constraint), so the repository writes input alone (N-9).
+	return s.repository.UpdateProtectedResource(ctx, m, id, input)
 }
 
 func (s *ProtectedResources) DeleteProtectedResource(ctx context.Context, m oauth.Mutation, id identity.ProtectedResourceID) error {

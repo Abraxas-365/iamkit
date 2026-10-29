@@ -103,7 +103,7 @@ func (h *Handler) deviceToken(c *fiber.Ctx, req *http.Request, rawID string) err
 	ar.GrantAudience(client.Audience)
 	out, err := p.NewAccessResponse(ctx, ar)
 	if err != nil {
-		p.WriteAccessError(ctx, w, ar, err)
+		p.WriteAccessError(ctx, w, ar, issueError(err))
 	} else {
 		p.WriteAccessResponse(ctx, w, ar, out)
 		h.issued(ctx, client)

@@ -8,7 +8,8 @@ Caddy](deployment.md#compose-with-tls) and the [Helm chart](deployment.md#kubern
 
 By default IAMKit takes the client address from the TCP connection, so behind
 a proxy every request seems to come from the proxy: per-IP rate limits are
-then shared by all clients, and request logs show the proxy. Set
+then shared by all clients (the hosted sign-in limits and the metadata
+document fetch budget of MCP clients too), and request logs show the proxy. Set
 `IAMKIT_TRUSTED_PROXIES` to the proxies' addresses (IPs or CIDRs,
 comma-separated):
 

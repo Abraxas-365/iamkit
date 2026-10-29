@@ -4,6 +4,76 @@ Changes that can affect existing deployments, newest first. Each entry lists
 its **incompatible changes** first: what behaved differently before, and what
 to do about it.
 
+## Unreleased — MCP authorization, phase (b): client admission
+
+### Incompatible changes
+
+- **Approving a document client needs `metadata_hash`.** `POST
+  …/protected-resources/:id/clients/:client/approve` (management and
+  `/api/v1`) now requires `metadata_hash`, the value `GET …/clients/:client`
+  (and the list) returns for the redirect URIs, `jwks_uri` and authentication
+  method you reviewed. Without it the answer is 400; if the document changed
+  since, 409 `CLIENT_METADATA_CHANGED` and nothing is approved. Callers send
+  the hash they read: `iamclient.ClientApproval.MetadataHash`,
+  `approveClient(…, {metadata_hash})`, `approve_client(…, metadata_hash=…)`,
+  `iam protected-resources clients approve --metadata-hash`. The console does
+  it itself.
+- **Discovery no longer always says `client_id_metadata_document_supported`.**
+  It is `true` only when the `client_metadata_documents` feature is on in
+  some environment that has an active protected resource allowing metadata
+  documents; otherwise `false`.
+- **Template and document redirect URIs follow RFC 8252.** A custom scheme
+  must be a reverse-domain private-use scheme (`com.example.app:/cb`); bare
+  schemes (`cursor:`) are refused. The `cursor`, `antigravity` and
+  `gemini_cli` templates use the redirects those tools actually send.
+- **Several replicas without Redis are refused when declared.** With
+  `IAMKIT_REPLICAS` above 1 and no `REDIS_URL` IAMKit does not start; the
+  Helm chart fails to render for `replicaCount` (or `autoscaling.maxReplicas`)
+  above 1 without `redis.existingSecret`. Set up Redis, or run one replica.
+
+- **Approvals by policy end with the policy, and turning documents off ends
+  them all.** Removing an allowlist entry or preset, or switching a server
+  from `open` to `allowlist`, returns the clients only that rule admitted to
+  pending and revokes their grants; turning `allow_client_metadata` or the
+  `client_metadata_documents` feature off stops every document client of the
+  server at once, manual approvals included (they return to pending,
+  `oauth_client.demoted`). Before, approvals outlived the rule that gave
+  them. Turning documents back on does not restore everything: turning
+  `allow_client_metadata` on again re-admits the waiting clients the
+  server's policy covers, while clients demoted when the feature went off
+  stay pending until IT approves them (or the policy is touched again).
+  Manual approvals are never restored. Removing an allowlist entry or preset
+  leaves manual approvals alone. New job `client_documents_reconcile`
+  (migration 022 adds the supporting indexes and
+  `oauth_client_access_requests.organization_id`).
+- **New 429 codes.** `CLIENT_ACCESS_REQUEST_LIMIT` (a user keeps 5 requests
+  for waiting clients, an organization 50, per 24 h) and
+  `CLIENT_METADATA_FETCH_BUDGET` (replaces the generic `TOO_MANY_REQUESTS`
+  for document fetches; adds a limit of 10 fetches a minute per client
+  address, so set `IAMKIT_TRUSTED_PROXIES` behind a proxy). Approved clients
+  whose host is down keep working from stored metadata for up to 48 hours.
+
+Clients named by a Client ID Metadata Document wait for IT before they can
+sign anyone in (migrations 020 and 021). See
+[Protect an MCP server](docs/guides/applications/protect-mcp-server.md#admit-clients-named-by-a-metadata-document).
+
+- **Deleting a protected resource now deletes its document clients** with
+  their grants, sessions and device codes (before, the grants blocked it).
+  `…/impact` adds `external_clients`.
+- **Blocking a client, or the end of its approval, stops its tokens at
+  once**: refresh, introspection and opaque tokens are refused, and the
+  sessions are revoked in the same transaction (blocking) or by the
+  `client_admission_expire` job.
+- **Console, CLI and SDKs manage admission.** The resource page lists the
+  clients (pending/approved/blocked) and the server's admission settings; the
+  environment has an *MCP client allowlist* page with the known-clients
+  gallery; `iam protected-resources clients`, `iam client-allowlist` and
+  `iam client-presets`, `iamclient`, `@iamkit/node` and `iamkit` expose the
+  same routes. Nothing changes for existing callers.
+- **Refused external clients get a hosted page**, never a redirect: pending,
+  blocked, too many waiting, registered clients only, documents disabled.
+  `Accept: application/json` still gets the error.
+
 ## Unreleased — MCP authorization, phase (a): protected resources
 
 IAMKit can act as the authorization server of remote MCP servers and other

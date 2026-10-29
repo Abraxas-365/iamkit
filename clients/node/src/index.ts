@@ -155,7 +155,18 @@ export {
 } from "./waitlist.js";
 export {
   ProtectedResourcesClient,
+  type Admission,
+  type AllowlistEntry,
+  type AllowlistEntryCreate,
+  type ClientAdmissionMode,
+  type ClientPreset,
+  type ExternalClient,
+  type ExternalClientAccessRequest,
+  type ProtectedResourcePage,
+  type PresetResult,
   type ProtectedResource,
+  type ProtectedResourceImpact,
+  type TemplateClient,
   type ProtectedResourceCreate,
   type ProtectedResourceList,
   type ProtectedResourcePolicy,

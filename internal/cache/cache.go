@@ -21,6 +21,11 @@ type Store interface {
 	Get(ctx context.Context, key string) (value []byte, found bool, err error)
 	// Set keeps value under key for ttl.
 	Set(ctx context.Context, key string, value []byte, ttl time.Duration) error
+	// SetNX keeps value under key for ttl only when key is absent or
+	// expired, and reports whether it did: one caller among all the
+	// replicas sharing the store wins. It is how a rate of work is
+	// throttled across replicas (at most one JWKS refetch a minute).
+	SetNX(ctx context.Context, key string, value []byte, ttl time.Duration) (stored bool, err error)
 	// Delete removes keys; absent keys are not an error.
 	Delete(ctx context.Context, keys ...string) error
 }

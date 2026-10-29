@@ -47,12 +47,41 @@ type Client struct {
 	ExternalID string
 	// Name is the document's client_name ("" for registered clients).
 	Name string
+	// ClientURI is the document's client_uri (https, "" for registered
+	// clients).
+	ClientURI string
+	// MetadataFetched is when the document this client holds was read
+	// (zero for registered clients).
+	MetadataFetched time.Time
+	// LogoURI is the document's logo_uri (https; shown only on the
+	// client_id's own host, LogoShown).
+	LogoURI string
 	// Admission and AdmissionExpiresAt gate an external client (Admitted).
 	Admission          string
 	AdmissionExpiresAt *time.Time
+	// Disabled is set at use when the client's protected resource no longer
+	// takes clients named by a metadata document (allow_client_metadata off,
+	// or the client_metadata_documents feature off in the environment):
+	// such a client holds no live token, whatever its row says (M-2).
+	Disabled bool
 	// LoopbackAnyPort lets registered http://localhost redirect URIs match
 	// on any port (external clients always may, RFC 8252 §7.3).
 	LoopbackAnyPort bool
+	// admitted is the loopback redirect URI AdmitRedirect added for the
+	// current request (not part of the stored or published document).
+	admitted string
+}
+
+// Document is the metadata document an external client was built from, as
+// resolved: RequestAccess persists a client not written yet from it without
+// reading the document again (M-5).
+//
+// It is the document as fetched: the loopback redirect URI of the current
+// request that AdmitRedirect added is not part of it, so a row written from
+// it (a request for access) never keeps a port the client did not publish.
+func (c Client) Document() ExternalClient {
+	redirects := slices.DeleteFunc(slices.Clone(c.Redirects), func(r string) bool { return c.admitted != "" && r == c.admitted })
+	return ExternalClient{ExternalID: c.ExternalID, Name: c.Name, ClientURI: c.ClientURI, LogoURI: c.LogoURI, Redirects: redirects, GrantTypes: slices.Clone(c.GrantTypes), Auth: c.Auth}
 }
 
 // External reports whether the client comes from a metadata document.

@@ -135,3 +135,53 @@ func TestExternalID(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateClientRedirects(t *testing.T) {
+	for _, ok := range []string{
+		"https://claude.ai/api/mcp/auth_callback",
+		"http://localhost:8787/callback", "http://127.0.0.1/callback", "http://[::1]:3000/cb",
+		"com.example.app:/oauth2redirect", "com.example.app://callback", "io.github.user-name.app:/cb?x=1",
+		"app.vscode:/cb",
+	} {
+		if err := ValidateClientRedirects([]string{ok}); err != nil {
+			t.Errorf("%q refused: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{
+		"", "/relative", "http://example.com/cb", "http://localhost.evil.com/cb", "http://192.168.0.1/cb",
+		"https://user:pw@example.com/cb", "https://example.com/cb#frag", "https://*.example.com/cb",
+		"javascript:alert(1)", "javascript.x:alert(1)", "data:text/html,x", "file:///etc/passwd", "blob:https://x.example/id",
+		"about:blank", "ws://localhost/cb", "wss://example.com/cb", "ftp://example.com/cb", "vbscript:x",
+		"cursor://callback", "vscode://x/cb", "myapp:/cb", "com.example.app:", "com.example.app:#frag",
+		"com.example.app:/cb#frag", "com.example.app://user@host/cb", "-com.example:/cb", "com..example:/cb",
+		"com.-example.app:/cb", "com.example.app:/c b",
+	} {
+		if err := ValidateClientRedirects([]string{bad}); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+	if err := ValidateClientRedirects(nil); err != nil {
+		t.Errorf("empty list: %v", err)
+	}
+}
+
+func TestDNSHost(t *testing.T) {
+	for raw, want := range map[string]string{
+		"Example.COM":           "example.com",
+		" claude.ai. ":          "claude.ai",
+		"BÜCHER.example":        "xn--bcher-kva.example",
+		"xn--bcher-kva.example": "xn--bcher-kva.example",
+		"localhost":             "localhost",
+		"a-b.c1.example":        "a-b.c1.example",
+	} {
+		if got, err := DNSHost(raw); err != nil || got != want {
+			t.Errorf("DNSHost(%q) = %q, %v; want %q", raw, got, err, want)
+		}
+	}
+	for _, raw := range []string{"", ".", "..", "a..b", "-a.example", "a-.example", "*.example.com", "exa mple.com", "1.2.3.4", "[::1]", "::1",
+		"under_score.example", "user@example.com", "https://example.com", "example.com/path", "example.com:443", strings.Repeat("a", 64) + ".example", strings.Repeat("a.", 130) + "com"} {
+		if got, err := DNSHost(raw); err == nil {
+			t.Errorf("DNSHost(%q) accepted as %q", raw, got)
+		}
+	}
+}
