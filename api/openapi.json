@@ -12340,6 +12340,13 @@
           },
           {
             "in": "query",
+            "name": "resource_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "search",
             "schema": {
               "type": "string"
@@ -38701,6 +38708,13 @@
             "name": "offset",
             "schema": {
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "resource_id",
+            "schema": {
+              "type": "string"
             }
           },
           {

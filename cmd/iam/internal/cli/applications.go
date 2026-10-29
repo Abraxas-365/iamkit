@@ -22,14 +22,14 @@ func applicationsCmd() *cobra.Command {
 
 func appsListCmd() *cobra.Command {
 	var limit, offset int
-	var search string
+	var search, resource string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List applications",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
 			p := newPrinter()
-			data, err := c.get(envPath() + "/applications" + listQuery(limit, offset, search))
+			data, err := c.get(envPath() + "/applications" + withQuery(listQuery(limit, offset, search), map[string]string{"resource_id": resource}))
 			if err != nil {
 				return err
 			}
@@ -50,6 +50,7 @@ func appsListCmd() *cobra.Command {
 	cmd.Flags().IntVar(&limit, "limit", 0, "Max results")
 	cmd.Flags().IntVar(&offset, "offset", 0, "Offset")
 	cmd.Flags().StringVar(&search, "search", "", "Search query")
+	cmd.Flags().StringVar(&resource, "resource", "", "Only applications linked to this resource ID")
 	return cmd
 }
 

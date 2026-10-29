@@ -136,6 +136,11 @@ func TestProtectedResources(t *testing.T) {
 		t.Fatalf("list: %v", list)
 	}
 	e.Must("POST", e.Base+"/protected-resources", e.Owner, fiber.Map{"application_id": e.Client, "resource_id": got["resource_id"], "name": "Again"}, 409)
+	// The console offers only applications linked to the resource.
+	if apps := e.Must("GET", e.Base+"/applications?resource_id="+got["resource_id"].(string), e.Owner, nil, 200).JSON; apps["page"].(map[string]any)["total"].(float64) != 1 || apps["items"].([]any)[0].(map[string]any)["id"] != e.Client {
+		t.Fatalf("applications of the resource: %v", apps)
+	}
+	e.Must("GET", e.Base+"/applications?resource_id=nope", e.Owner, nil, 400)
 	e.Must("POST", e.Base+"/protected-resources", e.Owner, fiber.Map{"application_id": e.Client, "resource_id": e.Res, "name": "Billing", "default_scopes": []string{"mcp:tools:read"}}, 400)
 	if res := e.Do("POST", e.Base+"/protected-resources", e.Owner, fiber.Map{"application_id": e.Client, "resource_id": e.IAMResource(), "name": "IAM"}); res.Status < 400 {
 		t.Fatalf("IAM resource protected: %d %s", res.Status, res.Body)

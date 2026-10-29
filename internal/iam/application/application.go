@@ -14,6 +14,12 @@ type Application struct {
 	Active    bool                   `json:"active"`
 }
 
+// Filter narrows List. Resource keeps the applications linked to that
+// resource (application_resources).
+type Filter struct {
+	Resource identity.ResourceID
+}
+
 type Create struct {
 	Name      string   `json:"name"`
 	Redirects []string `json:"redirect_uris"`

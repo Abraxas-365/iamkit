@@ -20,7 +20,7 @@ func (*repositoryStub) Create(context.Context, identity.EnvironmentID, identity.
 func (*repositoryStub) Find(context.Context, identity.EnvironmentID, identity.ApplicationID) (application.Application, error) {
 	return application.Application{}, nil
 }
-func (*repositoryStub) List(context.Context, identity.EnvironmentID, query.Pagination) (query.Paginated[application.Application], error) {
+func (*repositoryStub) List(context.Context, identity.EnvironmentID, application.Filter, query.Pagination) (query.Paginated[application.Application], error) {
 	return query.Paginated[application.Application]{}, nil
 }
 func (r *repositoryStub) Update(_ context.Context, _ application.Mutation, _ identity.ApplicationID, input application.Update) error {

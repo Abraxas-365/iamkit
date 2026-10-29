@@ -675,6 +675,12 @@ func (e Environment) Applications(ctx context.Context) ([]Application, error) {
 	return list[Application](e, ctx, "applications")
 }
 
+// ApplicationsOfResource lists the applications linked to a resource (the
+// ones a protected resource on it may name).
+func (e Environment) ApplicationsOfResource(ctx context.Context, resource string) ([]Application, error) {
+	return collect[Application](ctx, e.client, e.path("applications"), url.Values{"resource_id": {resource}})
+}
+
 func (e Environment) Application(ctx context.Context, id string) (Application, error) {
 	var out Application
 	err := e.operation(ctx, "GET", []string{"applications", id}, nil, &out)

@@ -9,6 +9,7 @@ import { rich, t } from '@/lib/i18n'
 import { ClientsSection } from './resource-clients'
 import { TemplateClientDialog, type ClientPreset } from './mcp-presets'
 import { useList } from '@/hooks/use-list'
+import { ProtectPrompt, type ProtectableResource } from './resource-protect'
 
 /** A protected resource (oauth.ProtectedResource): an OAuth resource server
  * such as a remote MCP server, one per resource. */
@@ -43,8 +44,10 @@ const days = (seconds: number) => t('{{count}} days', { count: Math.round(second
 /** ProtectedResourceSection shows the resource's protected resource (its MCP
  * server) and deactivates, reactivates or deletes it. Deactivating and
  * deleting end the sessions of its authorizations, so both first ask
- * …/impact and say how many. */
-export function ProtectedResourceSection({ base, resource, canWrite }: { base: string; resource: string; canWrite: boolean }) {
+ * …/impact and say how many. A resource without one offers to protect it
+ * (ProtectPrompt). */
+export function ProtectedResourceSection({ base, resource: target, canWrite }: { base: string; resource: ProtectableResource; canWrite: boolean }) {
+  const resource = target.id
   const [server, setServer] = useState<ProtectedResource | null | undefined>(undefined)
   const [error, setError] = useState('')
   const [ending, setEnding] = useState<{ action: 'deactivate' | 'delete'; sessions: number; clients: number } | null>(null)
@@ -59,7 +62,7 @@ export function ProtectedResourceSection({ base, resource, canWrite }: { base: s
       .catch(e => setError(message(e)))
   }, [base, resource])
   useEffect(load, [load])
-  if (server === null) return null
+  if (server === null) return canWrite ? <ProtectPrompt base={base} resource={target} onCreated={load} /> : null
   const title = t('MCP server')
   if (error) return <DetailSection title={title}><ErrorState error={error} retry={load} /></DetailSection>
   if (!server) return null

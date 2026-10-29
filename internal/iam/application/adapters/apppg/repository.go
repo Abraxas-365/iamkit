@@ -58,10 +58,15 @@ func (r *Repository) Find(ctx context.Context, environment identity.EnvironmentI
 	}
 	return row.toDomain(), failure(err)
 }
-func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, page query.Pagination) (query.Paginated[application.Application], error) {
+func (r *Repository) List(ctx context.Context, environment identity.EnvironmentID, filter application.Filter, page query.Pagination) (query.Paginated[application.Application], error) {
 	base := `FROM applications WHERE environment_id=$1`
 	args := []any{environment}
 	n := 1
+	if !filter.Resource.IsZero() {
+		n++
+		base += fmt.Sprintf(" AND id IN (SELECT application_id FROM application_resources WHERE environment_id=$1 AND resource_id=$%d)", n)
+		args = append(args, filter.Resource)
+	}
 	if like := query.EscapeLike(page.Search); like != "" {
 		n++
 		base += fmt.Sprintf(" AND name ILIKE $%d", n)

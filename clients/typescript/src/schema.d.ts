@@ -11305,6 +11305,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                resource_id?: string;
                 search?: string;
             };
             header?: never;
@@ -27770,6 +27771,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 offset?: number;
+                resource_id?: string;
                 search?: string;
             };
             header?: never;

@@ -39,7 +39,15 @@ func (h *Handler) Create(c *fiber.Ctx) error {
 	return c.Status(201).JSON(fiber.Map{"id": id})
 }
 func (h *Handler) List(c *fiber.Ctx) error {
-	out, err := h.queries.List(c.UserContext(), env(c), httpx.PaginationFromCtx(c))
+	var filter application.Filter
+	if raw := c.Query("resource_id"); raw != "" {
+		resource, err := identity.ParseResourceID(raw)
+		if err != nil {
+			return errx.Validation("invalid resource_id")
+		}
+		filter.Resource = resource
+	}
+	out, err := h.queries.List(c.UserContext(), env(c), filter, httpx.PaginationFromCtx(c))
 	if err != nil {
 		return err
 	}

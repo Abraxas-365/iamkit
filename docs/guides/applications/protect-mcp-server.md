@@ -60,6 +60,13 @@ curl -X POST "$IAMKIT_URL/management/v1/environments/$ENV/protected-resources" -
   -d "{\"application_id\":\"$APP\",\"resource_id\":\"$RESOURCE\",\"name\":\"Notes\",\"default_scopes\":[\"notes:read\"]}"
 ```
 
+In the console, open the resource and choose **Protect as MCP server** in its
+MCP server section. The dialog uses the resource's audience as the URL. It
+offers only the applications already linked to the resource
+(`GET …/applications?resource_id=<id>`; CLI `iam applications list --resource <id>`),
+and limits the lifetimes to the environment's ceilings. Link the application
+first, from the application's page.
+
 The resource's audience must already be canonical, and is the protected
 resource's `uri`:
 

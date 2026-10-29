@@ -3463,5 +3463,19 @@
   "{{count}} active sessions end now._one": "{{count}} sesión activa termina ahora.",
   "{{count}} active sessions end now._other": "{{count}} sesiones activas terminan ahora.",
   "{{count}} people must authorize this client again._one": "{{count}} persona debe autorizar este cliente de nuevo.",
-  "{{count}} people must authorize this client again._other": "{{count}} personas deben autorizar este cliente de nuevo."
+  "{{count}} people must authorize this client again._other": "{{count}} personas deben autorizar este cliente de nuevo.",
+  "An authorization unused this long ends.": "Una autorización sin uso durante este tiempo termina.",
+  "Granted when a client asks for no scope. Clients may still ask for any permission the user holds.": "Se otorgan cuando un cliente no pide ningún scope. Los clientes pueden pedir cualquier permiso que tenga el usuario.",
+  "Idle lifetime (days)": "Vida por inactividad (días)",
+  "It must be the exact URL the server answers at: https (http only on localhost), lowercase host, no query or fragment. A resource keeps its audience: for another URL, create a resource with it.": "Debe ser la URL exacta en la que responde el servidor: https (http solo en localhost), host en minúsculas, sin query ni fragmento. Un recurso conserva su audiencia: para otra URL, crea un recurso con ella.",
+  "Its URL is the resource audience: MCP clients ask for tokens with it, and only the clients of the application you choose can use it until you allow others.": "Su URL es la audiencia del recurso: los clientes MCP piden tokens con ella, y solo los clientes de la aplicación que elijas pueden usarlo hasta que permitas otros.",
+  "MCP server created": "Servidor MCP creado",
+  "No application uses this resource yet. Link it to one in {{link}} first.": "Ninguna aplicación usa este recurso todavía. Vincúlalo primero a una en {{link}}.",
+  "Protect": "Proteger",
+  "Protect as MCP server": "Proteger como servidor MCP",
+  "Protect this resource as an OAuth resource server (RFC 9728), such as a remote MCP server. Clients like Claude Code, Codex or VS Code then get tokens for its URL with the resource parameter.": "Protege este recurso como servidor de recursos OAuth (RFC 9728), por ejemplo un servidor MCP remoto. Clientes como Claude Code, Codex o VS Code obtienen entonces tokens para su URL con el parámetro resource.",
+  "This resource has no permissions.": "Este recurso no tiene permisos.",
+  "This resource is not an MCP server.": "Este recurso no es un servidor MCP.",
+  "Users authorize again after this, however active.": "Pasado este tiempo los usuarios autorizan de nuevo, aunque sigan activos.",
+  "Users see it when they authorize a client.": "Los usuarios lo ven al autorizar un cliente."
 }

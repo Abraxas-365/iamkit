@@ -168,7 +168,7 @@ export default function ResourceDetailPage() {
 
     <ApiKeyAllowlist base={base} resource={resource} canWrite={canWrite} system={system} onSaved={load} />
 
-    {!system && <ProtectedResourceSection base={base} resource={resource.id} canWrite={canWrite} />}
+    {!system && <ProtectedResourceSection base={base} resource={resource} canWrite={canWrite} />}
 
     {!system && <HistorySection path={`${base}/resources/${resource.id}`} refresh={resource} />}
 
