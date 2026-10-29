@@ -391,6 +391,13 @@ type ExternalClientView struct {
 	CreatedAt    time.Time  `json:"created_at"`
 }
 
+// ExternalClientImpact is what blocking or forgetting one external client
+// would end on its server: its live sessions and the people they belong to.
+type ExternalClientImpact struct {
+	ActiveSessions int `json:"active_sessions"`
+	Users          int `json:"users"`
+}
+
 // ExternalClientFilter narrows the list of a protected resource's external
 // clients ("" admission: all).
 type ExternalClientFilter struct {

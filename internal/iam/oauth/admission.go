@@ -237,6 +237,9 @@ type AdmissionQueries interface {
 	ListExternalClients(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, filter ExternalClientFilter, page query.Pagination) (query.Paginated[ExternalClientView], error)
 	FindExternalClient(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID) (ExternalClientView, error)
 	ListAccessRequests(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID, page query.Pagination) (query.Paginated[AccessRequestView], error)
+	// ExternalClientImpact counts what blocking or forgetting the client
+	// would end (live sessions, their people).
+	ExternalClientImpact(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID) (ExternalClientImpact, error)
 	// ListAllowlist lists the environment's entries; protected, when set,
 	// narrows them to those that apply to that server.
 	ListAllowlist(ctx context.Context, environment identity.EnvironmentID, protected *identity.ProtectedResourceID, page query.Pagination) (query.Paginated[AllowlistEntry], error)
@@ -251,6 +254,7 @@ type AdmissionRepository interface {
 	ListExternalClients(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, filter ExternalClientFilter, page query.Pagination) (query.Paginated[ExternalClientView], error)
 	FindExternalClient(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID) (ExternalClientView, error)
 	ListAccessRequests(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID, page query.Pagination) (query.Paginated[AccessRequestView], error)
+	ExternalClientImpact(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID) (ExternalClientImpact, error)
 	ApproveClient(ctx context.Context, m Mutation, protected identity.ProtectedResourceID, client identity.ClientID, input Approval) error
 	// BlockClient, UnblockClient and ForgetClient write their audit event
 	// in the same transaction as the change and the revocation.

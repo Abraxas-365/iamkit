@@ -162,6 +162,7 @@ export {
   type ClientPreset,
   type ExternalClient,
   type ExternalClientAccessRequest,
+  type ExternalClientImpact,
   type ProtectedResourcePage,
   type PresetResult,
   type ProtectedResource,

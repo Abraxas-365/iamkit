@@ -198,6 +198,23 @@ func (e Environment) ExternalClient(ctx context.Context, protectedResource, clie
 	return out, err
 }
 
+// ExternalClientImpact is what blocking or forgetting one external client
+// would end on its server.
+type ExternalClientImpact struct {
+	// ActiveSessions are the client's live sessions with the server.
+	ActiveSessions int `json:"active_sessions"`
+	// Users are the people those sessions belong to.
+	Users int `json:"users"`
+}
+
+// ExternalClientImpact counts what blocking or forgetting the client would
+// end, so a confirmation can say how many.
+func (e Environment) ExternalClientImpact(ctx context.Context, protectedResource, client string) (ExternalClientImpact, error) {
+	var out ExternalClientImpact
+	err := e.operation(ctx, "GET", []string{"protected-resources", protectedResource, "clients", client, "impact"}, nil, &out)
+	return out, err
+}
+
 // ExternalClientAccessRequests reads who asked for a client, newest first.
 func (e Environment) ExternalClientAccessRequests(ctx context.Context, protectedResource, client string, page Page) (ExternalClientAccessRequestList, error) {
 	var out ExternalClientAccessRequestList

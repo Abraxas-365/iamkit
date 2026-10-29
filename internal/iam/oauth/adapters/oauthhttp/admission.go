@@ -35,6 +35,7 @@ func (h *Admissions) ResourceRoutes(r fiber.Router) {
 	r.Get("/:id/clients", h.listClients)
 	r.Get("/:id/clients/:client", h.findClient)
 	r.Get("/:id/clients/:client/requests", h.requests)
+	r.Get("/:id/clients/:client/impact", h.impact)
 	r.Post("/:id/clients/:client/approve", h.approve)
 	r.Post("/:id/clients/:client/block", h.block)
 	r.Post("/:id/clients/:client/unblock", h.unblock)
@@ -96,6 +97,24 @@ func (h *Admissions) findClient(c *fiber.Ctx) error {
 		return err
 	}
 	out, err := h.queries.FindExternalClient(c.UserContext(), env(c), id, client)
+	if err != nil {
+		return err
+	}
+	return c.JSON(out)
+}
+
+// impact returns the live sessions, and their people, that blocking or
+// forgetting the client would end.
+func (h *Admissions) impact(c *fiber.Ctx) error {
+	id, err := protectedID(c)
+	if err != nil {
+		return err
+	}
+	client, err := clientParam(c)
+	if err != nil {
+		return err
+	}
+	out, err := h.queries.ExternalClientImpact(c.UserContext(), env(c), id, client)
 	if err != nil {
 		return err
 	}

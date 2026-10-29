@@ -191,6 +191,7 @@ iam protected-resources update ID --allow-client-metadata --client-admission all
 iam protected-resources impact ID                      # active sessions and external clients
 
 iam protected-resources clients list ID --admission pending
+iam protected-resources clients impact ID CLIENT       # live sessions and people a block ends
 iam protected-resources clients requests ID CLIENT     # who asked, and when
 iam protected-resources clients approve ID CLIENT --expires 2027-01-31
 iam protected-resources clients block ID CLIENT        # ends its sessions and grants

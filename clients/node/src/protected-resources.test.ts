@@ -29,6 +29,7 @@ describe("ProtectedResourcesClient", () => {
     const { fetch, calls } = fakeFetch((call) => {
       const path = new URL(call.url).pathname;
       if (call.method === "DELETE") return { status: 204, body: undefined };
+      if (path.endsWith("/clients/c1/impact")) return { body: { active_sessions: 4, users: 3 } };
       if (path.endsWith("/impact")) return { body: { active_sessions: 3, external_clients: 2 } };
       if (path.endsWith("/oauth-client-presets") && call.method === "GET") return { body: { items: null } };
       if (path.endsWith("/clients")) return { body: { items: null, page: { total: 0, limit: 50, offset: 0 } } };
@@ -38,6 +39,7 @@ describe("ProtectedResourcesClient", () => {
     expect(await client.impact("e1", "p1")).toEqual({ active_sessions: 3, external_clients: 2 });
     expect((await client.clients("e1", "p1", { admission: "pending", limit: 20 })).items).toEqual([]);
     await client.client("e1", "p1", "c1");
+    expect(await client.clientImpact("e1", "p1", "c1")).toEqual({ active_sessions: 4, users: 3 });
     await client.approveClient("e1", "p1", "c1", { metadata_hash: "h1", expires_at: "2027-01-01T00:00:00Z" });
     await client.blockClient("e1", "p1", "c1");
     await client.unblockClient("e1", "p1", "c1");
@@ -52,6 +54,7 @@ describe("ProtectedResourcesClient", () => {
       "GET /api/v1/environments/e1/protected-resources/p1/impact",
       "GET /api/v1/environments/e1/protected-resources/p1/clients",
       "GET /api/v1/environments/e1/protected-resources/p1/clients/c1",
+      "GET /api/v1/environments/e1/protected-resources/p1/clients/c1/impact",
       "POST /api/v1/environments/e1/protected-resources/p1/clients/c1/approve",
       "POST /api/v1/environments/e1/protected-resources/p1/clients/c1/block",
       "POST /api/v1/environments/e1/protected-resources/p1/clients/c1/unblock",
@@ -66,11 +69,12 @@ describe("ProtectedResourcesClient", () => {
     const query = new URL(calls[1].url).searchParams;
     expect(query.get("admission")).toBe("pending");
     expect(query.get("limit")).toBe("20");
-    expect(JSON.parse(calls[3].body)).toEqual({ metadata_hash: "h1", expires_at: "2027-01-01T00:00:00Z" });
-    expect(JSON.parse(calls[7].body)).toEqual({ preset: "gemini_cli" });
-    expect(JSON.parse(calls[8].body)).toEqual({ origin: "https://tools.example", path_prefix: "/oauth" });
-    expect(JSON.parse(calls[12].body)).toEqual({ allow_client_metadata: true, client_admission: "open" });
+    expect(JSON.parse(calls[4].body)).toEqual({ metadata_hash: "h1", expires_at: "2027-01-01T00:00:00Z" });
+    expect(JSON.parse(calls[8].body)).toEqual({ preset: "gemini_cli" });
+    expect(JSON.parse(calls[9].body)).toEqual({ origin: "https://tools.example", path_prefix: "/oauth" });
+    expect(JSON.parse(calls[13].body)).toEqual({ allow_client_metadata: true, client_admission: "open" });
     await expect(client.approveClient("e1", "p1", "a/b", { metadata_hash: "h1" })).rejects.toThrow();
+    await expect(client.clientImpact("e1", "p1", "../c")).rejects.toThrow();
     await expect(client.deleteAllowlistEntry("e1", "..")).rejects.toThrow();
   });
 });

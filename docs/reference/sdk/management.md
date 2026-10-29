@@ -154,7 +154,8 @@ Protected resources ([protect an MCP server](../../guides/applications/protect-m
 `ProtectedResourceImpact` (active sessions and `ExternalClients`),
 `ProtectedResourcePolicy` and `SetProtectedResourcePolicy`. Clients named by a
 metadata document: `ExternalClients(ctx, resource, admission, Page)`,
-`ExternalClient`, `ExternalClientAccessRequests`, `ApproveExternalClient(…,
+`ExternalClient`, `ExternalClientImpact` (live sessions and `Users` a block or
+forget would end), `ExternalClientAccessRequests`, `ApproveExternalClient(…,
 ClientApproval{ExpiresAt})`, `BlockExternalClient`, `UnblockExternalClient`,
 `ForgetExternalClient` and `CreateClientFromTemplate(ctx, resource, preset)`;
 for the environment, `OAuthClientAllowlist`, `CreateOAuthClientAllowlistEntry`,

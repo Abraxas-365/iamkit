@@ -130,6 +130,27 @@ func (r *Admission) FindExternalClient(ctx context.Context, environment identity
 	return row.domain(), failure(err)
 }
 
+// ExternalClientImpact counts the sessions revokeClients would end that are
+// still live, and their people.
+func (r *Admission) ExternalClientImpact(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID) (oauth.ExternalClientImpact, error) {
+	var out struct {
+		Found    bool `db:"found"`
+		Sessions int  `db:"sessions"`
+		Users    int  `db:"users"`
+	}
+	err := r.db.GetContext(ctx, &out, `SELECT EXISTS(SELECT 1 FROM oauth_clients WHERE id=$3 AND environment_id=$1 AND protected_resource_id=$2 AND source='cimd') AS found,
+		count(s.id) AS sessions, count(DISTINCT s.user_id) AS users
+		FROM sessions s WHERE s.environment_id=$1 AND s.oauth_client_id=$3 AND s.revoked_at IS NULL AND s.expires_at>now()
+		AND EXISTS(SELECT 1 FROM oauth_clients WHERE id=$3 AND environment_id=$1 AND protected_resource_id=$2 AND source='cimd')`, environment, protected, client)
+	if err != nil {
+		return oauth.ExternalClientImpact{}, failure(err)
+	}
+	if !out.Found {
+		return oauth.ExternalClientImpact{}, errx.NotFound("client not found")
+	}
+	return oauth.ExternalClientImpact{ActiveSessions: out.Sessions, Users: out.Users}, nil
+}
+
 func (r *Admission) ListAccessRequests(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID, page query.Pagination) (query.Paginated[oauth.AccessRequestView], error) {
 	var found bool
 	if err := r.db.GetContext(ctx, &found, `SELECT EXISTS(SELECT 1 FROM oauth_clients WHERE id=$3 AND environment_id=$1 AND protected_resource_id=$2)`, environment, protected, client); err != nil {

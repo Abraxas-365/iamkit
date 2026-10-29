@@ -3362,6 +3362,21 @@
         },
         "type": "object"
       },
+      "ExternalClientImpact": {
+        "properties": {
+          "active_sessions": {
+            "type": "integer"
+          },
+          "users": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active_sessions",
+          "users"
+        ],
+        "type": "object"
+      },
       "ExternalClientView": {
         "properties": {
           "access_requests": {
@@ -25948,6 +25963,79 @@
             "accessToken": []
           }
         ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/impact": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientImpact"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "impact returns the live sessions, and their people, that blocking or forgetting the client would end.",
         "tags": [
           "Scoped API"
         ]
@@ -52278,6 +52366,82 @@
             "operatorSession": []
           }
         ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/impact": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalClientImpact"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "impact returns the live sessions, and their people, that blocking or forgetting the client would end.",
         "tags": [
           "Management API"
         ]

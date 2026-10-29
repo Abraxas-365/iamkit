@@ -28,6 +28,10 @@ func TestProtectedResourceClients(t *testing.T) {
 	if err != nil || len(seen) != 2 || seen[0].Method != "GET" || !reflect.DeepEqual(seen[1].Body, map[string]any{"metadata_hash": "h2"}) || !strings.Contains(stderr, "http://localhost/cb") || !strings.Contains(stderr, "h2") {
 		t.Fatalf("approve without a hash: %v %q %+v", err, stderr, seen)
 	}
+	out, _, seen, err = runCLI(t, ok(200, `{"active_sessions":4,"users":3}`), "protected-resources", "clients", "impact", "p1", "c1")
+	if err != nil || seen[0].Method != "GET" || seen[0].Path != base+"/protected-resources/p1/clients/c1/impact" || !strings.Contains(out, "4") {
+		t.Fatalf("impact: %v %s %+v", err, out, seen)
+	}
 	for _, verb := range []string{"block", "unblock"} {
 		_, _, seen, err = runCLI(t, ok(200, `{"id":"c1"}`), "protected-resources", "clients", verb, "p1", "c1")
 		if err != nil || seen[0].Method != "POST" || seen[0].Path != base+"/protected-resources/p1/clients/c1/"+verb {

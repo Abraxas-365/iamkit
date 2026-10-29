@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 )
 
 const (
@@ -191,7 +192,16 @@ func TestAdmissionManagement(t *testing.T) {
 	if res := e.Do("GET", "/oauth/userinfo", access, nil); res.Status != 200 {
 		t.Fatalf("userinfo before block: %d %s", res.Status, res.Body)
 	}
+	// The impact counts what the block ends: the live sessions, their people.
+	live := e.count(`SELECT count(*) FROM sessions WHERE oauth_client_id=$1 AND revoked_at IS NULL AND expires_at>now()`, rowID)
+	if impact := e.Must("GET", base+"/clients/"+rowID+"/impact", e.Owner, nil, 200).JSON; live < 1 || impact["active_sessions"] != float64(live) || impact["users"] != float64(1) {
+		t.Fatalf("client impact = %v, live sessions %d", impact, live)
+	}
+	e.Must("GET", base+"/clients/"+uuid.NewString()+"/impact", e.Owner, nil, 404)
 	e.Must("POST", base+"/clients/"+rowID+"/block", e.Owner, nil, 200)
+	if impact := e.Must("GET", base+"/clients/"+rowID+"/impact", e.Owner, nil, 200).JSON; impact["active_sessions"] != float64(0) || impact["users"] != float64(0) {
+		t.Fatalf("client impact after block = %v", impact)
+	}
 	if status, out, _ := e.tokenCall(refreshForm(claudeCodeID, tokens["refresh_token"].(string)), ""); status != 400 || out["error"] != "invalid_grant" {
 		t.Fatalf("refresh after block: %d %v", status, out)
 	}

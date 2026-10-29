@@ -64,6 +64,8 @@ def test_external_clients_allowlist_and_presets(iam: IAMKit) -> None:
     assert iam.protected_resources.client("p1", "c1")["id"] == "c1"
     respx.get(f"{P}/p1/clients/c1/requests").respond(200, json={"items": [], "page": {"total": 0}})
     assert iam.protected_resources.client_requests("p1", "c1")["items"] == []
+    respx.get(f"{P}/p1/clients/c1/impact").respond(200, json={"active_sessions": 4, "users": 3})
+    assert iam.protected_resources.client_impact("p1", "c1") == {"active_sessions": 4, "users": 3}
 
     approve = respx.post(f"{P}/p1/clients/c1/approve").respond(200, json={"admission": "approved"})
     iam.protected_resources.approve_client("p1", "c1", metadata_hash="h1", expires_at="2027-01-01T00:00:00Z")

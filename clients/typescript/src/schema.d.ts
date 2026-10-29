@@ -2087,6 +2087,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** impact returns the live sessions, and their people, that blocking or forgetting the client would end. */
+        get: operations["getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/requests": {
         parameters: {
             query?: never;
@@ -6034,6 +6051,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** impact returns the live sessions, and their people, that blocking or forgetting the client would end. */
+        get: operations["getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/requests": {
         parameters: {
             query?: never;
@@ -8677,6 +8711,10 @@ export interface components {
         };
         ExecutionSetInput: {
             targets?: string[] | null;
+        };
+        ExternalClientImpact: {
+            active_sessions: number;
+            users: number;
         };
         ExternalClientView: {
             access_requests: number;
@@ -19507,6 +19545,49 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientImpact"];
+                };
             };
             /** @description Client error */
             "4XX": {
@@ -35810,6 +35891,49 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalClientImpact"];
+                };
             };
             /** @description Client error */
             "4XX": {

@@ -68,6 +68,14 @@ export interface ExternalClient {
   created_at: string;
 }
 
+/** What blocking or forgetting one external client would end on its server. */
+export interface ExternalClientImpact {
+  /** The client's live sessions with the server. */
+  active_sessions: number;
+  /** The people those sessions belong to. */
+  users: number;
+}
+
 export interface ExternalClientAccessRequest {
   user_id: string;
   email: string;
@@ -221,6 +229,11 @@ export class ProtectedResourcesClient {
 
   async client(environmentId: string, id: string, client: string): Promise<ExternalClient> {
     return this.call("GET", clientPath(environmentId, id, client));
+  }
+
+  /** Counts what blocking or forgetting the client would end, so a confirmation can say how many. */
+  async clientImpact(environmentId: string, id: string, client: string): Promise<ExternalClientImpact> {
+    return this.call("GET", `${clientPath(environmentId, id, client)}/impact`);
   }
 
   /** Who asked for a client, newest first. */

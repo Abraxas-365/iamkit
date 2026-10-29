@@ -209,7 +209,7 @@ func prClientsCmd() *cobra.Command {
 		Use:   "clients",
 		Short: "Review the clients named by metadata documents (pending, approved, blocked)",
 	}
-	cmd.AddCommand(prClientsListCmd(), prClientsGetCmd(), prClientsRequestsCmd(), prClientsApproveCmd(),
+	cmd.AddCommand(prClientsListCmd(), prClientsGetCmd(), prClientsImpactCmd(), prClientsRequestsCmd(), prClientsApproveCmd(),
 		prClientsDecisionCmd("block", "Block a client and end its sessions and grants"),
 		prClientsDecisionCmd("unblock", "Return a blocked client to pending"),
 		prClientsForgetCmd(), prClientsFromTemplateCmd())
@@ -263,6 +263,22 @@ func prClientsGetCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			data, err := mustClient(cmd).get(prClientPath(args[0], args[1]))
+			if err != nil {
+				return err
+			}
+			newPrinter().detail(data)
+			return nil
+		},
+	}
+}
+
+func prClientsImpactCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "impact RESOURCE_ID CLIENT",
+		Short: "Count the live sessions (and people) blocking or forgetting a client would end",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			data, err := mustClient(cmd).get(prClientPath(args[0], args[1]) + "/impact")
 			if err != nil {
 				return err
 			}

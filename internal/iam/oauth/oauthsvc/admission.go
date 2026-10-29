@@ -226,6 +226,10 @@ func (s *Admissions) ListAccessRequests(ctx context.Context, environment identit
 	return s.repository.ListAccessRequests(ctx, environment, protected, client, page)
 }
 
+func (s *Admissions) ExternalClientImpact(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID) (oauth.ExternalClientImpact, error) {
+	return s.repository.ExternalClientImpact(ctx, environment, protected, client)
+}
+
 func (s *Admissions) ListAllowlist(ctx context.Context, environment identity.EnvironmentID, protected *identity.ProtectedResourceID, page query.Pagination) (query.Paginated[oauth.AllowlistEntry], error) {
 	return s.repository.ListAllowlist(ctx, environment, protected, page)
 }

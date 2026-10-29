@@ -59,6 +59,8 @@ func TestExternalClients(t *testing.T) {
 			w.Write([]byte(`{"preset":"claude_code","mechanism":"metadata_document","allowlist_entry":{"id":"e2"}}`))
 		case "GET " + base + "protected-resources/p1/impact":
 			w.Write([]byte(`{"active_sessions":3,"external_clients":2}`))
+		case "GET " + base + "protected-resources/p1/clients/c1/impact":
+			w.Write([]byte(`{"active_sessions":4,"users":3}`))
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
@@ -108,10 +110,13 @@ func TestExternalClients(t *testing.T) {
 	if impact, err := env.ProtectedResourceImpact(ctx, "p1"); err != nil || impact.ActiveSessions != 3 || impact.ExternalClients != 2 {
 		t.Fatalf("impact = %+v %v", impact, err)
 	}
+	if impact, err := env.ExternalClientImpact(ctx, "p1", "c1"); err != nil || impact.ActiveSessions != 4 || impact.Users != 3 {
+		t.Fatalf("client impact = %+v %v", impact, err)
+	}
 	if seen[0] != "GET "+base+"protected-resources/p1/clients?admission=pending&limit=10" {
 		t.Errorf("first request = %q", seen[0])
 	}
-	if len(seen) != 13 {
+	if len(seen) != 14 {
 		t.Fatalf("requests = %d %v", len(seen), seen)
 	}
 	for _, bad := range []func() error{
@@ -119,6 +124,7 @@ func TestExternalClients(t *testing.T) {
 		func() error { _, err := env.ApproveExternalClient(ctx, "p1", "a/b", ClientApproval{}); return err },
 		func() error { return env.DeleteOAuthClientAllowlistEntry(ctx, "..") },
 		func() error { _, err := env.ProtectedResourceImpact(ctx, "x?y"); return err },
+		func() error { _, err := env.ExternalClientImpact(ctx, "p1", "../c"); return err },
 	} {
 		if bad() == nil {
 			t.Error("unsafe id accepted")

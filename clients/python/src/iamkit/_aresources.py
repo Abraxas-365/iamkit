@@ -800,6 +800,11 @@ class ProtectedResources(_Resource):
         path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}"
         return await self._c.request("GET", path)  # type: ignore[no-any-return]
 
+    async def client_impact(self, protected_id: str, client_id: str) -> JSON:
+        """Counts what blocking or forgetting a client would end: ``active_sessions`` and ``users``."""
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}/impact"
+        return await self._c.request("GET", path)  # type: ignore[no-any-return]
+
     async def client_requests(
         self, protected_id: str, client_id: str, *, limit: int | None = None, offset: int | None = None
     ) -> JSON:

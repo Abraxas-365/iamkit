@@ -129,6 +129,14 @@ function RequestsDialog({ path, client, onClose }: { path: string; client: Exter
   </DialogContent></Dialog>
 }
 
+/** ClientImpact is what blocking or deleting a client ends (…/clients/:id/impact). */
+type ClientImpact = { active_sessions: number; users: number }
+
+/** impactText says how many sessions, of how many people, a block or delete ends. */
+const impactText = (i: ClientImpact) => i.active_sessions === 0
+  ? t('No session of this client is active right now.')
+  : t('{{count}} active sessions end now.', { count: i.active_sessions }) + ' ' + t('{{count}} people must authorize this client again.', { count: i.users })
+
 /** ClientsSection lists the external clients of an MCP server by admission
  * state and lets operators approve, block, unblock or forget them. Blocking
  * and forgetting end the client's sessions (the backend does it in the same
@@ -139,8 +147,7 @@ export function ClientsSection({ path, canWrite, refresh }: { path: string; canW
   const list = usePaginatedList<ExternalClient>(`${path}/clients`, { extraParams })
   const [counts, setCounts] = useState<Partial<Record<Admission, number>>>({})
   const [approving, setApproving] = useState<ExternalClient | null>(null)
-  const [blocking, setBlocking] = useState<ExternalClient | null>(null)
-  const [forgetting, setForgetting] = useState<ExternalClient | null>(null)
+  const [ending, setEnding] = useState<{ client: ExternalClient; action: 'block' | 'delete'; impact: ClientImpact } | null>(null)
   const [requests, setRequests] = useState<ExternalClient | null>(null)
   const [busy, setBusy] = useState('')
   const { reload } = list
@@ -155,6 +162,11 @@ export function ClientsSection({ path, canWrite, refresh }: { path: string; canW
     return () => { live = false }
   }, [path, version, refresh])
   const changed = () => { reload(); setVersion(v => v + 1) }
+  // Blocking and deleting end the client's sessions: ask …/impact first and say how many.
+  const ask = async (client: ExternalClient, action: 'block' | 'delete') => {
+    setBusy(client.id)
+    try { setEnding({ client, action, impact: await api.get<ClientImpact>(`${path}/clients/${client.id}/impact`) }) } catch (e) { toast.error(message(e)) } finally { setBusy('') }
+  }
   const act = async (client: ExternalClient, verb: 'unblock', done: string) => {
     setBusy(client.id)
     try { await api.post(`${path}/clients/${client.id}/${verb}`); toast.success(done); changed() } catch (e) { toast.error(message(e)) } finally { setBusy('') }
@@ -182,9 +194,9 @@ export function ClientsSection({ path, canWrite, refresh }: { path: string; canW
         ...(canWrite ? [<RowActions label={t('Actions for {{host}}', { host: hostOf(c) })} actions={[
           ...(c.admission !== 'approved' && c.admission !== 'blocked' ? [{ label: t('Approve'), icon: <Check />, disabled: busy === c.id, onSelect: () => setApproving(c) }] : []),
           ...(c.admission === 'approved' ? [{ label: t('Change expiry'), icon: <Check />, disabled: busy === c.id, onSelect: () => setApproving(c) }] : []),
-          ...(c.admission === 'blocked' ? [{ label: t('Unblock'), icon: <Undo2 />, disabled: busy === c.id, onSelect: () => void act(c, 'unblock', t('Unblocked {{host}}', { host: hostOf(c) })) }] : [{ label: t('Block'), icon: <Ban />, disabled: busy === c.id, onSelect: () => setBlocking(c) }]),
+          ...(c.admission === 'blocked' ? [{ label: t('Unblock'), icon: <Undo2 />, disabled: busy === c.id, onSelect: () => void act(c, 'unblock', t('Unblocked {{host}}', { host: hostOf(c) })) }] : [{ label: t('Block'), icon: <Ban />, disabled: busy === c.id, onSelect: () => void ask(c, 'block') }]),
           { label: t('Access requests ({{count}})', { count: c.access_requests }), icon: <History />, onSelect: () => setRequests(c) },
-          { label: t('Delete'), icon: <Trash2 />, destructive: true, onSelect: () => setForgetting(c) },
+          { label: t('Delete'), icon: <Trash2 />, destructive: true, disabled: busy === c.id, onSelect: () => void ask(c, 'delete') },
         ]} />] : []),
       ])} />
     {list.total > list.limit && <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -193,14 +205,14 @@ export function ClientsSection({ path, canWrite, refresh }: { path: string; canW
     </div>}
     {approving && <ApproveDialog path={`${path}/clients`} client={approving} onClose={() => setApproving(null)} onDone={changed} />}
     {requests && <RequestsDialog path={`${path}/clients`} client={requests} onClose={() => setRequests(null)} />}
-    {blocking && <ConfirmDialog title={t('Block {{host}}?', { host: hostOf(blocking) })}
-      description={t('Its sessions and grants for this MCP server end at once, and it cannot be authorized again until you unblock it.')}
-      confirmLabel={t('Block')} onClose={() => setBlocking(null)}
-      confirm={async () => { await api.post(`${path}/clients/${blocking.id}/block`); toast.success(t('Blocked {{host}}', { host: hostOf(blocking) })); changed() }} />}
-    {forgetting && <ConfirmDialog title={t('Delete {{host}}?', { host: hostOf(forgetting) })}
-      description={t('IAMKit forgets this client and ends its sessions. If it tries again it is treated as new: admitted or held for approval according to the allowlist.')}
-      confirmLabel={t('Delete')} onClose={() => setForgetting(null)}
-      confirm={async () => { await api.delete(`${path}/clients/${forgetting.id}`); toast.success(t('Deleted {{host}}', { host: hostOf(forgetting) })); changed() }} />}
+    {ending?.action === 'block' && <ConfirmDialog title={t('Block {{host}}?', { host: hostOf(ending.client) })}
+      description={impactText(ending.impact) + ' ' + t('Its sessions and grants for this MCP server end at once, and it cannot be authorized again until you unblock it.')}
+      confirmLabel={t('Block')} onClose={() => setEnding(null)}
+      confirm={async () => { await api.post(`${path}/clients/${ending.client.id}/block`); toast.success(t('Blocked {{host}}', { host: hostOf(ending.client) })); changed() }} />}
+    {ending?.action === 'delete' && <ConfirmDialog title={t('Delete {{host}}?', { host: hostOf(ending.client) })}
+      description={impactText(ending.impact) + ' ' + t('IAMKit forgets this client and ends its sessions. If it tries again it is treated as new: admitted or held for approval according to the allowlist.')}
+      confirmLabel={t('Delete')} onClose={() => setEnding(null)}
+      confirm={async () => { await api.delete(`${path}/clients/${ending.client.id}`); toast.success(t('Deleted {{host}}', { host: hostOf(ending.client) })); changed() }} />}
   </DetailSection>
 }
 

@@ -3458,5 +3458,10 @@
   "“{{current}}” is not an enabled language; the automatic language applies until you choose another.": "“{{current}}” no es un idioma activado; se aplica el idioma automático hasta que elijas otro.",
   "“{{current}}” is not an enabled language; the inherited language applies until you choose another.": "“{{current}}” no es un idioma activado; se aplica el idioma heredado hasta que elijas otro.",
   "↑↓ to move": "↑↓ para moverte",
-  "↵ to open": "↵ para abrir"
+  "↵ to open": "↵ para abrir",
+  "No session of this client is active right now.": "Ahora mismo no hay ninguna sesión activa de este cliente.",
+  "{{count}} active sessions end now._one": "{{count}} sesión activa termina ahora.",
+  "{{count}} active sessions end now._other": "{{count}} sesiones activas terminan ahora.",
+  "{{count}} people must authorize this client again._one": "{{count}} persona debe autorizar este cliente de nuevo.",
+  "{{count}} people must authorize this client again._other": "{{count}} personas deben autorizar este cliente de nuevo."
 }

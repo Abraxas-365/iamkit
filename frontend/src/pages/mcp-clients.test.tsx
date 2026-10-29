@@ -46,6 +46,8 @@ beforeEach(() => {
             path === `${env}/organizations` ? page([]) :
               path === `${env}/protected-resources` ? page([server]) :
                 path === `${env}/protected-resources/pr1/impact` ? { active_sessions: 3, external_clients: 2 } :
+                  path === `${env}/protected-resources/pr1/clients/c1/impact` ? { active_sessions: 4, users: 3 } :
+                  path === `${env}/protected-resources/pr1/clients/c3/impact` ? { active_sessions: 0, users: 0 } :
                   path === `${env}/protected-resources/pr1/clients/c1/requests` ? { items: [{ user_id: 'u1', email: 'ana@example.com', name: 'Ana', requested_at: '2026-10-02T00:00:00Z' }] } :
                     path === `${env}/protected-resources/pr1/clients` ? page(clients.filter(c => c.admission === params.get('admission'))) :
                       path === `${env}/oauth-client-allowlist` ? page(allowlist) :
@@ -105,7 +107,11 @@ it('approves with an expiry date, blocks with confirmation and shows who asked',
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   await u.click(screen.getByRole('button', { name: 'Actions for evil.example' }))
   await u.click(await screen.findByRole('menuitem', { name: 'Block' }))
-  await u.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Block' }))
+  // The dialog says what the block ends before it does (…/clients/c1/impact).
+  const block = await screen.findByRole('dialog')
+  expect(block.textContent).toContain('4 active sessions end now.')
+  expect(block.textContent).toContain('3 people must authorize this client again.')
+  await u.click(within(block).getByRole('button', { name: 'Block' }))
   await waitFor(() => expect(calls('POST').some(c => c.url.endsWith('/clients/c1/block'))).toBe(true))
 })
 
@@ -135,7 +141,9 @@ it('unblocks and deletes after a confirmation', async () => {
   await waitFor(() => expect(calls('POST').some(c => c.url.endsWith('/clients/c3/unblock'))).toBe(true))
   await u.click(screen.getByRole('button', { name: 'Actions for blocked.example' }))
   await u.click(await screen.findByRole('menuitem', { name: 'Delete' }))
-  await u.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Delete' }))
+  const forget = await screen.findByRole('dialog')
+  expect(forget.textContent).toContain('No session of this client is active right now.')
+  await u.click(within(forget).getByRole('button', { name: 'Delete' }))
   await waitFor(() => expect(calls('DELETE')[0]?.url).toBe(`${env}/protected-resources/pr1/clients/c3`))
 })
 

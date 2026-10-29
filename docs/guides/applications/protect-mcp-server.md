@@ -141,6 +141,7 @@ Per protected resource, with `iam:protected-resources:read`/`write`
 |-------|------|
 | `GET …/protected-resources/:id/clients?admission=pending\|approved\|blocked` | The clients that asked, with the people who asked (`…/clients/:client/requests`) |
 | `POST …/clients/:client/approve` `{"metadata_hash": …, "expires_at": …}` | Approves (optionally until a time) for the redirect URIs, `jwks_uri` and authentication method you reviewed: `metadata_hash` is the one `GET …/clients/:client` showed. If the document changed since, the answer is 409 `CLIENT_METADATA_CHANGED` and nothing is approved; review it again. An approved client whose document later changes the three waits again |
+| `GET …/clients/:client/impact` | What a block or delete would end now: `{"active_sessions": n, "users": m}` (the client's live sessions with this server, and the people they belong to) |
 | `POST …/clients/:client/block` | Refuses the client and **revokes its sessions and refresh tokens in the same transaction**. Access tokens already issued are JWTs that your server verifies locally: they work until they expire (15 minutes at most, see [Lifetimes](#what-a-client-asks-for-and-gets)) |
 | `POST …/clients/:client/unblock` | Back to pending |
 | `DELETE …/clients/:client` | Forgets the client; it is discovered afresh |
@@ -377,7 +378,8 @@ or forwarded:
   *Unverified*; a logo only when it is served from the client's own host;
   the source, when it was last used, and the approval's expiry. Row actions:
   approve (with an optional expiry date), block, unblock, delete and the
-  people who asked.
+  people who asked. Block and delete first say how many active sessions,
+  of how many people, they end.
 - **Applications → MCP client allowlist** manages the environment's entries
   (origin and path prefix) and shows the known-clients gallery: each card
   says *Requires public exposure* (with the source addresses) or *Local
