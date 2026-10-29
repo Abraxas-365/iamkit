@@ -379,6 +379,10 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.LogoutDeliveries = oauthModule.Logouts
 	s.ProtectedResources = oauthModule.ProtectedResources
 	s.Admissions = oauthModule.Admissions
+	s.Consents = oauthModule.Consents
+	s.Consents.SetValidate(func(c *fiber.Ctx, environment identity.EnvironmentID, audience string) (authentication.Token, error) {
+		return s.Tokens.Validate(c, environment, audience)
+	})
 	s.LogoutDispatcher = oauthModule.Dispatcher
 	eventModule := eventmodule.New(eventmodule.Deps{DB: db, Retention: o.retention, Cipher: o.sealer, Transport: o.webhooks, ActorID: server.OperatorID})
 	s.Events = eventModule.HTTP
@@ -419,12 +423,13 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		// Tests run the delivery job once with Workers.RunOnce("saml_logout_delivery").
 		s.Workers.Add(samlModule.Jobs...)
 	}
-	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: tickets{oauth: oauthModule.Flows, saml: samlModule.Flows}, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Passkeys: authenticationModule.Passkeys, Features: featureModule.Queries, Captcha: hostedCaptcha{riskModule.Captchas, riskModule.Captcha}, Risk: riskModule.Evaluator, Finish: finisher(oauthModule.HTTP.Finish, samlModule.HTTP), ActorID: server.OperatorID})
+	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: tickets{oauth: oauthModule.Flows, saml: samlModule.Flows}, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Passkeys: authenticationModule.Passkeys, Features: featureModule.Queries, Captcha: hostedCaptcha{riskModule.Captchas, riskModule.Captcha}, Risk: riskModule.Evaluator, Issuer: issuer, Finish: finisher(oauthModule.HTTP.Finish, samlModule.HTTP), ActorID: server.OperatorID})
 	s.Hosted = hostedModule.HTTP
 	samlModule.HTTP.PostForm(hostedModule.HTTP.PostForm)
 	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
 	oauthModule.HTTP.SignedOut(hostedModule.HTTP.SignedOut)
 	oauthModule.HTTP.Refusals(hostedModule.HTTP.Refusal)
+	hostedModule.HTTP.Consents(oauthModule.HTTP.Consent)
 	// SAML single logout (SP side): end_session continues at the identity
 	// provider that opened the session; its answers come back to /slo.
 	federationModule.HTTP.Logout(federationModule.Logout, hostedModule.HTTP.PostForm)
@@ -501,6 +506,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Waitlist:           authenticationModule.WaitlistHTTP.WithActor(actor),
 		ProtectedResources: oauthModule.ProtectedResources.WithActor(actor),
 		Admissions:         oauthModule.Admissions.WithActor(actor),
+		Consents:           oauthModule.Consents.WithActor(actor),
 	}
 	s.OrgAdminPortal = orgAdmin.PortalHTTP
 	s.SetupLinks = orgAdmin.SetupLinkHTTP

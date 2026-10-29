@@ -76,6 +76,10 @@ type Module struct {
 	// Admissions serves what IT does with clients of metadata documents:
 	// …/protected-resources/:id/clients, the allowlist and the presets.
 	Admissions *oauthhttp.Admissions
+	// Consents serves connected apps (…/users/:id/connected-apps and
+	// /identity/v1/me/connected-apps) and administrator grants
+	// (…/protected-resources/:id/clients/:client/grants).
+	Consents *oauthhttp.Consents
 }
 
 func New(deps Deps) Module {
@@ -117,8 +121,10 @@ func New(deps Deps) Module {
 	logouts := oauthsvc.NewLogouts(clients, oauthfosite.NewLogoutSender(deps.Keys, deps.Issuer, deps.Transport))
 	protected := oauthsvc.NewProtectedResources(oauthpg.NewProtectedResources(deps.DB))
 	admissions := oauthsvc.NewAdmissions(oauthpg.NewAdmission(deps.DB), deps.Features)
+	consents := oauthsvc.NewConsents(oauthpg.NewConsents(deps.DB))
+	handler.Consents(consents)
 	return Module{Commands: service, Queries: service, Flows: service, Devices: service, HTTP: handler, Logouts: oauthhttp.NewLogouts(logouts, logouts, deps.ActorID), Dispatcher: logouts,
-		ProtectedResources: oauthhttp.NewProtectedResources(protected, protected, deps.ActorID), Admissions: oauthhttp.NewAdmissions(admissions, admissions, deps.ActorID), Jobs: []worker.Job{
+		ProtectedResources: oauthhttp.NewProtectedResources(protected, protected, deps.ActorID), Admissions: oauthhttp.NewAdmissions(admissions, admissions, deps.ActorID), Consents: oauthhttp.NewConsents(consents, consents, deps.ActorID), Jobs: []worker.Job{
 			{Name: "logout_delivery", Interval: config.LogoutDispatchInterval, Run: logouts.DispatchRound, Lag: logouts.Lag},
 			{Name: "logout_prune", Interval: time.Hour, Run: logouts.Prune},
 			// Check-at-use (Client.Admitted) already refuses an expired
@@ -132,5 +138,10 @@ func New(deps Deps) Module {
 			{Name: "client_documents_reconcile", Interval: config.ClientExpireInterval, Run: admissions.ReconcileDocuments},
 			{Name: "client_pending_prune", Interval: time.Hour, Run: service.PruneExternal},
 			{Name: "client_registration_prune", Interval: time.Hour, Run: registrations.PruneRegistrations},
+			// Check-at-use (Agreed at every refresh) already narrows a grant
+			// whose administrator grant expired; this job revokes it eagerly,
+			// ends the sessions it covered and records the event.
+			{Name: "client_grant_expire", Interval: config.ConsentJobInterval, Run: consents.ExpireClientGrants},
+			{Name: "oauth_consent_prune", Interval: time.Hour, Run: consents.PruneConsents},
 		}}
 }

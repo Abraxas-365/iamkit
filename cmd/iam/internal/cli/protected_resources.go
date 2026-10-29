@@ -22,7 +22,7 @@ reach with RFC 8707 resource indicators (MCP servers). Clients named by a
 metadata document (their client_id is an https URL) are admitted per server:
 list them with "clients list", then approve or block them.`,
 	}
-	cmd.AddCommand(prListCmd(), prGetCmd(), prCreateCmd(), prUpdateCmd(), prDeleteCmd(), prImpactCmd(), prClientsCmd())
+	cmd.AddCommand(prListCmd(), prGetCmd(), prCreateCmd(), prUpdateCmd(), prDeleteCmd(), prImpactCmd(), prClientsCmd(), prPolicyCmd())
 	return cmd
 }
 
@@ -81,8 +81,8 @@ func prGetCmd() *cobra.Command {
 }
 
 func prCreateCmd() *cobra.Command {
-	var app, resource, name, scopes string
-	var idle, max int
+	var app, resource, name, scopes, consent string
+	var idle, max, tokenTTL int
 	cmd := &cobra.Command{
 		Use:     "create",
 		Short:   "Register a resource of an application as a protected resource",
@@ -97,6 +97,15 @@ func prCreateCmd() *cobra.Command {
 			}
 			if max > 0 {
 				body["max_ttl_seconds"] = max
+			}
+			if consent != "" {
+				if err := checkConsentMode(consent); err != nil {
+					return err
+				}
+				body["consent_mode"] = consent
+			}
+			if tokenTTL > 0 {
+				body["access_token_ttl_seconds"] = tokenTTL
 			}
 			data, err := mustClient(cmd).post(envPath()+"/protected-resources", body)
 			if err != nil {
@@ -113,6 +122,8 @@ func prCreateCmd() *cobra.Command {
 	f.StringVar(&scopes, "scopes", "", "Default scopes, comma-separated")
 	f.IntVar(&idle, "idle-ttl-seconds", 0, "Refresh token idle lifetime (default 7 days)")
 	f.IntVar(&max, "max-ttl-seconds", 0, "Authorization lifetime (default 30 days)")
+	f.StringVar(&consent, "consent-mode", "", consentModeHelp+" (default per_user)")
+	f.IntVar(&tokenTTL, "access-token-ttl-seconds", 0, accessTokenTTLHelp+" (default: the server's default)")
 	_ = cmd.MarkFlagRequired("application")
 	_ = cmd.MarkFlagRequired("resource")
 	_ = cmd.MarkFlagRequired("name")
@@ -120,8 +131,8 @@ func prCreateCmd() *cobra.Command {
 }
 
 func prUpdateCmd() *cobra.Command {
-	var name, scopes, admission string
-	var idle, max int
+	var name, scopes, admission, consent string
+	var idle, max, tokenTTL int
 	var active, metadata, registration bool
 	cmd := &cobra.Command{
 		Use:   "update ID",
@@ -132,10 +143,13 @@ server; --allow-dynamic-registration lets clients registered at /oauth/register
 (RFC 7591) ask for it while the environment's dynamic_client_registration
 feature is on (no allowlist entry ever names them: only an approval or an open
 server admits them); --client-admission allowlist reviews them unless
-allowlisted, open admits any such client without review.`,
+allowlisted, open admits any such client without review. --consent-mode
+admin_granted lets an administrator grant clients scopes for users ("clients
+grants set"); per_user has each user consent to what a client asks.`,
 		Example: `  iam protected-resources update ID --allow-client-metadata
   iam protected-resources update ID --allow-dynamic-registration
-  iam protected-resources update ID --client-admission allowlist`,
+  iam protected-resources update ID --client-admission allowlist
+  iam protected-resources update ID --consent-mode admin_granted --access-token-ttl-seconds 900`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			body := map[string]any{}
@@ -167,6 +181,15 @@ allowlisted, open admits any such client without review.`,
 				}
 				body["client_admission"] = admission
 			}
+			if flags.Changed("consent-mode") {
+				if err := checkConsentMode(consent); err != nil {
+					return err
+				}
+				body["consent_mode"] = consent
+			}
+			if flags.Changed("access-token-ttl-seconds") {
+				body["access_token_ttl_seconds"] = tokenTTL
+			}
 			if len(body) == 0 {
 				return fmt.Errorf("nothing to change")
 			}
@@ -187,7 +210,20 @@ allowlisted, open admits any such client without review.`,
 	f.BoolVar(&metadata, "allow-client-metadata", false, "Allow clients named by a metadata document")
 	f.BoolVar(&registration, "allow-dynamic-registration", false, "Allow clients registered at /oauth/register (RFC 7591)")
 	f.StringVar(&admission, "client-admission", "", "allowlist or open (open admits any such client without review)")
+	f.StringVar(&consent, "consent-mode", "", consentModeHelp)
+	f.IntVar(&tokenTTL, "access-token-ttl-seconds", 0, accessTokenTTLHelp)
 	return cmd
+}
+
+const consentModeHelp = "per_user (each user consents) or admin_granted (an administrator grants clients scopes for users)"
+
+const accessTokenTTLHelp = "Access token lifetime, 60 to 3600 seconds (never past the idle TTL)"
+
+func checkConsentMode(v string) error {
+	if v != "per_user" && v != "admin_granted" {
+		return fmt.Errorf("--consent-mode must be per_user or admin_granted")
+	}
+	return nil
 }
 
 func prDeleteCmd() *cobra.Command {
@@ -229,7 +265,7 @@ func prClientsCmd() *cobra.Command {
 	cmd.AddCommand(prClientsListCmd(), prClientsGetCmd(), prClientsImpactCmd(), prClientsRequestsCmd(), prClientsApproveCmd(),
 		prClientsDecisionCmd("block", "Block a client and end its sessions and grants"),
 		prClientsDecisionCmd("unblock", "Return a blocked client to pending"),
-		prClientsForgetCmd(), prClientsFromTemplateCmd())
+		prClientsForgetCmd(), prClientsFromTemplateCmd(), prGrantsCmd())
 	return cmd
 }
 
@@ -430,6 +466,149 @@ func prClientsFromTemplateCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func prGrantsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "grants",
+		Short: "Scopes an administrator granted a client at a protected resource",
+		Long: `Administrator grants give a client scopes (permissions of the server's
+resource) for users without asking them: for every user of the environment, or
+for one organization. They cover users only while the server's consent mode is
+admin_granted ("update ID --consent-mode admin_granted"). CLIENT is the client
+row ID that "clients list" shows.`,
+	}
+	cmd.AddCommand(prGrantsListCmd(), prGrantsSetCmd(), prGrantsRevokeCmd())
+	return cmd
+}
+
+func prGrantsListCmd() *cobra.Command {
+	var revoked bool
+	cmd := &cobra.Command{
+		Use:     "list RESOURCE_ID CLIENT",
+		Short:   "List a client's administrator grants",
+		Example: `  iam protected-resources clients grants list RESOURCE_ID CLIENT --revoked`,
+		Args:    cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			path := prClientPath(args[0], args[1]) + "/grants"
+			if revoked {
+				path += "?revoked=true"
+			}
+			data, err := mustClient(cmd).get(path)
+			if err != nil {
+				return err
+			}
+			newPrinter().table(data, []string{"ID", "ORGANIZATION", "SCOPES", "EXPIRES", "CREATED", "REVOKED"}, func(m map[string]any) []string {
+				return []string{str(m, "id"), str(m, "organization_id"), uriList(m["scopes"]), str(m, "expires_at"), str(m, "created_at"), str(m, "revoked_at")}
+			})
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&revoked, "revoked", false, "Include revoked grants")
+	return cmd
+}
+
+func prGrantsSetCmd() *cobra.Command {
+	var scopes, organization, expires string
+	cmd := &cobra.Command{
+		Use:   "set RESOURCE_ID CLIENT",
+		Short: "Grant a client scopes for users (replaces the live grant of the same client and organization)",
+		Example: `  iam protected-resources clients grants set RESOURCE_ID CLIENT --scopes notes:read,notes:write
+  iam protected-resources clients grants set RESOURCE_ID CLIENT --scopes notes:read --organization ORG_ID --expires 2027-01-31`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			body := map[string]any{"scopes": splitList(scopes)}
+			if organization != "" {
+				body["organization_id"] = organization
+			}
+			if expires != "" {
+				at, err := parseExpiry(expires)
+				if err != nil {
+					return err
+				}
+				body["expires_at"] = at
+			}
+			data, err := mustClient(cmd).put(prClientPath(args[0], args[1])+"/grants", body)
+			if err != nil {
+				return err
+			}
+			newPrinter().detail(data)
+			return nil
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&scopes, "scopes", "", "Scopes to grant, comma-separated (permissions of the server's resource)")
+	f.StringVar(&organization, "organization", "", "Limit the grant to this organization ID (default: every user of the environment)")
+	f.StringVar(&expires, "expires", "", "Grant ends at this date (YYYY-MM-DD) or time (RFC 3339)")
+	_ = cmd.MarkFlagRequired("scopes")
+	return cmd
+}
+
+func prGrantsRevokeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "revoke RESOURCE_ID CLIENT GRANT_ID",
+		Short: "Revoke an administrator grant (ends the sessions it covered)",
+		Args:  cobra.ExactArgs(3),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if _, err := mustClient(cmd).delete(prClientPath(args[0], args[1]) + "/grants/" + url.PathEscape(args[2])); err != nil {
+				return err
+			}
+			newPrinter().ok("Grant revoked: " + args[2])
+			return nil
+		},
+	}
+}
+
+func prPolicyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "policy",
+		Short: "The environment's TTL ceilings for protected resources and where users consent",
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use:   "get",
+		Short: "Show the policy",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			data, err := mustClient(cmd).get(envPath() + "/protected-resource-policy")
+			if err != nil {
+				return err
+			}
+			newPrinter().detail(data)
+			return nil
+		},
+	})
+	var idle, lifetime int
+	var ui string
+	set := &cobra.Command{
+		Use:   "set",
+		Short: "Replace the ceilings (servers above a lowered ceiling are trimmed to it)",
+		Long: `Replace the policy: --max-idle-ttl-seconds and --max-lifetime-ttl-seconds are
+the ceilings. --consent-ui says where users consent: hosted (IAMKit's page) or
+custom (your own sign-in UI); left out, the saved one stays.`,
+		Example: `  iam protected-resources policy set --max-idle-ttl-seconds 604800 --max-lifetime-ttl-seconds 2592000 --consent-ui custom`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			body := map[string]any{"max_idle_ttl_seconds": idle, "max_lifetime_ttl_seconds": lifetime}
+			if cmd.Flags().Changed("consent-ui") {
+				if ui != "hosted" && ui != "custom" {
+					return fmt.Errorf("--consent-ui must be hosted or custom")
+				}
+				body["consent_ui"] = ui
+			}
+			data, err := mustClient(cmd).put(envPath()+"/protected-resource-policy", body)
+			if err != nil {
+				return err
+			}
+			newPrinter().detail(data)
+			return nil
+		},
+	}
+	f := set.Flags()
+	f.IntVar(&idle, "max-idle-ttl-seconds", 0, "Ceiling of a server's idle TTL")
+	f.IntVar(&lifetime, "max-lifetime-ttl-seconds", 0, "Ceiling of a server's lifetime")
+	f.StringVar(&ui, "consent-ui", "", "hosted or custom")
+	_ = set.MarkFlagRequired("max-idle-ttl-seconds")
+	_ = set.MarkFlagRequired("max-lifetime-ttl-seconds")
+	cmd.AddCommand(set)
+	return cmd
 }
 
 // ── environment-level: allowlist and presets ──

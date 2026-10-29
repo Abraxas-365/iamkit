@@ -41,6 +41,11 @@ type ClientView struct {
 	// System names a client IAMKit registers itself ("org_admin": the
 	// hosted organization admin portal); operators cannot change those.
 	System string `json:"system,omitempty"`
+	// ConsentPolicy is ConsentRequired (users consent to what the client
+	// asks at a protected resource) or ConsentSkip (first-party); always
+	// required for a client made from a preset template (Preset).
+	ConsentPolicy string `json:"consent_policy"`
+	Preset        string `json:"preset,omitempty"`
 	// Warnings are accepted settings to review (http loopback redirects).
 	Warnings []ClientWarning `json:"warnings"`
 	identity.ClientAuth
@@ -77,6 +82,9 @@ type Registration struct {
 	// AllowedOrigins are browser origins (scheme://host[:port]) allowed to
 	// call /identity/v1 and the browser-facing /oauth endpoints with CORS.
 	AllowedOrigins []string `json:"allowed_origins"`
+	// ConsentPolicy defaults to ConsentSkip: an operator-registered client
+	// is first-party unless it asks its users (ConsentRequired).
+	ConsentPolicy string `json:"consent_policy"`
 	// Preset and LoopbackAnyPort mark a client made from a template preset
 	// (never read from a request body).
 	Preset          string `json:"-"`
@@ -102,6 +110,9 @@ type ClientUpdate struct {
 	GrantTypes *[]string `json:"grant_types"`
 	// AllowedOrigins replaces the client's allowed origins.
 	AllowedOrigins *[]string `json:"allowed_origins"`
+	// ConsentPolicy changes whether users consent (never skip for a client
+	// made from a preset template).
+	ConsentPolicy *string `json:"consent_policy"`
 	// Client authentication: a changed method replaces the keys (jwks and
 	// jwks_uri are cleared unless given).
 	AuthMethod *string          `json:"token_endpoint_auth_method"`
@@ -143,8 +154,13 @@ func (u ClientUpdate) Apply(current identity.ClientAuth) identity.ClientAuth {
 }
 
 func (u ClientUpdate) Validate() error {
-	if u.HostedLogin == nil && u.Redirects == nil && u.PostLogoutRedirects == nil && u.AccessTokenFormat == nil && u.BackchannelLogoutURI == nil && u.BackchannelLogoutSessionRequired == nil && u.InitiateLoginURI == nil && u.GrantTypes == nil && u.AllowedOrigins == nil && !u.Authentication() {
-		return errx.Validation("hosted_login, redirect_uris, post_logout_redirect_uris, access_token_format, backchannel_logout_uri, initiate_login_uri, grant_types, allowed_origins or token_endpoint_auth_method is required")
+	if u.HostedLogin == nil && u.Redirects == nil && u.PostLogoutRedirects == nil && u.AccessTokenFormat == nil && u.BackchannelLogoutURI == nil && u.BackchannelLogoutSessionRequired == nil && u.InitiateLoginURI == nil && u.GrantTypes == nil && u.AllowedOrigins == nil && u.ConsentPolicy == nil && !u.Authentication() {
+		return errx.Validation("hosted_login, redirect_uris, post_logout_redirect_uris, access_token_format, backchannel_logout_uri, initiate_login_uri, grant_types, allowed_origins, consent_policy or token_endpoint_auth_method is required")
+	}
+	if u.ConsentPolicy != nil {
+		if err := ValidateConsentPolicy(*u.ConsentPolicy); err != nil {
+			return err
+		}
 	}
 	if u.BackchannelLogoutURI != nil {
 		if err := ValidateBackchannelURI(*u.BackchannelLogoutURI); err != nil {
@@ -222,6 +238,11 @@ func (r Registration) Validate() error {
 	if _, err := Origins(r.AllowedOrigins); err != nil {
 		return err
 	}
+	if r.ConsentPolicy != "" {
+		if err := CheckConsentPolicy(r.ConsentPolicy, SourceRegistered, r.Preset); err != nil {
+			return err
+		}
+	}
 	return r.ClientAuth.WithDefaults(r.Public).Validate(r.Public)
 }
 
@@ -244,7 +265,18 @@ type Ticket struct {
 	// Device is the hash of the device code a device ticket approves (nil
 	// for authorize requests).
 	Device []byte `db:"device_hash"`
+	// ConsentSession and ConsentScopes are set while the authorization
+	// waits for the user's consent (D30): the signed-in session it will be
+	// issued for and the scopes the user is asked about.
+	ConsentSession *identity.SessionID `db:"consent_session_id"`
+	ConsentScopes  []string            `db:"-"`
+	// ConsentHosted: the hosted pages signed ConsentSession in for this
+	// authorization (rejecting ends it).
+	ConsentHosted bool `db:"consent_session_hosted"`
 }
+
+// AwaitingConsent reports whether the authorization waits for consent.
+func (t Ticket) AwaitingConsent() bool { return t.ConsentSession != nil && len(t.ConsentScopes) > 0 }
 
 // Pending is an unfinished authorization: its active client and the
 // original authorize request form.
@@ -290,4 +322,7 @@ type SessionInfo struct {
 	// counts from it).
 	Started time.Time
 	AMR     []string
+	// User and Organization own the session.
+	User         identity.UserID
+	Organization identity.OrganizationID
 }

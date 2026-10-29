@@ -168,6 +168,10 @@ type OAuthClient struct {
 	// InitiateLoginURI is the application's sign-in endpoint for
 	// IdP-initiated SAML logins (https, or http on loopback).
 	InitiateLoginURI string `json:"initiate_login_uri,omitempty"`
+	// ConsentPolicy is ConsentRequired or ConsentSkip (default: skip, the
+	// client is first-party): whether its users consent to what it asks
+	// for at a protected resource.
+	ConsentPolicy string `json:"consent_policy,omitempty"`
 	// ClientAuthentication of confidential clients (client_secret_basic
 	// when empty; public clients always use none).
 	ClientAuthentication
@@ -203,6 +207,8 @@ type OAuthClientPatch struct {
 	BackchannelLogoutSessionRequired *bool   `json:"backchannel_logout_session_required,omitempty"`
 	// InitiateLoginURI "" turns IdP-initiated sign-in off.
 	InitiateLoginURI *string `json:"initiate_login_uri,omitempty"`
+	// ConsentPolicy is ConsentRequired or ConsentSkip.
+	ConsentPolicy *string `json:"consent_policy,omitempty"`
 	// Authentication, when set, replaces the token endpoint
 	// authentication (switching away from private_key_jwt drops the keys).
 	TokenEndpointAuthMethod *string          `json:"token_endpoint_auth_method,omitempty"`
@@ -247,6 +253,8 @@ type OAuthClientView struct {
 	BackchannelLogoutURI             string `json:"backchannel_logout_uri"`
 	BackchannelLogoutSessionRequired bool   `json:"backchannel_logout_session_required"`
 	InitiateLoginURI                 string `json:"initiate_login_uri"`
+	// ConsentPolicy is ConsentRequired or ConsentSkip.
+	ConsentPolicy string `json:"consent_policy"`
 	// System names a client IAMKit registers itself ("org_admin"); it
 	// cannot be changed.
 	System   string          `json:"system,omitempty"`

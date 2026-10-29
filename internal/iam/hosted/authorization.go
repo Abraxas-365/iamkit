@@ -2,7 +2,9 @@ package hosted
 
 import (
 	"github.com/Abraxas-365/iamkit/internal/i18n"
+	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/federation"
+	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
@@ -45,6 +47,52 @@ type Authorization struct {
 	// provider's widget with SiteKey and send its answer as captcha_token);
 	// absent when the environment has none for custom UIs.
 	Captcha *CaptchaInfo `json:"captcha,omitempty"`
+	// ConsentRequired: the user signed in and the authorization waits for
+	// their consent (Consent says to what). Where consent_ui is custom the
+	// UI posts the decision to /identity/v1/authorize/:ticket/consent;
+	// otherwise it sends the browser to IAMKit's consent page.
+	ConsentRequired bool         `json:"consent_required"`
+	Consent         *ConsentInfo `json:"consent,omitempty"`
+}
+
+// ConsentInfo is what a consent page asks (oauth.ConsentPrompt, without
+// what only the server needs).
+type ConsentInfo struct {
+	Client       oauth.ConnectedClient        `json:"client"`
+	Protected    identity.ProtectedResourceID `json:"protected_resource_id"`
+	Resource     string                       `json:"resource"`
+	ResourceName string                       `json:"resource_name"`
+	Organization identity.OrganizationID      `json:"organization_id"`
+	// Scopes are the scopes to agree to that the user holds; UnheldScopes
+	// the others to agree to, which the user does not hold yet (granted
+	// only once they do: show them apart, collapsed); AgreedScopes the
+	// asked scopes already agreed to.
+	Scopes       []string `json:"scopes"`
+	UnheldScopes []string `json:"unheld_scopes"`
+	AgreedScopes []string `json:"agreed_scopes"`
+	// UI is the environment's consent_ui: "custom" lets this UI decide;
+	// "hosted" means IAMKit's consent page (HostedURL) decides.
+	UI        string `json:"ui"`
+	HostedURL string `json:"hosted_url"`
+}
+
+// NewConsentInfo describes prompt; hostedURL is IAMKit's consent page for
+// the ticket.
+func NewConsentInfo(prompt oauth.ConsentPrompt, hostedURL string) *ConsentInfo {
+	return &ConsentInfo{Client: prompt.Client, Protected: prompt.Protected, Resource: prompt.Resource, ResourceName: prompt.ResourceName, Organization: prompt.Organization,
+		Scopes: prompt.Pending, UnheldScopes: prompt.Unheld, AgreedScopes: prompt.Agreed, UI: prompt.UI, HostedURL: hostedURL}
+}
+
+// ConsentPage is what IAMKit's consent page renders: the prompt, branded
+// like the sign-in pages (environment ← client ← the organization the user
+// signed in to) in Language, with the custom texts of Texts.
+type ConsentPage struct {
+	Prompt   oauth.ConsentPrompt
+	Settings Settings
+	Language string
+	Texts    TextScope
+	// Account is who consents (a failed read leaves it empty).
+	Account authentication.Profile
 }
 
 // CaptchaInfo is the widget a custom sign-in UI renders.

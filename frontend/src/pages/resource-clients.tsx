@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BadgeCheck, Ban, Check, History, Trash2, Undo2 } from 'lucide-react'
+import { BadgeCheck, Ban, Check, History, KeyRound, Trash2, Undo2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { api, ApiError } from '@/lib/api'
 import { message } from '@/lib/utils'
@@ -10,6 +10,7 @@ import { RowActions } from '@/components/ui/menu'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog, DataTable, DetailSection, EmptyState, ErrorState, Time } from '@/components/library/patterns'
+import { SearchSelect } from '@/components/ui/search-select'
 import { t } from '@/lib/i18n'
 
 export type Admission = 'pending' | 'approved' | 'blocked'
@@ -133,6 +134,86 @@ function RequestsDialog({ path, client, onClose }: { path: string; client: Exter
   </DialogContent></Dialog>
 }
 
+/** oauth.ClientGrant: an administrator's grant of scopes to a client for every
+ * user of the environment (organization_id null) or of one organization. */
+interface ClientGrant { id: string; organization_id: string | null; scopes: string[]; expires_at: string | null; created_at: string; updated_at: string }
+
+/** Grants are what GrantsDialog needs: the environment base path (organization
+ * search) and the server's permission catalog (grantable scopes). */
+export interface Grants { base: string; scopes: string[] }
+
+/** GrantsDialog lists a client's live administrator grants at this server,
+ * grants scopes (replacing the live grant of the same organization) and revokes
+ * one. Revoking ends the sessions the grant covered; narrowing takes effect at
+ * each grant's next refresh. */
+function GrantsDialog({ path, client, grants, onClose }: { path: string; client: ExternalClient; grants: Grants; onClose: () => void }) {
+  const url = `${path}/${client.id}/grants`
+  const [rows, setRows] = useState<ClientGrant[] | null>(null)
+  const [orgNames, setOrgNames] = useState<Record<string, string>>({})
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [scopes, setScopes] = useState<string[]>([])
+  const [org, setOrg] = useState('')
+  const [expires, setExpires] = useState('')
+  const [revoking, setRevoking] = useState<ClientGrant | null>(null)
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const load = () => api.get<{ items: ClientGrant[] }>(url).then(r => setRows(r.items ?? [])).catch(e => setError(message(e)))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [url])
+  useEffect(() => {
+    for (const id of new Set((rows ?? []).map(g => g.organization_id).filter((v): v is string => !!v && !orgNames[v]))) {
+      api.get<{ name: string }>(`${grants.base}/organizations/${id}`).then(o => setOrgNames(n => ({ ...n, [id]: o.name }))).catch(() => undefined)
+    }
+  }, [rows, grants.base, orgNames])
+  const where = (g: ClientGrant) => g.organization_id ? t('Organization {{name}}', { name: orgNames[g.organization_id] ?? g.organization_id }) : t('Every user')
+  const submit = async () => {
+    setBusy(true); setError('')
+    try {
+      await api.put(url, { scopes, ...(org ? { organization_id: org } : {}), ...(expires ? { expires_at: new Date(`${expires}T23:59:59`).toISOString() } : {}) })
+      toast.success(t('Granted {{host}}', { host: hostOf(client) })); setScopes([]); setExpires(''); await load()
+    } catch (e) { setError(message(e)) } finally { setBusy(false) }
+  }
+  return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}><DialogContent className="max-w-lg">
+    <DialogTitle className="pr-6 text-base font-semibold [overflow-wrap:anywhere]">{t('Grants for {{host}}', { host: hostOf(client) })}</DialogTitle>
+    <DialogDescription className="text-muted-foreground">{t('Scopes you grant are agreed for the users they cover: they are not asked about them. Users still consent to anything beyond the grant, and only get scopes they hold.')}</DialogDescription>
+    {rows === null ? <p role="status" className="text-sm text-muted-foreground">{t('Loading…')}</p> : rows.length === 0
+      ? <p className="text-sm text-muted-foreground">{t('No live grants: each user consents.')}</p>
+      : <ul className="space-y-2">{rows.map(g => <li key={g.id} className="flex items-start justify-between gap-3 rounded-lg border p-3 text-sm">
+        <div className="min-w-0 space-y-0.5">
+          <p className="font-medium">{where(g)}</p>
+          <p className="break-all font-mono text-xs text-muted-foreground">{g.scopes.join(' ')}</p>
+          <p className="text-xs text-muted-foreground">{g.expires_at ? <>{t('Expires')} <Time value={g.expires_at} /></> : t('No end date')}</p>
+        </div>
+        <Button variant="outline" size="sm" disabled={busy} aria-label={t('Revoke grant: {{where}}', { where: where(g) })} onClick={() => setRevoking(g)}>{t('Revoke')}</Button>
+      </li>)}</ul>}
+    <form className="space-y-3 border-t pt-3" onSubmit={e => { e.preventDefault(); if (scopes.length) void submit() }}>
+      <fieldset className="space-y-1.5" disabled={busy}>
+        <legend className="text-sm font-medium">{t('Scopes to grant')}</legend>
+        <div className="grid max-h-48 gap-1 overflow-y-auto sm:grid-cols-2">
+          {grants.scopes.map(s => <label key={s} className="flex items-center gap-2 font-mono text-xs">
+            <input type="checkbox" className="accent-primary" checked={scopes.includes(s)} onChange={e => setScopes(v => e.target.checked ? [...v, s] : v.filter(x => x !== s))} />{s}
+          </label>)}
+        </div>
+      </fieldset>
+      <div className="space-y-1.5">
+        <label htmlFor="grant-organization" className="text-sm font-medium">{t('Organization')} <span className="font-normal text-muted-foreground">{t('(optional)')}</span></label>
+        <SearchSelect id="grant-organization" name="organization_id" path={`${grants.base}/organizations`} mapItem={o => ({ id: String(o.id), label: String(o.name) })} placeholder={t('Every user of the environment')} disabled={busy} onChange={setOrg} />
+        <p className="text-xs text-muted-foreground">{t('Granting again for the same organization (or for everyone) replaces that grant.')}</p>
+      </div>
+      <div className="space-y-1.5">
+        <label htmlFor="grant-expiry" className="text-sm font-medium">{t('Grant expires')} <span className="font-normal text-muted-foreground">{t('(optional)')}</span></label>
+        <Input id="grant-expiry" type="date" min={tomorrow} value={expires} onChange={e => setExpires(e.target.value)} disabled={busy} />
+        <p className="text-xs text-muted-foreground">{t('When it expires, the sessions it covered end and users consent themselves.')}</p>
+      </div>
+      {error && <ErrorState error={error} />}
+      <div className="flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t('Close')}</Button><Button type="submit" disabled={busy || scopes.length === 0}>{busy ? t('Working…') : t('Grant')}</Button></div>
+    </form>
+    {revoking && <ConfirmDialog title={t('Revoke this grant?')} description={t('The sessions it covered end at once ({{where}}). Users must consent themselves to use {{host}} again.', { where: where(revoking), host: hostOf(client) })}
+      confirmLabel={t('Revoke')} onClose={() => setRevoking(null)}
+      confirm={async () => { await api.delete(`${url}/${revoking.id}`); toast.success(t('Grant revoked')); await load() }} />}
+  </DialogContent></Dialog>
+}
+
 /** ClientImpact is what blocking or deleting a client ends (…/clients/:id/impact). */
 type ClientImpact = { active_sessions: number; users: number }
 
@@ -145,7 +226,7 @@ const impactText = (i: ClientImpact) => i.active_sessions === 0
  * state and lets operators approve, block, unblock or forget them. Blocking
  * and forgetting end the client's sessions (the backend does it in the same
  * transaction). */
-export function ClientsSection({ path, canWrite, refresh }: { path: string; canWrite: boolean; refresh?: unknown }) {
+export function ClientsSection({ path, canWrite, refresh, grants }: { path: string; canWrite: boolean; refresh?: unknown; grants?: Grants }) {
   const [admission, setAdmission] = useState<Admission>('pending')
   const extraParams = useMemo(() => ({ admission }), [admission])
   const list = usePaginatedList<ExternalClient>(`${path}/clients`, { extraParams })
@@ -153,6 +234,7 @@ export function ClientsSection({ path, canWrite, refresh }: { path: string; canW
   const [approving, setApproving] = useState<ExternalClient | null>(null)
   const [ending, setEnding] = useState<{ client: ExternalClient; action: 'block' | 'delete'; impact: ClientImpact } | null>(null)
   const [requests, setRequests] = useState<ExternalClient | null>(null)
+  const [granting, setGranting] = useState<ExternalClient | null>(null)
   const [busy, setBusy] = useState('')
   const { reload } = list
   const [version, setVersion] = useState(0)
@@ -199,6 +281,7 @@ export function ClientsSection({ path, canWrite, refresh }: { path: string; canW
           ...(c.admission !== 'approved' && c.admission !== 'blocked' ? [{ label: t('Approve'), icon: <Check />, disabled: busy === c.id, onSelect: () => setApproving(c) }] : []),
           ...(c.admission === 'approved' ? [{ label: t('Change expiry'), icon: <Check />, disabled: busy === c.id, onSelect: () => setApproving(c) }] : []),
           ...(c.admission === 'blocked' ? [{ label: t('Unblock'), icon: <Undo2 />, disabled: busy === c.id, onSelect: () => void act(c, 'unblock', t('Unblocked {{host}}', { host: hostOf(c) })) }] : [{ label: t('Block'), icon: <Ban />, disabled: busy === c.id, onSelect: () => void ask(c, 'block') }]),
+          ...(grants && c.admission === 'approved' ? [{ label: t('Grants'), icon: <KeyRound />, onSelect: () => setGranting(c) }] : []),
           { label: t('Access requests ({{count}})', { count: c.access_requests }), icon: <History />, onSelect: () => setRequests(c) },
           { label: t('Delete'), icon: <Trash2 />, destructive: true, disabled: busy === c.id, onSelect: () => void ask(c, 'delete') },
         ]} />] : []),
@@ -209,6 +292,7 @@ export function ClientsSection({ path, canWrite, refresh }: { path: string; canW
     </div>}
     {approving && <ApproveDialog path={`${path}/clients`} client={approving} onClose={() => setApproving(null)} onDone={changed} />}
     {requests && <RequestsDialog path={`${path}/clients`} client={requests} onClose={() => setRequests(null)} />}
+    {granting && grants && <GrantsDialog path={`${path}/clients`} client={granting} grants={grants} onClose={() => setGranting(null)} />}
     {ending?.action === 'block' && <ConfirmDialog title={t('Block {{host}}?', { host: hostOf(ending.client) })}
       description={impactText(ending.impact) + ' ' + t('Its sessions and grants for this MCP server end at once, and it cannot be authorized again until you unblock it.')}
       confirmLabel={t('Block')} onClose={() => setEnding(null)}

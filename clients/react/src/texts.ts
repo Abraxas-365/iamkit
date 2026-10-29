@@ -64,9 +64,28 @@ export const defaultTexts: Record<string, string> = {
   "hosted.form.accept_terms": "I accept the terms of service",
   "hosted.form.optional": "(optional — without one, we email you a code to sign in)",
   "hosted.error.generic": "Something went wrong. Please try again.",
+  "hosted.consent.title": "Allow access?",
+  "hosted.consent.subtitle": "{application} wants to access {resource} on your behalf.",
+  "hosted.consent.subtitle_more": "{application} wants more access to {resource} on your behalf.",
+  "hosted.consent.this_application": "This application",
+  "hosted.consent.asks": "It asks for:",
+  "hosted.consent.unheld": "Permissions you do not have yet",
+  "hosted.consent.unheld_help": "The application gets these only once an administrator gives them to you.",
+  "hosted.consent.agreed": "Already allowed",
+  "hosted.consent.revoke_help": "You can remove this access at any time from your connected applications.",
+  "hosted.consent.allow": "Allow",
+  "hosted.consent.deny": "Deny",
+  "hosted.consent.scope.profile": "Your name and profile",
+  "hosted.consent.scope.email": "Your email address",
+  "hosted.consent.scope.phone": "Your phone number",
 };
 
 export type Translate = (key: string, ...args: string[]) => string;
+
+/** Fills the `{name}` placeholders of a catalog text (consent wording). */
+export function fill(text: string, vars: Record<string, string>): string {
+  return text.replace(/\{(\w+)\}/g, (match, name: string) => vars[name] ?? match);
+}
 
 /** Looks a key up: caller texts › the ticket's custom texts › English. */
 export function translator(authorization?: Pick<Authorization, "texts">, texts?: Record<string, string>): Translate {

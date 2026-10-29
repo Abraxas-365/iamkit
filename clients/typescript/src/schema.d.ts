@@ -2087,6 +2087,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants"];
+        put: operations["putApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/grants/{grant}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrantsbyGrant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/impact": {
         parameters: {
             query?: never;
@@ -2664,6 +2696,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/users/{id}/connected-apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getApiEnvironmentsbyEnvironmentUsersbyIdConnectedApps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/environments/{environment}/users/{id}/connected-apps/{client}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteApiEnvironmentsbyEnvironmentUsersbyIdConnectedAppsbyClient"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/users/{id}/deactivate": {
         parameters: {
             query?: never;
@@ -3113,6 +3177,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/identity/v1/authorize/{ticket}/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** ConsentDecision serves POST /identity/v1/authorize/:ticket/consent: a custom sign-in UI (consent_ui custom) records the user's decision {"approve": bool} under the browser binding cookie and gets w... */
+        post: operations["postIdentityAuthorizebyTicketConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/identity/v1/captcha/{environment}": {
         parameters: {
             query?: never;
@@ -3471,6 +3552,38 @@ export interface paths {
         put?: never;
         post?: never;
         delete: operations["deleteIdentityMeApiKeysbyKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity/v1/me/connected-apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getIdentityMeConnectedApps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/identity/v1/me/connected-apps/{client}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteIdentityMeConnectedAppsbyClient"];
         options?: never;
         head?: never;
         patch?: never;
@@ -6051,6 +6164,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants"];
+        put: operations["putManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/grants/{grant}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrantsbyGrant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/impact": {
         parameters: {
             query?: never;
@@ -6851,6 +6996,38 @@ export interface paths {
         post?: never;
         /** RevokeUser revokes a key of the user (404 when the key is another's). */
         delete: operations["deleteManagementEnvironmentsbyEnvironmentUsersbyIdApiKeysbyKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/users/{id}/connected-apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getManagementEnvironmentsbyEnvironmentUsersbyIdConnectedApps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/management/v1/environments/{environment}/users/{id}/connected-apps/{client}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteManagementEnvironmentsbyEnvironmentUsersbyIdConnectedAppsbyClient"];
         options?: never;
         head?: never;
         patch?: never;
@@ -8146,6 +8323,8 @@ export interface components {
             /** @description UUID (empty when unset) */
             connection_id?: string | null;
             connections: components["schemas"]["ConnectionSummary"][] | null;
+            consent?: components["schemas"]["ConsentInfo"] | null;
+            consent_required: boolean;
             /** @description UUID (empty when unset) */
             environment_id: string;
             languages: string[] | null;
@@ -8234,6 +8413,33 @@ export interface components {
             token_endpoint_auth_method?: string;
             token_endpoint_auth_signing_alg?: string;
         };
+        ClientGrant: {
+            /** @description UUID (empty when unset) */
+            client_id: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            expires_at: string | null;
+            /** @description UUID (empty when unset) */
+            id: string;
+            /** @description UUID (empty when unset) */
+            organization_id: string | null;
+            /** @description UUID (empty when unset) */
+            protected_resource_id: string;
+            /** Format: date-time */
+            revoked_at?: string | null;
+            revoked_reason?: string;
+            scopes: string[] | null;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ClientGrantInputInput: {
+            /** Format: date-time */
+            expires_at?: string | null;
+            /** @description UUID (empty when unset) */
+            organization_id?: string | null;
+            scopes?: string[] | null;
+        };
         ClientRegistrationInput: {
             client_name?: string;
             client_uri?: string;
@@ -8252,6 +8458,7 @@ export interface components {
             allowed_origins?: string[] | null;
             backchannel_logout_session_required?: boolean | null;
             backchannel_logout_uri?: string | null;
+            consent_policy?: string | null;
             grant_types?: string[] | null;
             hosted_login?: boolean | null;
             initiate_login_uri?: string | null;
@@ -8271,6 +8478,7 @@ export interface components {
             application_name: string;
             backchannel_logout_session_required: boolean;
             backchannel_logout_uri: string;
+            consent_policy: string;
             grant_types: string[] | null;
             hosted_login: boolean;
             /** @description UUID (empty when unset) */
@@ -8279,6 +8487,7 @@ export interface components {
             jwks?: unknown | null;
             jwks_uri: string;
             post_logout_redirect_uris: string[] | null;
+            preset?: string;
             public: boolean;
             redirect_uris: string[] | null;
             /** @description UUID (empty when unset) */
@@ -8301,6 +8510,7 @@ export interface components {
             factor: string;
         };
         Completion: {
+            consent_required?: boolean;
             redirect_to: string;
         };
         Condition: {
@@ -8340,6 +8550,32 @@ export interface components {
             sourcetype?: string;
             tags?: string[] | null;
             url?: string;
+        };
+        ConnectedApp: {
+            active_sessions: number;
+            client: components["schemas"]["ConnectedClient"];
+            /** Format: date-time */
+            consented_at: string | null;
+            /** Format: date-time */
+            last_used_at: string | null;
+            /** @description UUID (empty when unset) */
+            organization_id: string;
+            /** @description UUID (empty when unset) */
+            protected_resource_id: string;
+            resource: string;
+            resource_name: string;
+            scopes: string[] | null;
+        };
+        ConnectedClient: {
+            client_id: string;
+            host: string;
+            /** @description UUID (empty when unset) */
+            id: string;
+            logo_uri: string;
+            name: string;
+            preset: string;
+            source: string;
+            verified_name: string;
         };
         ConnectionDetail: {
             active: boolean;
@@ -8439,6 +8675,20 @@ export interface components {
             provider: string;
             signup: boolean;
             update_profile: boolean;
+        };
+        ConsentInfo: {
+            agreed_scopes: string[] | null;
+            client: components["schemas"]["ConnectedClient"];
+            hosted_url: string;
+            /** @description UUID (empty when unset) */
+            organization_id: string;
+            /** @description UUID (empty when unset) */
+            protected_resource_id: string;
+            resource: string;
+            resource_name: string;
+            scopes: string[] | null;
+            ui: string;
+            unheld_scopes: string[] | null;
         };
         Context: {
             location?: string;
@@ -9835,12 +10085,14 @@ export interface components {
             org_unit_id?: string | null;
         };
         ProtectedResource: {
+            access_token_ttl_seconds: number;
             active: boolean;
             allow_client_metadata: boolean;
             allow_dynamic_registration: boolean;
             /** @description UUID (empty when unset) */
             application_id: string;
             client_admission: string;
+            consent_mode: string;
             /** Format: date-time */
             created_at: string;
             default_scopes: string[] | null;
@@ -9856,8 +10108,10 @@ export interface components {
             uri: string;
         };
         ProtectedResourceCreateInput: {
+            access_token_ttl_seconds?: number;
             /** @description UUID (empty when unset) */
             application_id?: string;
+            consent_mode?: string;
             default_scopes?: string[] | null;
             idle_ttl_seconds?: number;
             max_ttl_seconds?: number;
@@ -9870,18 +10124,22 @@ export interface components {
             external_clients: number;
         };
         ProtectedResourcePolicy: {
+            consent_ui: string;
             max_idle_ttl_seconds: number;
             max_lifetime_ttl_seconds: number;
         };
         ProtectedResourcePolicyInput: {
+            consent_ui?: string;
             max_idle_ttl_seconds?: number;
             max_lifetime_ttl_seconds?: number;
         };
         ProtectedResourceUpdateInput: {
+            access_token_ttl_seconds?: number | null;
             active?: boolean | null;
             allow_client_metadata?: boolean | null;
             allow_dynamic_registration?: boolean | null;
             client_admission?: string | null;
+            consent_mode?: string | null;
             default_scopes?: string[] | null;
             idle_ttl_seconds?: number | null;
             max_ttl_seconds?: number | null;
@@ -9938,6 +10196,7 @@ export interface components {
             application_id?: string;
             backchannel_logout_session_required?: boolean;
             backchannel_logout_uri?: string;
+            consent_policy?: string;
             grant_types?: string[] | null;
             hosted_login?: boolean;
             initiate_login_uri?: string;
@@ -19614,6 +19873,142 @@ export interface operations {
             };
         };
     };
+    getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants: {
+        parameters: {
+            query?: {
+                revoked?: boolean;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ClientGrant"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClientGrantInputInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientGrant"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrantsbyGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+                grant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact: {
         parameters: {
             query?: never;
@@ -22104,6 +22499,95 @@ export interface operations {
             };
         };
     };
+    getApiEnvironmentsbyEnvironmentUsersbyIdConnectedApps: {
+        parameters: {
+            query?: {
+                organization_id?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ConnectedApp"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteApiEnvironmentsbyEnvironmentUsersbyIdConnectedAppsbyClient: {
+        parameters: {
+            query?: {
+                organization_id?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     postApiEnvironmentsbyEnvironmentUsersbyIdDeactivate: {
         parameters: {
             query?: never;
@@ -23606,6 +24090,69 @@ export interface operations {
             };
         };
     };
+    postIdentityAuthorizebyTicketConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticket: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": {
+                    approve?: boolean | null;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Completion"];
+                };
+            };
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Redirect */
+            303: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Success */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     getIdentityCaptchabyEnvironment: {
         parameters: {
             query?: never;
@@ -23857,7 +24404,7 @@ export interface operations {
                     "application/json": {
                         error: string;
                         success: boolean;
-                    } | {
+                    } | components["schemas"]["Completion"] | {
                         access_token: string;
                         expires_in: number;
                         recovery_codes?: string[] | null;
@@ -24992,6 +25539,94 @@ export interface operations {
                 };
             };
         };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getIdentityMeConnectedApps: {
+        parameters: {
+            query?: {
+                audience?: string;
+                environment_id?: string;
+                organization_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ConnectedApp"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteIdentityMeConnectedAppsbyClient: {
+        parameters: {
+            query?: {
+                audience?: string;
+                environment_id?: string;
+                organization_id?: string;
+            };
+            header?: never;
+            path: {
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description No content */
             204: {
@@ -35961,6 +36596,142 @@ export interface operations {
             };
         };
     };
+    getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants: {
+        parameters: {
+            query?: {
+                revoked?: boolean;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ClientGrant"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClientGrantInputInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientGrant"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrantsbyGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+                grant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact: {
         parameters: {
             query?: never;
@@ -39357,6 +40128,95 @@ export interface operations {
             };
         };
     };
+    getManagementEnvironmentsbyEnvironmentUsersbyIdConnectedApps: {
+        parameters: {
+            query?: {
+                organization_id?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        items: components["schemas"]["ConnectedApp"][] | null;
+                    };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteManagementEnvironmentsbyEnvironmentUsersbyIdConnectedAppsbyClient: {
+        parameters: {
+            query?: {
+                organization_id?: string;
+            };
+            header?: never;
+            path: {
+                environment: string;
+                id: string;
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     postManagementEnvironmentsbyEnvironmentUsersbyIdDeactivate: {
         parameters: {
             query?: never;
@@ -41865,6 +42725,13 @@ export interface operations {
             };
             /** @description No content */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Redirect */
+            303: {
                 headers: {
                     [name: string]: unknown;
                 };

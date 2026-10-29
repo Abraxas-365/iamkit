@@ -150,6 +150,18 @@ class Users(_Resource):
         """Ends every live session of the user (audited ``user.sessions_revoked``)."""
         return await self._c.request("POST", f"{self._c.env()}/users/{seg(user_id)}/revoke-sessions")  # type: ignore[no-any-return]
 
+    async def connected_apps(self, user_id: str, *, organization_id: str | None = None) -> JSON:
+        """The apps connected to the user's account (``{"items": [...]}``): clients with a live consent or sessions
+        at a protected resource, in ``organization_id`` or in all of the user's organizations."""
+        params = compact({"organization_id": organization_id})
+        return await self._c.request("GET", f"{self._c.env()}/users/{seg(user_id)}/connected-apps", params=params)  # type: ignore[no-any-return]
+
+    async def disconnect_app(self, user_id: str, client_id: str, *, organization_id: str | None = None) -> None:
+        """Ends the user's connection to a client (a connected app's ``client.id``): their consents to it and
+        its sessions for them, in ``organization_id`` or in all (audited ``oauth_consent.revoke``)."""
+        path = f"{self._c.env()}/users/{seg(user_id)}/connected-apps/{seg(client_id)}"
+        await self._c.request("DELETE", path, params=compact({"organization_id": organization_id}))
+
     async def require_password_change(self, user_id: str) -> None:
         await self._c.request("POST", f"{self._c.env()}/users/{seg(user_id)}/require-password-change")
 
@@ -745,10 +757,15 @@ class ProtectedResources(_Resource):
         default_scopes: Sequence[str] | None = None,
         idle_ttl_seconds: int | None = None,
         max_ttl_seconds: int | None = None,
+        consent_mode: str | None = None,
+        access_token_ttl_seconds: int | None = None,
     ) -> JSON:
         """Registers a resource linked to the application; its audience must be its canonical URL.
 
-        TTLs left out take the defaults (7 days idle, 30 days in all).
+        TTLs left out take the defaults (7 days idle, 30 days in all). ``consent_mode`` is ``"per_user"``
+        (default: each user consents to what a client asks) or ``"admin_granted"`` (an administrator may grant
+        a client scopes for users, see :meth:`grant_client`); ``access_token_ttl_seconds`` (60 to 3600, never
+        past the idle TTL) takes the default when left out.
         """
         body = compact(
             {
@@ -758,6 +775,8 @@ class ProtectedResources(_Resource):
                 "default_scopes": list(default_scopes) if default_scopes is not None else None,
                 "idle_ttl_seconds": idle_ttl_seconds,
                 "max_ttl_seconds": max_ttl_seconds,
+                "consent_mode": consent_mode,
+                "access_token_ttl_seconds": access_token_ttl_seconds,
             }
         )
         return await self._c.request("POST", f"{self._c.env()}/protected-resources", json=body)  # type: ignore[no-any-return]
@@ -767,7 +786,8 @@ class ProtectedResources(_Resource):
         (``active=False`` ends every authorization), ``allow_client_metadata``,
         ``allow_dynamic_registration`` (clients registered at ``/oauth/register``, while the environment's
         ``dynamic_client_registration`` feature is on) or ``client_admission`` (``"allowlist"`` or
-        ``"open"``: open admits any such client without review)."""
+        ``"open"``: open admits any such client without review), ``consent_mode`` (``"per_user"`` or
+        ``"admin_granted"``) or ``access_token_ttl_seconds`` (60 to 3600)."""
         path = f"{self._c.env()}/protected-resources/{seg(protected_id)}"
         return await self._c.request("PATCH", path, json=fields)  # type: ignore[no-any-return]
 
@@ -842,6 +862,34 @@ class ProtectedResources(_Resource):
             "DELETE", f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}"
         )
 
+    async def client_grants(self, protected_id: str, client_id: str, *, revoked: bool = False) -> JSON:
+        """A client's administrator grants at the server (``{"items": [...]}``); ``revoked=True`` adds revoked ones."""
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}/grants"
+        params = compact({"revoked": True if revoked else None})
+        return await self._c.request("GET", path, params=params)  # type: ignore[no-any-return]
+
+    async def grant_client(
+        self,
+        protected_id: str,
+        client_id: str,
+        scopes: Sequence[str],
+        *,
+        organization_id: str | None = None,
+        expires_at: str | None = None,
+    ) -> JSON:
+        """Grants a client ``scopes`` (permissions of the server's resource) for users without asking them,
+        replacing the live grant of the same client and organization. It covers users only while the server's
+        ``consent_mode`` is ``"admin_granted"``. ``organization_id`` limits it to one organization,
+        ``expires_at`` (RFC 3339) ends it."""
+        path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}/grants"
+        body = compact({"scopes": list(scopes), "organization_id": organization_id, "expires_at": expires_at})
+        return await self._c.request("PUT", path, json=body)  # type: ignore[no-any-return]
+
+    async def revoke_client_grant(self, protected_id: str, client_id: str, grant_id: str) -> None:
+        """Revokes an administrator grant; the sessions it covered end."""
+        base = f"{self._c.env()}/protected-resources/{seg(protected_id)}/clients/{seg(client_id)}"
+        await self._c.request("DELETE", f"{base}/grants/{seg(grant_id)}")
+
     async def create_client_from_template(self, protected_id: str, preset: str) -> JSON:
         """Creates (or returns) the fixed client of a template preset (``cursor``, ``antigravity``, ``gemini_cli``)."""
         path = f"{self._c.env()}/protected-resources/{seg(protected_id)}/client-templates"
@@ -887,10 +935,22 @@ class ProtectedResources(_Resource):
         return await self._c.request("POST", f"{self._c.env()}/oauth-client-presets", json=body)  # type: ignore[no-any-return]
 
     async def policy(self) -> JSON:
-        """The environment's ceilings: ``{"max_idle_ttl_seconds", "max_lifetime_ttl_seconds"}``."""
+        """The environment's ``max_idle_ttl_seconds`` and ``max_lifetime_ttl_seconds`` ceilings and ``consent_ui``."""
         return await self._c.request("GET", f"{self._c.env()}/protected-resource-policy")  # type: ignore[no-any-return]
 
-    async def set_policy(self, *, max_idle_ttl_seconds: int, max_lifetime_ttl_seconds: int) -> JSON:
-        """Replaces the ceilings; resources above a lowered ceiling are trimmed to it."""
-        body = {"max_idle_ttl_seconds": max_idle_ttl_seconds, "max_lifetime_ttl_seconds": max_lifetime_ttl_seconds}
+    async def set_policy(
+        self, *, max_idle_ttl_seconds: int, max_lifetime_ttl_seconds: int, consent_ui: str | None = None
+    ) -> JSON:
+        """Replaces the ceilings; resources above a lowered ceiling are trimmed to it.
+
+        ``consent_ui`` is where users consent: ``"hosted"`` (IAMKit's page) or ``"custom"`` (your own sign-in
+        UI); left out, the saved one stays.
+        """
+        body = compact(
+            {
+                "max_idle_ttl_seconds": max_idle_ttl_seconds,
+                "max_lifetime_ttl_seconds": max_lifetime_ttl_seconds,
+                "consent_ui": consent_ui,
+            }
+        )
         return await self._c.request("PUT", f"{self._c.env()}/protected-resource-policy", json=body)  # type: ignore[no-any-return]

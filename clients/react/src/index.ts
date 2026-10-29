@@ -9,6 +9,7 @@ export {
   useAccount,
   useAccountClient,
   useApiKeys,
+  useConnectedApps,
   useFactors,
   useOrganizations,
   usePassword,
@@ -19,6 +20,7 @@ export {
   type SignInRequired,
   type UseAccount,
   type UseApiKeys,
+  type UseConnectedApps,
   type UseFactors,
   type UseOrganizations,
   type UsePassword,
@@ -30,4 +32,5 @@ export { UserProfile, type ProfileField, type UserProfileProps } from "./UserPro
 export { UserSecurity, type UserSecurityProps } from "./UserSecurity.js";
 export { UserSessions, type UserSessionsProps } from "./UserSessions.js";
 export { ApiKeys, type ApiKeysProps } from "./ApiKeys.js";
+export { ConnectedApps, type ConnectedAppsProps } from "./ConnectedApps.js";
 export { OrganizationSwitcher, type OrganizationSwitcherProps } from "./OrganizationSwitcher.js";

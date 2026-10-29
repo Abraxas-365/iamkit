@@ -97,6 +97,10 @@ type Flow interface {
 	// acceptLanguage is the browser's, to pick the language like the
 	// hosted pages do.
 	Authorization(ctx context.Context, r Request, acceptLanguage string) (Authorization, error)
+	// ConsentPage is the hosted consent page of an authorization waiting
+	// for consent (any client: a custom UI that does not ask for consent
+	// falls back to it).
+	ConsentPage(ctx context.Context, r Request) (ConsentPage, error)
 	// Identify routes an email (by its domain) or a username (always to
 	// the password page).
 	Identify(ctx context.Context, r Request, login string) (Route, error)
@@ -222,6 +226,9 @@ type Secrets interface {
 // Authorizations is the part of the OAuth flows the hosted pages use.
 type Authorizations interface {
 	Pending(ctx context.Context, ticket, binding string) (oauth.Pending, error)
+	// ConsentPrompt is what an authorization waiting for consent asks
+	// (oauth.ErrConsentNotPending otherwise).
+	ConsentPrompt(ctx context.Context, ticket, binding string) (oauth.ConsentPrompt, error)
 }
 
 // Challenges is the part of the authentication commands the hosted pages use.

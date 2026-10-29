@@ -1060,6 +1060,19 @@
               "null"
             ]
           },
+          "consent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConsentInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "consent_required": {
+            "type": "boolean"
+          },
           "environment_id": {
             "description": "UUID (empty when unset)",
             "type": "string"
@@ -1118,6 +1131,7 @@
           "branding",
           "client_id",
           "connections",
+          "consent_required",
           "environment_id",
           "languages",
           "locale",
@@ -1396,6 +1410,102 @@
         },
         "type": "object"
       },
+      "ClientGrant": {
+        "properties": {
+          "client_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "organization_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "protected_resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "revoked_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked_reason": {
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "created_at",
+          "expires_at",
+          "id",
+          "organization_id",
+          "protected_resource_id",
+          "scopes",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "ClientGrantInputInput": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organization_id": {
+            "description": "UUID (empty when unset)",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "ClientRegistrationInput": {
         "properties": {
           "client_name": {
@@ -1481,6 +1591,12 @@
             ]
           },
           "backchannel_logout_uri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "consent_policy": {
             "type": [
               "string",
               "null"
@@ -1584,6 +1700,9 @@
           "backchannel_logout_uri": {
             "type": "string"
           },
+          "consent_policy": {
+            "type": "string"
+          },
           "grant_types": {
             "items": {
               "type": "string"
@@ -1622,6 +1741,9 @@
               "array",
               "null"
             ]
+          },
+          "preset": {
+            "type": "string"
           },
           "public": {
             "type": "boolean"
@@ -1669,6 +1791,7 @@
           "application_name",
           "backchannel_logout_session_required",
           "backchannel_logout_uri",
+          "consent_policy",
           "grant_types",
           "hosted_login",
           "id",
@@ -1726,6 +1849,9 @@
       },
       "Completion": {
         "properties": {
+          "consent_required": {
+            "type": "boolean"
+          },
           "redirect_to": {
             "type": "string"
           }
@@ -1868,6 +1994,105 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ConnectedApp": {
+        "properties": {
+          "active_sessions": {
+            "type": "integer"
+          },
+          "client": {
+            "$ref": "#/components/schemas/ConnectedClient"
+          },
+          "consented_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organization_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "protected_resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "resource_name": {
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "active_sessions",
+          "client",
+          "consented_at",
+          "last_used_at",
+          "organization_id",
+          "protected_resource_id",
+          "resource",
+          "resource_name",
+          "scopes"
+        ],
+        "type": "object"
+      },
+      "ConnectedClient": {
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "logo_uri": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "verified_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "host",
+          "id",
+          "logo_uri",
+          "name",
+          "preset",
+          "source",
+          "verified_name"
+        ],
         "type": "object"
       },
       "ConnectionDetail": {
@@ -2255,6 +2480,73 @@
           "provider",
           "signup",
           "update_profile"
+        ],
+        "type": "object"
+      },
+      "ConsentInfo": {
+        "properties": {
+          "agreed_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "client": {
+            "$ref": "#/components/schemas/ConnectedClient"
+          },
+          "hosted_url": {
+            "type": "string"
+          },
+          "organization_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "protected_resource_id": {
+            "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "resource_name": {
+            "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "ui": {
+            "type": "string"
+          },
+          "unheld_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "agreed_scopes",
+          "client",
+          "hosted_url",
+          "organization_id",
+          "protected_resource_id",
+          "resource",
+          "resource_name",
+          "scopes",
+          "ui",
+          "unheld_scopes"
         ],
         "type": "object"
       },
@@ -7721,6 +8013,9 @@
       },
       "ProtectedResource": {
         "properties": {
+          "access_token_ttl_seconds": {
+            "type": "integer"
+          },
           "active": {
             "type": "boolean"
           },
@@ -7735,6 +8030,9 @@
             "type": "string"
           },
           "client_admission": {
+            "type": "string"
+          },
+          "consent_mode": {
             "type": "string"
           },
           "created_at": {
@@ -7776,11 +8074,13 @@
           }
         },
         "required": [
+          "access_token_ttl_seconds",
           "active",
           "allow_client_metadata",
           "allow_dynamic_registration",
           "application_id",
           "client_admission",
+          "consent_mode",
           "created_at",
           "default_scopes",
           "environment_id",
@@ -7795,8 +8095,14 @@
       },
       "ProtectedResourceCreateInput": {
         "properties": {
+          "access_token_ttl_seconds": {
+            "type": "integer"
+          },
           "application_id": {
             "description": "UUID (empty when unset)",
+            "type": "string"
+          },
+          "consent_mode": {
             "type": "string"
           },
           "default_scopes": {
@@ -7841,6 +8147,9 @@
       },
       "ProtectedResourcePolicy": {
         "properties": {
+          "consent_ui": {
+            "type": "string"
+          },
           "max_idle_ttl_seconds": {
             "type": "integer"
           },
@@ -7849,6 +8158,7 @@
           }
         },
         "required": [
+          "consent_ui",
           "max_idle_ttl_seconds",
           "max_lifetime_ttl_seconds"
         ],
@@ -7856,6 +8166,9 @@
       },
       "ProtectedResourcePolicyInput": {
         "properties": {
+          "consent_ui": {
+            "type": "string"
+          },
           "max_idle_ttl_seconds": {
             "type": "integer"
           },
@@ -7867,6 +8180,12 @@
       },
       "ProtectedResourceUpdateInput": {
         "properties": {
+          "access_token_ttl_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "active": {
             "type": [
               "boolean",
@@ -7886,6 +8205,12 @@
             ]
           },
           "client_admission": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "consent_mode": {
             "type": [
               "string",
               "null"
@@ -8106,6 +8431,9 @@
             "type": "boolean"
           },
           "backchannel_logout_uri": {
+            "type": "string"
+          },
+          "consent_policy": {
             "type": "string"
           },
           "grant_types": {
@@ -26114,6 +26442,251 @@
         ]
       }
     },
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/grants": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revoked",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/ClientGrant"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "put": {
+        "operationId": "putApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientGrantInputInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientGrant"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/grants/{grant}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrantsbyGrant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "grant",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
     "/api/v1/environments/{environment}/protected-resources/{id}/clients/{client}/impact": {
       "get": {
         "operationId": "getApiEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact",
@@ -30086,6 +30659,163 @@
         ]
       }
     },
+    "/api/v1/environments/{environment}/users/{id}/connected-apps": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentUsersbyIdConnectedApps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/ConnectedApp"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/users/{id}/connected-apps/{client}": {
+      "delete": {
+        "operationId": "deleteApiEnvironmentsbyEnvironmentUsersbyIdConnectedAppsbyClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
     "/api/v1/environments/{environment}/users/{id}/deactivate": {
       "post": {
         "operationId": "postApiEnvironmentsbyEnvironmentUsersbyIdDeactivate",
@@ -32460,6 +33190,69 @@
         ]
       }
     },
+    "/identity/v1/authorize/{ticket}/consent": {
+      "post": {
+        "operationId": "postIdentityAuthorizebyTicketConsent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ticket",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "approve": {
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                },
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Completion"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "204": {
+            "description": "No content"
+          },
+          "303": {
+            "description": "Redirect"
+          },
+          "4XX": {
+            "description": "Client error"
+          },
+          "5XX": {
+            "description": "Server error"
+          },
+          "default": {
+            "description": "Success"
+          }
+        },
+        "summary": "ConsentDecision serves POST /identity/v1/authorize/:ticket/consent: a custom sign-in UI (consent_ui custom) records the user's decision {\"approve\": bool} under the browser binding cookie and gets w...",
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
     "/identity/v1/captcha/{environment}": {
       "get": {
         "operationId": "getIdentityCaptchabyEnvironment",
@@ -32877,6 +33670,9 @@
                         "success"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "$ref": "#/components/schemas/Completion"
                     },
                     {
                       "properties": {
@@ -34692,6 +35488,149 @@
             }
           }
         },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
+    "/identity/v1/me/connected-apps": {
+      "get": {
+        "operationId": "getIdentityMeConnectedApps",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/ConnectedApp"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "tags": [
+          "Identity API"
+        ]
+      }
+    },
+    "/identity/v1/me/connected-apps/{client}": {
+      "delete": {
+        "operationId": "deleteIdentityMeConnectedAppsbyClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "audience",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "204": {
             "description": "No content"
@@ -52524,6 +53463,260 @@
         ]
       }
     },
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/grants": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revoked",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/ClientGrant"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      },
+      "put": {
+        "operationId": "putManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrants",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientGrantInputInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientGrant"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/grants/{grant}": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientGrantsbyGrant",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "grant",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
     "/management/v1/environments/{environment}/protected-resources/{id}/clients/{client}/impact": {
       "get": {
         "operationId": "getManagementEnvironmentsbyEnvironmentProtectedResourcesbyIdClientsbyClientImpact",
@@ -58098,6 +59291,169 @@
         ]
       }
     },
+    "/management/v1/environments/{environment}/users/{id}/connected-apps": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentUsersbyIdConnectedApps",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "items": {
+                      "items": {
+                        "$ref": "#/components/schemas/ConnectedApp"
+                      },
+                      "type": [
+                        "array",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/users/{id}/connected-apps/{client}": {
+      "delete": {
+        "operationId": "deleteManagementEnvironmentsbyEnvironmentUsersbyIdConnectedAppsbyClient",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "client",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organization_id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
     "/management/v1/environments/{environment}/users/{id}/deactivate": {
       "post": {
         "operationId": "postManagementEnvironmentsbyEnvironmentUsersbyIdDeactivate",
@@ -62003,6 +63359,9 @@
           },
           "204": {
             "description": "No content"
+          },
+          "303": {
+            "description": "Redirect"
           },
           "default": {
             "description": "Success"

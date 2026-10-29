@@ -251,9 +251,9 @@ func ErrAdmissionBacklog() error {
 }
 
 // ErrAdmissionPending refuses to finish an authorization of an external
-// client IT has not approved (or whose approval expired).
+// client an administrator has not approved (or whose approval expired).
 func ErrAdmissionPending() error {
-	e := errx.Forbidden("IT has not approved this application for this server yet")
+	e := errx.Forbidden("an administrator has not approved this application for this server yet")
 	e.Code = "CLIENT_ADMISSION_PENDING"
 	return e
 }

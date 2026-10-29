@@ -3,12 +3,14 @@ package oauthsvc
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/errx"
 	"github.com/Abraxas-365/iamkit/internal/iam/authentication"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 	"github.com/Abraxas-365/iamkit/internal/query"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -38,6 +40,9 @@ func (s *Service) Create(ctx context.Context, environment identity.EnvironmentID
 	input.ClientAuth = input.ClientAuth.WithDefaults(input.Public)
 	if input.AccessTokenFormat == "" {
 		input.AccessTokenFormat = oauth.TokenFormatJWT
+	}
+	if input.ConsentPolicy == "" {
+		input.ConsentPolicy = oauth.ConsentSkip
 	}
 	if err := identity.ValidateRedirects(input.Redirects); err != nil {
 		return identity.ClientID{}, "", err
@@ -95,6 +100,11 @@ func (s *Service) Update(ctx context.Context, m oauth.Mutation, id identity.Clie
 			return err
 		}
 		if err = oauth.ValidateExchangeClient(update(current.GrantTypes, input.GrantTypes), current.Public); err != nil {
+			return err
+		}
+	}
+	if input.ConsentPolicy != nil {
+		if err = oauth.CheckConsentPolicy(*input.ConsentPolicy, oauth.SourceRegistered, current.Preset); err != nil {
 			return err
 		}
 	}
@@ -304,6 +314,39 @@ func (s *Service) Pending(ctx context.Context, ticket, binding string) (oauth.Pe
 	return oauth.Pending{Client: client, Form: row.Form, Ticket: row}, nil
 }
 
+// ConsentPrompt reads, under the ticket's browser binding, what an
+// authorization waiting for consent asks: the scopes the ticket holds,
+// split by whether the user holds them now, and the asked scopes already
+// agreed to. The session it waits with must still be live.
+func (s *Service) ConsentPrompt(ctx context.Context, ticket, binding string) (oauth.ConsentPrompt, error) {
+	p, err := s.Pending(ctx, ticket, binding)
+	if err != nil {
+		return oauth.ConsentPrompt{}, err
+	}
+	if !p.Ticket.AwaitingConsent() {
+		return oauth.ConsentPrompt{}, oauth.ErrConsentNotPending()
+	}
+	client := p.Client
+	form, _ := url.ParseQuery(p.Form)
+	target, err := oauth.ResolveResource(client, form["resource"])
+	if err != nil || target == nil {
+		return oauth.ConsentPrompt{}, invalidTicket()
+	}
+	info, err := s.repository.SessionInfo(ctx, *p.Ticket.ConsentSession)
+	if err != nil {
+		return oauth.ConsentPrompt{}, invalidTicket()
+	}
+	access, err := s.Access(ctx, client, info.User, *p.Ticket.ConsentSession, info.Organization)
+	if err != nil {
+		return oauth.ConsentPrompt{}, invalidTicket()
+	}
+	asked := oauth.ConsentScopes(target, oauth.ResourceScopes(target, strings.Fields(form.Get("scope")), client.Allows(oauth.GrantRefreshToken)))
+	held, unheld, agreed := oauth.NewConsentPrompt(p.Ticket.ConsentScopes, asked, access.Permissions)
+	shown := oauth.ConnectedClient{ID: client.ID, ClientID: client.PublicID(), Source: client.Source, Name: client.Name, Preset: client.Preset}.Describe(client.LogoURI)
+	return oauth.ConsentPrompt{Client: shown, Protected: target.ID, Resource: target.URI, ResourceName: target.Name, User: info.User, Organization: info.Organization,
+		Pending: held, Unheld: unheld, Agreed: agreed, UI: target.ConsentUI, Environment: client.Environment, Form: p.Form}, nil
+}
+
 func invalidTicket() error {
 	return errx.Unauthorized("invalid authorization ticket or browser binding")
 }
@@ -341,12 +384,19 @@ func (s *Service) Complete(ctx context.Context, ticket, binding string, approve 
 		return err
 	}
 	defer tx.Rollback()
-	// Lock order (N-1): the client row before the ticket, as block, demote
+	// Lock order (N-1): the server, then the client row before the ticket, as block, demote
 	// and forget take them (client, then its tickets). Database reads only:
 	// an external client blocked, or whose approval ended, since it was
 	// resolved is refused here, and its row is held against a block until
 	// this transaction ends. A client not persisted yet (ID zero) is
 	// pending, which prepare refuses.
+	// The protected resource first (W4): consents and bindings written
+	// here reference it, and a delete takes it before the clients.
+	if client.Protected != nil {
+		if err := tx.HoldProtected(ctx, client.Protected.ID); err != nil {
+			return err
+		}
+	}
 	var state *oauth.AdmissionState
 	if client.External() && !client.ID.IsZero() {
 		got, err := tx.Admission(ctx, client.ID)
@@ -380,6 +430,18 @@ func (s *Service) Complete(ctx context.Context, ticket, binding string, approve 
 		}
 	}
 	if err = prepare(row, client, tx); err != nil {
+		// Waiting for consent (D30): the ticket keeps the session and the
+		// scopes to ask about, and stays unspent for the decision.
+		var pending *oauth.ConsentPending
+		if errors.As(err, &pending) {
+			if err = tx.AwaitConsent(ctx, hash, *pending); err != nil {
+				return err
+			}
+			if err = tx.Commit(); err != nil {
+				return err
+			}
+			return pending
+		}
 		return err
 	}
 	if err = tx.Consume(ctx, hash); err != nil {

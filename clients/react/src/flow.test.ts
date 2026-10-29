@@ -134,4 +134,47 @@ describe("SignInFlow", () => {
     expect(calls.find((c) => c.route === "POST /identity/v1/federation/result")!.body).toEqual({ federation_result: "ik_fedres_x", code_verifier: "v".repeat(64) });
     expect(went).toEqual(["https://app.example.com/cb?code=c"]);
   });
+  const consent = {
+    client: { id: "c1", client_id: "https://vscode.dev/oauth/client-metadata.json", source: "cimd", name: "VS Code", host: "vscode.dev", logo_uri: "", preset: "vscode", verified_name: "Visual Studio Code" },
+    protected_resource_id: "p1",
+    resource: "https://mcp.example.com/mcp",
+    resource_name: "Docs MCP",
+    organization_id: "org",
+    scopes: ["mcp:tools:read"],
+    unheld_scopes: [],
+    agreed_scopes: [],
+    ui: "custom",
+    hosted_url: "https://id.example.com/hosted/consent?ticket=ik_ticket",
+  };
+
+  it("asks for consent in a custom UI and answers with the decision", async () => {
+    let described = 0;
+    const { flow, calls, went } = setup({
+      "GET /identity/v1/authorize/ik_ticket": () => json(200, described++ === 0 ? authorization : { ...authorization, consent_required: true, consent }),
+      "POST /identity/v1/login": () => json(200, pair),
+      "POST /oauth/authorize/complete": () => json(200, { redirect_to: consent.hosted_url, consent_required: true }),
+      "POST /identity/v1/authorize/ik_ticket/consent": (body) => json(200, { redirect_to: body.approve ? "https://app.example.com/cb?code=c" : "https://app.example.com/cb?error=access_denied" }),
+    });
+    await flow.start("");
+    await flow.identify("ada@example.com");
+    await flow.submitPassword("pw");
+    expect(flow.state.step).toBe("consent");
+    expect(flow.state.consent?.resource_name).toBe("Docs MCP");
+    expect(went).toEqual([]);
+    await flow.consent(false);
+    expect(calls.find((c) => c.route === "POST /identity/v1/authorize/ik_ticket/consent")!.body).toEqual({ approve: false });
+    expect(went).toEqual(["https://app.example.com/cb?error=access_denied"]);
+  });
+
+  it("resumes a ticket waiting for consent, and leaves for IAMKit's page where it asks", async () => {
+    const custom = setup({ "GET /identity/v1/authorize/ik_ticket": () => json(200, { ...authorization, consent_required: true, consent }) });
+    await custom.flow.start("");
+    expect(custom.flow.state.step).toBe("consent");
+
+    const hosted = setup({
+      "GET /identity/v1/authorize/ik_ticket": () => json(200, { ...authorization, consent_required: true, consent: { ...consent, ui: "hosted" } }),
+    });
+    await hosted.flow.start("");
+    expect(hosted.went).toEqual([consent.hosted_url]);
+  });
 });

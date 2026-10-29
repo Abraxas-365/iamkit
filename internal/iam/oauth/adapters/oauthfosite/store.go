@@ -320,8 +320,16 @@ func (s *Store) RevokeRefreshToken(ctx context.Context, id string) error {
 	if err := s.lock(ctx, id); err != nil {
 		return err
 	}
-	_, err := s.executor(ctx).ExecContext(ctx, `UPDATE oauth_requests SET active=false WHERE environment_id=$1 AND kind='refresh' AND request_id=$2`, s.Environment, id)
-	return wrap(err, "revoke refresh family")
+	if _, err := s.executor(ctx).ExecContext(ctx, `UPDATE oauth_requests SET active=false WHERE environment_id=$1 AND kind='refresh' AND request_id=$2`, s.Environment, id); err != nil {
+		return wrap(err, "revoke refresh family")
+	}
+	// RFC 7009 runs in transactionalRevoker's transaction: fosite revokes
+	// the refresh family before the access one, while its rows still
+	// name the grant's session.
+	if revoking(ctx) {
+		return s.endRevokedGrant(ctx, id)
+	}
+	return nil
 }
 func (s *Store) RevokeAccessToken(ctx context.Context, id string) error {
 	if _, ok := ctx.Value(txKey{s}).(*sqlx.Tx); !ok {

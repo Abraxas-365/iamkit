@@ -55,7 +55,7 @@ func (r *Repository) AccessTokenClient(ctx context.Context, key string) (identit
 func (r *Repository) Create(ctx context.Context, environment identity.EnvironmentID, id identity.ClientID, input oauth.Registration, hash []byte) error {
 	auth := input.ClientAuth
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash,hosted_login,post_logout_redirect_uris,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri,access_token_format,backchannel_logout_uri,backchannel_logout_session_required,grant_types,allowed_origins,initiate_login_uri) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`, id, environment, input.Application, input.Resource, pq.StringArray(nonNil(input.Redirects)), input.Public, hash, input.HostedLogin, pq.StringArray(nonNil(input.PostLogoutRedirects)), auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, pq.StringArray(input.Grants()), pq.StringArray(nonNil(input.AllowedOrigins)), input.InitiateLoginURI); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash,hosted_login,post_logout_redirect_uris,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks,jwks_uri,access_token_format,backchannel_logout_uri,backchannel_logout_session_required,grant_types,allowed_origins,initiate_login_uri,consent_policy) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`, id, environment, input.Application, input.Resource, pq.StringArray(nonNil(input.Redirects)), input.Public, hash, input.HostedLogin, pq.StringArray(nonNil(input.PostLogoutRedirects)), auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, pq.StringArray(input.Grants()), pq.StringArray(nonNil(input.AllowedOrigins)), input.InitiateLoginURI, input.ConsentPolicy); err != nil {
 			return conflict(err)
 		}
 		return eventpg.Record(ctx, tx, environment, event.OAuthClientCreated, event.Subject{Kind: "oauth_client", ID: id.String()},
@@ -80,9 +80,9 @@ func (r *Repository) Update(ctx context.Context, m oauth.Mutation, id identity.C
 		origins = pq.StringArray(nonNil(*input.AllowedOrigins))
 	}
 	if auth != nil {
-		return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($11,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($12,backchannel_logout_session_required), grant_types=COALESCE($13,grant_types), allowed_origins=COALESCE($14,allowed_origins), initiate_login_uri=COALESCE($15,initiate_login_uri), token_endpoint_auth_method=$7, token_endpoint_auth_signing_alg=$8, jwks=$9, jwks_uri=$10 WHERE environment_id=$1 AND id=$2 AND active AND source='registered'`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI)
+		return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($11,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($12,backchannel_logout_session_required), grant_types=COALESCE($13,grant_types), allowed_origins=COALESCE($14,allowed_origins), initiate_login_uri=COALESCE($15,initiate_login_uri), consent_policy=COALESCE($16,consent_policy), token_endpoint_auth_method=$7, token_endpoint_auth_signing_alg=$8, jwks=$9, jwks_uri=$10 WHERE environment_id=$1 AND id=$2 AND active AND source='registered'`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, auth.Method, auth.SigningAlg, auth.StoredJWKS(), auth.JWKSURI, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI, input.ConsentPolicy)
 	}
-	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($7,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($8,backchannel_logout_session_required), grant_types=COALESCE($9,grant_types), allowed_origins=COALESCE($10,allowed_origins), initiate_login_uri=COALESCE($11,initiate_login_uri) WHERE environment_id=$1 AND id=$2 AND active AND source='registered'`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI)
+	return r.audited(ctx, m, `UPDATE oauth_clients SET hosted_login=COALESCE($3,hosted_login), redirect_uris=COALESCE($4,redirect_uris), post_logout_redirect_uris=COALESCE($5,post_logout_redirect_uris), access_token_format=COALESCE($6,access_token_format), backchannel_logout_uri=COALESCE($7,backchannel_logout_uri), backchannel_logout_session_required=COALESCE($8,backchannel_logout_session_required), grant_types=COALESCE($9,grant_types), allowed_origins=COALESCE($10,allowed_origins), initiate_login_uri=COALESCE($11,initiate_login_uri), consent_policy=COALESCE($12,consent_policy) WHERE environment_id=$1 AND id=$2 AND active AND source='registered'`, m.Environment, id, input.HostedLogin, redirects, postLogout, input.AccessTokenFormat, input.BackchannelLogoutURI, input.BackchannelLogoutSessionRequired, grants, origins, input.InitiateLoginURI, input.ConsentPolicy)
 }
 func (r *Repository) Disable(ctx context.Context, m oauth.Mutation, id identity.ClientID) error {
 	return r.audited(ctx, m, `UPDATE oauth_clients SET active=false WHERE environment_id=$1 AND id=$2 AND source='registered'`, m.Environment, id)
@@ -158,7 +158,7 @@ func (r *Repository) OriginAllowed(ctx context.Context, origin string) (bool, er
 	return ok, failure(err)
 }
 
-const clientColumns = "oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.post_logout_redirect_uris, oc.public, oc.hosted_login, oc.active, oc.token_endpoint_auth_method, oc.token_endpoint_auth_signing_alg, oc.jwks, oc.jwks_uri, oc.access_token_format, oc.backchannel_logout_uri, oc.backchannel_logout_session_required, oc.initiate_login_uri, oc.grant_types, oc.allowed_origins, coalesce(oc.system,'') AS system"
+const clientColumns = "oc.id, oc.application_id, a.name AS application_name, oc.resource_id, res.name AS resource_name, oc.redirect_uris, oc.post_logout_redirect_uris, oc.public, oc.hosted_login, oc.active, oc.token_endpoint_auth_method, oc.token_endpoint_auth_signing_alg, oc.jwks, oc.jwks_uri, oc.access_token_format, oc.backchannel_logout_uri, oc.backchannel_logout_session_required, oc.initiate_login_uri, oc.grant_types, oc.allowed_origins, coalesce(oc.system,'') AS system, oc.consent_policy, oc.preset"
 
 type clientViewRow struct {
 	ID              identity.ClientID      `db:"id"`
@@ -178,11 +178,13 @@ type clientViewRow struct {
 	Grants          pq.StringArray         `db:"grant_types"`
 	Origins         pq.StringArray         `db:"allowed_origins"`
 	System          string                 `db:"system"`
+	ConsentPolicy   string                 `db:"consent_policy"`
+	Preset          string                 `db:"preset"`
 	authRow
 }
 
 func (row clientViewRow) view() oauth.ClientView {
-	return oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), PostLogoutRedirects: nonNil([]string(row.PostLogout)), Public: row.Public, HostedLogin: row.HostedLogin, Active: row.Active, AccessTokenFormat: row.TokenFormat, BackchannelLogoutURI: row.Backchannel, BackchannelLogoutSessionRequired: row.SessionRequired, InitiateLoginURI: row.Initiate, GrantTypes: nonNil([]string(row.Grants)), AllowedOrigins: nonNil([]string(row.Origins)), System: row.System, ClientAuth: row.auth()}
+	return oauth.ClientView{ID: row.ID, Application: row.Application, ApplicationName: row.ApplicationName, Resource: row.Resource, ResourceName: row.ResourceName, Redirects: []string(row.Redirects), PostLogoutRedirects: nonNil([]string(row.PostLogout)), Public: row.Public, HostedLogin: row.HostedLogin, Active: row.Active, AccessTokenFormat: row.TokenFormat, BackchannelLogoutURI: row.Backchannel, BackchannelLogoutSessionRequired: row.SessionRequired, InitiateLoginURI: row.Initiate, GrantTypes: nonNil([]string(row.Grants)), AllowedOrigins: nonNil([]string(row.Origins)), System: row.System, ConsentPolicy: row.ConsentPolicy, Preset: row.Preset, ClientAuth: row.auth()}
 }
 
 // authRow scans the token endpoint authentication columns.
@@ -224,10 +226,25 @@ func (r *Repository) SaveTicket(ctx context.Context, hash, binding []byte, clien
 
 // ticketTTL is the authorization ticket lifetime in seconds.
 func ticketTTL() float64 { return config.OAuthAuthorizationTicketTTL.Seconds() }
+
+// ticketColumns select a ticketRow from oauth_authorizations.
+const ticketColumns = `client_id,external_id,protected_resource_id,binding_hash,request_form,requested_at,device_hash,consent_session_id,consent_scopes,consent_session_hosted`
+
+type ticketRow struct {
+	oauth.Ticket
+	Scopes pq.StringArray `db:"consent_scopes"`
+}
+
+func (r ticketRow) toDomain() oauth.Ticket {
+	t := r.Ticket
+	t.ConsentScopes = []string(r.Scopes)
+	return t
+}
+
 func (r *Repository) PendingTicket(ctx context.Context, hash []byte) (oauth.Ticket, error) {
-	var row oauth.Ticket
-	err := r.db.GetContext(ctx, &row, `SELECT client_id,external_id,protected_resource_id,binding_hash,request_form,requested_at,device_hash FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL`, hash)
-	return row, lookup(err)
+	var row ticketRow
+	err := r.db.GetContext(ctx, &row, `SELECT `+ticketColumns+` FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL`, hash)
+	return row.toDomain(), lookup(err)
 }
 
 type authorization struct{ tx *sqlx.Tx }
@@ -240,9 +257,14 @@ func (r *Repository) Begin(ctx context.Context) (oauth.Authorization, error) {
 	return &authorization{tx}, nil
 }
 func (t *authorization) Ticket(ctx context.Context, hash []byte) (oauth.Ticket, error) {
-	var row oauth.Ticket
-	err := t.tx.GetContext(ctx, &row, `SELECT client_id,external_id,protected_resource_id,binding_hash,request_form,requested_at,device_hash FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL FOR UPDATE`, hash)
-	return row, lookup(err)
+	var row ticketRow
+	err := t.tx.GetContext(ctx, &row, `SELECT `+ticketColumns+` FROM oauth_authorizations WHERE secret_hash=$1 AND expires_at>now() AND consumed_at IS NULL FOR UPDATE`, hash)
+	return row.toDomain(), lookup(err)
+}
+func (t *authorization) HoldProtected(ctx context.Context, protected identity.ProtectedResourceID) error {
+	var found int
+	err := t.tx.GetContext(ctx, &found, `SELECT 1 FROM protected_resources WHERE id=$1 FOR KEY SHARE`, protected)
+	return lookup(err)
 }
 func (t *authorization) Admission(ctx context.Context, client identity.ClientID) (oauth.AdmissionState, error) {
 	var row struct {
@@ -257,19 +279,25 @@ func (t *authorization) Admission(ctx context.Context, client identity.ClientID)
 }
 func (t *authorization) Session(ctx context.Context, id identity.SessionID) (oauth.SessionInfo, error) {
 	var row struct {
-		Expires       time.Time      `db:"expires_at"`
-		Authenticated time.Time      `db:"authenticated_at"`
-		Created       time.Time      `db:"created_at"`
-		AMR           pq.StringArray `db:"amr"`
+		Expires       time.Time               `db:"expires_at"`
+		Authenticated time.Time               `db:"authenticated_at"`
+		Created       time.Time               `db:"created_at"`
+		AMR           pq.StringArray          `db:"amr"`
+		User          identity.UserID         `db:"user_id"`
+		Organization  identity.OrganizationID `db:"organization_id"`
 	}
-	err := t.tx.GetContext(ctx, &row, `SELECT expires_at,authenticated_at,created_at,amr FROM sessions WHERE id=$1 AND revoked_at IS NULL`, id)
-	return oauth.SessionInfo{Expires: row.Expires, Authenticated: row.Authenticated, Started: row.Created, AMR: []string(row.AMR)}, lookup(err)
+	err := t.tx.GetContext(ctx, &row, `SELECT expires_at,authenticated_at,created_at,amr,user_id,organization_id FROM sessions WHERE id=$1 AND revoked_at IS NULL`, id)
+	return oauth.SessionInfo{Expires: row.Expires, Authenticated: row.Authenticated, Started: row.Created, AMR: []string(row.AMR), User: row.User, Organization: row.Organization}, lookup(err)
 }
-func (t *authorization) Bind(ctx context.Context, session identity.SessionID, client identity.ClientID, lifetime time.Duration) (time.Time, error) {
+func (t *authorization) Bind(ctx context.Context, session identity.SessionID, client identity.ClientID, protected identity.ProtectedResourceID, lifetime time.Duration) (time.Time, error) {
 	// The first binding to a protected resource's client gives the session
 	// the resource's lifetime from its start; the sign-in's own identity
 	// refresh tokens end then, so only this grant lives that long.
-	res, err := t.tx.ExecContext(ctx, `UPDATE sessions SET oauth_client_id=$2, expires_at=CASE WHEN $3::bigint>0 THEN created_at+($3::bigint*interval '1 millisecond') ELSE expires_at END WHERE id=$1 AND oauth_client_id IS NULL`, session, client, lifetime.Milliseconds())
+	var resource *identity.ProtectedResourceID
+	if !protected.IsZero() {
+		resource = &protected
+	}
+	res, err := t.tx.ExecContext(ctx, `UPDATE sessions SET oauth_client_id=$2, protected_resource_id=$4, expires_at=CASE WHEN $3::bigint>0 THEN created_at+($3::bigint*interval '1 millisecond') ELSE expires_at END WHERE id=$1 AND oauth_client_id IS NULL`, session, client, lifetime.Milliseconds(), resource)
 	if err != nil {
 		return time.Time{}, failure(err)
 	}
@@ -294,6 +322,27 @@ func (t *authorization) Bind(ctx context.Context, session identity.SessionID, cl
 func (t *authorization) Consume(ctx context.Context, hash []byte) error {
 	_, err := t.tx.ExecContext(ctx, `UPDATE oauth_authorizations SET consumed_at=now() WHERE secret_hash=$1`, hash)
 	return failure(err)
+}
+func (t *authorization) AwaitConsent(ctx context.Context, hash []byte, pending oauth.ConsentPending) error {
+	_, err := t.tx.ExecContext(ctx, `UPDATE oauth_authorizations SET consent_session_id=$2, consent_scopes=$3, consent_session_hosted=$4 WHERE secret_hash=$1 AND consumed_at IS NULL`, hash, pending.Session, pq.StringArray(pending.Scopes), pending.Hosted)
+	return failure(err)
+}
+func (t *authorization) Agreed(ctx context.Context, key oauth.ConsentKey, admin bool) (oauth.Agreed, error) {
+	return agreed(ctx, t.tx, key, admin, false)
+}
+func (t *authorization) RecordConsent(ctx context.Context, record oauth.ConsentRecord) error {
+	return recordConsent(ctx, t.tx, record)
+}
+func (t *authorization) DenyConsent(ctx context.Context, record oauth.ConsentRecord, end *identity.SessionID) error {
+	if end != nil {
+		if err := sessionReason(ctx, t.tx, "consent_denied"); err != nil {
+			return err
+		}
+		if _, err := t.tx.ExecContext(ctx, `UPDATE sessions SET revoked_at=now() WHERE id=$1 AND environment_id=$2 AND revoked_at IS NULL`, *end, record.Key.Environment); err != nil {
+			return failure(err)
+		}
+	}
+	return consentEvent(ctx, t.tx, event.OAuthConsentDenied, record, identity.ConsentID{}, nil)
 }
 func (t *authorization) Commit() error   { return failure(t.tx.Commit()) }
 func (t *authorization) Rollback() error { return failure(t.tx.Rollback()) }

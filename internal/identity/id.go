@@ -136,6 +136,8 @@ type (
 	waitlistTag      struct{} // waitlist entry
 	protectedTag     struct{} // protected resource (RFC 9728 resource server)
 	allowlistTag     struct{} // OAuth client metadata document allowlist entry
+	consentTag       struct{} // user consent to an OAuth client
+	clientGrantTag   struct{} // administrator grant of scopes to an OAuth client
 )
 
 // tagName returns a human-readable name for error messages.
@@ -220,6 +222,10 @@ func tagName[T any]() string {
 		return "protected_resource_id"
 	case allowlistTag:
 		return "allowlist_entry_id"
+	case consentTag:
+		return "consent_id"
+	case clientGrantTag:
+		return "client_grant_id"
 	default:
 		return "id"
 	}
@@ -284,6 +290,11 @@ type (
 	// AllowlistEntryID names an entry of the OAuth client metadata document
 	// allowlist.
 	AllowlistEntryID = ID[allowlistTag]
+	// ConsentID names what a user agreed an OAuth client may do.
+	ConsentID = ID[consentTag]
+	// ClientGrantID names scopes an administrator granted an OAuth client
+	// at a protected resource.
+	ClientGrantID = ID[clientGrantTag]
 )
 
 // ---------- Typed constructors (callable from outside the package) ----------
@@ -329,6 +340,8 @@ func NewRestrictionID() RestrictionID             { return NewID[restrictionTag]
 func NewWaitlistEntryID() WaitlistEntryID         { return NewID[waitlistTag]() }
 func NewProtectedResourceID() ProtectedResourceID { return NewID[protectedTag]() }
 func NewAllowlistEntryID() AllowlistEntryID       { return NewID[allowlistTag]() }
+func NewConsentID() ConsentID                     { return NewID[consentTag]() }
+func NewClientGrantID() ClientGrantID             { return NewID[clientGrantTag]() }
 
 // ---------- Typed parsers (callable from outside the package) ----------
 
@@ -378,6 +391,10 @@ func ParseProtectedResourceID(raw string) (ProtectedResourceID, error) {
 }
 func ParseAllowlistEntryID(raw string) (AllowlistEntryID, error) {
 	return ParseID[allowlistTag](raw)
+}
+func ParseConsentID(raw string) (ConsentID, error) { return ParseID[consentTag](raw) }
+func ParseClientGrantID(raw string) (ClientGrantID, error) {
+	return ParseID[clientGrantTag](raw)
 }
 
 // MustParse convenience functions — panic on invalid input; use in tests and static init.

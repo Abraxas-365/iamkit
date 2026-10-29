@@ -43,8 +43,54 @@ type ProtectedResource struct {
 	AllowDynamicRegistration bool `json:"allow_dynamic_registration"`
 	// ClientAdmission is ClientAdmissionAllowlist (a document client waits
 	// for IT unless an allowlist entry admits it) or ClientAdmissionOpen.
-	ClientAdmission string    `json:"client_admission"`
-	CreatedAt       time.Time `json:"created_at"`
+	ClientAdmission string `json:"client_admission"`
+	// ConsentMode is ConsentModePerUser (each user consents to what a
+	// client asks) or ConsentModeAdminGranted (an administrator may grant a
+	// client scopes for every user; beyond them users still consent).
+	ConsentMode string `json:"consent_mode"`
+	// AccessTokenTTLSeconds is the lifetime of the access tokens the
+	// resource flow issues: how long a token outlives a revocation for a
+	// server that does not introspect. Held to the idle TTL at use.
+	AccessTokenTTLSeconds int64     `json:"access_token_ttl_seconds"`
+	CreatedAt             time.Time `json:"created_at"`
+}
+
+// Consent modes of a protected resource.
+const (
+	ConsentModePerUser      = "per_user"
+	ConsentModeAdminGranted = "admin_granted"
+)
+
+// Bounds of a protected resource's access token lifetime.
+const (
+	MinAccessTokenTTLSeconds = 60
+	MaxAccessTokenTTLSeconds = 3600
+)
+
+func validateConsentMode(mode string) error {
+	if mode != ConsentModePerUser && mode != ConsentModeAdminGranted {
+		return errx.Validation("consent_mode must be per_user or admin_granted")
+	}
+	return nil
+}
+
+// DefaultAccessTokenTTL is a server's access token lifetime when none is
+// set: config.OAuthAccessTokenLifespan, held to its idle TTL and the
+// bounds.
+func DefaultAccessTokenTTL(idle int64) int64 {
+	return max(MinAccessTokenTTLSeconds, min(int64(config.OAuthAccessTokenLifespan.Seconds()), idle))
+}
+
+func validateAccessTTL(ttl, idle int64) error {
+	if ttl < MinAccessTokenTTLSeconds || ttl > MaxAccessTokenTTLSeconds {
+		return errx.Validation("access_token_ttl_seconds must be between 60 and 3600")
+	}
+	// A server idle for less than the minimum issues tokens of its idle
+	// TTL (NewProtectedTarget holds AccessTTL to Idle).
+	if ttl > max(idle, MinAccessTokenTTLSeconds) {
+		return errx.Validation("access_token_ttl_seconds cannot exceed idle_ttl_seconds")
+	}
+	return nil
 }
 
 // ProtectedResourceImpact is what deactivating or deleting a protected
@@ -67,6 +113,10 @@ type ProtectedResourceCreate struct {
 	DefaultScopes  []string               `json:"default_scopes"`
 	IdleTTLSeconds int64                  `json:"idle_ttl_seconds"`
 	MaxTTLSeconds  int64                  `json:"max_ttl_seconds"`
+	// ConsentMode defaults to ConsentModePerUser, AccessTokenTTLSeconds to
+	// config.OAuthAccessTokenLifespan.
+	ConsentMode           string `json:"consent_mode"`
+	AccessTokenTTLSeconds int64  `json:"access_token_ttl_seconds"`
 }
 
 // WithDefaults fills the TTLs left out.
@@ -79,6 +129,12 @@ func (c ProtectedResourceCreate) WithDefaults() ProtectedResourceCreate {
 	}
 	if c.DefaultScopes == nil {
 		c.DefaultScopes = []string{}
+	}
+	if c.ConsentMode == "" {
+		c.ConsentMode = ConsentModePerUser
+	}
+	if c.AccessTokenTTLSeconds == 0 {
+		c.AccessTokenTTLSeconds = DefaultAccessTokenTTL(c.IdleTTLSeconds)
 	}
 	return c
 }
@@ -93,7 +149,13 @@ func (c ProtectedResourceCreate) Validate() error {
 	if err := identity.ValidatePermissions(c.DefaultScopes, ""); err != nil {
 		return errx.Validation("default_scopes must be distinct permissions of the resource")
 	}
-	return validateTTLs(c.IdleTTLSeconds, c.MaxTTLSeconds)
+	if err := validateConsentMode(c.ConsentMode); err != nil {
+		return err
+	}
+	if err := validateTTLs(c.IdleTTLSeconds, c.MaxTTLSeconds); err != nil {
+		return err
+	}
+	return validateAccessTTL(c.AccessTokenTTLSeconds, c.IdleTTLSeconds)
 }
 
 // ProtectedResourceUpdate changes a protected resource; nil fields keep.
@@ -109,9 +171,28 @@ type ProtectedResourceUpdate struct {
 	AllowClientMetadata      *bool   `json:"allow_client_metadata"`
 	AllowDynamicRegistration *bool   `json:"allow_dynamic_registration"`
 	ClientAdmission          *string `json:"client_admission"`
+	ConsentMode              *string `json:"consent_mode"`
+	AccessTokenTTLSeconds    *int64  `json:"access_token_ttl_seconds"`
+}
+
+// HoldAccessTTL lowers the access token lifetime with an idle TTL lowered
+// below it when the update does not set one.
+func (u ProtectedResourceUpdate) HoldAccessTTL(current ProtectedResource) ProtectedResourceUpdate {
+	if u.IdleTTLSeconds == nil || u.AccessTokenTTLSeconds != nil {
+		return u
+	}
+	if held := max(MinAccessTokenTTLSeconds, *u.IdleTTLSeconds); held < current.AccessTokenTTLSeconds {
+		u.AccessTokenTTLSeconds = &held
+	}
+	return u
 }
 
 func (u ProtectedResourceUpdate) Validate() error {
+	if u.ConsentMode != nil {
+		if err := validateConsentMode(*u.ConsentMode); err != nil {
+			return err
+		}
+	}
 	if u.ClientAdmission != nil && *u.ClientAdmission != ClientAdmissionAllowlist && *u.ClientAdmission != ClientAdmissionOpen {
 		return errx.Validation("client_admission must be allowlist or open")
 	}
@@ -157,6 +238,12 @@ func (u ProtectedResourceUpdate) Apply(current ProtectedResource) ProtectedResou
 	if u.ClientAdmission != nil {
 		current.ClientAdmission = *u.ClientAdmission
 	}
+	if u.ConsentMode != nil {
+		current.ConsentMode = *u.ConsentMode
+	}
+	if u.AccessTokenTTLSeconds != nil {
+		current.AccessTokenTTLSeconds = *u.AccessTokenTTLSeconds
+	}
 	return current
 }
 
@@ -168,7 +255,13 @@ func (r ProtectedResource) Validate() error {
 	if r.ClientAdmission != ClientAdmissionAllowlist && r.ClientAdmission != ClientAdmissionOpen {
 		return errx.Validation("client_admission must be allowlist or open")
 	}
-	return validateTTLs(r.IdleTTLSeconds, r.MaxTTLSeconds)
+	if err := validateConsentMode(r.ConsentMode); err != nil {
+		return err
+	}
+	if err := validateTTLs(r.IdleTTLSeconds, r.MaxTTLSeconds); err != nil {
+		return err
+	}
+	return validateAccessTTL(r.AccessTokenTTLSeconds, r.IdleTTLSeconds)
 }
 
 // ProtectedResourcePolicy are an environment's ceilings for the TTLs of its
@@ -177,14 +270,28 @@ func (r ProtectedResource) Validate() error {
 type ProtectedResourcePolicy struct {
 	MaxIdleTTLSeconds     int64 `json:"max_idle_ttl_seconds"`
 	MaxLifetimeTTLSeconds int64 `json:"max_lifetime_ttl_seconds"`
+	// ConsentUI is where the environment's users consent: ConsentUIHosted
+	// (IAMKit's consent page) or ConsentUICustom (the environment's own
+	// sign-in UI, through the authorization ticket's consent endpoints;
+	// hosted sign-ins still get the hosted page).
+	ConsentUI string `json:"consent_ui"`
 }
+
+// Consent surfaces.
+const (
+	ConsentUIHosted = "hosted"
+	ConsentUICustom = "custom"
+)
 
 // DefaultProtectedResourcePolicy applies while an environment saved none.
 func DefaultProtectedResourcePolicy() ProtectedResourcePolicy {
-	return ProtectedResourcePolicy{MaxIdleTTLSeconds: int64(config.ProtectedResourceIdleCeiling.Seconds()), MaxLifetimeTTLSeconds: int64(config.ProtectedResourceLifetimeCeiling.Seconds())}
+	return ProtectedResourcePolicy{MaxIdleTTLSeconds: int64(config.ProtectedResourceIdleCeiling.Seconds()), MaxLifetimeTTLSeconds: int64(config.ProtectedResourceLifetimeCeiling.Seconds()), ConsentUI: ConsentUIHosted}
 }
 
 func (p ProtectedResourcePolicy) Validate() error {
+	if p.ConsentUI != ConsentUIHosted && p.ConsentUI != ConsentUICustom {
+		return errx.Validation("consent_ui must be hosted or custom")
+	}
 	return validateTTLs(p.MaxIdleTTLSeconds, p.MaxLifetimeTTLSeconds)
 }
 
@@ -201,6 +308,8 @@ func (p ProtectedResourcePolicy) Admits(idle, lifetime int64) error {
 type ProtectedTarget struct {
 	ID  identity.ProtectedResourceID
 	URI string
+	// Name is the server's display name (consent pages).
+	Name string
 	// Scopes is the resource's permission catalog: every scope a client may
 	// ask for at this server.
 	Scopes        []string
@@ -209,6 +318,12 @@ type ProtectedTarget struct {
 	// policy.
 	Idle     time.Duration
 	Lifetime time.Duration
+	// AccessTTL is the lifetime of an access token issued now, at most Idle.
+	AccessTTL   time.Duration
+	ConsentMode string
+	// ConsentUI is where the environment's users consent (the policy's
+	// consent_ui, ConsentUIHosted by default).
+	ConsentUI string
 }
 
 // NewProtectedTarget holds a resource's TTLs to the policy (nil policy:
@@ -218,9 +333,33 @@ func NewProtectedTarget(r ProtectedResource, scopes []string, policy *ProtectedR
 	if policy != nil {
 		p = *policy
 	}
-	return &ProtectedTarget{ID: r.ID, URI: r.URI, Scopes: scopes, DefaultScopes: r.DefaultScopes,
-		Idle:     time.Duration(min(r.IdleTTLSeconds, p.MaxIdleTTLSeconds)) * time.Second,
-		Lifetime: time.Duration(min(r.MaxTTLSeconds, p.MaxLifetimeTTLSeconds)) * time.Second}
+	idle := min(r.IdleTTLSeconds, p.MaxIdleTTLSeconds)
+	access := r.AccessTokenTTLSeconds
+	if access <= 0 {
+		access = int64(config.OAuthAccessTokenLifespan.Seconds())
+	}
+	mode := r.ConsentMode
+	if mode == "" {
+		mode = ConsentModePerUser
+	}
+	ui := p.ConsentUI
+	if ui == "" {
+		ui = ConsentUIHosted
+	}
+	return &ProtectedTarget{ID: r.ID, URI: r.URI, Name: r.Name, Scopes: scopes, DefaultScopes: r.DefaultScopes, ConsentUI: ui,
+		Idle:        time.Duration(idle) * time.Second,
+		Lifetime:    time.Duration(min(r.MaxTTLSeconds, p.MaxLifetimeTTLSeconds)) * time.Second,
+		AccessTTL:   time.Duration(min(access, idle)) * time.Second,
+		ConsentMode: mode}
+}
+
+// AccessExpiry is when an access token issued now expires: after AccessTTL,
+// never past the grant's deadline.
+func (t *ProtectedTarget) AccessExpiry(now, deadline time.Time) time.Time {
+	if at := now.Add(t.AccessTTL); deadline.IsZero() || at.Before(deadline) {
+		return at
+	}
+	return deadline
 }
 
 // RefreshExpiry is when a refresh token issued now expires: after the

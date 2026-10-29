@@ -349,8 +349,8 @@ func TestClientPendingPrune(t *testing.T) {
 		if used {
 			last = "now()"
 		}
-		e.DB.Get(&id, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,hosted_login,token_endpoint_auth_method,grant_types,source,external_id,protected_resource_id,admission,discovered_at,last_used_at)
-			VALUES(gen_random_uuid(),$1,$2,$3,'{http://localhost/callback}',true,true,'none','{authorization_code,refresh_token}','cimd',$4,$5,$6,now()-$7::interval,`+last+`) RETURNING id`,
+		e.DB.Get(&id, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,hosted_login,token_endpoint_auth_method,grant_types,source,external_id,protected_resource_id,admission,discovered_at,last_used_at,consent_policy)
+			VALUES(gen_random_uuid(),$1,$2,$3,'{http://localhost/callback}',true,true,'none','{authorization_code,refresh_token}','cimd',$4,$5,$6,now()-$7::interval,`+last+`,'required') RETURNING id`,
 			e.EnvID, e.Client, resource, "https://"+name+".example/c", protected, admission, age)
 		return id
 	}

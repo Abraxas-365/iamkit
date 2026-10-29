@@ -45,6 +45,8 @@ type (
 	ImportResult            = iamclient.ImportResult
 	ImportRowError          = iamclient.ImportRowError
 	ImportRowResult         = iamclient.ImportRowResult
+	ConnectedApp            = iamclient.ConnectedApp
+	ConnectedClient         = iamclient.ConnectedClient
 	Created                 = iamclient.Created
 	DNSRecord               = iamclient.DNSRecord
 	DeliveryAttempt         = iamclient.DeliveryAttempt

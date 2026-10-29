@@ -261,7 +261,7 @@ function ProviderMark({ provider }: { provider: string }) {
 // --- OAuth Clients ---
 /** ClientWarning is an accepted setting to review (code loopback_redirect). */
 export interface ClientWarning { code: string; field: string; value: string }
-export interface OAuthClient extends ClientAuth { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; post_logout_redirect_uris?: string[] | null; allowed_origins?: string[] | null; public: boolean; hosted_login: boolean; active: boolean; access_token_format?: 'jwt' | 'opaque'; backchannel_logout_uri?: string; backchannel_logout_session_required?: boolean; initiate_login_uri?: string; grant_types?: string[]; warnings?: ClientWarning[] | null }
+export interface OAuthClient extends ClientAuth { id: string; application_id: string; application_name: string; resource_id: string; resource_name: string; redirect_uris: string[]; post_logout_redirect_uris?: string[] | null; allowed_origins?: string[] | null; public: boolean; hosted_login: boolean; active: boolean; access_token_format?: 'jwt' | 'opaque'; backchannel_logout_uri?: string; backchannel_logout_session_required?: boolean; initiate_login_uri?: string; grant_types?: string[]; warnings?: ClientWarning[] | null; consent_policy?: 'required' | 'skip'; preset?: string }
 export const redirectHint = t('Where users return after signing in. HTTPS; http only for localhost, 127.0.0.1 or [::1] (development and native apps).')
 
 /** loopbackWarnings mirrors the server's warnings for URIs being edited. */

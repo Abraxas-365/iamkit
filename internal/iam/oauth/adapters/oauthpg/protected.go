@@ -22,7 +22,7 @@ func NewProtectedResources(db *sqlx.DB) *ProtectedResources { return &ProtectedR
 
 var _ oauth.ProtectedResourceRepository = (*ProtectedResources)(nil)
 
-const protectedColumns = `id,environment_id,application_id,resource_id,uri,name,default_scopes,idle_ttl_seconds,max_ttl_seconds,active,allow_client_metadata,allow_dynamic_registration,client_admission,created_at`
+const protectedColumns = `id,environment_id,application_id,resource_id,uri,name,default_scopes,idle_ttl_seconds,max_ttl_seconds,active,allow_client_metadata,allow_dynamic_registration,client_admission,consent_mode,access_token_ttl_seconds,created_at`
 
 type protectedResourceRow struct {
 	ID          identity.ProtectedResourceID `db:"id"`
@@ -38,6 +38,8 @@ type protectedResourceRow struct {
 	AllowMeta   bool                         `db:"allow_client_metadata"`
 	AllowDCR    bool                         `db:"allow_dynamic_registration"`
 	Admission   string                       `db:"client_admission"`
+	ConsentMode string                       `db:"consent_mode"`
+	AccessTTL   int64                        `db:"access_token_ttl_seconds"`
 	CreatedAt   time.Time                    `db:"created_at"`
 }
 
@@ -46,7 +48,7 @@ func (r protectedResourceRow) domain() oauth.ProtectedResource {
 	if scopes == nil {
 		scopes = []string{}
 	}
-	return oauth.ProtectedResource{ID: r.ID, Environment: r.Environment, Application: r.Application, Resource: r.Resource, URI: r.URI, Name: r.Name, DefaultScopes: scopes, IdleTTLSeconds: r.Idle, MaxTTLSeconds: r.Max, Active: r.Active, AllowClientMetadata: r.AllowMeta, AllowDynamicRegistration: r.AllowDCR, ClientAdmission: r.Admission, CreatedAt: r.CreatedAt}
+	return oauth.ProtectedResource{ID: r.ID, Environment: r.Environment, Application: r.Application, Resource: r.Resource, URI: r.URI, Name: r.Name, DefaultScopes: scopes, IdleTTLSeconds: r.Idle, MaxTTLSeconds: r.Max, Active: r.Active, AllowClientMetadata: r.AllowMeta, AllowDynamicRegistration: r.AllowDCR, ClientAdmission: r.Admission, ConsentMode: r.ConsentMode, AccessTokenTTLSeconds: r.AccessTTL, CreatedAt: r.CreatedAt}
 }
 
 // protectedConflict maps the table's constraints to their meaning.
@@ -85,8 +87,8 @@ func (r *ProtectedResources) ProtectedResourceSource(ctx context.Context, enviro
 
 func (r *ProtectedResources) CreateProtectedResource(ctx context.Context, m oauth.Mutation, id identity.ProtectedResourceID, uri string, input oauth.ProtectedResourceCreate) error {
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO protected_resources(id,environment_id,application_id,resource_id,uri,name,default_scopes,idle_ttl_seconds,max_ttl_seconds) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-			id, m.Environment, input.Application, input.Resource, uri, input.Name, pq.StringArray(input.DefaultScopes), input.IdleTTLSeconds, input.MaxTTLSeconds); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO protected_resources(id,environment_id,application_id,resource_id,uri,name,default_scopes,idle_ttl_seconds,max_ttl_seconds,consent_mode,access_token_ttl_seconds) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			id, m.Environment, input.Application, input.Resource, uri, input.Name, pq.StringArray(input.DefaultScopes), input.IdleTTLSeconds, input.MaxTTLSeconds, input.ConsentMode, input.AccessTokenTTLSeconds); err != nil {
 			return protectedConflict(err)
 		}
 		return eventpg.AuditWith(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, map[string]any{"uri": uri, "resource_id": input.Resource.String()})
@@ -101,8 +103,9 @@ func (r *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oaut
 			Allow     bool   `db:"allow_client_metadata"`
 			AllowDCR  bool   `db:"allow_dynamic_registration"`
 			Admission string `db:"client_admission"`
+			Consent   string `db:"consent_mode"`
 		}
-		if err := tx.GetContext(ctx, &before, `SELECT allow_client_metadata,allow_dynamic_registration,client_admission FROM protected_resources WHERE id=$1 AND environment_id=$2 FOR NO KEY UPDATE`, id, m.Environment); errors.Is(err, sql.ErrNoRows) {
+		if err := tx.GetContext(ctx, &before, `SELECT allow_client_metadata,allow_dynamic_registration,client_admission,consent_mode FROM protected_resources WHERE id=$1 AND environment_id=$2 FOR NO KEY UPDATE`, id, m.Environment); errors.Is(err, sql.ErrNoRows) {
 			return errx.NotFound("protected resource not found")
 		} else if err != nil {
 			return failure(err)
@@ -122,9 +125,10 @@ func (r *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oaut
 		var row protectedResourceRow
 		err := tx.GetContext(ctx, &row, `UPDATE protected_resources SET name=COALESCE($3,name),default_scopes=COALESCE($4::text[],default_scopes),
 			idle_ttl_seconds=COALESCE($5,idle_ttl_seconds),max_ttl_seconds=COALESCE($6,max_ttl_seconds),active=COALESCE($7,active),
-			allow_client_metadata=COALESCE($8,allow_client_metadata),client_admission=COALESCE($9,client_admission),allow_dynamic_registration=COALESCE($10,allow_dynamic_registration)
+			allow_client_metadata=COALESCE($8,allow_client_metadata),client_admission=COALESCE($9,client_admission),allow_dynamic_registration=COALESCE($10,allow_dynamic_registration),
+			consent_mode=COALESCE($11,consent_mode),access_token_ttl_seconds=COALESCE($12,access_token_ttl_seconds)
 			WHERE id=$1 AND environment_id=$2 RETURNING `+protectedColumns,
-			id, m.Environment, input.Name, scopes, input.IdleTTLSeconds, input.MaxTTLSeconds, input.Active, input.AllowClientMetadata, input.ClientAdmission, input.AllowDynamicRegistration)
+			id, m.Environment, input.Name, scopes, input.IdleTTLSeconds, input.MaxTTLSeconds, input.Active, input.AllowClientMetadata, input.ClientAdmission, input.AllowDynamicRegistration, input.ConsentMode, input.AccessTokenTTLSeconds)
 		if errors.Is(err, sql.ErrNoRows) {
 			return errx.NotFound("protected resource not found")
 		} else if err != nil {
@@ -135,6 +139,14 @@ func (r *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oaut
 		// block and of Complete.
 		if err = reconcileAdmission(ctx, tx, m, p, oauth.ProtectedResource{AllowClientMetadata: before.Allow, AllowDynamicRegistration: before.AllowDCR, ClientAdmission: before.Admission}); err != nil {
 			return err
+		}
+		// Back to per-user consent: the administrator grants no longer
+		// count, so they end now with their sessions (D32), not silently
+		// at each refresh (and never come back with the mode).
+		if before.Consent == oauth.ConsentModeAdminGranted && p.ConsentMode != oauth.ConsentModeAdminGranted {
+			if err = revokeServerGrants(ctx, tx, m.Environment, m.Actor, p.ID, oauth.GrantConsentModeChanged); err != nil {
+				return err
+			}
 		}
 		if !p.Active {
 			if err = endProtectedGrants(ctx, tx, m.Environment, p.ID); err != nil {
@@ -278,7 +290,7 @@ func (r *ProtectedResources) ProtectedResourceImpact(ctx context.Context, enviro
 
 func (r *ProtectedResources) ProtectedResourcePolicy(ctx context.Context, environment identity.EnvironmentID) (*oauth.ProtectedResourcePolicy, error) {
 	var p oauth.ProtectedResourcePolicy
-	err := r.db.QueryRowContext(ctx, `SELECT max_idle_ttl_seconds,max_lifetime_ttl_seconds FROM protected_resource_policies WHERE environment_id=$1`, environment).Scan(&p.MaxIdleTTLSeconds, &p.MaxLifetimeTTLSeconds)
+	err := r.db.QueryRowContext(ctx, `SELECT max_idle_ttl_seconds,max_lifetime_ttl_seconds,consent_ui FROM protected_resource_policies WHERE environment_id=$1`, environment).Scan(&p.MaxIdleTTLSeconds, &p.MaxLifetimeTTLSeconds, &p.ConsentUI)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -290,13 +302,14 @@ func (r *ProtectedResources) ProtectedResourcePolicy(ctx context.Context, enviro
 
 func (r *ProtectedResources) SetProtectedResourcePolicy(ctx context.Context, m oauth.Mutation, p oauth.ProtectedResourcePolicy) error {
 	return eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO protected_resource_policies(environment_id,max_idle_ttl_seconds,max_lifetime_ttl_seconds) VALUES($1,$2,$3)
-			ON CONFLICT (environment_id) DO UPDATE SET max_idle_ttl_seconds=EXCLUDED.max_idle_ttl_seconds,max_lifetime_ttl_seconds=EXCLUDED.max_lifetime_ttl_seconds,updated_at=now()`,
-			m.Environment, p.MaxIdleTTLSeconds, p.MaxLifetimeTTLSeconds); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO protected_resource_policies(environment_id,max_idle_ttl_seconds,max_lifetime_ttl_seconds,consent_ui) VALUES($1,$2,$3,$4)
+			ON CONFLICT (environment_id) DO UPDATE SET max_idle_ttl_seconds=EXCLUDED.max_idle_ttl_seconds,max_lifetime_ttl_seconds=EXCLUDED.max_lifetime_ttl_seconds,consent_ui=EXCLUDED.consent_ui,updated_at=now()`,
+			m.Environment, p.MaxIdleTTLSeconds, p.MaxLifetimeTTLSeconds, p.ConsentUI); err != nil {
 			return failure(err)
 		}
 		// Servers above a lowered ceiling are trimmed to it.
-		if _, err := tx.ExecContext(ctx, `UPDATE protected_resources SET max_ttl_seconds=LEAST(max_ttl_seconds,$2),idle_ttl_seconds=LEAST(idle_ttl_seconds,$3,$2) WHERE environment_id=$1 AND (max_ttl_seconds>$2 OR idle_ttl_seconds>$3)`,
+		if _, err := tx.ExecContext(ctx, `UPDATE protected_resources SET max_ttl_seconds=LEAST(max_ttl_seconds,$2),idle_ttl_seconds=LEAST(idle_ttl_seconds,$3,$2),
+			access_token_ttl_seconds=LEAST(access_token_ttl_seconds,GREATEST(LEAST(idle_ttl_seconds,$3,$2),60)) WHERE environment_id=$1 AND (max_ttl_seconds>$2 OR idle_ttl_seconds>$3)`,
 			m.Environment, p.MaxLifetimeTTLSeconds, p.MaxIdleTTLSeconds); err != nil {
 			return failure(err)
 		}

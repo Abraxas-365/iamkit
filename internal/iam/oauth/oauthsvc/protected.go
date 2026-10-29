@@ -63,6 +63,7 @@ func (s *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oaut
 	if err != nil {
 		return err
 	}
+	input = input.HoldAccessTTL(current)
 	next := input.Apply(current)
 	if err = next.Validate(); err != nil {
 		return err
@@ -100,6 +101,14 @@ func (s *ProtectedResources) DeleteProtectedResource(ctx context.Context, m oaut
 }
 
 func (s *ProtectedResources) SetProtectedResourcePolicy(ctx context.Context, m oauth.Mutation, policy oauth.ProtectedResourcePolicy) error {
+	if policy.ConsentUI == "" {
+		// Left out: the saved one stays.
+		current, err := s.ProtectedResourcePolicy(ctx, m.Environment)
+		if err != nil {
+			return err
+		}
+		policy.ConsentUI = current.ConsentUI
+	}
 	if err := policy.Validate(); err != nil {
 		return err
 	}

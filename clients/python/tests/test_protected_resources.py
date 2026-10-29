@@ -117,3 +117,55 @@ async def test_async_twin() -> None:
     assert [c["id"] async for c in aiam.protected_resources.iterate_clients("p1")] == ["c1"]
     respx.post(f"{P}/p1/clients/c1/block").respond(200, json={"admission": "blocked"})
     assert (await aiam.protected_resources.block_client("p1", "c1"))["admission"] == "blocked"
+
+
+@respx.mock
+def test_consent_fields_grants_and_connected_apps(iam: IAMKit) -> None:
+    create = respx.post(P).respond(201, json={"id": "p1"})
+    iam.protected_resources.create("a1", "r1", "Notes", consent_mode="admin_granted", access_token_ttl_seconds=900)
+    assert body(create) == {
+        "application_id": "a1",
+        "resource_id": "r1",
+        "name": "Notes",
+        "consent_mode": "admin_granted",
+        "access_token_ttl_seconds": 900,
+    }
+    update = respx.patch(f"{P}/p1").respond(200, json={"id": "p1"})
+    iam.protected_resources.update("p1", consent_mode="per_user")
+    assert body(update) == {"consent_mode": "per_user"}
+    policy = respx.put(POLICY).respond(200, json={"consent_ui": "custom"})
+    iam.protected_resources.set_policy(max_idle_ttl_seconds=600, max_lifetime_ttl_seconds=7200, consent_ui="custom")
+    assert body(policy) == {"max_idle_ttl_seconds": 600, "max_lifetime_ttl_seconds": 7200, "consent_ui": "custom"}
+
+    listing = respx.get(f"{P}/p1/clients/c1/grants").respond(200, json={"items": [{"id": "g1"}]})
+    assert iam.protected_resources.client_grants("p1", "c1")["items"][0]["id"] == "g1"
+    assert dict(listing.calls.last.request.url.params) == {}
+    iam.protected_resources.client_grants("p1", "c1", revoked=True)
+    assert dict(listing.calls.last.request.url.params) == {"revoked": "true"}
+
+    grant = respx.put(f"{P}/p1/clients/c1/grants").respond(200, json={"id": "g1"})
+    iam.protected_resources.grant_client(
+        "p1", "c1", ["notes:read"], organization_id="o1", expires_at="2030-01-01T00:00:00Z"
+    )
+    assert body(grant) == {"scopes": ["notes:read"], "organization_id": "o1", "expires_at": "2030-01-01T00:00:00Z"}
+    revoke = respx.delete(f"{P}/p1/clients/c1/grants/g1").respond(204)
+    iam.protected_resources.revoke_client_grant("p1", "c1", "g1")
+    assert revoke.called
+
+    apps = respx.get(f"{BASE}/management/v1/environments/env-1/users/u1/connected-apps").respond(
+        200, json={"items": [{"client": {"id": "c1"}, "active_sessions": 2}]}
+    )
+    assert iam.users.connected_apps("u1", organization_id="o1")["items"][0]["client"]["id"] == "c1"
+    assert dict(apps.calls.last.request.url.params) == {"organization_id": "o1"}
+    disconnect = respx.delete(f"{BASE}/management/v1/environments/env-1/users/u1/connected-apps/c1").respond(204)
+    iam.users.disconnect_app("u1", "c1")
+    assert disconnect.called
+
+
+@respx.mock
+async def test_consent_async() -> None:
+    async with AsyncIAMKit(BASE, KEY, environment_id="env-1") as iam:
+        respx.put(f"{P}/p1/clients/c1/grants").respond(200, json={"id": "g1"})
+        assert (await iam.protected_resources.grant_client("p1", "c1", ["notes:read"]))["id"] == "g1"
+        respx.get(f"{BASE}/management/v1/environments/env-1/users/u1/connected-apps").respond(200, json={"items": []})
+        assert (await iam.users.connected_apps("u1"))["items"] == []

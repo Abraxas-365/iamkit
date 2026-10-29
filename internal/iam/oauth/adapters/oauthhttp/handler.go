@@ -52,13 +52,16 @@ type Handler struct {
 	offers oauth.Capabilities
 	// registrations serves POST /oauth/register (nil: not routed).
 	registrations oauth.Registrations
-	commands      oauth.Commands
-	queries       oauth.Queries
-	flows         oauth.Flows
-	provider      Provider
-	tokens        Tokens
-	issuer        string
-	actor         func(*fiber.Ctx) string
+	// consents holds consent-checked grants to the live consent at every
+	// refresh (D32).
+	consents oauth.ConsentQueries
+	commands oauth.Commands
+	queries  oauth.Queries
+	flows    oauth.Flows
+	provider Provider
+	tokens   Tokens
+	issuer   string
+	actor    func(*fiber.Ctx) string
 	// signedOut renders the end_session result page (hosted module);
 	// problem is nil after a successful logout.
 	signedOut func(c *fiber.Ctx, environment identity.EnvironmentID, problem error) error
@@ -411,6 +414,9 @@ func (h *Handler) authorize(c *fiber.Ctx) error {
 // Offers sets where discovery learns what the deployment offers.
 func (h *Handler) Offers(offers oauth.Capabilities) { h.offers = offers }
 
+// Consents sets the consent reads refreshes are held to.
+func (h *Handler) Consents(consents oauth.ConsentQueries) { h.consents = consents }
+
 // Refusals sets how a browser is told that an external client was refused
 // (waiting for IT, blocked…): a page of the hosted module, never a redirect.
 // Without it, or for a script that asked for JSON, the error is the answer.
@@ -472,7 +478,7 @@ func (h *Handler) complete(c *fiber.Ctx) error {
 	if err := c.BodyParser(&input); err != nil {
 		return errx.Validation("invalid request")
 	}
-	err := h.finish(c, input.Ticket, input.Approve, func(client *oauth.Client) (oauth.Login, error) {
+	err := h.finish(c, input.Ticket, input.Approve, false, func(client *oauth.Client) (oauth.Login, error) {
 		access, err := h.tokens.Validate(c, client.Environment, client.Audience)
 		if err != nil {
 			return oauth.Login{}, errx.Forbidden("login does not match client")
@@ -481,7 +487,7 @@ func (h *Handler) complete(c *fiber.Ctx) error {
 			return oauth.Login{}, err
 		}
 		return oauth.Login{User: access.Subject, Organization: access.OrganizationID, Session: access.SessionID, Permissions: access.Permissions}, nil
-	})
+	}, nil)
 	if err != nil || !wantsJSON(c) {
 		return err
 	}
@@ -498,8 +504,81 @@ func (h *Handler) complete(c *fiber.Ctx) error {
 
 // Completion is the JSON answer of /oauth/authorize/complete to a client
 // that asked for it (Accept: application/json): where to send the browser.
+// ConsentRequired: the authorization waits for the user's consent and
+// RedirectTo is IAMKit's consent page; a custom UI that asks for consent
+// itself (consent_ui custom) reads GET /identity/v1/authorize/:ticket and
+// posts the decision instead.
 type Completion struct {
-	RedirectTo string `json:"redirect_to"`
+	RedirectTo      string `json:"redirect_to"`
+	ConsentRequired bool   `json:"consent_required,omitempty"`
+}
+
+// consentPending answers an authorization that now waits for consent: the
+// browser goes to the hosted consent page (a script gets it as a
+// Completion). The ticket and its binding cookie stay.
+func (h *Handler) consentPending(c *fiber.Ctx, ticket string) error {
+	target := strings.TrimSuffix(h.issuer, "/") + "/hosted/consent?" + url.Values{"ticket": {ticket}}.Encode()
+	c.Set(fiber.HeaderCacheControl, "no-store")
+	if wantsJSON(c) {
+		return c.Status(fiber.StatusOK).JSON(Completion{RedirectTo: target, ConsentRequired: true})
+	}
+	return c.Redirect(target, fiber.StatusSeeOther)
+}
+
+// consentLogin is the login a consent decision completes with: the session
+// that signed in for the ticket (still live), with its current
+// permissions.
+func (h *Handler) consentLogin(c *fiber.Ctx, client *oauth.Client, row oauth.Ticket, tx oauth.Authorization) (oauth.Login, error) {
+	info, err := tx.Session(c.UserContext(), *row.ConsentSession)
+	if err != nil {
+		return oauth.Login{}, invalidAuthorization()
+	}
+	access, err := h.flows.Access(c.UserContext(), client, info.User, *row.ConsentSession, info.Organization)
+	if err != nil {
+		return oauth.Login{}, invalidAuthorization()
+	}
+	return oauth.Login{User: info.User, Organization: info.Organization, Session: *row.ConsentSession, Permissions: access.Permissions}, nil
+}
+
+// invalidAuthorization refuses a step out of order: a ticket waiting for
+// consent completed by a sign-in, or a consent session that ended.
+func invalidAuthorization() error {
+	return errx.Unauthorized("invalid authorization ticket or browser binding")
+}
+
+// ConsentDecision serves POST /identity/v1/authorize/:ticket/consent: a
+// custom sign-in UI (consent_ui custom) records the user's decision
+// {"approve": bool} under the browser binding cookie and gets where to
+// send the browser ({"redirect_to"}, the client's redirect).
+func (h *Handler) ConsentDecision(c *fiber.Ctx) error {
+	var body struct {
+		Approve *bool `json:"approve"`
+	}
+	if err := c.BodyParser(&body); err != nil || body.Approve == nil {
+		return errx.Validation("approve is required (true or false)")
+	}
+	// The answer is the redirect as JSON, whatever the browser accepts.
+	c.Request().Header.Set(fiber.HeaderAccept, fiber.MIMEApplicationJSON)
+	return h.Consent(c, c.Params("ticket"), oauth.ConsentDecision{Approve: *body.Approve, UI: oauth.ConsentUICustom})
+}
+
+// Consent records a user's decision on an authorization waiting for
+// consent (hosted page: hostedhttp; custom UI: POST
+// /identity/v1/authorize/:ticket/consent) and answers it like
+// /oauth/authorize/complete: the client's redirect (a Completion for
+// scripts).
+func (h *Handler) Consent(c *fiber.Ctx, ticket string, decision oauth.ConsentDecision) error {
+	err := h.finish(c, ticket, true, false, nil, &consentStep{approve: decision.Approve, ui: decision.UI})
+	if err != nil || !wantsJSON(c) {
+		return err
+	}
+	location := c.GetRespHeader(fiber.HeaderLocation)
+	if c.Response().StatusCode() != fiber.StatusSeeOther || location == "" {
+		return nil
+	}
+	c.Response().Header.Del(fiber.HeaderLocation)
+	c.Response().ResetBody()
+	return c.Status(fiber.StatusOK).JSON(Completion{RedirectTo: location})
 }
 
 // wantsJSON reports whether the request accepts JSON but not HTML: a
@@ -520,18 +599,29 @@ type accessAsk struct {
 // Finish completes a hosted authorization with a session the hosted login
 // pages issued for the ticket's client, and redirects to the client.
 func (h *Handler) Finish(c *fiber.Ctx, ticket string, login oauth.Login) error {
-	return h.finish(c, ticket, true, func(*oauth.Client) (oauth.Login, error) { return login, nil })
+	return h.finish(c, ticket, true, true, func(*oauth.Client) (oauth.Login, error) { return login, nil }, nil)
+}
+
+// consentStep is a user's consent decision on an authorization waiting
+// for it (D30): approve or reject, on the hosted page or a custom UI.
+type consentStep struct {
+	approve bool
+	ui      string
 }
 
 // finish consumes the ticket and answers the original authorize request
-// with a code for the login's session.
-func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*oauth.Client) (oauth.Login, error)) error {
+// with a code for the login's session. hosted: the hosted pages signed the
+// login in for this ticket. A resource-flow authorization of a client that
+// requires consent, with scopes the user has not agreed to, ends its first
+// pass waiting for consent instead (the ticket is kept, ErrConsentPending:
+// see consentPending); step is the decision that resumes it.
+func (h *Handler) finish(c *fiber.Ctx, ticket string, approve, hosted bool, login func(*oauth.Client) (oauth.Login, error), step *consentStep) error {
 	var p fosite.OAuth2Provider
 	var ar fosite.AuthorizeRequester
 	var session *oauthfosite.Session
 	var device *oauth.Client
 	var refused error
-	var stale bool
+	var stale, denied bool
 	var ask *accessAsk
 	var store *oauthfosite.Store
 	var bound *oauth.Client
@@ -546,6 +636,17 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 		bound = client
 		form, _ := url.ParseQuery(row.Form)
 		client.AdmitRedirect(form.Get("redirect_uri"))
+		// A ticket waiting for consent takes only the decision, which
+		// completes it with the session that signed in for it.
+		if row.AwaitingConsent() != (step != nil) {
+			if step != nil {
+				return oauth.ErrConsentNotPending()
+			}
+			return invalidAuthorization()
+		}
+		if step != nil {
+			login = func(client *oauth.Client) (oauth.Login, error) { return h.consentLogin(c, client, row, tx) }
+		}
 		access, err := login(client)
 		if err != nil {
 			return err
@@ -573,7 +674,7 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 			if _, err = tx.Session(c.UserContext(), access.Session); err != nil {
 				return err
 			}
-			if _, err = tx.Bind(c.UserContext(), access.Session, client.ID, 0); err != nil {
+			if _, err = tx.Bind(c.UserContext(), access.Session, client.ID, identity.ProtectedResourceID{}, 0); err != nil {
 				return err
 			}
 			device = client
@@ -614,6 +715,42 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 			stale = true
 			return nil
 		}
+		if target != nil && client.RequiresConsent() {
+			asked := oauth.ConsentScopes(target, ar.GetGrantedScopes())
+			record := oauth.ConsentRecord{Key: oauth.ConsentKey{Environment: client.Environment, User: access.User, Organization: access.Organization, Client: client.ID, Protected: target.ID},
+				ID: identity.NewConsentID(), Requested: asked, ClientID: client.PublicID(), Host: oauth.ClientHost(client.PublicID()), Resource: target.URI}
+			if step != nil {
+				if step.ui == oauth.ConsentUICustom && target.ConsentUI != oauth.ConsentUICustom {
+					return oauth.ErrConsentUI()
+				}
+				record.UI = step.ui
+				if !step.approve {
+					// Rejected: access_denied to the client, the ticket spent
+					// and the session the hosted pages signed in ended (a
+					// custom UI's own session is the application's).
+					var end *identity.SessionID
+					if row.ConsentHosted {
+						end = &access.Session
+					}
+					denied = true
+					return tx.DenyConsent(c.UserContext(), record, end)
+				}
+				// Approved: exactly what the page asked, recorded with the
+				// code in this transaction.
+				record.Scopes = row.ConsentScopes
+				if err = tx.RecordConsent(c.UserContext(), record); err != nil {
+					return err
+				}
+			} else {
+				agreed, err := tx.Agreed(c.UserContext(), record.Key, target.ConsentMode == oauth.ConsentModeAdminGranted)
+				if err != nil {
+					return err
+				}
+				if pending := oauth.PendingConsent(asked, agreed, oauth.FormInteraction(row.Form).Consent); len(pending) > 0 {
+					return &oauth.ConsentPending{Session: access.Session, Scopes: pending, Hosted: hosted}
+				}
+			}
+		}
 		session = h.session(client, access, info, requested)
 		if target != nil {
 			// What the user agreed to; every issuance grants what of it they
@@ -621,6 +758,10 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 			session.Resource = target.URI
 			session.Started = info.Started
 			session.Consented = oauth.Consented(target, ar.GetGrantedScopes())
+			// A grant that went through consent is held to the live consent
+			// (and grants) at every refresh: revoking or narrowing them
+			// narrows it (D32).
+			session.ConsentChecked = client.RequiresConsent()
 			effective := oauth.EffectiveScopes(session.Consented, access.Permissions)
 			session.AccessClaims.Extra["permissions"] = effective
 			// Only resource flow tokens carry the indicator: resource
@@ -637,13 +778,17 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 			return nil
 		}
 		var lifetime time.Duration
+		var protected identity.ProtectedResourceID
 		if target != nil {
-			lifetime = target.Lifetime
+			lifetime, protected = target.Lifetime, target.ID
 		}
-		deadline, err := tx.Bind(c.UserContext(), access.Session, client.ID, lifetime)
+		deadline, err := tx.Bind(c.UserContext(), access.Session, client.ID, protected, lifetime)
 		session.Deadline = deadline
 		return err
 	})
+	if errors.Is(err, oauth.ErrConsentPending) {
+		return h.consentPending(c, ticket)
+	}
 	if err != nil && ask != nil {
 		// The refusal stands unless recording the request is refused too
 		// (backlog, per-user limit) or fails.
@@ -665,6 +810,10 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve bool, login func(*
 	}
 	if refused != nil {
 		p.WriteAuthorizeError(c.UserContext(), w, ar, hookError(refused))
+		return h.authorizeResponse(c, w)
+	}
+	if denied {
+		p.WriteAuthorizeError(c.UserContext(), w, ar, fosite.ErrAccessDenied.WithHint("The user rejected the authorization."))
 		return h.authorizeResponse(c, w)
 	}
 	out, err := h.issueCode(c.UserContext(), p, store, bound, ar, session)
@@ -912,7 +1061,16 @@ func (h *Handler) token(c *fiber.Ctx) error {
 				// still holds (D12), narrowed to the request's scope when it
 				// names one (RFC 6749 §6); the refresh token keeps the
 				// consent.
-				effective := oauth.EffectiveScopes(session.Consented, access.Permissions)
+				consented := session.Consented
+				if session.ConsentChecked {
+					// D32: held to what the user (or an administrator) agrees
+					// to now; a narrowed consent narrows the grant.
+					if consented, err = h.agreedAtRefresh(ctx, client, subjectID, orgID, consented); err != nil {
+						p.WriteAccessError(ctx, w, ar, err)
+						return response(c, w)
+					}
+				}
+				effective := oauth.EffectiveScopes(consented, access.Permissions)
 				if requested := strings.Fields(req.PostForm.Get("scope")); len(requested) > 0 {
 					for _, s := range requested {
 						if !slices.Contains(ar.GetGrantedScopes(), s) && !slices.Contains(session.Consented, s) {
@@ -939,8 +1097,12 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		session.AccessClaims.IssuedAt = time.Now()
 		session.AccessClaims.JTI = ""
 		if session.Resource != "" {
-			// A resource's refresh token lapses after its inactivity window,
-			// never past the session's lifetime.
+			// The server's access token lifetime (D36: the window in which a
+			// token outlives a revocation for a server that does not
+			// introspect), never past the grant; fosite set its default in
+			// NewAccessRequest. A resource's refresh token lapses after its
+			// inactivity window, never past the session's lifetime.
+			session.SetExpiresAt(fosite.AccessToken, client.Protected.AccessExpiry(time.Now(), session.Deadline))
 			session.SetExpiresAt(fosite.RefreshToken, client.Protected.RefreshExpiry(time.Now(), session.Deadline))
 		} else {
 			session.SetExpiresAt(fosite.RefreshToken, session.Deadline)
@@ -954,6 +1116,21 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		}
 		return response(c, w)
 	})
+}
+
+// agreedAtRefresh narrows a consent-checked grant's consented scopes to
+// the live consent and grants. Without the consent port wired, a grant
+// that needs it cannot be checked, so it ends.
+func (h *Handler) agreedAtRefresh(ctx context.Context, client *oauth.Client, user identity.UserID, organization identity.OrganizationID, consented []string) ([]string, error) {
+	if h.consents == nil || client.Protected == nil {
+		return nil, endedGrant
+	}
+	key := oauth.ConsentKey{Environment: client.Environment, User: user, Organization: organization, Client: client.ID, Protected: client.Protected.ID}
+	agreed, err := h.consents.Agreed(ctx, key, client.Protected.ConsentMode == oauth.ConsentModeAdminGranted)
+	if err != nil {
+		return nil, fosite.ErrServerError.WithWrap(err)
+	}
+	return oauth.AllowedAtRefresh(consented, agreed), nil
 }
 
 // clientCredentials is grant_type=client_credentials for service accounts
@@ -1033,7 +1210,8 @@ func (h *Handler) revoke(c *fiber.Ctx) error {
 		return clientError(c, err)
 	}
 	markPublic(c, client)
-	ctx := context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID.String())
+	// D34: revoking a resource grant's token ends its session too.
+	ctx := oauthfosite.Revoking(context.WithValue(req.Context(), oauthfosite.ClientContextKey{}, client.ID.String()))
 	req = req.WithContext(ctx)
 	return store.WithTokenLock(ctx, raw, kind, client.ID.String(), func() error {
 		err := p.NewRevocationRequest(ctx, req)

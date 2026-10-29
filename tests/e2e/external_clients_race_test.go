@@ -356,6 +356,13 @@ func TestSignInsRaceOperatorChanges(t *testing.T) {
 	}
 	race := func(name string, change *operatorCall) {
 		t.Helper()
+		// Alice consented already (a block revokes her consent, so each
+		// race seeds it): the sign-ins race the change to a code, not to
+		// the consent page.
+		r.DB.MustExec(`INSERT INTO oauth_consents (id, environment_id, organization_id, user_id, client_id, protected_resource_id, scopes)
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, '{mcp:tools:read}')
+			ON CONFLICT (environment_id, user_id, organization_id, client_id, protected_resource_id) WHERE revoked_at IS NULL DO NOTHING`,
+			r.EnvID, r.Org, r.Alice, r.row, r.protected)
 		bs, tks := started()
 		// The gate holds the client row for a change of its admission: the
 		// sign-ins reach Complete (after the password hash) and queue on
@@ -375,7 +382,10 @@ func TestSignInsRaceOperatorChanges(t *testing.T) {
 		r.waitFor("sign-ins queued on the client", func() bool { return r.locked("oauth_clients") >= n })
 		wg.Add(1)
 		go func() { defer wg.Done(); r.call(change) }()
-		r.waitFor("the change queued on the client", func() bool { return r.locked("oauth_clients") >= n+1 })
+		// The change waits on the client, or on the server a delete takes
+		// first (W4: the sign-ins hold it FOR KEY SHARE); every sign-in is
+		// already counted on the client.
+		r.waitFor("the change queued", func() bool { return r.locked("") >= n+1 })
 		gate.open()
 		wg.Wait()
 		change.check(t)

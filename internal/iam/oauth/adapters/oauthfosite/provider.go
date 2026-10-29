@@ -35,6 +35,11 @@ type Session struct {
 	// holds the grant to Started + the resource's current lifetime, so a
 	// lowered ceiling also shortens grants already issued.
 	Started time.Time `json:"started,omitempty"`
+	// ConsentChecked: the grant went through consent (a client that
+	// requires it, D29), so every refresh also holds it to the live consent
+	// and administrator grants (oauth.AllowedAtRefresh, D32). Grants issued
+	// before consent existed lack it and keep what they had.
+	ConsentChecked bool `json:"consent_checked,omitempty"`
 }
 
 func NewSession() *Session {

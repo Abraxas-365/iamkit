@@ -33,12 +33,16 @@ export function Login({ ticket }: { ticket: string }) {
   codes → back to the client through `POST /oauth/authorize/complete`. Also
   expired passwords, password reset and sign-up when the ticket's `methods`
   allow them. Single sign-on returns to the same page (`returnTo`, default:
-  the current URL with `?ticket=`), where the form redeems the result.
+  the current URL with `?ticket=`), where the form redeems the result. When
+  an MCP client asks for scopes the user has not allowed yet and the
+  environment's `consent_ui` is `custom`, the form shows the consent step
+  (`hosted.consent.*` texts) and sends the decision; otherwise it leaves for
+  IAMKit's consent page.
 - `<AcceptInvitation token>` — preview, name + password for new users,
   accept; render what follows with its child function.
 
 Both are unstyled: pass `classNames` (e.g. Tailwind utilities) per part, or
-style `[data-iamkit="title|subtitle|notice|error|form|label|input|button|secondary|divider|codes|root"]`;
+style `[data-iamkit="title|subtitle|notice|error|form|label|input|button|secondary|divider|codes|scopes|root"]`;
 the root also carries `data-step`.
 
 Texts use the hosted catalog keys (`hosted.form.sign_in`, …): your `texts`
@@ -71,9 +75,11 @@ connect hosts.
 Self-service widgets for the signed-in user, on the `createAccount` client of
 `@iamkit/js`: `<UserProfile>`, `<UserSecurity>` (password, authenticator app
 with an injectable `renderQRCode`, email/SMS codes, security keys, passkeys,
-recovery codes), `<UserSessions>`, `<ApiKeys>` and `<OrganizationSwitcher>`,
-with the hooks `useAccount`, `usePassword`, `useSessions`, `useFactors`,
-`useApiKeys` and `useOrganizations` behind an `<AccountProvider account
+recovery codes), `<UserSessions>`, `<ConnectedApps>` (applications the user
+let reach a protected resource such as an MCP server, with disconnect),
+`<ApiKeys>` and `<OrganizationSwitcher>`, with the hooks `useAccount`,
+`usePassword`, `useSessions`, `useConnectedApps`, `useFactors`, `useApiKeys`
+and `useOrganizations` behind an `<AccountProvider account
 onReauthenticate>`. `REAUTHENTICATION_REQUIRED` anywhere calls
 `onReauthenticate`. Optional styles: `import "@iamkit/react/widgets.css"`.
 See [React account widgets](../../docs/reference/sdk/react-widgets.md).
@@ -83,6 +89,7 @@ See [React account widgets](../../docs/reference/sdk/react-widgets.md).
   <UserProfile />
   <UserSecurity renderQRCode={(uri) => <QRCode value={uri} />} />
   <UserSessions />
+  <ConnectedApps />
   <ApiKeys />
 </AccountProvider>
 ```
@@ -93,7 +100,7 @@ See [React account widgets](../../docs/reference/sdk/react-widgets.md).
   `{state, flow}`: `state.step` (`identify`, `password`, `code`, `mfa`,
   `enroll`, `new_password`, `reset`, `ldap`, `signup`, `signup_verify`, `waitlisted` (the waitlist took the sign-up; pass the
   approval link's `?waitlist=` as `waitlistToken`; text keys `hosted.title.waitlisted`/`hosted.notice.waitlisted`),
-  `captcha`, `risk_challenge`, `blocked`, `redirecting`, `failed`), `state.authorization` (methods, connections,
+  `captcha`, `risk_challenge`, `blocked`, `consent` (`state.consent`: client, server, `scopes`, `unheld_scopes`, `agreed_scopes`; answer with `flow.consent(true|false)`), `redirecting`, `failed`), `state.authorization` (methods, connections,
   branding, texts), `state.error` (`IAMKitError`), `state.busy`; actions
   `flow.identify(login)`, `submitPassword`, `changePassword`, `sendCode`,
   `verifyCode`, `forgotPassword`, `resetPassword`, `submitDirectoryPassword`,

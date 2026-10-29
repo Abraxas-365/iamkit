@@ -41,6 +41,16 @@ export type SignedUp = Schema<"SignedUp">;
 /** What a sign-up request did: sent a code, or put the address on the waitlist. */
 export type SignupStatus = "code_sent" | "waitlisted";
 export type Organization = Schema<"AuthenticationOrganization">;
+/**
+ * What completing an authorization answers: where to navigate, and
+ * `consent_required` when a client that asks its users wants scopes the user
+ * has not agreed to at an MCP server (`redirect_to` is then IAMKit's consent
+ * page; with the environment's `consent_ui` set to `custom`, describe the
+ * ticket again and show `authorization.consent` instead).
+ */
+export type Completion = Schema<"Completion">;
+/** What a ticket waiting for consent asks (`Authorization.consent`). */
+export type ConsentInfo = Schema<"ConsentInfo">;
 
 /** An access/refresh token pair (+ recovery codes after a first enrollment). */
 export type Tokens = Extract<SignInAnswer, { access_token: string }>;
@@ -386,13 +396,45 @@ export class SignIn {
    * the browser that called `authorize`: the ticket is bound to it.
    */
   async complete(ticket: string, accessToken: string, approve = true): Promise<string> {
+    return (await this.completion(ticket, accessToken, approve)).redirect_to;
+  }
+
+  /**
+   * `complete`, with what it answered: `consent_required` says the
+   * authorization now waits for the user's consent (the ticket stays valid).
+   * Navigate to `redirect_to` (IAMKit's consent page) or, where the
+   * environment's `consent_ui` is `custom`, show `authorization(ticket).consent`
+   * and answer with `consent`.
+   */
+  async completion(ticket: string, accessToken: string, approve = true): Promise<Completion> {
     const out = await unwrap(
       this.client.POST("/oauth/authorize/complete", {
         body: { authorization_ticket: ticket, approve },
         headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
       }),
     );
-    return (out as Schema<"Completion">).redirect_to;
+    return out as Completion;
+  }
+
+  /**
+   * Records the user's consent decision for a ticket waiting for it (custom
+   * consent UIs only: the environment's `consent_ui` is `custom`, else 403
+   * `CONSENT_UI_HOSTED`) and returns the URL to navigate to: the client's
+   * redirect URI with a code, or with `error=access_denied` when `approve` is
+   * false. Runs in the browser that called `authorize` (binding cookie).
+   */
+  async consent(ticket: string, approve: boolean): Promise<string> {
+    const out = await unwrap(
+      this.client.POST("/identity/v1/authorize/{ticket}/consent", {
+        params: { path: { ticket } },
+        body: { approve },
+        headers: { Accept: "application/json" },
+      }),
+    );
+    if (!out?.redirect_to) {
+      throw new IAMKitError(502, "ERROR", "the consent decision returned no redirect");
+    }
+    return out.redirect_to;
   }
 
   private requireStorage(): VerifierStore {

@@ -66,6 +66,11 @@ type Config struct {
 	// admitted, only their granted scopes count, never their permissions
 	// claim.
 	AllowTokensWithoutResource bool
+	// Introspection, when set, also asks IAMKit whether each token is
+	// still live (RFC 7662), failing closed. Nil (the default) trusts a
+	// valid signature until the token expires (at most the protected
+	// resource's access_token_ttl_seconds).
+	Introspection *Introspection
 }
 
 // Claims are a validated access token's claims.
@@ -117,10 +122,11 @@ var (
 	// ErrInvalidToken: the token is malformed, expired, not signed by the
 	// issuer or not for this resource.
 	ErrInvalidToken = errors.New("invalid access token")
-	// ErrUnavailable: the issuer's signing keys could not be fetched; the
-	// token was not judged. Answered 503 without a challenge, so clients
-	// keep their tokens through an outage.
-	ErrUnavailable = errors.New("signing keys unavailable")
+	// ErrUnavailable: the issuer's signing keys could not be fetched, or
+	// introspection could not be answered; the token was not judged.
+	// Answered 503 without a challenge, so clients keep their tokens
+	// through an outage.
+	ErrUnavailable = errors.New("authorization server unavailable")
 )
 
 // errUnavailable marks a key lookup that failed on the JWKS fetch.
@@ -155,6 +161,7 @@ type Server struct {
 	resource    string
 	metadataURL string
 	keys        *authclient.KeySet
+	introspect  *introspector
 }
 
 // New checks cfg and canonicalizes the resource.
@@ -173,7 +180,13 @@ func New(cfg Config) (*Server, error) {
 	if keys == nil {
 		keys = authclient.NewKeySet(strings.TrimRight(cfg.Issuer, "/")+"/.well-known/jwks.json", cfg.HTTPClient)
 	}
-	return &Server{cfg: cfg, resource: resource, metadataURL: MetadataURL(resource), keys: keys}, nil
+	srv := &Server{cfg: cfg, resource: resource, metadataURL: MetadataURL(resource), keys: keys}
+	if cfg.Introspection != nil {
+		if srv.introspect, err = newIntrospector(strings.TrimRight(cfg.Issuer, "/"), cfg.Introspection, cfg.HTTPClient); err != nil {
+			return nil, err
+		}
+	}
+	return srv, nil
 }
 
 // Resource is the canonical resource URI (the tokens' aud).
@@ -239,7 +252,8 @@ type tokenClaims struct {
 // Verify validates a raw access token for this resource: RS256 signature
 // by the issuer's keys, iss, aud containing the resource, exp/nbf (with
 // leeway), the environment, a user session (purpose application) and the
-// organization when Organizations is set.
+// organization when Organizations is set; with Introspection, that IAMKit
+// still holds the token active (ErrUnavailable when it cannot answer).
 func (s *Server) Verify(ctx context.Context, raw string) (*Claims, error) {
 	if raw == "" {
 		return nil, ErrNoToken
@@ -295,6 +309,11 @@ func (s *Server) Verify(ctx context.Context, raw string) (*Claims, error) {
 	}
 	if c.ExpiresAt != nil {
 		out.ExpiresAt = c.ExpiresAt.Time
+	}
+	if s.introspect != nil {
+		if err := s.introspect.check(ctx, raw, s.resource, out); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }

@@ -120,8 +120,29 @@ const (
 	// path_prefix, preset, protected_resource_id).
 	OAuthClientAllowlistCreated = "oauth_client_allowlist.created"
 	OAuthClientAllowlistDeleted = "oauth_client_allowlist.deleted"
-	OrgAdminPortalEnabled       = "org_admin_portal.enabled"
-	OrgAdminPortalDisabled      = "org_admin_portal.disabled"
+	// OAuthConsentGranted: a user agreed to what a client asked at a
+	// protected resource (actor the user; subject the consent; data:
+	// user_id, organization_id, client (id, client_id, host),
+	// protected_resource_id, resource, requested and granted scopes,
+	// consent_ui hosted|custom, ip, user_agent). Never a token.
+	OAuthConsentGranted = "oauth_consent.granted"
+	// OAuthConsentDenied: a user rejected a consent page (same data, no
+	// granted scopes); the client got access_denied.
+	OAuthConsentDenied = "oauth_consent.denied"
+	// OAuthConsentRevoked: a consent ended and the client's sessions for
+	// the user there with it (data.reason user|operator|client_blocked,
+	// revoked_sessions; actor the user, the operator or system).
+	OAuthConsentRevoked = "oauth_consent.revoked"
+	// OAuthClientGranted: an administrator granted a client scopes at a
+	// protected resource for every user, or one organization's (data:
+	// protected_resource_id, organization_id, scopes, expires_at).
+	OAuthClientGranted = "oauth_client.granted"
+	// OAuthClientGrantRevoked: an administrator grant ended (data.reason
+	// operator|expired, revoked_sessions); the expire job writes it as
+	// system with reason expired.
+	OAuthClientGrantRevoked = "oauth_client.grant_revoked"
+	OrgAdminPortalEnabled   = "org_admin_portal.enabled"
+	OrgAdminPortalDisabled  = "org_admin_portal.disabled"
 	// OrgSetupLink*: an organization setup link was created or revoked
 	// (actor: the operator or owner) or exchanged for a session (actor: the
 	// link itself); subject = the link.

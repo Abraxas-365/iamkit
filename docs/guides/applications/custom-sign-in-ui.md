@@ -166,10 +166,23 @@ const authz = await iam.authorization(start.authorization_ticket);  // methods, 
 const boundary = { environmentId: authz.environment_id, organizationId, applicationId: authz.application_id, resourceId: authz.resource_id };
 const result = await iam.login(boundary, { login: email, password });
 if (result.status === "signed_in") {
-  location.assign(await iam.complete(start.authorization_ticket, result.tokens.access_token));
+  const done = await iam.completion(start.authorization_ticket, result.tokens.access_token);
+  const consent = done.consent_required ? (await iam.authorization(start.authorization_ticket)).consent : undefined;
+  if (consent?.ui === "custom") {
+    // Show consent.client, consent.resource_name and consent.scopes, then:
+    location.assign(await iam.consent(start.authorization_ticket, userAllowed));
+  } else {
+    location.assign(done.redirect_to); // the client, or IAMKit's consent page
+  }
 }
 // else result.mfa: verify with iam.mfa.verify(result.mfa.mfa_token, code)
 ```
+
+`consent_required` comes only from authorizations for an
+[MCP server](protect-mcp-server.md#user-consent) by a client that asks its
+users. With the environment's `consent_ui` set to `custom`, your UI asks;
+otherwise `redirect_to` is IAMKit's consent page. `complete()` returns just
+the URL to navigate to, which works with the hosted page.
 
 A request with `prompt=none` has no session to reuse: `authorize` throws
 `LOGIN_REQUIRED` with `details.redirect_to`, the client's redirect URI carrying

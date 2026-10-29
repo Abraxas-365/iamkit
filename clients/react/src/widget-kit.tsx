@@ -21,6 +21,10 @@ export interface AccountClassNames {
   item?: string;
   badge?: string;
   meta?: string;
+  /** Row actions (a confirmation's buttons). */
+  actions?: string;
+  /** An application's logo (connected apps: verified ones only). */
+  logo?: string;
   codes?: string;
   secret?: string;
 }

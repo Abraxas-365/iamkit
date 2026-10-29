@@ -10,6 +10,7 @@ import {
   UserProfile,
   UserSecurity,
   UserSessions,
+  ConnectedApps,
   useAccount,
   useApiKeys,
   useFactors,
@@ -305,6 +306,68 @@ describe("UserSessions", () => {
     const f = setup({ "GET /identity/v1/me/sessions": () => json(500, { error: { code: "INTERNAL", message: "boom" } }) });
     render(<UserSessions account={f.account} />);
     expect((await screen.findByRole("alert")).textContent).toBe("boom");
+  });
+});
+
+describe("ConnectedApps", () => {
+  const verified = {
+    client: { id: "c1", client_id: "https://claude.ai/oauth/claude-code-client-metadata", source: "cimd", name: "Claude Code", host: "claude.ai", logo_uri: "https://claude.ai/logo.png", preset: "claude_code", verified_name: "Claude Code" },
+    protected_resource_id: "pr1", resource: "https://mcp.example.com/mcp", resource_name: "Notes", organization_id: "org1",
+    scopes: ["notes:read"], consented_at: "2030-01-01T00:00:00Z", active_sessions: 2, last_used_at: null,
+  };
+  const unverified = {
+    ...verified,
+    client: { id: "c2", client_id: "https://tools.example/client.json", source: "cimd", name: "Claude Code", host: "tools.example", logo_uri: "https://tools.example/l.png", preset: "", verified_name: "" },
+  };
+
+  it("shows who vouches for each app and disconnects after a confirmation", async () => {
+    let gone = false;
+    const f = setup({
+      "GET /identity/v1/me/connected-apps": () => json(200, { items: gone ? [unverified] : [verified, unverified] }),
+      "DELETE /identity/v1/me/connected-apps/c1": () => ((gone = true), none()),
+    });
+    render(<ConnectedApps account={f.account} />);
+    await screen.findByText("tools.example");
+    const first = document.querySelector<HTMLElement>('li[data-client="c1"]')!;
+    expect(within(first).getByText("Claude Code")).toBeTruthy();
+    expect(within(first).getByText("at claude.ai")).toBeTruthy();
+    expect(first.querySelector("img")?.getAttribute("src")).toBe("https://claude.ai/logo.png");
+    // A self-named client is shown by its host, its name marked, no logo.
+    const second = document.querySelector<HTMLElement>('li[data-client="c2"]')!;
+    expect(within(second).getByText("unverified")).toBeTruthy();
+    expect(second.querySelector("img")).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Disconnect: Claude Code" }));
+    });
+    expect(f.count("DELETE /identity/v1/me/connected-apps/c1")).toBe(0);
+    expect(screen.getByRole("group").textContent).toContain("loses access at once");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    });
+    expect(f.count("DELETE /identity/v1/me/connected-apps/c1")).toBe(1);
+    expect(await screen.findByText("Claude Code was disconnected.")).toBeTruthy();
+    expect(f.count("GET /identity/v1/me/connected-apps")).toBe(2);
+  });
+
+  it("is empty without apps, and an impersonated session's refusal shows as an alert", async () => {
+    const f = setup({
+      "GET /identity/v1/me/connected-apps": () => json(200, { items: [verified] }),
+      "DELETE /identity/v1/me/connected-apps/c1": () => json(403, { error: { code: "FORBIDDEN", message: "impersonated sessions cannot disconnect apps" } }),
+    });
+    render(<ConnectedApps account={f.account} />);
+    const disconnect = await screen.findByRole("button", { name: "Disconnect: Claude Code" });
+    await act(async () => {
+      fireEvent.click(disconnect);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain("impersonated");
+
+    const empty = setup({ "GET /identity/v1/me/connected-apps": () => json(200, { items: null }) });
+    render(<ConnectedApps account={empty.account} />);
+    expect(await screen.findByText("No applications are connected to your account.")).toBeTruthy();
   });
 });
 

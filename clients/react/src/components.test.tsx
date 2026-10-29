@@ -49,6 +49,40 @@ describe("SignInForm", () => {
     expect(f.calls).toContain("POST /oauth/authorize/complete");
   });
 
+  it("words the consent step like the hosted page and sends the decision", async () => {
+    const went: string[] = [];
+    const consent = {
+      client: { id: "c1", client_id: "https://cli.example.dev/client.json", source: "cimd", name: "Unverified name", host: "cli.example.dev", logo_uri: "", preset: "", verified_name: "" },
+      protected_resource_id: "p1",
+      resource: "https://mcp.example.com/mcp",
+      resource_name: "",
+      organization_id: "org",
+      scopes: ["email", "docs:read"],
+      unheld_scopes: ["docs:write"],
+      agreed_scopes: ["profile"],
+      ui: "custom",
+      hosted_url: "https://id.example.com/hosted/consent?ticket=ik_ticket",
+    };
+    const f = provider({
+      "GET /identity/v1/authorize/ik_ticket": () => json(200, { ...authorization, consent_required: true, consent }),
+      "POST /identity/v1/authorize/ik_ticket/consent": () => json(200, { redirect_to: "https://app.example.com/cb?code=c" }),
+    });
+    render(
+      <IAMKitProvider baseUrl="https://id.example.com" fetch={f.fetch}>
+        <SignInForm ticket="ik_ticket" navigate={(u) => went.push(u)} />
+      </IAMKitProvider>,
+    );
+    expect(await screen.findByRole("heading", { name: "Allow access?" })).toBeTruthy();
+    expect(screen.getByText("cli.example.dev wants more access to https://mcp.example.com/mcp on your behalf.")).toBeTruthy();
+    expect(screen.getByText("Your email address")).toBeTruthy();
+    expect(screen.getByText("docs:write")).toBeTruthy();
+    expect(screen.queryByText("Unverified name")).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Allow" }));
+    });
+    expect(went).toEqual(["https://app.example.com/cb?code=c"]);
+  });
+
   it("shows IAMKit's error and stays on the step", async () => {
     const f = provider({
       "GET /identity/v1/authorize/ik_ticket": () => json(200, { ...authorization, organization_id: "org" }),

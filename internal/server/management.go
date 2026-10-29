@@ -50,6 +50,9 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	if s.Admissions != nil {
 		s.Admissions.Register(e)
 	}
+	if s.Consents != nil {
+		s.Consents.Register(e)
+	}
 	s.Federation.Register(e)
 	if s.Hosted != nil {
 		s.Hosted.RegisterManagement(e)

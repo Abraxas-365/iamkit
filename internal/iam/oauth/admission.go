@@ -71,9 +71,9 @@ func IsClientRefusal(err error) bool {
 	return false
 }
 
-// ErrClientBlocked refuses an external client IT blocked.
+// ErrClientBlocked refuses an external client an administrator blocked.
 func ErrClientBlocked() *errx.Error {
-	e := errx.Forbidden("IT blocked this application for this server")
+	e := errx.Forbidden("an administrator blocked this application for this server")
 	e.Code = CodeClientBlocked
 	return e
 }

@@ -65,6 +65,7 @@ const named: Record<string, string> = {
   'protected_resource.create': t('Registered an MCP server'), 'protected_resource.update': t('Updated an MCP server'), 'protected_resource.delete': t('Deleted an MCP server'),
   'protected_resource_policy.update': t('Updated the MCP server lifetime ceilings'),
   'oauth_client.approve': t('Approved an MCP client'), 'oauth_client.block': t('Blocked an MCP client'), 'oauth_client.unblock': t('Unblocked an MCP client'), 'oauth_client.forget': t('Deleted an MCP client'),
+  'oauth_client.grant': t('Granted an MCP client scopes'), 'oauth_client.grant_revoke': t('Revoked an MCP client grant'), 'oauth_consent.revoke': t('Disconnected a user\'s app'),
   'oauth_client_allowlist.create': t('Added an MCP client allowlist entry'), 'oauth_client_allowlist.delete': t('Removed an MCP client allowlist entry'),
   'user.access_token_created': t('Created a personal access token'), 'user.access_token_revoked': t('Revoked a personal access token'),
   'user.key_added': t('Added a machine user key'), 'user.key_removed': t('Removed a machine user key'),

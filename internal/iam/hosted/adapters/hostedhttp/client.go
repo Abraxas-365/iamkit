@@ -26,9 +26,10 @@ type ClientApplication struct {
 }
 
 // Refusal is the page for an external client the server cannot serve yet:
-// waiting for IT, blocked, too many waiting, registered clients only, or
-// documents disabled. It is a page, never a redirect: nothing is trusted
-// about the client's redirect URIs before IT approves it.
+// waiting for an administrator, blocked, too many waiting, registered
+// clients only, or documents disabled. It is a page, never a redirect:
+// nothing is trusted about the client's redirect URIs before an
+// administrator approves it.
 func (h *Handler) Refusal(c *fiber.Ctx, err error) error {
 	var e *errx.Error
 	_ = errx.As(err, &e)

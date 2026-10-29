@@ -35,6 +35,9 @@ type Deps struct {
 	Captcha hosted.Captcha
 	// Risk applies restrictions, detections and challenges (nil: none).
 	Risk hosted.Risk
+	// Issuer is IAMKit's public URL: custom UIs are told the absolute
+	// address of the hosted consent page.
+	Issuer string
 	// Finish completes the OAuth authorization (oauthhttp.Handler.Finish).
 	Finish  hostedhttp.Finisher
 	ActorID func(*fiber.Ctx) string
@@ -52,6 +55,7 @@ type Module struct {
 
 func New(deps Deps) Module {
 	service := hostedsvc.New(hostedpg.New(deps.DB), cryptox.Generator{}, deps.Authorizations, deps.Authenticator, deps.Challenges, deps.Federation, deps.SecondFactor)
+	service.SetIssuer(deps.Issuer)
 	if deps.SignInPolicies != nil {
 		service.SetSignInPolicies(deps.SignInPolicies)
 	}

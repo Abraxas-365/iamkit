@@ -74,7 +74,7 @@ func (r *Repository) UnsavedExternal(ctx context.Context, target oauth.ExternalT
 		Audience string `db:"audience"`
 		protectedRow
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT r.audience,r.permissions,pr.id AS protected_id,pr.uri AS protected_uri,pr.default_scopes AS protected_default_scopes,pr.idle_ttl_seconds AS protected_idle,pr.max_ttl_seconds AS protected_max,pp.max_idle_ttl_seconds AS policy_idle,pp.max_lifetime_ttl_seconds AS policy_lifetime
+	err := r.db.GetContext(ctx, &row, `SELECT r.audience,r.permissions,`+targetColumns+`
 		FROM protected_resources pr JOIN resources r ON r.id=pr.resource_id AND r.environment_id=pr.environment_id JOIN applications a ON a.id=pr.application_id AND a.environment_id=pr.environment_id
 		LEFT JOIN protected_resource_policies pp ON pp.environment_id=pr.environment_id WHERE pr.id=$1 AND pr.environment_id=$2 AND pr.active AND a.active`, target.Protected, target.Environment)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -85,7 +85,7 @@ func (r *Repository) UnsavedExternal(ctx context.Context, target oauth.ExternalT
 	}
 	return &oauth.Client{Environment: target.Environment, Application: target.Application, Resource: target.Resource, Audience: row.Audience, Redirects: slices.Clone(doc.Redirects),
 		Public: doc.Public(), HostedLogin: true, Auth: doc.Auth, AccessTokenFormat: oauth.TokenFormatJWT, GrantTypes: slices.Clone(doc.GrantTypes), Protected: row.target(),
-		Source: doc.RowSource(), ExternalID: doc.ExternalID, Name: doc.Name, ClientURI: doc.ClientURI, LogoURI: doc.LogoURI, Admission: oauth.AdmissionPending}, nil
+		Source: doc.RowSource(), ExternalID: doc.ExternalID, Name: doc.Name, ClientURI: doc.ClientURI, LogoURI: doc.LogoURI, Admission: oauth.AdmissionPending, ConsentPolicy: oauth.ConsentRequired}, nil
 }
 
 // externalRow is what a client's document set on its row.
@@ -149,7 +149,7 @@ func insertExternal(ctx context.Context, tx *sqlx.Tx, target oauth.ExternalTarge
 			return err
 		}
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,hosted_login,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks_uri,grant_types,source,external_id,protected_resource_id,admission,admission_source,approved_metadata_hash,client_name,client_uri,logo_uri,metadata_fetched_at) VALUES($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$20,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+	if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,hosted_login,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks_uri,grant_types,source,external_id,protected_resource_id,admission,admission_source,approved_metadata_hash,client_name,client_uri,logo_uri,metadata_fetched_at,consent_policy) VALUES($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$20,$11,$12,$13,$14,$15,$16,$17,$18,$19,'required')`,
 		id, target.Environment, target.Application, target.Resource, pq.StringArray(doc.Redirects), doc.Public(), doc.Auth.Method, doc.Auth.SigningAlg, doc.Auth.JWKSURI, pq.StringArray(doc.GrantTypes), doc.ExternalID, target.Protected, admission, source, hash, doc.Name, doc.ClientURI, doc.LogoURI, fetched, doc.RowSource()); err != nil {
 		return failure(err)
 	}

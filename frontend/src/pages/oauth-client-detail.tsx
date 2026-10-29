@@ -175,6 +175,16 @@ export default function OAuthClientDetailPage() {
         onChange={v => { if (v === 'opaque') setOpaque(true); else void save({ access_token_format: 'jwt' }, t('Now issuing JWT access tokens')) }} />
     </DetailSection>
 
+    <DetailSection title={t('User consent')} description={t('Whether users agree to what this client asks before it reaches an MCP server (a protected resource). Ordinary sign-ins to your own application never ask.')}>
+      <RadioCards name="consent_policy" label={t('Consent')} value={client.consent_policy ?? 'skip'} disabled={!editable || busy || !!client.preset}
+        options={[
+          { value: 'skip', label: t('First-party: never ask'), description: t('Your own client. Users reach the server with every scope they hold that it asks for.') },
+          { value: 'required', label: t('Ask users'), description: t('Users see the consent page once per scope set; they can disconnect it later.') },
+        ]}
+        hint={client.preset ? t('This client was created from a template for a third-party application, so its users are always asked.') : undefined}
+        onChange={v => void save({ consent_policy: v }, v === 'required' ? t('Users are now asked to consent') : t('Users are no longer asked to consent'))} />
+    </DetailSection>
+
     <DetailSection title={t('Back-channel logout')} description={t('IAMKit POSTs a signed logout_token (OpenID Connect Back-Channel Logout) to this URL whenever a session this client signed in ends — sign-out, revocation, suspension or deletion.')}
       actions={editable && !editingBackchannel && <Button variant="outline" size="sm" aria-label={t('Edit back-channel logout')} onClick={() => setEditingBackchannel(true)}><Pencil /> {t('Edit')}</Button>}>
       {editingBackchannel ? <form className="space-y-3" onSubmit={async e => {

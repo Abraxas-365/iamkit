@@ -361,5 +361,37 @@
 </form>
 {{end}}
 
+{{define "consent/content"}}
+{{with .Consent}}
+<div class="application">
+{{with .Application}}{{if .Logo}}<img src="{{.Logo}}" alt="" referrerpolicy="no-referrer">{{end}}
+{{if .Host}}<p class="muted">{{$.T "hosted.client.host"}}</p>
+<p class="host"><strong>{{.Host}}</strong></p>{{end}}
+{{with .Label $}}<p class="muted">{{if $.Consent.Application.Verified}}&#10003; {{end}}{{.}}</p>{{end}}{{end}}
+</div>
+{{end}}
+{{with .Account}}{{if .Email}}<div class="account">{{if .AvatarURL}}<img class="avatar" src="{{.AvatarURL}}" alt="" width="40" height="40" referrerpolicy="no-referrer">{{end}}<div><strong>{{.Name}}</strong><p class="muted">{{.Email}}</p></div></div>{{end}}{{end}}
+{{with .Consent}}
+{{if .Scopes}}<p><strong>{{$.T "hosted.consent.asks"}}</strong></p>
+<ul class="scopes">{{range .Scopes}}<li>{{.Label}}{{if ne .Label .Name}} <code>{{.Name}}</code>{{end}}</li>{{end}}</ul>{{end}}
+{{if .Unheld}}<details class="unheld"><summary>{{$.T "hosted.consent.unheld"}}</summary>
+<p class="muted">{{$.T "hosted.consent.unheld_help"}}</p>
+<ul class="scopes">{{range .Unheld}}<li>{{.Label}}{{if ne .Label .Name}} <code>{{.Name}}</code>{{end}}</li>{{end}}</ul></details>{{end}}
+{{if .Agreed}}<details class="agreed"><summary>{{$.T "hosted.consent.agreed"}}</summary>
+<ul class="scopes">{{range .Agreed}}<li>{{.Label}}{{if ne .Label .Name}} <code>{{.Name}}</code>{{end}}</li>{{end}}</ul></details>{{end}}
+{{end}}
+<p class="muted">{{.T "hosted.consent.revoke_help"}}</p>
+<form method="post" action="/hosted/consent">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<input type="hidden" name="decision" value="allow">
+<button type="submit">{{.T "hosted.consent.allow"}}</button>
+</form>
+<form method="post" action="/hosted/consent">
+<input type="hidden" name="ticket" value="{{.Ticket}}">
+<input type="hidden" name="decision" value="deny">
+<button type="submit" class="secondary">{{.T "hosted.consent.deny"}}</button>
+</form>
+{{end}}
+
 {{define "captcha"}}{{with .Captcha}}<div class="{{.Class}}" data-sitekey="{{.SiteKey}}" data-action="{{.Action}}"></div>
 <script src="{{.Script}}" nonce="{{$.Nonce}}" async defer></script>{{end}}{{end}}

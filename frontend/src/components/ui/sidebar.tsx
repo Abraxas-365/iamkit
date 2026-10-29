@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { t } from '@/lib/i18n'
 
-// FreeRouter's inset/off-canvas sidebar, retaining the primitives used by IAM.
+// Inset/off-canvas sidebar, retaining the primitives used by IAMKit.
 const SidebarContext = React.createContext<{
   open: boolean; openMobile: boolean; isMobile: boolean;
   setOpenMobile: (open: boolean) => void; toggleSidebar: () => void;

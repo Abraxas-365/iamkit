@@ -10,7 +10,7 @@ pages and call your server with an access token issued for it alone.
 This guide covers what ships today: pre-registered clients, RFC 8707 resource
 indicators, scopes mapped to permissions with step-up, and the
 resource-server SDKs, clients named by a Client ID Metadata Document
-with IT approval, and dynamic client registration (RFC 7591), off unless
+with administrator approval, and dynamic client registration (RFC 7591), off unless
 you turn it on (see below).
 
 A runnable example with a seeded stack is in
@@ -135,10 +135,10 @@ Inspector's web UI can call them.
 An MCP client such as Claude Code or VS Code does not need a pre-registered
 client: its `client_id` is the https URL of its Client ID Metadata Document.
 IAMKit reads the document (guarded, cached, never from a private address)
-the first time a user signs in with it, and the client **waits for IT**. The
+the first time a user signs in with it, and the client **waits for an administrator**. The
 user sees a page that shows the client's host first (the one thing IAMKit
 can vouch for), the document's own name marked *unverified* unless the URL
-is a known preset, and "your request was sent to IT". Nothing redirects to
+is a known preset, and "your request was sent to an administrator". Nothing redirects to
 the client until someone approves it.
 
 Per protected resource, with `iam:protected-resources:read`/`write`
@@ -200,7 +200,7 @@ admits every client its rule covers (`admission_source` `allowlist`,
   re-approve them all: turning `allow_client_metadata` on again approves the
   waiting clients the server's policy covers (allowlist, preset, `open`).
   Clients demoted because the feature went off stay pending when it comes
-  back, and manual approvals are never restored: IT approves those again.
+  back, and manual approvals are never restored: an administrator approves those again.
 
 Each return to pending records `oauth_client.demoted` with
 `data.reason` (`metadata_documents_disabled`, `feature_disabled` or
@@ -303,12 +303,12 @@ templates, so the two never disagree.
 
 ### Limits
 
-A page full of unknown URLs cannot exhaust IAMKit or its IT queue:
+A page full of unknown URLs cannot exhaust IAMKit or its approval queue:
 
 | Limit | Value | What happens |
 |-------|-------|--------------|
 | Pending clients per environment | 200 | 429 `CLIENT_ADMISSION_BACKLOG` (hosted page *Too many applications are waiting*) |
-| Requests a user keeps for clients still waiting | 5 in 24 h | 429 `CLIENT_ACCESS_REQUEST_LIMIT`; nothing is stored. It frees when IT answers or the day passes |
+| Requests a user keeps for clients still waiting | 5 in 24 h | 429 `CLIENT_ACCESS_REQUEST_LIMIT`; nothing is stored. It frees when an administrator answers or the day passes |
 | The same, per organization | 50 in 24 h | the same |
 | Document fetches per environment | 60 a minute; 45 for clients with no row | 429 `CLIENT_METADATA_FETCH_BUDGET`. The other 15 are reserved for clients IAMKit knows, so a flood of new URLs does not stop them refreshing |
 | Document fetches per client address | 10 a minute (IPv6: per /64) | the same code. Cached documents are free |
@@ -520,7 +520,9 @@ In the resource flow:
   rest again. A scope never granted is `invalid_scope`.
 - A `resource` on the token request must equal the authorization's. When it
   is absent, the authorization's applies.
-- **Lifetimes.** The access token lives 15 minutes. The authorization lives
+- **Lifetimes.** The access token lives the server's
+  `access_token_ttl_seconds` (15 minutes by default, 60–3600 seconds, never
+  above `idle_ttl_seconds`). The authorization lives
   the server's `idle_ttl_seconds` / `max_ttl_seconds`, held to the
   environment's ceilings. Every refresh applies the current values: the
   authorization ends at its sign-in plus the server's current
@@ -534,6 +536,136 @@ The access token is a JWT
 `scope` (string) and `scp` (list), `permissions`, `sub` (user),
 `organization_id`, `environment_id`, `oauth_client_id`, `sid` and the usual
 `iss`/`exp`/`iat`; see [token claims](../../reference/token-claims.md).
+
+## User consent
+
+Before a client gets a token for your server, the user agrees to what it
+asks. IAMKit records the decision and asks again only for what is new.
+
+### Which clients ask
+
+Every OAuth client has a `consent_policy`:
+
+| Client | `consent_policy` |
+|--------|------------------|
+| Named by a metadata document, registered dynamically, or made from a preset template | Always `required`; it cannot be changed |
+| Registered by an operator (`POST …/oauth-clients`) | `skip` by default: your own applications act for your users without a page. Set `required` to ask |
+
+Consent applies to the resource flow only (an authorization with
+`resource`). Ordinary OpenID Connect sign-ins never show it.
+
+### What the user sees
+
+After signing in, the user sees IAMKit's consent page. It shows:
+
+- the client's host (`vscode.dev`), or its name when a preset vouches for it;
+- the server's name;
+- the scopes to allow, with profile scopes worded ("Your email address");
+- collapsed, the scopes the user does not hold yet (the client gets them
+  only once an administrator gives them to the user);
+- collapsed, the scopes already allowed.
+
+**Allow** sends the browser to the client with a code. **Deny** sends it
+back with `error=access_denied`, spends the authorization and ends the
+session the hosted pages signed in.
+
+A consent is kept per user, organization, client and server. The next
+sign-in skips the page when it asks for nothing new. When it asks for more
+(a step-up), the page lists only the new scopes, and allowing adds them to
+the record.
+
+The page's texts are part of the hosted catalog (`hosted.consent.*`), so
+[sign-in texts](hosted-login.md#sign-in-texts) reword them per
+environment, client or organization and locale. The defaults say "an
+administrator", never a team name.
+
+### A consent page of your own
+
+An environment with a [custom sign-in UI](custom-sign-in-ui.md) can ask for
+consent there too. Set `consent_ui` to `custom` on the environment's policy:
+
+```bash
+curl -X PUT "$IAMKIT_URL/management/v1/environments/$ENV/protected-resource-policy" -H "X-API-Key: $MGMT" \
+  -H 'Content-Type: application/json' -d '{"max_idle_ttl_seconds":2592000,"max_lifetime_ttl_seconds":7776000,"consent_ui":"custom"}'
+```
+
+Then, when `POST /oauth/authorize/complete` answers `consent_required: true`:
+
+1. Describe the ticket again: `GET /identity/v1/authorize/:ticket` returns
+   `consent_required` and `consent` (client, server, `scopes`,
+   `unheld_scopes`, `agreed_scopes`, `ui`).
+2. Show your page.
+3. Send the decision from the same browser:
+   `POST /identity/v1/authorize/:ticket/consent` with `{"approve": true}` or
+   `{"approve": false}`. The browser binding cookie authenticates it; no
+   token is needed. The answer is `{"redirect_to": …}`.
+
+With `@iamkit/js`, `completion()` reports `consent_required` and `consent()`
+records the decision. `@iamkit/react`'s `SignInFlow` has a `consent` step and
+`<SignInForm>` renders it.
+
+With `consent_ui` `hosted` (the default), the decision call is refused with
+`403 CONSENT_UI_HOSTED`; follow `redirect_to` (or `consent.hosted_url`) to
+IAMKit's page. A ticket that is not waiting for a decision answers
+`409 CONSENT_NOT_PENDING`.
+
+### Administrator grants
+
+For an organization that does not want each user to agree, switch the server
+to `consent_mode` `admin_granted` and grant a client scopes for its users:
+
+```bash
+curl -X PATCH "$IAMKIT_URL/management/v1/environments/$ENV/protected-resources/$SERVER" -H "X-API-Key: $MGMT" \
+  -H 'Content-Type: application/json' -d '{"consent_mode":"admin_granted"}'
+curl -X PUT "$IAMKIT_URL/management/v1/environments/$ENV/protected-resources/$SERVER/clients/$CLIENT/grants" -H "X-API-Key: $MGMT" \
+  -H 'Content-Type: application/json' -d '{"scopes":["notes:read"],"organization_id":"'$ORG'","expires_at":"2027-01-01T00:00:00Z"}'
+```
+
+- Without `organization_id` the grant covers every organization of the
+  environment. `expires_at` is optional. At expiry the `client_grant_expire`
+  job revokes the grant and ends its sessions.
+- A `PUT` replaces the live grant of the same client and organization.
+- Users covered by a grant see no page. A step-up beyond the grant asks the
+  user for the extra scopes only.
+- Switching the server back to `per_user` revokes every live grant at once
+  (`data.reason` `consent_mode_changed`), and users are asked again.
+
+`$CLIENT` is the client's IAMKit id (the `id` in the server's client list),
+not its `client_id` URL.
+
+### Revoking
+
+Revoking ends access at once:
+
+- **Users** disconnect an application under `GET`/`DELETE
+  /identity/v1/me/connected-apps[/:client]`, or with `<ConnectedApps>` from
+  `@iamkit/react`.
+- **Operators** do the same for a user under `…/users/:id/connected-apps`
+  (console: User → Connected apps), and revoke grants with `DELETE
+  …/clients/:client/grants/:grant`.
+- **Clients** revoking a refresh token
+  ([RFC 7009](https://www.rfc-editor.org/rfc/rfc7009), `POST /oauth/revoke`)
+  end the whole authorization.
+
+A revocation ends the client's sessions in its scope in the same
+transaction, so refresh tokens stop at once. Access tokens already issued
+live until they expire unless your server uses
+[introspection](#stop-revoked-tokens-at-once-introspection). The next sign-in
+asks again. Revoked consents and grants stay as records (`revoked_at`), and
+the `oauth_consent_prune` job deletes them after 365 days.
+
+Every refresh issues the consented scopes the user still holds, within the
+live consent or grant.
+
+### Events
+
+| Event | When |
+|-------|------|
+| `oauth_consent.granted` / `.denied` | A user allowed or denied (`data.consent_ui` `hosted` or `custom`) |
+| `oauth_consent.revoked` | A user or an operator disconnected an application |
+| `oauth_client.granted` / `.grant_revoked` | An operator granted or revoked; expiry and a `consent_mode` change revoke with `data.reason` |
+
+Events never carry tokens.
 
 ## Verify tokens in your server
 
@@ -642,6 +774,61 @@ gets it.
 `protect()` / `Protect` removes the `Authorization` header before your handler
 runs. Do not forward the client's token to other services.
 
+### Stop revoked tokens at once (introspection)
+
+A JWT stays valid until it expires: by default the server's access token
+lifetime (`access_token_ttl_seconds`, 15 minutes unless you change it, 60–3600
+seconds). When a user disconnects an application, an administrator revokes a
+consent or a grant, or a client is blocked, IAMKit ends the session and stops
+its refresh tokens at once, but an access token already issued keeps working
+in a server that only checks signatures until it expires.
+
+To close that window, configure introspection. After the local checks pass,
+the SDK asks IAMKit (RFC 7662, `POST /oauth/introspect`) whether the token is
+still live, and refuses it with `401 invalid_token` if not:
+
+```ts
+const rs = createResourceServer({
+  issuer, resource, environmentId,
+  introspection: {
+    clientId: process.env.IAMKIT_RS_CLIENT_ID!,         // a confidential OAuth client of the environment
+    clientSecret: process.env.IAMKIT_RS_CLIENT_SECRET!,
+    cacheTtlSec: 0,                                     // default: ask on every request
+  },
+});
+```
+
+```go
+rs, err := resourceserver.New(resourceserver.Config{
+	Issuer: issuer, Resource: resource, EnvironmentID: environmentID,
+	Introspection: &resourceserver.Introspection{
+		ClientID:     os.Getenv("IAMKIT_RS_CLIENT_ID"),
+		ClientSecret: os.Getenv("IAMKIT_RS_CLIENT_SECRET"),
+		CacheTTL:     0, // default: ask on every request
+	},
+})
+```
+
+- **Credentials.** Introspection needs a confidential client (`POST
+  …/oauth-clients` without `public`) of the server's environment. Public and
+  external clients cannot introspect. The secret lives only in your server.
+- **Cost.** Each request makes one call to IAMKit. `cacheTtlSec` / `CacheTTL`
+  keeps an *active* answer for at most that long, never past the token's
+  `exp`; an inactive answer is never cached. A cache of N seconds lets a
+  revoked token through for up to N seconds, so keep it short (a few seconds
+  absorbs bursts of tool calls). `maxCacheEntries` / `MaxCacheEntries` bounds
+  it (default 10 000).
+- **Fails closed.** If IAMKit cannot answer (network error, timeout, `5xx`,
+  refused client credentials), the request gets `503` without a challenge. The
+  client keeps its token and retries; the token is never admitted unchecked.
+- **Same token.** The SDK accepts the answer only when it describes this
+  token: active, an access token, the same subject and session, and the
+  server's URL in its audience. A token that fails the local checks is
+  refused before any call.
+
+Without introspection, a lower `access_token_ttl_seconds` on the protected
+resource narrows the window at the cost of more refreshes.
+
 ## Call other APIs as the user
 
 To reach a downstream API (another resource of the same application) for the
@@ -705,8 +892,8 @@ they hold across replicas as well.
 | The client loops on `403` | The user lacks the permission. The client stops after one retry and reports the scopes that were not granted |
 | The browser shows "Sign-in expired" | The hosted pages need HTTPS: IAMKit's issuer must be `https` outside loopback |
 | Claude Code cannot complete sign-in | Its `--callback-port` must match a registered `http://localhost:<port>/callback` |
-| `429 CLIENT_ACCESS_REQUEST_LIMIT` | The user (or their organization) already has as many requests waiting for IT as allowed; IT answers some, or wait a day |
+| `429 CLIENT_ACCESS_REQUEST_LIMIT` | The user (or their organization) already has as many requests waiting for approval as allowed; an administrator answers some, or wait a day |
 | `429 CLIENT_METADATA_FETCH_BUDGET` | Too many documents read this minute for the environment or from the caller's address; retry in a minute. Behind a proxy without `IAMKIT_TRUSTED_PROXIES` every user shares one address |
 | An approved client stopped working after you turned a setting off | `allow_client_metadata` off, the `client_metadata_documents` feature off, or a removed allowlist entry returns it to pending (`oauth_client.demoted`); see [Approvals by policy and by hand](#approvals-by-policy-and-by-hand) |
-| A client waits forever on "your request was sent to IT" | It is *Pending*: approve it (Resource → Clients), or add it to the MCP client allowlist |
+| A client waits forever on "your request was sent to an administrator" | It is *Pending*: approve it (Resource → Clients), or add it to the MCP client allowlist |
 | Claude on the web cannot reach a server behind a VPN | Claude connects from its cloud (`160.79.104.0/21`); expose the server and IAMKit, or use Claude Code |

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ProtectedResourcesClient } from "./index.js";
+import { IdentityClient, ProtectedResourcesClient } from "./index.js";
 import { fakeFetch, issuer } from "./testing/helpers.js";
 
 describe("ProtectedResourcesClient", () => {
@@ -76,5 +76,62 @@ describe("ProtectedResourcesClient", () => {
     await expect(client.approveClient("e1", "p1", "a/b", { metadata_hash: "h1" })).rejects.toThrow();
     await expect(client.clientImpact("e1", "p1", "../c")).rejects.toThrow();
     await expect(client.deleteAllowlistEntry("e1", "..")).rejects.toThrow();
+  });
+
+  it("manages administrator grants and users' connected apps", async () => {
+    const { fetch, calls } = fakeFetch((call) => {
+      const path = new URL(call.url).pathname;
+      if (call.method === "DELETE") return { status: 204, body: undefined };
+      if (call.method === "PUT") return { body: { id: "g1", client_id: "c1", scopes: ["notes:read"], organization_id: "o1" } };
+      if (path.endsWith("/grants")) return { body: { items: null } };
+      return { body: { items: [{ client: { id: "c1", host: "claude.ai" }, scopes: ["notes:read"], active_sessions: 2 }] } };
+    });
+    const client = new ProtectedResourcesClient({ baseUrl: issuer, token: "at", fetch });
+    expect(await client.grants("e1", "p1", "c1")).toEqual([]);
+    await client.grants("e1", "p1", "c1", { revoked: true });
+    const grant = await client.grantClient("e1", "p1", "c1", { scopes: ["notes:read"], organization_id: "o1", expires_at: "2030-01-01T00:00:00Z" });
+    expect(grant.id).toBe("g1");
+    await client.revokeGrant("e1", "p1", "c1", "g1");
+    expect((await client.userConnectedApps("e1", "u1", { organizationId: "o1" }))[0].active_sessions).toBe(2);
+    await client.disconnectUserApp("e1", "u1", "c1");
+    expect(calls.map((c) => `${c.method} ${c.url.replace(issuer, "")}`)).toEqual([
+      "GET /api/v1/environments/e1/protected-resources/p1/clients/c1/grants",
+      "GET /api/v1/environments/e1/protected-resources/p1/clients/c1/grants?revoked=true",
+      "PUT /api/v1/environments/e1/protected-resources/p1/clients/c1/grants",
+      "DELETE /api/v1/environments/e1/protected-resources/p1/clients/c1/grants/g1",
+      "GET /api/v1/environments/e1/users/u1/connected-apps?organization_id=o1",
+      "DELETE /api/v1/environments/e1/users/u1/connected-apps/c1",
+    ]);
+    expect(JSON.parse(calls[2].body)).toEqual({ scopes: ["notes:read"], organization_id: "o1", expires_at: "2030-01-01T00:00:00Z" });
+    await expect(client.revokeGrant("e1", "p1", "c1", "../g")).rejects.toThrow();
+    await expect(client.disconnectUserApp("e1", "u1", "a/b")).rejects.toThrow();
+  });
+
+  it("sends the consent fields", async () => {
+    const { fetch, calls } = fakeFetch(() => ({ body: { id: "p1" } }));
+    const client = new ProtectedResourcesClient({ baseUrl: issuer, token: "at", fetch });
+    await client.create("e1", { application_id: "a1", resource_id: "r1", name: "Notes", consent_mode: "admin_granted", access_token_ttl_seconds: 900 });
+    await client.update("e1", "p1", { consent_mode: "per_user", access_token_ttl_seconds: 600 });
+    await client.setPolicy("e1", { max_idle_ttl_seconds: 600, max_lifetime_ttl_seconds: 7200, consent_ui: "custom" });
+    expect(JSON.parse(calls[0].body)).toMatchObject({ consent_mode: "admin_granted", access_token_ttl_seconds: 900 });
+    expect(JSON.parse(calls[1].body)).toEqual({ consent_mode: "per_user", access_token_ttl_seconds: 600 });
+    expect(JSON.parse(calls[2].body).consent_ui).toBe("custom");
+  });
+
+  it("lists and disconnects the user's own connected apps", async () => {
+    const { fetch, calls } = fakeFetch((call) => (call.method === "DELETE" ? { status: 204 } : { body: { items: null } }));
+    const apps = new IdentityClient({ baseUrl: issuer, fetch }).connectedApps("at", "env-1", "https://orders");
+    expect(await apps.list()).toEqual([]);
+    await apps.list({ organizationId: "o1" });
+    await apps.disconnect("c1", { organizationId: "o1" });
+    const scope = "environment_id=env-1&audience=https%3A%2F%2Forders";
+    expect(calls.map((c) => `${c.method} ${c.url.replace(issuer, "")}`)).toEqual([
+      `GET /identity/v1/me/connected-apps?${scope}`,
+      `GET /identity/v1/me/connected-apps?${scope}&organization_id=o1`,
+      `DELETE /identity/v1/me/connected-apps/c1?${scope}&organization_id=o1`,
+    ]);
+    expect(calls.every((c) => c.headers.get("authorization") === "Bearer at")).toBe(true);
+    await expect(apps.disconnect("../x")).rejects.toMatchObject({ code: "VALIDATION" });
+    expect(() => new IdentityClient({ baseUrl: issuer, fetch }).connectedApps("", "env-1", "a")).toThrow();
   });
 });

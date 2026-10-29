@@ -1,4 +1,4 @@
-import { IAMKitError, ErrorCodes, RiskChallengeReason, boundaryOf, type Authorization, type Boundary, type CaptchaWidget, type Enrollment, type MFAPending, type SignIn, type SignInResult } from "@iamkit/js";
+import { IAMKitError, ErrorCodes, RiskChallengeReason, boundaryOf, type Authorization, type Boundary, type CaptchaWidget, type ConsentInfo, type Enrollment, type MFAPending, type SignIn, type SignInResult } from "@iamkit/js";
 
 /** The steps of a sign-in, mirroring IAMKit's hosted pages. */
 export type Step =
@@ -17,6 +17,7 @@ export type Step =
   | "signup" // name (+ password) for a new account
   | "signup_verify" // the emailed verification code
   | "waitlisted" // the environment's waitlist took the sign-up: no code was sent, wait for the approval email
+  | "consent" // the user allows or denies what the client asks (`state.consent`; environments with `consent_ui` custom)
   | "redirecting" // leaving for the identity provider or back to the client
   | "failed"; // the ticket cannot continue (expired, other browser, …)
 
@@ -50,6 +51,13 @@ export interface FlowState {
   busy: boolean;
   /** Where the browser goes next (step `redirecting`). */
   redirectTo?: string;
+  /**
+   * What the client asks the user to allow (step `consent`): the client, the
+   * server, the scopes to agree to (`scopes`), those the user does not hold
+   * yet (`unheld_scopes`, granted only once they do) and those already
+   * allowed (`agreed_scopes`). Answer with `consent(true | false)`.
+   */
+  consent?: ConsentInfo;
 }
 
 export interface FlowOptions {
@@ -95,6 +103,7 @@ export class SignInFlow {
   private password = "";
   private boundary?: Boundary;
   private connection = "";
+  private pendingConsent?: ConsentInfo;
 
   constructor(
     readonly iam: SignIn,
@@ -217,6 +226,11 @@ export class SignInFlow {
       }
       const login = authorization.login_hint ?? "";
       this.set({ authorization, login, step: "identify", captcha: authorization.captcha });
+      if (authorization.consent_required && authorization.consent) {
+        // Signed in already (the page was reloaded): only the decision is left.
+        this.askConsent(authorization.consent);
+        return;
+      }
       if (location) {
         const back = await this.iam.federation.finish(location).catch((err) => {
           throw asError(err);
@@ -502,18 +516,57 @@ export class SignInFlow {
     }
     this.password = "";
     const tokens = result.tokens;
-    const url = await this.iam.complete(this.options.ticket, tokens.access_token);
+    const done = await this.iam.completion(this.options.ticket, tokens.access_token);
+    let consent: ConsentInfo | undefined;
+    if (done.consent_required) {
+      // The client asks for scopes the user has not allowed yet: the
+      // environment's own UI asks where `consent_ui` is custom, IAMKit's
+      // consent page (`redirect_to`) otherwise.
+      const described = await this.iam.authorization(this.options.ticket);
+      if (described.consent?.ui === "custom") consent = described.consent;
+    }
     if (tokens.recovery_codes?.length) {
       // Shown once; the UI calls proceed() when the user saved them.
-      this.set({ step: "redirecting", redirectTo: url, recoveryCodes: tokens.recovery_codes });
+      this.pendingConsent = consent;
+      this.set({ step: "redirecting", redirectTo: consent ? undefined : done.redirect_to, recoveryCodes: tokens.recovery_codes });
       return;
     }
-    this.go(url);
+    if (consent) {
+      this.askConsent(consent);
+      return;
+    }
+    this.go(done.redirect_to);
   }
 
-  /** Leaves for the client after the recovery codes were shown. */
+  /** Leaves for the client (or asks for consent) after the recovery codes were shown. */
   proceed(): void {
+    if (this.pendingConsent) {
+      const consent = this.pendingConsent;
+      this.pendingConsent = undefined;
+      this.askConsent(consent);
+      return;
+    }
     if (this.current.redirectTo) this.go(this.current.redirectTo);
+  }
+
+  /**
+   * Answers the consent step: `true` allows what the client asks and sends
+   * the browser to it with a code, `false` sends it back with
+   * `error=access_denied`.
+   */
+  consent(approve: boolean): Promise<void> {
+    return this.run(async () => {
+      this.go(await this.iam.consent(this.options.ticket, approve));
+    });
+  }
+
+  private askConsent(consent: ConsentInfo) {
+    if (consent.ui !== "custom") {
+      // The environment asks on IAMKit's page.
+      this.go(consent.hosted_url);
+      return;
+    }
+    this.set({ step: "consent", consent, recoveryCodes: undefined, redirectTo: undefined });
   }
 
   private go(url: string) {

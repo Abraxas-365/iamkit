@@ -86,6 +86,18 @@ describe("SignIn", () => {
     expect(f.calls[2].body).toMatchObject({ purpose: "password_reset", password: "new", environment_id: "env" });
   });
 
+  it("reports consent_required and records a custom UI's consent decision", async () => {
+    const f = fake({
+      "POST /oauth/authorize/complete": () => json(200, { redirect_to: "https://id.example.com/hosted/consent?ticket=t", consent_required: true }),
+      "POST /identity/v1/authorize/ik_ticket/consent": () => json(200, { redirect_to: "https://app.example.com/cb?code=c&state=s" }),
+    });
+    const iam = createSignIn({ baseUrl: "https://id.example.com", fetch: f.fetch });
+    expect(await iam.completion("ik_ticket", "at")).toEqual({ redirect_to: "https://id.example.com/hosted/consent?ticket=t", consent_required: true });
+    expect(await iam.consent("ik_ticket", false)).toBe("https://app.example.com/cb?code=c&state=s");
+    expect(f.calls[1].body).toEqual({ approve: false });
+    expect(f.calls[1].headers.get("Accept")).toBe("application/json");
+  });
+
   it("describes a ticket and completes the authorization with the user token", async () => {
     const f = fake({
       "GET /identity/v1/authorize/ik_ticket": () => json(200, { client_id: "cl", environment_id: "env", application_id: "app", resource_id: "res", audience: "api", scopes: ["openid"], organization_id: null }),

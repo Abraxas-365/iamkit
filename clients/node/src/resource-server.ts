@@ -19,7 +19,10 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { errors, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from "jose";
+import { createIntrospector, type IntrospectionOptions } from "./introspection.js";
 import { createKeySet, type KeySetOptions } from "./tokens.js";
+
+export type { IntrospectionOptions } from "./introspection.js";
 
 /** The RFC 9728 well-known path. */
 export const METADATA_PATH = "/.well-known/oauth-protected-resource";
@@ -145,6 +148,13 @@ export interface ResourceServerOptions {
    * consented for this server. Even then only granted scopes count.
    */
   allowTokensWithoutResource?: boolean;
+  /**
+   * Also ask IAMKit whether each token is still live (RFC 7662), failing
+   * closed (503 when it cannot answer). Unset (the default) trusts a valid
+   * signature until the token expires (at most the protected resource's
+   * access_token_ttl_seconds).
+   */
+  introspection?: IntrospectionOptions;
 }
 
 /** The claims of a verified access token. */
@@ -255,6 +265,7 @@ export function createResourceServer(options: ResourceServerOptions): ResourceSe
   const resource = canonicalResource(options.resource);
   if (!resource) throw new TypeError(`resource ${options.resource} has no canonical form`);
   const keys = options.keys ?? createKeySet({ ...options.keySet, issuer: options.issuer });
+  const introspector = options.introspection ? createIntrospector(options.issuer.replace(/\/+$/, ""), options.introspection) : undefined;
   const url = metadataUrl(resource);
   const rest = resource.slice(resource.indexOf("://") + 3);
   const slash = rest.indexOf("/");
@@ -304,6 +315,11 @@ export function createResourceServer(options: ResourceServerOptions): ResourceSe
     }
     const scp = list("scp");
     const scopes = scp.length ? scp : text("scope").split(" ").filter(Boolean);
+    if (introspector) {
+      const live = await introspector.check(token, { sub: text("sub"), sessionId: text("sid"), exp: Number(p.exp) }, (a) => canonicalResource(a) === resource);
+      if (live === "unavailable") throw new ResourceError("unavailable");
+      if (live === "inactive") throw new ResourceError("invalid_token");
+    }
     return {
       sub: text("sub"),
       environmentId: text("environment_id"),

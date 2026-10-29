@@ -38,6 +38,8 @@ type clientRow struct {
 	Admission   string                 `db:"admission"`
 	Expires     *time.Time             `db:"admission_expires_at"`
 	AnyPort     bool                   `db:"loopback_any_port"`
+	Consent     string                 `db:"consent_policy"`
+	Preset      string                 `db:"preset"`
 	// AllowMeta: the protected resource takes clients of the row's source
 	// (allowsSource).
 	AllowMeta sql.NullBool `db:"allow_client_metadata"`
@@ -51,12 +53,20 @@ type protectedRow struct {
 	Permissions    pq.StringArray                `db:"permissions"`
 	ProtectedID    *identity.ProtectedResourceID `db:"protected_id"`
 	ProtectedURI   sql.NullString                `db:"protected_uri"`
+	ProtectedName  sql.NullString                `db:"protected_name"`
 	ProtectedScope pq.StringArray                `db:"protected_default_scopes"`
 	ProtectedIdle  sql.NullInt64                 `db:"protected_idle"`
 	ProtectedMax   sql.NullInt64                 `db:"protected_max"`
 	PolicyIdle     sql.NullInt64                 `db:"policy_idle"`
 	PolicyLifetime sql.NullInt64                 `db:"policy_lifetime"`
+	PolicyUI       sql.NullString                `db:"policy_consent_ui"`
+	ProtectedTTL   sql.NullInt64                 `db:"protected_access_ttl"`
+	ConsentMode    sql.NullString                `db:"protected_consent_mode"`
 }
+
+// targetColumns select a protectedRow from pr (protected_resources) and
+// pp (protected_resource_policies).
+const targetColumns = `pr.id AS protected_id,pr.uri AS protected_uri,pr.name AS protected_name,pr.default_scopes AS protected_default_scopes,pr.idle_ttl_seconds AS protected_idle,pr.max_ttl_seconds AS protected_max,pr.access_token_ttl_seconds AS protected_access_ttl,pr.consent_mode AS protected_consent_mode,pp.max_idle_ttl_seconds AS policy_idle,pp.max_lifetime_ttl_seconds AS policy_lifetime,pp.consent_ui AS policy_consent_ui`
 
 func (p protectedRow) target() *oauth.ProtectedTarget {
 	if p.ProtectedID == nil {
@@ -64,9 +74,9 @@ func (p protectedRow) target() *oauth.ProtectedTarget {
 	}
 	var policy *oauth.ProtectedResourcePolicy
 	if p.PolicyIdle.Valid {
-		policy = &oauth.ProtectedResourcePolicy{MaxIdleTTLSeconds: p.PolicyIdle.Int64, MaxLifetimeTTLSeconds: p.PolicyLifetime.Int64}
+		policy = &oauth.ProtectedResourcePolicy{MaxIdleTTLSeconds: p.PolicyIdle.Int64, MaxLifetimeTTLSeconds: p.PolicyLifetime.Int64, ConsentUI: p.PolicyUI.String}
 	}
-	return oauth.NewProtectedTarget(oauth.ProtectedResource{ID: *p.ProtectedID, URI: p.ProtectedURI.String, DefaultScopes: []string(p.ProtectedScope), IdleTTLSeconds: p.ProtectedIdle.Int64, MaxTTLSeconds: p.ProtectedMax.Int64}, []string(p.Permissions), policy)
+	return oauth.NewProtectedTarget(oauth.ProtectedResource{ID: *p.ProtectedID, URI: p.ProtectedURI.String, Name: p.ProtectedName.String, DefaultScopes: []string(p.ProtectedScope), IdleTTLSeconds: p.ProtectedIdle.Int64, MaxTTLSeconds: p.ProtectedMax.Int64, AccessTokenTTLSeconds: p.ProtectedTTL.Int64, ConsentMode: p.ConsentMode.String}, []string(p.Permissions), policy)
 }
 
 // FindActive is the registered client with row id in environment. A client
@@ -94,7 +104,7 @@ func (r *Repository) findClient(ctx context.Context, environment identity.Enviro
 	var row clientRow
 	// An external client exists only through its protected resource: it is
 	// found while that resource is active.
-	err := r.db.GetContext(ctx, &row, `SELECT c.id,c.environment_id,c.application_id,c.resource_id,c.redirect_uris,c.public,c.secret_hash,c.hosted_login,c.post_logout_redirect_uris,c.token_endpoint_auth_method,c.token_endpoint_auth_signing_alg,c.jwks,c.jwks_uri,c.access_token_format,c.grant_types,c.initiate_login_uri,c.source,c.external_id,c.client_name,c.logo_uri,c.admission,c.admission_expires_at,c.metadata_fetched_at,c.loopback_any_port,r.audience,r.permissions,`+allowsSource+` AS allow_client_metadata,pr.id AS protected_id,pr.uri AS protected_uri,pr.default_scopes AS protected_default_scopes,pr.idle_ttl_seconds AS protected_idle,pr.max_ttl_seconds AS protected_max,pp.max_idle_ttl_seconds AS policy_idle,pp.max_lifetime_ttl_seconds AS policy_lifetime FROM oauth_clients c JOIN applications a ON a.id=c.application_id AND a.environment_id=c.environment_id JOIN resources r ON r.id=c.resource_id AND r.environment_id=c.environment_id LEFT JOIN protected_resources pr ON pr.resource_id=c.resource_id AND pr.environment_id=c.environment_id AND pr.application_id=c.application_id AND pr.active AND (c.protected_resource_id IS NULL OR pr.id=c.protected_resource_id) LEFT JOIN protected_resource_policies pp ON pp.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND c.source = ANY($3) AND c.active AND a.active AND (c.protected_resource_id IS NULL OR pr.id IS NOT NULL)`, id, environment, pq.StringArray(sources))
+	err := r.db.GetContext(ctx, &row, `SELECT c.id,c.environment_id,c.application_id,c.resource_id,c.redirect_uris,c.public,c.secret_hash,c.hosted_login,c.post_logout_redirect_uris,c.token_endpoint_auth_method,c.token_endpoint_auth_signing_alg,c.jwks,c.jwks_uri,c.access_token_format,c.grant_types,c.initiate_login_uri,c.source,c.external_id,c.client_name,c.logo_uri,c.admission,c.admission_expires_at,c.metadata_fetched_at,c.loopback_any_port,c.consent_policy,c.preset,r.audience,r.permissions,`+allowsSource+` AS allow_client_metadata,`+targetColumns+` FROM oauth_clients c JOIN applications a ON a.id=c.application_id AND a.environment_id=c.environment_id JOIN resources r ON r.id=c.resource_id AND r.environment_id=c.environment_id LEFT JOIN protected_resources pr ON pr.resource_id=c.resource_id AND pr.environment_id=c.environment_id AND pr.application_id=c.application_id AND pr.active AND (c.protected_resource_id IS NULL OR pr.id=c.protected_resource_id) LEFT JOIN protected_resource_policies pp ON pp.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND c.source = ANY($3) AND c.active AND a.active AND (c.protected_resource_id IS NULL OR pr.id IS NOT NULL)`, id, environment, pq.StringArray(sources))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, errx.NotFound("OAuth client not found")
 	}
@@ -102,7 +112,7 @@ func (r *Repository) findClient(ctx context.Context, environment identity.Enviro
 		return nil, errx.Wrap(err, "load OAuth client", errx.TypeInternal)
 	}
 	return &oauth.Client{ID: row.ID, Environment: row.Environment, Application: row.Application, Resource: row.Resource, Audience: row.Audience, Redirects: []string(row.Redirects), Public: row.Public, Secret: row.Secret, HostedLogin: row.HostedLogin, PostLogoutRedirects: []string(row.PostLogout), Auth: row.auth(), AccessTokenFormat: row.TokenFormat, GrantTypes: []string(row.Grants), InitiateLoginURI: row.Initiate, Protected: row.target(),
-		Source: row.Source, ExternalID: row.ExternalID.String, Name: row.Name, LogoURI: row.LogoURI, Admission: row.Admission, AdmissionExpiresAt: row.Expires, MetadataFetched: row.Fetched.Time, LoopbackAnyPort: row.AnyPort,
+		Source: row.Source, ExternalID: row.ExternalID.String, Name: row.Name, LogoURI: row.LogoURI, Admission: row.Admission, AdmissionExpiresAt: row.Expires, MetadataFetched: row.Fetched.Time, LoopbackAnyPort: row.AnyPort, ConsentPolicy: row.Consent, Preset: row.Preset,
 		// The server stopped taking clients of the row's source (M-2).
 		Disabled: row.Source != oauth.SourceRegistered && !row.AllowMeta.Bool}, nil
 }

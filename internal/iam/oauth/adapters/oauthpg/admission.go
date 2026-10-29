@@ -237,7 +237,12 @@ func (r *Admission) BlockClient(ctx context.Context, m oauth.Mutation, protected
 		if err != nil {
 			return err
 		}
-		return eventpg.AuditWith(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, map[string]any{"protected_resource_id": protected.String(), "revoked_sessions": n})
+		if err = eventpg.AuditWith(ctx, tx, m.Environment, m.Actor, m.Action, m.Target, map[string]any{"protected_resource_id": protected.String(), "revoked_sessions": n}); err != nil {
+			return err
+		}
+		// Users consented to a client IT now refuses: unblocking it asks
+		// them again (D32, reason client_blocked).
+		return revokeClientConsents(ctx, tx, m.Environment, m.Actor, []string{client.String()})
 	})
 }
 
@@ -560,7 +565,7 @@ func (r *Admission) CreateTemplateClient(ctx context.Context, m oauth.Mutation, 
 	auth := input.ClientAuth
 	out, created := id, false
 	err := eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) error {
-		res, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash,hosted_login,token_endpoint_auth_method,token_endpoint_auth_signing_alg,access_token_format,grant_types,preset,loopback_any_port) VALUES($1,$2,$3,$4,$5,true,'\x',true,$6,$7,$8,$9,$10,$11) ON CONFLICT (environment_id,application_id,resource_id,preset) WHERE preset<>'' AND source='registered' DO NOTHING`,
+		res, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,secret_hash,hosted_login,token_endpoint_auth_method,token_endpoint_auth_signing_alg,access_token_format,grant_types,preset,loopback_any_port,consent_policy) VALUES($1,$2,$3,$4,$5,true,'\x',true,$6,$7,$8,$9,$10,$11,'required') ON CONFLICT (environment_id,application_id,resource_id,preset) WHERE preset<>'' AND source='registered' DO NOTHING`,
 			id, m.Environment, input.Application, input.Resource, pq.StringArray(input.Redirects), auth.Method, auth.SigningAlg, input.AccessTokenFormat, pq.StringArray(input.Grants()), input.Preset, input.LoopbackAnyPort)
 		if err != nil {
 			return conflict(err)

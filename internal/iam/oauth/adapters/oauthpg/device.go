@@ -85,15 +85,18 @@ func (r *Repository) PollDevice(ctx context.Context, client *oauth.Client, devic
 
 func (r *Repository) SessionInfo(ctx context.Context, session identity.SessionID) (oauth.SessionInfo, error) {
 	var row struct {
-		Expires       time.Time      `db:"expires_at"`
-		Authenticated time.Time      `db:"authenticated_at"`
-		AMR           pq.StringArray `db:"amr"`
+		Expires       time.Time               `db:"expires_at"`
+		Authenticated time.Time               `db:"authenticated_at"`
+		Created       time.Time               `db:"created_at"`
+		AMR           pq.StringArray          `db:"amr"`
+		User          identity.UserID         `db:"user_id"`
+		Organization  identity.OrganizationID `db:"organization_id"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT expires_at,authenticated_at,amr FROM sessions WHERE id=$1 AND revoked_at IS NULL AND expires_at>now()`, session)
+	err := r.db.GetContext(ctx, &row, `SELECT expires_at,authenticated_at,created_at,amr,user_id,organization_id FROM sessions WHERE id=$1 AND revoked_at IS NULL AND expires_at>now()`, session)
 	if errors.Is(err, sql.ErrNoRows) {
 		return oauth.SessionInfo{}, oauth.DeviceError(oauth.DeviceInvalidGrant)
 	}
-	return oauth.SessionInfo{Expires: row.Expires, Authenticated: row.Authenticated, AMR: []string(row.AMR)}, failure(err)
+	return oauth.SessionInfo{Expires: row.Expires, Authenticated: row.Authenticated, Started: row.Created, AMR: []string(row.AMR), User: row.User, Organization: row.Organization}, failure(err)
 }
 
 // ApproveDevice records the login on the device's pending row, in the

@@ -30,9 +30,38 @@ type ProtectedResource struct {
 	AllowDynamicRegistration bool `json:"allow_dynamic_registration"`
 	// ClientAdmission is ClientAdmissionAllowlist or ClientAdmissionOpen:
 	// how such clients are admitted the first time.
-	ClientAdmission string    `json:"client_admission"`
-	CreatedAt       time.Time `json:"created_at"`
+	ClientAdmission string `json:"client_admission"`
+	// ConsentMode is ConsentModePerUser or ConsentModeAdminGranted: whether
+	// each user consents to what a client asks, or an administrator may
+	// grant a client scopes for them (see GrantClient).
+	ConsentMode string `json:"consent_mode"`
+	// AccessTokenTTLSeconds is the lifetime of the access tokens the server
+	// gets (60 to 3600, never past the idle TTL).
+	AccessTokenTTLSeconds int64     `json:"access_token_ttl_seconds"`
+	CreatedAt             time.Time `json:"created_at"`
 }
+
+// Consent modes of a protected resource (ProtectedResource.ConsentMode).
+const (
+	ConsentModePerUser      = "per_user"
+	ConsentModeAdminGranted = "admin_granted"
+)
+
+// Where an environment's users consent
+// (ProtectedResourcePolicy.ConsentUI).
+const (
+	ConsentUIHosted = "hosted"
+	ConsentUICustom = "custom"
+)
+
+// Consent policies of an OAuth client (OAuthClient.ConsentPolicy): whether
+// its users consent to what it asks for at a protected resource. Clients
+// named outside IAMKit and clients made from a preset are always
+// ConsentRequired.
+const (
+	ConsentRequired = "required"
+	ConsentSkip     = "skip"
+)
 
 // ProtectedResourceImpact is what deactivating or deleting a protected
 // resource would end.
@@ -53,6 +82,10 @@ type ProtectedResourceCreate struct {
 	DefaultScopes  []string `json:"default_scopes,omitempty"`
 	IdleTTLSeconds int64    `json:"idle_ttl_seconds,omitempty"`
 	MaxTTLSeconds  int64    `json:"max_ttl_seconds,omitempty"`
+	// ConsentMode is ConsentModePerUser (default) or ConsentModeAdminGranted.
+	ConsentMode string `json:"consent_mode,omitempty"`
+	// AccessTokenTTLSeconds takes the default when zero.
+	AccessTokenTTLSeconds int64 `json:"access_token_ttl_seconds,omitempty"`
 }
 
 // ProtectedResourceUpdate changes only its non-nil fields. Active false
@@ -71,13 +104,19 @@ type ProtectedResourceUpdate struct {
 	// AllowDynamicRegistration turns dynamically registered clients on or
 	// off for this server (off demotes their approvals).
 	AllowDynamicRegistration *bool `json:"allow_dynamic_registration,omitempty"`
+	// ConsentMode is ConsentModePerUser or ConsentModeAdminGranted.
+	ConsentMode           *string `json:"consent_mode,omitempty"`
+	AccessTokenTTLSeconds *int64  `json:"access_token_ttl_seconds,omitempty"`
 }
 
 // ProtectedResourcePolicy are the environment's TTL ceilings for its
-// protected resources.
+// protected resources and where its users consent.
 type ProtectedResourcePolicy struct {
 	MaxIdleTTLSeconds     int64 `json:"max_idle_ttl_seconds"`
 	MaxLifetimeTTLSeconds int64 `json:"max_lifetime_ttl_seconds"`
+	// ConsentUI is ConsentUIHosted (IAMKit's consent page) or
+	// ConsentUICustom (your own sign-in UI). Left out, the saved one stays.
+	ConsentUI string `json:"consent_ui,omitempty"`
 }
 
 func (e Environment) ProtectedResources(ctx context.Context) ([]ProtectedResource, error) {

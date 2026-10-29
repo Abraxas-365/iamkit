@@ -37,6 +37,10 @@ func (f fakeAuthorizations) Pending(context.Context, string, string) (oauth.Pend
 	return oauth.Pending{Client: &oauth.Client{ID: client, Environment: env, Application: app, Resource: res, HostedLogin: f.hosted}, Form: f.form}, f.err
 }
 
+func (f fakeAuthorizations) ConsentPrompt(context.Context, string, string) (oauth.ConsentPrompt, error) {
+	return oauth.ConsentPrompt{}, oauth.ErrConsentNotPending()
+}
+
 type fakeAuthenticator struct {
 	organizations []authentication.Organization
 	issued        []authentication.Context

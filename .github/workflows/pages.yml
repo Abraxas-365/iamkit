@@ -8,6 +8,7 @@ on:
       - 'docs/**'
       - 'frontend/src/theme.css'
       - 'scripts/check_docs.py'
+      - 'scripts/check_agnostic.py'
       - 'scripts/test_check_docs.py'
       - '.github/workflows/pages.yml'
   pull_request:
@@ -16,6 +17,7 @@ on:
       - 'docs/**'
       - 'frontend/src/theme.css'
       - 'scripts/check_docs.py'
+      - 'scripts/check_agnostic.py'
       - 'scripts/test_check_docs.py'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
@@ -47,6 +49,7 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p 'test_check_docs.py'
           python3 scripts/check_docs.py
+          python3 scripts/check_agnostic.py
       - name: Install website dependencies
         working-directory: website
         run: npm ci

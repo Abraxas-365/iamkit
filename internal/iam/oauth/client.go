@@ -70,6 +70,11 @@ type Client struct {
 	// LoopbackAnyPort lets registered http://localhost redirect URIs match
 	// on any port (external clients always may, RFC 8252 §7.3).
 	LoopbackAnyPort bool
+	// ConsentPolicy is ConsentRequired or ConsentSkip (RequiresConsent).
+	ConsentPolicy string
+	// Preset is the template preset a registered client was made from
+	// ("" otherwise): its verified name on consent pages.
+	Preset string
 	// admitted is the loopback redirect URI AdmitRedirect added for the
 	// current request (not part of the stored or published document).
 	admitted string

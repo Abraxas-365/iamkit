@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Cloud, Laptop, Plus, ShieldCheck, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -9,7 +9,7 @@ import { useList } from '@/hooks/use-list'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RowActions } from '@/components/ui/menu'
-import { ConfirmDialog, DataTable, DetailSection, EmptyState, ErrorState, FormDialog, PageHeader, Time } from '@/components/library/patterns'
+import { ConfirmDialog, DataTable, DetailSection, EmptyState, ErrorState, FormDialog, PageHeader, RadioCards, Time } from '@/components/library/patterns'
 import { t } from '@/lib/i18n'
 import { TemplateClientDialog, useEnablePreset, type ClientPreset } from './mcp-presets'
 
@@ -17,6 +17,40 @@ import { TemplateClientDialog, useEnablePreset, type ClientPreset } from './mcp-
 export interface AllowlistEntry {
   id: string; environment_id: string; protected_resource_id: string | null
   origin: string; path_prefix: string; preset: string; created_at: string
+}
+
+/** oauth.ProtectedResourcePolicy. */
+interface ResourcePolicy { max_idle_ttl_seconds: number; max_lifetime_ttl_seconds: number; consent_ui: 'hosted' | 'custom' }
+
+/** ConsentPage chooses where the environment's users consent to MCP clients:
+ * IAMKit's consent page or the environment's own sign-in UI. */
+function ConsentPage({ base, canWrite }: { base: string; canWrite: boolean }) {
+  const [policy, setPolicy] = useState<ResourcePolicy | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    const controller = new AbortController()
+    api.get<ResourcePolicy>(`${base}/protected-resource-policy`, controller.signal).then(setPolicy).catch(() => { if (!controller.signal.aborted) setFailed(true) })
+    return () => controller.abort()
+  }, [base])
+  const save = async (consent_ui: ResourcePolicy['consent_ui']) => {
+    if (!policy || busy) return
+    setBusy(true)
+    try {
+      const next = { ...policy, consent_ui }
+      await api.put(`${base}/protected-resource-policy`, next)
+      setPolicy(next)
+      toast.success(consent_ui === 'custom' ? t('Your sign-in UI now asks for consent') : t('IAMKit now asks for consent'))
+    } catch (e) { toast.error(message(e)) } finally { setBusy(false) }
+  }
+  return <DetailSection title={t('Consent page')} description={t('Where users agree to what an MCP client asks for. Hosted sign-ins always use IAMKit\'s page.')}>
+    {failed ? <ErrorState error={t('Could not load the consent setting.')} /> : policy && <RadioCards name="consent_ui" label={t('Users consent in')} value={policy.consent_ui} disabled={!canWrite || busy}
+      options={[
+        { value: 'hosted', label: t('IAMKit\'s consent page'), description: t('Recommended. Works with any sign-in UI.') },
+        { value: 'custom', label: t('Your sign-in UI'), description: t('Your UI shows the request and sends the decision (@iamkit/react does it for you).') },
+      ]}
+      onChange={v => void save(v as ResourcePolicy['consent_ui'])} />}
+  </DetailSection>
 }
 
 /** NetworkBadge says where a client connects from: "Requires public
@@ -107,6 +141,8 @@ export default function McpClientsPage() {
     </DetailSection>
 
     <PresetGallery base={base} canWrite={canWrite} entries={entries.data} onChanged={entries.reload} />
+
+    <ConsentPage base={base} canWrite={canWrite} />
 
     {adding && <FormDialog title={t('Add an allowlist entry')} description={t('Clients whose metadata URL starts with this origin and path are admitted without review.')}
       submitLabel={t('Add')} success={t('Entry added')} onClose={() => setAdding(false)}

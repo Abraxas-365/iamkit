@@ -40,7 +40,7 @@ var script string
 
 var pages = func() map[string]*template.Template {
 	out := map[string]*template.Template{}
-	for _, name := range []string{"identify", "password", "directory", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "client", "test", "test-start", "signup", "signup-code", "waitlisted", "device", "device-confirm", "post"} {
+	for _, name := range []string{"identify", "password", "directory", "code", "reset", "organization", "mfa", "enroll", "recovery", "expired", "invite", "message", "client", "test", "test-start", "signup", "signup-code", "waitlisted", "device", "device-confirm", "consent", "post"} {
 		t := template.Must(template.ParseFS(files, "templates/*.html"))
 		template.Must(t.New("content").Parse(`{{template "` + name + `/content" .}}`))
 		out[name] = t
@@ -68,6 +68,8 @@ type Handler struct {
 	actor       func(*fiber.Ctx) string
 	devices     hosted.Devices
 	captcha     hosted.Captcha
+	// consent records consent decisions (nil: no consent pages).
+	consent Consenter
 	// texts are the custom sign-in texts (nil: the catalog's words).
 	texts struct {
 		commands hosted.TextCommands
@@ -153,6 +155,7 @@ func (h *Handler) Pages() map[string]fiber.Handler {
 		"POST /hosted/invite":                h.accept,
 	}
 	h.devicePages(pages)
+	h.consentPages(pages)
 	return pages
 }
 
@@ -203,6 +206,8 @@ type view struct {
 	// NextStep tells its user what to do about it.
 	Application *ClientApplication
 	NextStep    string
+	// Consent is what the consent page asks.
+	Consent *ConsentView
 	// Test is the test connection result the "test" page shows.
 	Test *federation.TestResult
 	// TestStart is the test connection link the "test-start" page posts.

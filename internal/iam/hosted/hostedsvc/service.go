@@ -35,13 +35,19 @@ type Service struct {
 	features       hosted.Features
 	captcha        hosted.Captcha
 	risk           hosted.Risk
-	now            func() time.Time
+	// issuer is IAMKit's public URL (the hosted consent page's base).
+	issuer string
+	now    func() time.Time
 }
 
 // New builds the hosted flow; second may be nil (no multi-factor step).
 func New(repository hosted.Repository, secrets hosted.Secrets, authorizations hosted.Authorizations, authenticator authentication.Authenticator, challenges hosted.Challenges, federation hosted.Federation, second hosted.SecondFactor) *Service {
 	return &Service{repository: repository, secrets: secrets, authorizations: authorizations, authenticator: authenticator, challenges: challenges, federation: federation, second: second, now: time.Now}
 }
+
+// SetIssuer sets IAMKit's public URL, the base of the hosted consent page
+// custom UIs are sent to.
+func (s *Service) SetIssuer(issuer string) { s.issuer = issuer }
 
 // SetSignInPolicies narrows the pages to the environment's sign-in policy
 // (without it every method the client offers is shown).
@@ -226,7 +232,40 @@ func (s *Service) Authorization(ctx context.Context, r hosted.Request, acceptLan
 			out.Captcha = &hosted.CaptchaInfo{Provider: pub.Provider, SiteKey: pub.SiteKey}
 		}
 	}
+	if p.Ticket.AwaitingConsent() {
+		prompt, err := s.authorizations.ConsentPrompt(ctx, r.Ticket, r.Binding)
+		if err != nil {
+			return hosted.Authorization{}, err
+		}
+		out.ConsentRequired, out.Consent = true, hosted.NewConsentInfo(prompt, s.consentURL(r.Ticket))
+	}
 	return out, nil
+}
+
+// consentURL is IAMKit's consent page for a ticket.
+func (s *Service) consentURL(ticket string) string {
+	return strings.TrimSuffix(s.issuer, "/") + "/hosted/consent?" + url.Values{"ticket": {ticket}}.Encode()
+}
+
+// ConsentPage brands the consent page of an authorization waiting for
+// consent like its sign-in pages, in the organization the user signed in
+// to; any client (hosted login or not) consents here.
+func (s *Service) ConsentPage(ctx context.Context, r hosted.Request) (hosted.ConsentPage, error) {
+	p, err := s.authorizations.Pending(ctx, r.Ticket, r.Binding)
+	if err != nil {
+		return hosted.ConsentPage{}, err
+	}
+	prompt, err := s.authorizations.ConsentPrompt(ctx, r.Ticket, r.Binding)
+	if err != nil {
+		return hosted.ConsentPage{}, err
+	}
+	settings, err := s.Branded(ctx, prompt.Environment, prompt.Client.ID, prompt.Organization)
+	if err != nil {
+		return hosted.ConsentPage{}, err
+	}
+	// The page shows who consents; a failed read only hides it.
+	account, _ := s.authenticator.Account(ctx, prompt.Environment, prompt.User)
+	return hosted.ConsentPage{Prompt: prompt, Settings: settings, Language: settings.Preferred(uiLocales(p)), Texts: hosted.TextScope{Client: prompt.Client.ID, Organization: prompt.Organization}, Account: account}, nil
 }
 
 // offered checks the pending authorization and that its client offers the

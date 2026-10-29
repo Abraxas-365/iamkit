@@ -93,6 +93,8 @@ type APIHandlerSet struct {
 	// Admissions serves the external-client admission API, the allowlist
 	// and the presets.
 	Admissions *oauthhttp.Admissions
+	// Consents serves connected apps (users) and administrator grants.
+	Consents *oauthhttp.Consents
 }
 
 type Server struct {
@@ -170,6 +172,8 @@ type Server struct {
 	// Admissions serves the external-client admission API, the allowlist
 	// and the presets.
 	Admissions *oauthhttp.Admissions
+	// Consents serves connected apps (users) and administrator grants.
+	Consents *oauthhttp.Consents
 	// LogoutDispatcher sends due back-channel logout notifications once
 	// (the worker runs it periodically; tests call it directly).
 	LogoutDispatcher oauth.Dispatcher
@@ -446,6 +450,10 @@ func (s *Server) App() *fiber.App {
 	if s.Hosted != nil {
 		auth.Get("/authorize/:ticket", s.limit(limiter.Config{Max: 60, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Hosted.Authorization)
 	}
+	if s.OAuth != nil {
+		// A custom sign-in UI's consent decision (consent_ui custom).
+		auth.Post("/authorize/:ticket/consent", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.OAuth.ConsentDecision)
+	}
 	if s.Invitations != nil {
 		auth.Post("/invitations/preview", s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Invitations.Preview)
 		auth.Post("/invitations/accept", s.limit(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Invitations.Accept)
@@ -461,6 +469,9 @@ func (s *Server) App() *fiber.App {
 	auth.Post("/me/password", s.limit(limiter.Config{Max: 10, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}), s.Tokens.ChangePassword)
 	if s.CaptchaPublic != nil {
 		s.CaptchaPublic.Register(auth, s.limit(limiter.Config{Max: 60, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}))
+	}
+	if s.Consents != nil {
+		s.Consents.SelfRoutes(auth, sessionsLimit)
 	}
 	if s.APIKeySelf != nil {
 		s.APIKeySelf.Register(auth, s.limit(limiter.Config{Max: 30, LimitReached: func(c *fiber.Ctx) error { return fiber.ErrTooManyRequests }}))

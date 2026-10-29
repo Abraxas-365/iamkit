@@ -39,6 +39,14 @@ func (t tickets) Pending(ctx context.Context, ticket, binding string) (oauth.Pen
 	return oauth.Pending{Client: &oauth.Client{Environment: target.Environment, Application: target.Application, Resource: target.Resource, HostedLogin: true}}, nil
 }
 
+// ConsentPrompt: SAML sign-ins never wait for consent.
+func (t tickets) ConsentPrompt(ctx context.Context, ticket, binding string) (oauth.ConsentPrompt, error) {
+	if saml(ticket) {
+		return oauth.ConsentPrompt{}, oauth.ErrConsentNotPending()
+	}
+	return t.oauth.ConsentPrompt(ctx, ticket, binding)
+}
+
 // finisher completes a hosted sign-in: the SAML response for SAML tickets,
 // the OAuth authorization otherwise.
 func finisher(oauthFinish hostedhttp.Finisher, samlHTTP *samlhttp.Handler) hostedhttp.Finisher {

@@ -1,6 +1,7 @@
 import { createIAMKitClient, type IAMKitClient, type IAMKitOptions } from "@iamkit/api";
 import { APIKeyPrefix, MeAPIKeys } from "./apikeys.js";
 import { invalidArgument } from "./errors.js";
+import { MeConnectedApps } from "./protected-resources.js";
 import { Transport, withQuery, type FetchLike } from "./http.js";
 
 /**
@@ -187,6 +188,14 @@ export class IdentityClient {
    */
   me(accessToken: string, environmentId: string, audience: string): MeAPIKeys {
     return new MeAPIKeys(this.http, accessToken, environmentId, audience);
+  }
+
+  /**
+   * The apps connected to the token user's account (self-service): list
+   * them and disconnect one. `accessToken` is the user's token for `audience`.
+   */
+  connectedApps(accessToken: string, environmentId: string, audience: string): MeConnectedApps {
+    return new MeConnectedApps(this.http, accessToken, environmentId, audience);
   }
 }
 

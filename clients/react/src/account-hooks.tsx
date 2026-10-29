@@ -6,6 +6,7 @@ import {
   type ApiKeyOptions,
   type ApiKey,
   type Boundary,
+  type ConnectedApp,
   type Factor,
   type FactorSummary,
   type IssuedApiKey,
@@ -264,6 +265,38 @@ export function useSessions(page: { limit?: number; offset?: number } = {}): Use
       const count = await action.run((a) => a.sessions.revokeOthers());
       if (count !== undefined) loader.refresh();
       return count;
+    },
+  };
+}
+
+// ── useConnectedApps ──
+
+export interface UseConnectedApps extends Loadable {
+  /** The applications the user connected to protected resources (MCP servers). */
+  apps: ConnectedApp[];
+  /**
+   * Disconnects one (`clientId` = `ConnectedApp.client.id`, in the app's
+   * organization): its access ends at once and its next sign-in asks for
+   * consent again.
+   */
+  disconnect: (app: ConnectedApp) => Promise<boolean>;
+}
+
+/** The user's connected applications (`organizationId` narrows to one organization). */
+export function useConnectedApps(filter: { organizationId?: string } = {}): UseConnectedApps {
+  const loader = useLoader((a) => a.connectedApps.list(filter), [filter.organizationId]);
+  const action = useAction();
+  return {
+    apps: loader.data ?? [],
+    loading: loader.loading,
+    error: action.error ?? loader.error,
+    busy: action.busy,
+    refresh: loader.refresh,
+    clearError: action.clearError,
+    disconnect: async (app) => {
+      const ok = (await action.run(async (a) => (await a.connectedApps.disconnect(app.client.id, { organizationId: app.organization_id || undefined }), true))) === true;
+      if (ok) loader.refresh();
+      return ok;
     },
   };
 }

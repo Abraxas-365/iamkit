@@ -116,6 +116,19 @@ describe("createAccount", () => {
     expect(calls[2]).toMatchObject({ method: "POST", path: "/identity/v1/me/sessions/revoke-others" });
   });
 
+  it("lists and disconnects connected apps", async () => {
+    const app = { client: { id: "c-1", host: "claude.ai", verified_name: "Claude Code" }, resource: "https://mcp.example.com/mcp", scopes: ["notes:read"], active_sessions: 1 };
+    const { account, calls } = setup((call) => (call.method === "GET" ? { body: { items: call.query.organization_id ? null : [app] } } : { status: 204 }));
+    expect(await account.connectedApps.list()).toEqual([app]);
+    expect(await account.connectedApps.list({ organizationId: "org-2" })).toEqual([]);
+    await account.connectedApps.disconnect("c/1");
+    await account.connectedApps.disconnect("c-1", { organizationId: "org-2" });
+    expect(calls[0]).toMatchObject({ method: "GET", path: "/identity/v1/me/connected-apps", query: scope });
+    expect(calls[1].query).toEqual({ ...scope, organization_id: "org-2" });
+    expect(calls[2]).toMatchObject({ method: "DELETE", path: "/identity/v1/me/connected-apps/c%2F1", query: scope, body: undefined });
+    expect(calls[3]).toMatchObject({ method: "DELETE", path: "/identity/v1/me/connected-apps/c-1", query: { ...scope, organization_id: "org-2" } });
+  });
+
   it("manages API keys", async () => {
     const { account, calls } = setup((call) => {
       if (call.method === "DELETE") {

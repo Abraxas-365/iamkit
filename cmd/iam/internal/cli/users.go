@@ -29,6 +29,7 @@ func usersCmd() *cobra.Command {
 	cmd.AddCommand(metadataCmd("users", "user"))
 	cmd.AddCommand(usersProfileCmd())
 	cmd.AddCommand(usersDevicesCmd())
+	cmd.AddCommand(usersConnectedAppsCmd())
 	return cmd
 }
 
@@ -300,4 +301,61 @@ func usersSuspendCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func usersConnectedAppsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "connected-apps",
+		Aliases: []string{"apps"},
+		Short:   "Apps connected to a user's account (OAuth clients with a live consent or sessions)",
+	}
+	var organization string
+	list := &cobra.Command{
+		Use:     "list USER_ID",
+		Short:   "List a user's connected apps",
+		Example: `  iam users connected-apps list USER_ID --organization ORG_ID`,
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			data, err := mustClient(cmd).get(connectedAppsPath(args[0], "", organization))
+			if err != nil {
+				return err
+			}
+			newPrinter().table(data, []string{"CLIENT", "HOST", "NAME", "SERVER", "ORGANIZATION", "SCOPES", "SESSIONS", "LAST USED"}, func(m map[string]any) []string {
+				client, _ := m["client"].(map[string]any)
+				return []string{str(client, "id"), clientHost(client), str(client, "name"), str(m, "resource_name"), str(m, "organization_id"), uriList(m["scopes"]), str(m, "active_sessions"), str(m, "last_used_at")}
+			})
+			return nil
+		},
+	}
+	list.Flags().StringVar(&organization, "organization", "", "Only the apps in this organization ID")
+	var disconnectOrg string
+	disconnect := &cobra.Command{
+		Use:   "disconnect USER_ID CLIENT",
+		Short: "End a user's connection to a client: their consents to it and its sessions (audited)",
+		Long: `Ends a user's connection to a client: their consents to it and its sessions for
+them, in one organization or in all. CLIENT is the client row ID that
+"connected-apps list" shows.`,
+		Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if _, err := mustClient(cmd).delete(connectedAppsPath(args[0], args[1], disconnectOrg)); err != nil {
+				return err
+			}
+			newPrinter().ok("App disconnected: " + args[1])
+			return nil
+		},
+	}
+	disconnect.Flags().StringVar(&disconnectOrg, "organization", "", "Only in this organization ID")
+	cmd.AddCommand(list, disconnect)
+	return cmd
+}
+
+func connectedAppsPath(user, client, organization string) string {
+	path := envPath() + "/users/" + url.PathEscape(user) + "/connected-apps"
+	if client != "" {
+		path += "/" + url.PathEscape(client)
+	}
+	if organization != "" {
+		path += "?" + url.Values{"organization_id": {organization}}.Encode()
+	}
+	return path
 }

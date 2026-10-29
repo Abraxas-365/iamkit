@@ -173,6 +173,24 @@
   color: var(--iamkit-accent);
 }
 
+:where([data-iamkit="badge"][data-unverified="true"]) {
+  background: color-mix(in srgb, var(--iamkit-muted) 15%, transparent);
+  color: var(--iamkit-muted);
+}
+
+:where([data-iamkit="actions"]) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1 1 100%;
+}
+
+:where([data-iamkit="logo"]) {
+  border-radius: 4px;
+  object-fit: contain;
+}
+
 :where([data-iamkit="secret"]) {
   word-break: break-all;
   padding: var(--iamkit-pad);

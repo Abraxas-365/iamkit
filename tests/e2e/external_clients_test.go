@@ -277,11 +277,29 @@ func (b *browser) signInTo(start page, redirect string) string {
 	}
 	tk := b.get(start.Location).field("ticket")
 	done := b.post("/hosted/login/password", url.Values{"ticket": {tk}, "email": {b.e.AliceEmail}, "password": {b.e.Pass}})
+	// A client that requires consent (every external one) asks first; the
+	// user allows what it asks.
+	done = b.allowConsent(done)
 	loc, err := url.Parse(done.Location)
 	if done.Status != 303 || err != nil || !strings.HasPrefix(done.Location, redirect+"?") || loc.Query().Get("code") == "" || loc.Query().Get("iss") != testIssuer {
 		b.t.Fatalf("finish: %d %q %s", done.Status, done.Location, done.Body)
 	}
 	return loc.Query().Get("code")
+}
+
+// allowConsent answers the consent page done leads to, if any, with
+// allow, and returns the answer (the redirect to the client).
+func (b *browser) allowConsent(done page) page {
+	b.t.Helper()
+	if done.Status != 303 || !strings.Contains(done.Location, "/hosted/consent?ticket=") {
+		return done
+	}
+	path := done.Location[strings.Index(done.Location, "/hosted/consent"):]
+	consent := b.get(path)
+	if consent.Status != 200 {
+		b.t.Fatalf("consent page: %d %s", consent.Status, consent.Body)
+	}
+	return b.post("/hosted/consent", url.Values{"ticket": {consent.field("ticket")}, "decision": {"allow"}})
 }
 
 // httpForm posts form to path and returns the status.
@@ -316,6 +334,7 @@ func TestExternalClientConstraint(t *testing.T) {
 			"jwks_uri":                   "''",
 			"grant_types":                "'{authorization_code,refresh_token}'",
 			"hosted_login":               "true",
+			"consent_policy":             "'required'",
 		}
 		for k, v := range overrides {
 			cols[k] = v
@@ -381,6 +400,9 @@ func TestExternalClientConstraint(t *testing.T) {
 		"unknown source":            {"source": "'dcr'"},
 		"unknown admission":         {"admission": "'maybe'"},
 		"preset on external client": {"preset": "'claude_code'"},
+		// D29: a third party never skips consent.
+		"external skips consent": {"consent_policy": "'skip'"},
+		"unknown consent policy": {"consent_policy": "'maybe'"},
 	} {
 		if err := insert(overrides); err == nil || !strings.Contains(err.Error(), "violates check constraint") {
 			t.Errorf("%s: %v", name, err)
@@ -390,7 +412,7 @@ func TestExternalClientConstraint(t *testing.T) {
 	// One row per (protected resource, document URL).
 	tx, _ := e.DB.Beginx()
 	defer tx.Rollback()
-	q := `INSERT INTO oauth_clients (id, environment_id, application_id, resource_id, redirect_uris, public, token_endpoint_auth_method, hosted_login, source, external_id, protected_resource_id) VALUES (gen_random_uuid(), $1, $2, $3, '{http://localhost/callback}', true, 'none', true, 'cimd', 'https://claude.ai/oauth/x', $4)`
+	q := `INSERT INTO oauth_clients (id, environment_id, application_id, resource_id, redirect_uris, public, token_endpoint_auth_method, hosted_login, source, external_id, protected_resource_id, consent_policy) VALUES (gen_random_uuid(), $1, $2, $3, '{http://localhost/callback}', true, 'none', true, 'cimd', 'https://claude.ai/oauth/x', $4, 'required')`
 	if _, err := tx.Exec(q, e.EnvID, e.Client, resource, protected); err != nil {
 		t.Fatal(err)
 	}

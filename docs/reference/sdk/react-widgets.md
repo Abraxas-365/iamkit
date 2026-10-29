@@ -13,6 +13,7 @@ has its own portal.
 | Edit name, avatar, phone and custom profile properties | `<UserProfile>` / `useAccount` |
 | Change the password, manage second factors, passkeys and recovery codes | `<UserSecurity>` / `usePassword`, `useFactors` |
 | List and end sessions | `<UserSessions>` / `useSessions` |
+| List and disconnect the applications connected to protected resources (MCP servers) | `<ConnectedApps>` / `useConnectedApps` |
 | Create and revoke the user's [API keys](../../guides/machines/api-keys.md) | `<ApiKeys>` / `useApiKeys` |
 | Show and change the organization | `<OrganizationSwitcher>` / `useOrganizations` |
 
@@ -25,7 +26,7 @@ client once and share it through `<AccountProvider>`:
 
 ```tsx
 import { createAccount } from "@iamkit/js";
-import { AccountProvider, ApiKeys, UserProfile, UserSecurity, UserSessions } from "@iamkit/react";
+import { AccountProvider, ApiKeys, ConnectedApps, UserProfile, UserSecurity, UserSessions } from "@iamkit/react";
 import "@iamkit/react/widgets.css"; // optional
 
 const account = createAccount({
@@ -41,6 +42,7 @@ export function AccountPage() {
       <UserProfile />
       <UserSecurity renderQRCode={(uri) => <QRCode value={uri} />} />
       <UserSessions />
+      <ConnectedApps />
       <ApiKeys />
     </AccountProvider>
   );
@@ -96,6 +98,20 @@ Lists live sessions (application, organization, browser, address, time), marks
 the current one (`data-current="true"` and a badge), ends one and ends all the
 others. Use `useSessions({limit, offset})` to page the list yourself.
 
+### `<ConnectedApps>`
+
+Lists the applications the user let reach a
+[protected resource](../../guides/applications/protect-mcp-server.md) — an MCP
+client such as an AI assistant — one row per client, server and organization:
+who the client is, the server, the scopes the user consented to, when, the last
+use and the live sessions. A client is shown as IAMKit can vouch for it: the
+verified name (and logo) of a preset, else the host of its `client_id` URL with
+the name it gives itself marked **unverified** (`data-unverified="true"` on the
+badge) and no logo. **Disconnect** asks for a confirmation, then revokes the
+consent and ends the client's sessions for the user at once; its next sign-in
+asks for consent again. `organizationId?` lists one organization only.
+Impersonated sessions can read the list but not disconnect (403).
+
 ### `<ApiKeys>`
 
 Lists the user's keys (obfuscated value, state, permissions, expiry, last use)
@@ -145,6 +161,7 @@ answer `false` or `undefined` instead of throwing, and reload what they changed.
 | `useAccount()` | `profile`, `properties`, `updateProfile({name?, avatarUrl?})`, `updateProperties(patch)` (`null` removes a key), `phone.start/verify/remove`, `changePassword` |
 | `usePassword()` | `changePassword(current, next)` |
 | `useSessions({limit?, offset?})` | `sessions`, `page`, `revoke(id)`, `revokeOthers()` |
+| `useConnectedApps({organizationId?})` | `apps`, `disconnect(app)` |
 | `useFactors()` | `summary`, `factors`, `recoveryCodesRemaining`, `lockedUntil`, `totp`/`email`/`sms` (`start`, `confirm`, `send`, `remove`), `recoveryCodes(proof)`, `passkeys` (`add`, `rename`, `assert`, `remove`) |
 | `useApiKeys(filter?)` | `keys`, `page`, `options` (`enabled`, `max_ttl_days`, `resources`), `create(key)` → issued key with `value`, `revoke(id)` |
 | `useOrganizations(options?)` | `organizations`, `currentId`, `switchTo(id)`, `refusal` |
@@ -160,7 +177,7 @@ errors go in a `role="alert"` region and confirmations in `role="status"`
 (`aria-label="Revoke: ci"`). Each element carries `data-iamkit="<part>"`
 (`root`, `title`, `section`, `subtitle`, `notice`, `error`, `form`, `field`,
 `label`, `input`, `button`, `secondary`, `danger`, `list`, `item`, `badge`,
-`secret`, `codes`, `meta`); `classNames` adds classes per part.
+`secret`, `codes`, `meta`, `actions`, `logo`); `classNames` adds classes per part.
 
 `@iamkit/react/widgets.css` is an optional stylesheet: CSS variables
 (`--iamkit-color`, `--iamkit-bg`, `--iamkit-border`, `--iamkit-accent`,

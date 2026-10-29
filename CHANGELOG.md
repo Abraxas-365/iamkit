@@ -4,6 +4,44 @@ Changes that can affect existing deployments, newest first. Each entry lists
 its **incompatible changes** first: what behaved differently before, and what
 to do about it.
 
+## Unreleased — MCP authorization, phase (d): consent and revocation
+
+### Incompatible changes
+
+- **Third-party clients ask for consent.** Clients named by a metadata
+  document, registered dynamically or made from a preset template now show
+  IAMKit's consent page the next time each user authorizes them for an MCP
+  server (`oauth_clients.consent_policy` is `required` for them and cannot be
+  changed). Existing authorizations keep working until they end. Clients
+  registered by an operator keep signing in without a page (`skip`).
+- **Revoking a resource-flow token ends its authorization.** `POST
+  /oauth/revoke` of a refresh or access token issued for a protected resource
+  now also ends the session behind it, as a client "disconnecting" expects.
+  Ordinary OpenID Connect tokens are unchanged.
+- **Access-token lifetime per server.** Resource-flow access tokens live the
+  protected resource's `access_token_ttl_seconds` (default 900, 60–3600,
+  never above `idle_ttl_seconds`), not the client's lifetime.
+- **Neutral refusal texts.** The hosted `client` page says "an administrator"
+  instead of naming a team (`hosted.client.pending`, `.blocked`,
+  `.request_limit`). Custom texts for those keys still win.
+- **`/identity/v1/authorize/:ticket` gains `consent_required` and
+  `consent`.** `POST /oauth/authorize/complete` may answer
+  `consent_required: true` with `redirect_to` = IAMKit's consent page. A
+  custom sign-in UI that follows `redirect_to` keeps working.
+
+Migration 024 adds per-client consent policies, per-user consents
+(`oauth_consents`), administrator grants with optional expiry
+(`oauth_client_grants`, `consent_mode` `admin_granted`), the environment's
+`consent_ui` (`hosted` or `custom`) and connected apps for users
+(`/identity/v1/me/connected-apps`, `<ConnectedApps>`) and operators
+(`…/users/:id/connected-apps`). Revoking a consent or a grant ends the
+client's sessions in its scope at once; revoked rows stay as records until
+`oauth_consent_prune` (365 days). New events `oauth_consent.granted`,
+`.denied`, `.revoked`, `oauth_client.granted`, `.grant_revoked`; new jobs
+`client_grant_expire` and `oauth_consent_prune`. The Go and Node resource-server
+SDKs can introspect each token (fail closed with 503). See
+[User consent](docs/guides/applications/protect-mcp-server.md#user-consent).
+
 ## Unreleased — MCP authorization, phase (c): dynamic client registration
 
 ### Incompatible changes

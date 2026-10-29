@@ -1,9 +1,9 @@
-import type { IAMKitError } from "@iamkit/js";
+import type { ConsentInfo, IAMKitError } from "@iamkit/js";
 import { type FormEvent, type ReactNode } from "react";
 import type { FlowOptions } from "./flow.js";
 import { Captcha } from "./Captcha.js";
 import { useSignIn } from "./hooks.js";
-import { translator, type Translate } from "./texts.js";
+import { fill, translator, type Translate } from "./texts.js";
 
 /**
  * Class names per part, e.g. Tailwind utilities. Parts without a class are
@@ -23,6 +23,8 @@ export interface ClassNames {
   link?: string;
   divider?: string;
   codes?: string;
+  /** The consent step's scope lists (`consent`, `unheld`, `agreed`). */
+  scopes?: string;
 }
 
 export interface SignInFormProps extends FlowOptions {
@@ -45,8 +47,10 @@ export interface SignInFormProps extends FlowOptions {
 /**
  * A complete sign-in for an authorization ticket, step by step like the
  * hosted pages: identifier, password or emailed code, passkey, single
- * sign-on, second factor and enrollment, expired password, reset and
- * sign-up. Unstyled; style it with `classNames` or `[data-iamkit]`.
+ * sign-on, second factor and enrollment, expired password, reset,
+ * sign-up and, where the environment's `consent_ui` is `custom`, the
+ * consent an MCP client asks for. Unstyled; style it with `classNames` or
+ * `[data-iamkit]`.
  */
 export function SignInForm(props: SignInFormProps) {
   const { texts, classNames: cn = {}, renderError, renderQRCode, renderCaptcha, nonce, ...options } = props;
@@ -340,6 +344,9 @@ export function SignInForm(props: SignInFormProps) {
         </>
       );
       break;
+    case "consent":
+      body = state.consent ? <Consent consent={state.consent} t={t} part={part} error={error} busy={busy} decide={(approve) => void flow.consent(approve)} /> : null;
+      break;
     case "redirecting":
       body = state.recoveryCodes?.length ? (
         <>
@@ -365,6 +372,76 @@ export function SignInForm(props: SignInFormProps) {
     <div {...part("root")} data-step={state.step} aria-busy={busy}>
       {body}
     </div>
+  );
+}
+
+/** Profile data scopes the consent step words; permissions show by name. */
+const profileScopes = ["profile", "email", "phone"];
+
+/**
+ * The consent step, worded like IAMKit's consent page: who asks (the
+ * client_id's host, or the name a preset vouches for), for which server,
+ * the scopes to allow, those the user does not hold yet and those already
+ * allowed.
+ */
+function Consent(props: { consent: ConsentInfo; t: Translate; part: (name: keyof ClassNames) => { "data-iamkit": string; className?: string }; error: ReactNode; busy: boolean; decide: (approve: boolean) => void }) {
+  const { consent, t, part, error, busy, decide } = props;
+  const client = consent.client;
+  const who = client.verified_name || client.host || t("hosted.consent.this_application");
+  const resource = consent.resource_name || consent.resource;
+  const agreed = consent.agreed_scopes ?? [];
+  const unheld = consent.unheld_scopes ?? [];
+  const scopes = consent.scopes ?? [];
+  const list = (items: string[], name: string) => (
+    <ul {...part("scopes")} data-list={name}>
+      {items.map((s) => {
+        const label = profileScopes.includes(s) ? t(`hosted.consent.scope.${s}`) : s;
+        return (
+          <li key={s}>
+            {label}
+            {label !== s ? (
+              <>
+                {" "}
+                <code>{s}</code>
+              </>
+            ) : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+  return (
+    <>
+      <h1 {...part("title")}>{t("hosted.consent.title")}</h1>
+      <p {...part("subtitle")}>{fill(t(agreed.length ? "hosted.consent.subtitle_more" : "hosted.consent.subtitle"), { application: who, resource })}</p>
+      {error}
+      {scopes.length ? (
+        <>
+          <p {...part("notice")}>{t("hosted.consent.asks")}</p>
+          {list(scopes, "consent")}
+        </>
+      ) : null}
+      {unheld.length ? (
+        <details>
+          <summary>{t("hosted.consent.unheld")}</summary>
+          <p {...part("notice")}>{t("hosted.consent.unheld_help")}</p>
+          {list(unheld, "unheld")}
+        </details>
+      ) : null}
+      {agreed.length ? (
+        <details>
+          <summary>{t("hosted.consent.agreed")}</summary>
+          {list(agreed, "agreed")}
+        </details>
+      ) : null}
+      <p {...part("notice")}>{t("hosted.consent.revoke_help")}</p>
+      <button type="button" disabled={busy} onClick={() => decide(true)} {...part("button")}>
+        {t("hosted.consent.allow")}
+      </button>
+      <button type="button" disabled={busy} onClick={() => decide(false)} {...part("secondary")}>
+        {t("hosted.consent.deny")}
+      </button>
+    </>
   );
 }
 

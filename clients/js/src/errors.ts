@@ -58,6 +58,10 @@ export const ErrorCodes = {
   RiskChallenge: "RISK_CHALLENGE",
   /** A risk challenge was needed but the user has no verified email. */
   ChallengeUnavailable: "CHALLENGE_UNAVAILABLE",
+  /** The environment asks for consent on IAMKit's page (`consent_ui` hosted): navigate to `consent.hosted_url`. */
+  ConsentUIHosted: "CONSENT_UI_HOSTED",
+  /** The authorization does not wait for consent (decided already, or never asked). */
+  ConsentNotPending: "CONSENT_NOT_PENDING",
 } as const;
 
 function codeOf(error: unknown, code: string): error is IAMKitError {

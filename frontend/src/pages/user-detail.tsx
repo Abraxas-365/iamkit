@@ -18,6 +18,7 @@ import { Avatar } from '@/components/library/avatar'
 import { MetadataEditor, ProfileAttributes } from '@/components/library/metadata-editor'
 import { UserAPIKeys } from './user-api-keys'
 import { UserKeys } from './machine-keys'
+import { UserConnectedApps } from './user-connected-apps'
 import { SignInAttempts } from '@/components/library/sign-in-attempts'
 import type { KnownDevice } from '@/lib/risk'
 import { HistorySection } from './history'
@@ -112,6 +113,7 @@ export default function UserDetailPage() {
       ? <UserKeys base={base} user={{ id: user.id, name: label }} canWrite={canWrite} />
       : <SecondFactors path={path} user={user} canWrite={canWrite} />}
     <Sessions base={base} console={console} user={user} canWrite={canWrite} />
+    {!machine && <UserConnectedApps base={base} userId={user.id} userLabel={label} canWrite={canWrite} />}
     {!machine && <UserSecurity base={base} console={console} user={user} />}
     <HistorySection path={path} refresh={user} />
 

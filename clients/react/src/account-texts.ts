@@ -1,6 +1,6 @@
 /**
  * English defaults of the account widgets (`<UserProfile>`, `<UserSecurity>`,
- * `<UserSessions>`, `<ApiKeys>`, `<OrganizationSwitcher>`). Pass `texts` to a
+ * `<UserSessions>`, `<ConnectedApps>`, `<ApiKeys>`, `<OrganizationSwitcher>`). Pass `texts` to a
  * widget to translate or reword any key; `%s` is replaced by the arguments
  * in order.
  */
@@ -98,6 +98,21 @@ export const accountTexts: Record<string, string> = {
   "account.sessions.organization": "Organization: %s",
   "account.sessions.application": "Application: %s",
   "account.sessions.unknown_device": "Unknown device",
+
+  "account.apps.title": "Connected applications",
+  "account.apps.none": "No applications are connected to your account.",
+  "account.apps.unverified": "unverified",
+  "account.apps.unverified_help": "The application chose the name %s itself; it is not verified.",
+  "account.apps.at": "at %s",
+  "account.apps.server": "Server: %s",
+  "account.apps.scopes": "Allowed: %s",
+  "account.apps.no_scopes": "Allowed by your administrator",
+  "account.apps.connected": "Connected %s",
+  "account.apps.last_used": "last used %s",
+  "account.apps.sessions": "%s active sessions",
+  "account.apps.disconnect": "Disconnect",
+  "account.apps.confirm": "Disconnect %s? It loses access at once and must ask you again to reconnect.",
+  "account.apps.disconnected": "%s was disconnected.",
 
   "account.keys.title": "API keys",
   "account.keys.disabled": "API keys are not enabled.",

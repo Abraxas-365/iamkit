@@ -63,6 +63,9 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	if h := s.APIHandlers.APIKeys; h != nil {
 		h.UserRoutes(users.Group("/:id/api-keys"))
 	}
+	if h := s.APIHandlers.Consents; h != nil {
+		h.UserRoutes(users)
+	}
 	if s.APIHandlers.UserKeys != nil {
 		users.Get("/:id/keys", s.APIHandlers.UserKeys.List)
 		users.Post("/:id/keys", s.APIHandlers.UserKeys.Add)
@@ -238,6 +241,9 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 		h.ResourceRoutes(e.Group("/protected-resources", perms))
 		h.AllowlistRoutes(e.Group("/oauth-client-allowlist", perms))
 		h.PresetRoutes(e.Group("/oauth-client-presets", perms))
+	}
+	if h := s.APIHandlers.Consents; h != nil {
+		h.GrantRoutes(e.Group("/protected-resources", apiauth.ReadWrite(authorization.PermProtectedResourcesRead, authorization.PermProtectedResourcesWrite)))
 	}
 	if h := s.APIHandlers.SMS; h != nil {
 		sms := e.Group("/sms", apiauth.ReadWrite(authorization.PermDeliveryRead, authorization.PermDeliveryWrite))

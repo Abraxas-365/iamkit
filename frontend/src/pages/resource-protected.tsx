@@ -4,7 +4,8 @@ import { api } from '@/lib/api'
 import { message } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Link, useParams } from 'react-router-dom'
-import { ConfirmDialog, CopyText, DetailSection, ErrorState, Status, SwitchField, selectClass } from '@/components/library/patterns'
+import { ConfirmDialog, CopyText, DetailSection, ErrorState, RadioCards, Status, SwitchField, selectClass } from '@/components/library/patterns'
+import { Input } from '@/components/ui/input'
 import { rich, t } from '@/lib/i18n'
 import { ClientsSection } from './resource-clients'
 import { TemplateClientDialog, type ClientPreset } from './mcp-presets'
@@ -22,6 +23,10 @@ export interface ProtectedResource {
   allow_dynamic_registration?: boolean
   /** How a new external client is admitted: only through the allowlist (or an approval), or any. */
   client_admission?: 'allowlist' | 'open'
+  /** per_user: each user consents; admin_granted: an administrator may grant a client scopes for everyone. */
+  consent_mode?: 'per_user' | 'admin_granted'
+  /** Lifetime of the access tokens it issues: how long one outlives a revocation without introspection. */
+  access_token_ttl_seconds?: number
 }
 
 /** DynamicRegistrationOff tells that the environment's feature is off, so the
@@ -51,6 +56,24 @@ function TemplatePicker({ base, server, onDone }: { base: string; server: Protec
     <Button type="button" variant="outline" size="sm" onClick={() => setOpen(templates.find(p => p.key === (key || templates[0].key)) ?? null)}>{t('Create client from template')}</Button>
     {open && <TemplateClientDialog base={base} preset={open} server={server} onClose={() => setOpen(null)} onDone={onDone} />}
   </div>
+}
+
+/** AccessTokenLifetime edits access_token_ttl_seconds in minutes (1–60, at most the idle TTL). */
+function AccessTokenLifetime({ server, disabled, save }: { server: ProtectedResource; disabled: boolean; save: (body: Record<string, unknown>, done: string) => Promise<void> }) {
+  const current = Math.round((server.access_token_ttl_seconds ?? 900) / 60)
+  const [minutes, setMinutes] = useState(String(current))
+  useEffect(() => setMinutes(String(current)), [current])
+  const cap = Math.max(1, Math.min(60, Math.floor(server.idle_ttl_seconds / 60)))
+  const value = Number(minutes)
+  const valid = Number.isInteger(value) && value >= 1 && value <= cap
+  return <form className="space-y-1.5" onSubmit={e => { e.preventDefault(); if (valid) void save({ access_token_ttl_seconds: value * 60 }, t('Access token lifetime saved')) }}>
+    <label htmlFor="access-token-ttl" className="text-sm font-medium">{t('Access token lifetime (minutes)')}</label>
+    <div className="flex max-w-xs items-center gap-2">
+      <Input id="access-token-ttl" type="number" min={1} max={cap} inputMode="numeric" value={minutes} disabled={disabled} onChange={e => setMinutes(e.target.value)} aria-invalid={!valid} />
+      <Button type="submit" variant="outline" size="sm" disabled={disabled || !valid || value === current}>{t('Save')}</Button>
+    </div>
+    <p className="text-xs text-muted-foreground">{t('Revoking a consent or disconnecting an app ends refresh at once, but an access token already issued keeps working until it expires in a server that does not introspect. Shorter means a smaller window and more refreshes. 1 to {{cap}} minutes.', { cap })}</p>
+  </form>
 }
 
 const days = (seconds: number) => t('{{count}} days', { count: Math.round(seconds / 86400) })
@@ -135,6 +158,17 @@ export function ProtectedResourceSection({ base, resource: target, canWrite }: {
       </div>}
     </div>
     {canWrite && <TemplatePicker base={base} server={server} onDone={() => setVersion(v => v + 1)} />}
+    <div className="space-y-3 border-t pt-4">
+      <h3 className="text-sm font-semibold">{t('Consent')}</h3>
+      <RadioCards name="consent_mode" label={t('Who agrees to what a client asks')} value={server.consent_mode ?? 'per_user'} disabled={!canWrite || busy}
+        options={[
+          { value: 'per_user', label: t('Each user'), description: t('Users see the consent page the first time a client asks for a scope, and can disconnect it later.') },
+          { value: 'admin_granted', label: t('An administrator, for everyone'), description: t('Grant a client scopes under Clients below, for every user or one organization. Users still consent to anything beyond the grant.') },
+        ]}
+        onChange={v => void patch({ consent_mode: v }, v === 'admin_granted' ? t('Administrators can now grant clients') : t('Each user consents now'))} />
+      {(server.consent_mode ?? 'per_user') === 'per_user' && <p className="text-xs text-muted-foreground">{t('Switching back to each user revokes the administrator grants and ends the sessions they covered.')}</p>}
+      <AccessTokenLifetime server={server} disabled={!canWrite || busy} save={patch} />
+    </div>
     {opening && <ConfirmDialog title={t('Admit any client?')} description={t('Every client that serves a valid metadata document is admitted without review. Anyone can then make their client ask your users for access. Use it for development only.')}
       confirmLabel={t('Admit any client')} onClose={() => setOpening(false)}
       confirm={async () => { await api.patch(path, { client_admission: 'open' }); toast.success(t('Admission set to open')); load() }} />}
@@ -147,6 +181,6 @@ export function ProtectedResourceSection({ base, resource: target, canWrite }: {
       confirmLabel={t('Delete')} confirmationText={server.uri} onClose={() => setEnding(null)}
       confirm={async () => { await api.delete(path); toast.success(t('MCP server deleted')); load() }} />}
   </DetailSection>
-  <ClientsSection path={path} canWrite={canWrite} refresh={`${server.allow_client_metadata}${server.allow_dynamic_registration}${version}`} />
+  <ClientsSection path={path} canWrite={canWrite} refresh={`${server.allow_client_metadata}${server.allow_dynamic_registration}${version}`} grants={server.consent_mode === 'admin_granted' ? { base, scopes: target.permissions } : undefined} />
   </>
 }

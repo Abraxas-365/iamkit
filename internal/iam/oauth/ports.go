@@ -84,6 +84,10 @@ type Flows interface {
 	// Pending checks an unfinished authorization ticket and its browser
 	// binding without consuming it (hosted login pages).
 	Pending(ctx context.Context, ticket, binding string) (Pending, error)
+	// ConsentPrompt is what an authorization waiting for consent asks the
+	// user (under its browser binding, without spending it); not waiting
+	// is ErrConsentNotPending.
+	ConsentPrompt(ctx context.Context, ticket, binding string) (ConsentPrompt, error)
 	// Complete spends the ticket in one transaction: prepare runs inside it,
 	// with the ticket locked, and issues what the authorization grants.
 	// The ticket's client is resolved first, before the transaction opens
@@ -115,8 +119,29 @@ type Authorization interface {
 	// when this call binds it. It returns this grant's deadline: the
 	// session's end, capped at lifetime (or config.SessionTTL without one)
 	// from the session's start, so a reused session never widens a grant.
-	Bind(ctx context.Context, session identity.SessionID, client identity.ClientID, lifetime time.Duration) (time.Time, error)
+	// protected (zero: none) is the protected resource the grant is for,
+	// recorded with the first binding (consent revocation and connected
+	// apps find the client's sessions there by it).
+	Bind(ctx context.Context, session identity.SessionID, client identity.ClientID, protected identity.ProtectedResourceID, lifetime time.Duration) (time.Time, error)
 	Consume(ctx context.Context, hash []byte) error
+	// AwaitConsent keeps the ticket for the user's consent decision: the
+	// signed-in session it will be issued for and the scopes asked.
+	AwaitConsent(ctx context.Context, hash []byte, pending ConsentPending) error
+	// Agreed reads what already covers key (ConsentRepository.Agreed) in
+	// the transaction.
+	Agreed(ctx context.Context, key ConsentKey, admin bool) (Agreed, error)
+	// RecordConsent adds the record's scopes to the user's live consent (a
+	// new row when there is none) and writes oauth_consent.granted.
+	RecordConsent(ctx context.Context, record ConsentRecord) error
+	// DenyConsent writes oauth_consent.denied and, when end is set, ends
+	// that session (the one the hosted pages signed in for the ticket).
+	DenyConsent(ctx context.Context, record ConsentRecord, end *identity.SessionID) error
+	// HoldProtected holds the protected resource's row against a delete
+	// until the transaction ends (FOR KEY SHARE: updates pass). Lock order
+	// (W4): the server before its clients, tickets and sessions, since
+	// consents and session bindings reference it. Unauthorized when it is
+	// gone (the ticket went with it).
+	HoldProtected(ctx context.Context, protected identity.ProtectedResourceID) error
 	// Admission reads the admission of an external client's row, holding it
 	// against a concurrent block until the transaction ends.
 	Admission(ctx context.Context, client identity.ClientID) (AdmissionState, error)
@@ -217,7 +242,9 @@ type DeviceRepository interface {
 	// PollDevice locks the client's device, saves what poll returns and
 	// returns it with poll's error (the poll is saved either way).
 	PollDevice(ctx context.Context, client *Client, deviceHash []byte, poll func(Device) (Device, error)) (Device, error)
-	// SessionInfo is the live session a device was approved with.
+	// SessionInfo is a live session (the one a device was approved with,
+	// or an authorization waits for consent with); not found is the
+	// device grant's invalid_grant.
 	SessionInfo(ctx context.Context, session identity.SessionID) (SessionInfo, error)
 }
 

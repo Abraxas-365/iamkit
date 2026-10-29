@@ -9,6 +9,14 @@ import { getAssertion } from "./webauthn.js";
 export type Profile = Schema<"Profile">;
 /** One of the user's live sessions; `current` marks the one of the token that asked. */
 export type Session = Schema<"UserSession">;
+/**
+ * An application the user let reach a protected resource (an MCP server)
+ * in one organization: the client as IAMKit can vouch for it (`client.host`
+ * is the client_id URL's host, `client.verified_name` is set only when a
+ * preset vouches for it; `client.name` is what the application calls
+ * itself), the scopes the user consented to and its live sessions.
+ */
+export type ConnectedApp = Schema<"ConnectedApp">;
 /** A second factor, security key or passkey of the user. */
 export type Factor = Schema<"Factor">;
 /** The user's factors with the recovery codes left and, when locked, until when. */
@@ -127,7 +135,7 @@ function parse(text: string): unknown {
 
 /**
  * Self-service calls of the signed-in user: profile, phone, sessions,
- * password, API keys, second factors, passkeys and organizations, over
+ * connected apps, password, API keys, second factors, passkeys and organizations, over
  * `/identity/v1`. Every call reads the token from `getAccessToken`;
  * nothing is stored. Failures throw `IAMKitError` (`code`, `status`,
  * `details`): password, phone, API key and factor changes need a recent
@@ -246,6 +254,26 @@ export class Account {
     revoke: async (sessionId: string): Promise<void> => void (await this.call("DELETE", `/identity/v1/me/sessions/${encodeURIComponent(sessionId)}`)),
     /** Ends every session but the current one; answers how many ended. */
     revokeOthers: async (): Promise<number> => (await this.call<{ count: number }>("POST", "/identity/v1/me/sessions/revoke-others")).count,
+  };
+
+  // ── Connected apps ──
+
+  readonly connectedApps = {
+    /**
+     * The applications the user connected to protected resources, one per
+     * client, server and organization (`organizationId` narrows to one).
+     */
+    list: async (filter: { organizationId?: string } = {}): Promise<ConnectedApp[]> =>
+      (await this.call<{ items: ConnectedApp[] | null }>("GET", "/identity/v1/me/connected-apps", { query: { organization_id: filter.organizationId } })).items ?? [],
+    /**
+     * Disconnects an application (`clientId` is `ConnectedApp.client.id`):
+     * the user's consent is revoked and every session of the client for
+     * the user ends at once, in every organization unless `organizationId`
+     * names one. The next sign-in asks for consent again. Impersonated
+     * sessions throw `FORBIDDEN`.
+     */
+    disconnect: async (clientId: string, filter: { organizationId?: string } = {}): Promise<void> =>
+      void (await this.call("DELETE", `/identity/v1/me/connected-apps/${encodeURIComponent(clientId)}`, { query: { organization_id: filter.organizationId } })),
   };
 
   // ── API keys ──

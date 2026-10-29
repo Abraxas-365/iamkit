@@ -236,10 +236,14 @@ var actions = map[string]named{
 	"protected_resource_policy.update": {ProtectedResourcePolicyUpdated, "environment"},
 	// External OAuth clients and the allowlist (oauth.ActionClient*,
 	// ActionAllowlist*; target = the client or entry id).
-	"oauth_client.approve":          {OAuthClientApproved, "oauth_client"},
-	"oauth_client.block":            {OAuthClientBlocked, "oauth_client"},
-	"oauth_client.unblock":          {OAuthClientUnblocked, "oauth_client"},
-	"oauth_client.forget":           {OAuthClientForgotten, "oauth_client"},
+	"oauth_client.approve": {OAuthClientApproved, "oauth_client"},
+	"oauth_client.block":   {OAuthClientBlocked, "oauth_client"},
+	"oauth_client.unblock": {OAuthClientUnblocked, "oauth_client"},
+	"oauth_client.forget":  {OAuthClientForgotten, "oauth_client"},
+	// Administrator grants (oauth.ActionClientGrant*; target = the client
+	// id). Consent revocations write their own oauth_consent.revoked.
+	"oauth_client.grant":            {OAuthClientGranted, "oauth_client"},
+	"oauth_client.grant_revoke":     {OAuthClientGrantRevoked, "oauth_client"},
 	"oauth_client_allowlist.create": {OAuthClientAllowlistCreated, "oauth_client_allowlist"},
 	"oauth_client_allowlist.delete": {OAuthClientAllowlistDeleted, "oauth_client_allowlist"},
 	// Ends a session: the trigger writes session.revoked.

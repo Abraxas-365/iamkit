@@ -81,7 +81,7 @@ func TestAdmissionManagement(t *testing.T) {
 	// first and its own name marked unverified. The logo comes from
 	// another host, so it is not shown.
 	page := e.loginAndAsk(unknownApp)
-	if page.Status != 403 || page.Location != "" || !strings.Contains(page.Body, "apps.example") || !strings.Contains(page.Body, "Totally Trusted Bank") || !strings.Contains(page.Body, "unverified") || !strings.Contains(page.Body, "sent to IT") || strings.Contains(page.Body, "cdn.evil.example") {
+	if page.Status != 403 || page.Location != "" || !strings.Contains(page.Body, "apps.example") || !strings.Contains(page.Body, "Totally Trusted Bank") || !strings.Contains(page.Body, "unverified") || !strings.Contains(page.Body, "sent to an administrator") || strings.Contains(page.Body, "cdn.evil.example") {
 		t.Fatalf("pending page: %d %q %s", page.Status, page.Location, page.Body)
 	}
 	if p := e.loginAndAsk(claudeCodeID); p.Status != 403 || !strings.Contains(p.Body, "claude.ai") || !strings.Contains(p.Body, "Claude Code") || strings.Contains(p.Body, "unverified") {

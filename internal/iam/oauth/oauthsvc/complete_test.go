@@ -80,10 +80,24 @@ func (t *guardedTx) Ticket(context.Context, []byte) (oauth.Ticket, error) {
 func (t *guardedTx) Session(context.Context, identity.SessionID) (oauth.SessionInfo, error) {
 	return oauth.SessionInfo{}, nil
 }
-func (t *guardedTx) Bind(context.Context, identity.SessionID, identity.ClientID, time.Duration) (time.Time, error) {
+func (t *guardedTx) Bind(context.Context, identity.SessionID, identity.ClientID, identity.ProtectedResourceID, time.Duration) (time.Time, error) {
 	return time.Time{}, nil
 }
 func (t *guardedTx) Consume(context.Context, []byte) error { return nil }
+func (t *guardedTx) AwaitConsent(context.Context, []byte, oauth.ConsentPending) error {
+	return nil
+}
+func (t *guardedTx) Agreed(context.Context, oauth.ConsentKey, bool) (oauth.Agreed, error) {
+	return oauth.Agreed{}, nil
+}
+func (t *guardedTx) RecordConsent(context.Context, oauth.ConsentRecord) error { return nil }
+func (t *guardedTx) DenyConsent(context.Context, oauth.ConsentRecord, *identity.SessionID) error {
+	return nil
+}
+func (t *guardedTx) HoldProtected(context.Context, identity.ProtectedResourceID) error {
+	t.r.calls = append(t.r.calls, "HoldProtected")
+	return nil
+}
 func (t *guardedTx) Admission(context.Context, identity.ClientID) (oauth.AdmissionState, error) {
 	t.r.calls = append(t.r.calls, "Admission")
 	return t.r.admit, nil

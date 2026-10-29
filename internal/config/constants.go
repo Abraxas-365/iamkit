@@ -191,6 +191,18 @@ const SAMLResponseMax = 64 << 10
 // IAMKIT_EVENT_RETENTION says otherwise.
 const EventRetention = 90 * 24 * time.Hour
 
+// SecurityRetention is how long security records outlive their end:
+// revoked consents and administrator grants (oauth_consent_prune).
+const SecurityRetention = 365 * 24 * time.Hour
+
+// Consent jobs: client_grant_expire revokes grants past expires_at,
+// oauth_consent_prune deletes revoked records after SecurityRetention
+// (ConsentJobBatch rows a round each).
+const (
+	ConsentJobInterval = time.Minute
+	ConsentJobBatch    = 200
+)
+
 // App audit logs (auditlog module).
 const (
 	// AuditLogRetention is how long app audit log events are kept unless

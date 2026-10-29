@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"net/url"
 	"strconv"
 	"strings"
@@ -99,7 +100,7 @@ func oauthClientsGetCmd() *cobra.Command {
 }
 
 func oauthClientsCreateCmd() *cobra.Command {
-	var app, resource, redirects, postLogout, origins, format, backchannel, grants, initiate string
+	var app, resource, redirects, postLogout, origins, format, backchannel, grants, initiate, consent string
 	var public, hosted, sessionRequired bool
 	var auth clientAuthFlags
 	cmd := &cobra.Command{
@@ -120,6 +121,12 @@ func oauthClientsCreateCmd() *cobra.Command {
 			}
 			if initiate != "" {
 				body["initiate_login_uri"] = initiate
+			}
+			if consent != "" {
+				if err := checkConsentPolicy(consent); err != nil {
+					return err
+				}
+				body["consent_policy"] = consent
 			}
 			if err := auth.apply(cmd, body); err != nil {
 				return err
@@ -144,6 +151,7 @@ func oauthClientsCreateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&sessionRequired, "backchannel-logout-session-required", false, "Record that the client needs sid in logout tokens")
 	cmd.Flags().StringVar(&grants, "grant-types", "", grantTypesHelp+" (default authorization_code,refresh_token)")
 	cmd.Flags().StringVar(&initiate, "initiate-login-uri", "", initiateHelp)
+	cmd.Flags().StringVar(&consent, "consent-policy", "", consentPolicyHelp+" (default skip)")
 	auth.register(cmd)
 	cmd.MarkFlagRequired("app")
 	cmd.MarkFlagRequired("resource")
@@ -151,12 +159,12 @@ func oauthClientsCreateCmd() *cobra.Command {
 }
 
 func oauthClientsUpdateCmd() *cobra.Command {
-	var redirects, postLogout, origins, format, backchannel, grants, initiate string
+	var redirects, postLogout, origins, format, backchannel, grants, initiate, consent string
 	var hosted, sessionRequired bool
 	var auth clientAuthFlags
 	cmd := &cobra.Command{
 		Use:   "update CLIENT_ID",
-		Short: "Change an OAuth client's URIs, allowed origins, hosted login, grant types, access token format, back-channel logout or token endpoint authentication",
+		Short: "Change an OAuth client's URIs, allowed origins, hosted login, grant types, access token format, back-channel logout, consent policy or token endpoint authentication",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c := mustClient(cmd)
@@ -188,6 +196,12 @@ func oauthClientsUpdateCmd() *cobra.Command {
 			if cmd.Flags().Changed("initiate-login-uri") {
 				body["initiate_login_uri"] = initiate
 			}
+			if cmd.Flags().Changed("consent-policy") {
+				if err := checkConsentPolicy(consent); err != nil {
+					return err
+				}
+				body["consent_policy"] = consent
+			}
 			if err := auth.apply(cmd, body); err != nil {
 				return err
 			}
@@ -207,6 +221,7 @@ func oauthClientsUpdateCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&sessionRequired, "backchannel-logout-session-required", false, "Record that the client needs sid in logout tokens")
 	cmd.Flags().StringVar(&grants, "grant-types", "", grantTypesHelp+" (replaces the list)")
 	cmd.Flags().StringVar(&initiate, "initiate-login-uri", "", initiateHelp+" (empty turns it off)")
+	cmd.Flags().StringVar(&consent, "consent-policy", "", consentPolicyHelp)
 	auth.register(cmd)
 	return cmd
 }
@@ -220,6 +235,15 @@ const deviceCodeGrant = "urn:ietf:params:oauth:grant-type:device_code"
 const tokenExchangeGrant = "urn:ietf:params:oauth:grant-type:token-exchange"
 
 const initiateHelp = "Sign-in endpoint of the application for IdP-initiated SAML logins (HTTPS, or http on loopback): IAMKit redirects there with iss, connection_id and organization_id"
+
+const consentPolicyHelp = "Whether users consent to what the client asks at a protected resource: required, or skip (first-party)"
+
+func checkConsentPolicy(v string) error {
+	if v != "required" && v != "skip" {
+		return fmt.Errorf("--consent-policy must be required or skip")
+	}
+	return nil
+}
 
 const grantTypesHelp = "Comma-separated grants: authorization_code, refresh_token, device_code (needs --hosted-login), token_exchange (confidential clients)"
 

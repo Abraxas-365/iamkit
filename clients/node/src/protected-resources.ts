@@ -25,10 +25,19 @@ export interface ProtectedResource {
   allow_dynamic_registration: boolean;
   /** How such clients are admitted the first time: reviewed unless allowlisted (`allowlist`) or any (`open`). */
   client_admission: ClientAdmissionMode;
+  /** `per_user`: each user consents to what a client asks; `admin_granted`: an administrator may grant a client scopes for users (see `grantClient`). */
+  consent_mode: ConsentMode;
+  /** Lifetime of the access tokens of this server, 60 to 3600 seconds and never past `idle_ttl_seconds`. */
+  access_token_ttl_seconds: number;
   created_at: string;
 }
 
 export type ClientAdmissionMode = "allowlist" | "open";
+export type ConsentMode = "per_user" | "admin_granted";
+/** Where the environment's users consent: IAMKit's page (`hosted`) or your own sign-in UI (`custom`). */
+export type ConsentUI = "hosted" | "custom";
+/** Whether an OAuth client's users consent to what it asks for at a protected resource. */
+export type ConsentPolicy = "required" | "skip";
 export type Admission = "pending" | "approved" | "blocked";
 
 /** What deactivating or deleting a protected resource would end. */
@@ -153,17 +162,88 @@ export interface ProtectedResourceCreate {
   default_scopes?: string[];
   idle_ttl_seconds?: number;
   max_ttl_seconds?: number;
+  /** Default `per_user`. */
+  consent_mode?: ConsentMode;
+  /** Takes the default when left out. */
+  access_token_ttl_seconds?: number;
 }
 
 /** Only the given fields change; `active: false` ends every authorization. */
 export type ProtectedResourceUpdate = Partial<
-  Pick<ProtectedResource, "name" | "default_scopes" | "idle_ttl_seconds" | "max_ttl_seconds" | "active" | "allow_client_metadata" | "allow_dynamic_registration" | "client_admission">
+  Pick<ProtectedResource, "name" | "default_scopes" | "idle_ttl_seconds" | "max_ttl_seconds" | "active" | "allow_client_metadata" | "allow_dynamic_registration" | "client_admission" | "consent_mode" | "access_token_ttl_seconds">
 >;
 
-/** The environment's TTL ceilings for its protected resources. */
+/** The environment's TTL ceilings for its protected resources and where its users consent. */
 export interface ProtectedResourcePolicy {
   max_idle_ttl_seconds: number;
   max_lifetime_ttl_seconds: number;
+  /** Left out when saving, the saved one stays. */
+  consent_ui?: ConsentUI;
+}
+
+/**
+ * Scopes an administrator granted a client at a protected resource for every
+ * user of the environment (`organization_id` null) or of one organization.
+ * It covers users only while the server is `admin_granted`.
+ */
+export interface ClientGrant {
+  id: string;
+  protected_resource_id: string;
+  client_id: string;
+  organization_id: string | null;
+  scopes: string[];
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Set on revoked grants (`grants(…, { revoked: true })`). */
+  revoked_at?: string | null;
+  revoked_reason?: string;
+}
+
+/** Grants a client scopes (permissions of the protected resource's resource); `grantClient` replaces the live grant of the same client and organization. */
+export interface ClientGrantInput {
+  scopes: string[];
+  /** Limits the grant to one organization (default: every user of the environment). */
+  organization_id?: string | null;
+  /** RFC 3339; default: until revoked. */
+  expires_at?: string | null;
+}
+
+/**
+ * How a connected app shows its client. `name` is the client's own word;
+ * `host` (the client_id URL's host) and `verified_name` (the preset that
+ * vouches for it) are the only facts IAMKit vouches for.
+ */
+export interface ConnectedClient {
+  /** The client's row id, used to disconnect it. */
+  id: string;
+  client_id: string;
+  /** `registered`, `cimd` or `dcr`. */
+  source: string;
+  name: string;
+  host: string;
+  logo_uri: string;
+  preset: string;
+  verified_name: string;
+}
+
+/**
+ * A client that holds, or may get without asking, access to a user's account
+ * at one protected resource in one organization: a live consent, live
+ * sessions, or both (a first-party client has sessions only).
+ */
+export interface ConnectedApp {
+  client: ConnectedClient;
+  protected_resource_id: string;
+  /** The protected resource's URI. */
+  resource: string;
+  resource_name: string;
+  organization_id: string;
+  /** What the user consented to (empty for a first-party client). */
+  scopes: string[];
+  consented_at: string | null;
+  active_sessions: number;
+  last_used_at: string | null;
 }
 
 export interface ProtectedResourceList {
@@ -303,6 +383,33 @@ export class ProtectedResourcesClient {
     return this.call("POST", presetsPath(environmentId), input);
   }
 
+  /** A client's administrator grants at the server (iam:protected-resources:read); `revoked` includes the revoked ones. */
+  async grants(environmentId: string, id: string, client: string, options: { revoked?: boolean } = {}): Promise<ClientGrant[]> {
+    const path = withQuery(`${clientPath(environmentId, id, client)}/grants`, { revoked: options.revoked ? "true" : undefined });
+    return (await this.call<{ items: ClientGrant[] | null }>("GET", path)).items ?? [];
+  }
+
+  /** Grants a client scopes for users without asking them, replacing the live grant of the same client and organization (iam:protected-resources:write). The server must be `admin_granted` for it to cover users. */
+  async grantClient(environmentId: string, id: string, client: string, input: ClientGrantInput): Promise<ClientGrant> {
+    return this.call("PUT", `${clientPath(environmentId, id, client)}/grants`, input);
+  }
+
+  /** Revokes an administrator grant; the sessions it covered end. */
+  async revokeGrant(environmentId: string, id: string, client: string, grant: string): Promise<void> {
+    await this.call("DELETE", `${clientPath(environmentId, id, client)}/grants/${segment(grant)}`);
+  }
+
+  /** The apps connected to a user's account, optionally in one organization (iam:users:read). */
+  async userConnectedApps(environmentId: string, userId: string, options: { organizationId?: string } = {}): Promise<ConnectedApp[]> {
+    const path = withQuery(userAppsPath(environmentId, userId), { organization_id: options.organizationId });
+    return (await this.call<{ items: ConnectedApp[] | null }>("GET", path)).items ?? [];
+  }
+
+  /** Ends a user's connection to a client (`ConnectedClient.id`): their consents to it and its sessions for them (iam:users:write). */
+  async disconnectUserApp(environmentId: string, userId: string, client: string, options: { organizationId?: string } = {}): Promise<void> {
+    await this.call("DELETE", withQuery(`${userAppsPath(environmentId, userId)}/${segment(client)}`, { organization_id: options.organizationId }));
+  }
+
   async policy(environmentId: string): Promise<ProtectedResourcePolicy> {
     return this.call("GET", policyPath(environmentId));
   }
@@ -354,6 +461,10 @@ function clientPath(environmentId: string, id: string, client: string): string {
   return `${base(environmentId)}/${segment(id)}/clients/${segment(client)}`;
 }
 
+function userAppsPath(environmentId: string, userId: string): string {
+  return `/api/v1/environments/${segment(environmentId)}/users/${segment(userId)}/connected-apps`;
+}
+
 function allowlistPath(environmentId: string): string {
   return `/api/v1/environments/${segment(environmentId)}/oauth-client-allowlist`;
 }
@@ -364,4 +475,39 @@ function presetsPath(environmentId: string): string {
 
 function policyPath(environmentId: string): string {
   return `/api/v1/environments/${segment(environmentId)}/protected-resource-policy`;
+}
+
+/**
+ * The apps connected to the signed-in user's account, on
+ * `/identity/v1/me/connected-apps` (see IdentityClient.connectedApps).
+ */
+export class MeConnectedApps {
+  constructor(
+    private readonly http: Transport,
+    private readonly accessToken: string,
+    private readonly environmentId: string,
+    private readonly audience: string,
+  ) {
+    if (!accessToken) {
+      throw invalidArgument("accessToken is required");
+    }
+  }
+
+  /** The user's connected apps, optionally in one organization. */
+  async list(options: { organizationId?: string } = {}): Promise<ConnectedApp[]> {
+    const out = await this.http.get<{ items: ConnectedApp[] | null }>(withQuery("/identity/v1/me/connected-apps", this.scope(options.organizationId)), this.accessToken);
+    return out.items ?? [];
+  }
+
+  /** Ends the user's connection to a client (`ConnectedClient.id`): their consents to it and its sessions, optionally in one organization. Impersonated tokens cannot. */
+  async disconnect(client: string, options: { organizationId?: string } = {}): Promise<void> {
+    await this.http.send(withQuery(`/identity/v1/me/connected-apps/${segment(client)}`, this.scope(options.organizationId)), {
+      method: "DELETE",
+      headers: { Accept: "application/json", Authorization: `Bearer ${this.accessToken}` },
+    });
+  }
+
+  private scope(organizationId: string | undefined): Record<string, string | undefined> {
+    return { environment_id: this.environmentId, audience: this.audience, organization_id: organizationId };
+  }
 }

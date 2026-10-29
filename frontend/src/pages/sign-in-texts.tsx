@@ -40,7 +40,7 @@ export function textProblem(value: string, key: TextKey): string {
 
 // group is the section of a key: hosted.<group>.…
 const group = (key: string) => key.split('.')[1] ?? ''
-const groups: Record<string, string> = { title: t('Titles'), subtitle: t('Subtitles'), form: t('Labels and buttons'), notice: t('Notices'), error: t('Errors'), invitation: t('Invitations'), device: t('Device sign-in'), directory: t('Directory sign-in'), legal: t('Legal links') }
+const groups: Record<string, string> = { title: t('Titles'), subtitle: t('Subtitles'), form: t('Labels and buttons'), notice: t('Notices'), error: t('Errors'), invitation: t('Invitations'), device: t('Device sign-in'), directory: t('Directory sign-in'), consent: t('Consent page'), client: t('Client access pages'), legal: t('Legal links') }
 
 // SignInTextsPage rewords the hosted pages per language for the
 // environment, an OAuth client or an organization, with a live preview.
