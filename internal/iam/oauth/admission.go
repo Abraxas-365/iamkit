@@ -43,8 +43,13 @@ const (
 	// named by a metadata document (allow_client_metadata off). Every
 	// approval goes, manual ones included.
 	DemotionDocumentsOff = "metadata_documents_disabled"
-	// DemotionFeatureOff: the client_metadata_documents feature is off in
-	// the environment. Every approval goes, manual ones included.
+	// DemotionRegistrationOff: the protected resource stopped taking
+	// dynamically registered clients (allow_dynamic_registration off).
+	// Every approval goes, manual ones included.
+	DemotionRegistrationOff = "dynamic_registration_disabled"
+	// DemotionFeatureOff: the source's feature (client_metadata_documents,
+	// dynamic_client_registration) is off in the environment. Every
+	// approval goes, manual ones included.
 	DemotionFeatureOff = "feature_disabled"
 	// DemotionPolicyEnded: the allowlist entry, preset or open mode that
 	// admitted the client no longer does. Manual approvals stay.
@@ -225,8 +230,9 @@ type AdmissionCommands interface {
 	// when a full batch was processed.
 	ExpireApprovals(ctx context.Context) (more bool, err error)
 	// ReconcileDocuments is the client_documents_reconcile job: in every
-	// environment where the client_metadata_documents feature is off, the
-	// approved external clients return to pending and lose their grants
+	// environment where a source's feature (client_metadata_documents,
+	// dynamic_client_registration) is off, the approved external clients
+	// of that source return to pending and lose their grants
 	// (DemotionFeatureOff). The feature is another module's setting, so
 	// this follows it; the check at use (Client.Disabled) is immediate.
 	ReconcileDocuments(ctx context.Context) (more bool, err error)
@@ -265,10 +271,11 @@ type AdmissionRepository interface {
 	// pending, revoking their grants, and reports how many.
 	ExpireApprovals(ctx context.Context, limit int) (int, error)
 	// ApprovedEnvironments lists the environments that hold approved
-	// external clients; DemoteDocuments returns up to limit of an
-	// environment's to pending (DemotionFeatureOff) and reports how many.
-	ApprovedEnvironments(ctx context.Context) ([]identity.EnvironmentID, error)
-	DemoteDocuments(ctx context.Context, environment identity.EnvironmentID, limit int) (int, error)
+	// external clients of source (SourceCIMD, SourceDCR); DemoteSource
+	// returns up to limit of an environment's to pending
+	// (DemotionFeatureOff) and reports how many.
+	ApprovedEnvironments(ctx context.Context, source string) ([]identity.EnvironmentID, error)
+	DemoteSource(ctx context.Context, environment identity.EnvironmentID, source string, limit int) (int, error)
 	ListAllowlist(ctx context.Context, environment identity.EnvironmentID, protected *identity.ProtectedResourceID, page query.Pagination) (query.Paginated[AllowlistEntry], error)
 	FindAllowlistEntry(ctx context.Context, environment identity.EnvironmentID, entry identity.AllowlistEntryID) (AllowlistEntry, error)
 	// CreateAllowlistEntry stores a resolved entry and approves the pending

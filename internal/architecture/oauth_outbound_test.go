@@ -410,6 +410,93 @@ func other() { http.Get("https://x") }
 	)
 }
 
+// registrationWriters are the functions that may write oauth_registrations
+// (D25/D26): a dynamic registration is inserted once, marked used when a
+// client row is written from it, and pruned. Nothing else changes it — it
+// is immutable (no RFC 7592), so an UPDATE may set last_used_at only. Keys
+// are "<dir without iam/> <func>".
+var registrationWriters = map[string]bool{
+	"oauth/adapters/oauthpg (*Repository).SaveRegistration":   true,
+	"oauth/adapters/oauthpg markRegistrationUsed":             true,
+	"oauth/adapters/oauthpg (*Repository).PruneRegistrations": true,
+}
+
+var (
+	registrationWrite  = regexp.MustCompile(`(?is)\b(insert\s+into|update|delete\s+from)\s+oauth_registrations\b`)
+	registrationUpdate = regexp.MustCompile(`(?is)\bupdate\s+oauth_registrations\s+set\s+(.*?)(\bwhere\b|$)`)
+	onlyLastUsed       = regexp.MustCompile(`(?is)^\s*last_used_at\s*=\s*[^,]+$`)
+)
+
+func registrationWriteViolations(files []goFile, writers map[string]bool) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range files {
+		dir := dirOf(f.rel)
+		for _, decl := range f.file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			key := dir + " " + funcKey(fn)
+			seen[key] = true
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				lit, ok := n.(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					return true
+				}
+				sql, err := strconv.Unquote(lit.Value)
+				if err != nil || !registrationWrite.MatchString(sql) {
+					return true
+				}
+				where := fmt.Sprintf("%s:%d", f.rel, f.fset.Position(lit.Pos()).Line)
+				if !writers[key] {
+					out = append(out, fmt.Sprintf("%s: %s writes oauth_registrations; only the registration writers may (registrationWriters)", where, funcKey(fn)))
+					return true
+				}
+				if m := registrationUpdate.FindStringSubmatch(sql); m != nil && !onlyLastUsed.MatchString(m[1]) {
+					out = append(out, fmt.Sprintf("%s: %s changes a registration beyond last_used_at; registrations are immutable", where, funcKey(fn)))
+				}
+				return true
+			})
+		}
+	}
+	for key := range writers {
+		if !seen[key] {
+			out = append(out, fmt.Sprintf("%s: function not found (update registrationWriters when it moves)", key))
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func TestDynamicRegistrationsHaveOneWriter(t *testing.T) {
+	report(t, registrationWriteViolations(sources(t, false), registrationWriters))
+}
+
+func TestRegistrationLintCatchesViolations(t *testing.T) {
+	files := parseFixtures(t, map[string]string{
+		"oauth/adapters/oauthpg/registration.go": "package oauthpg\n" +
+			"func (r *Repository) SaveRegistration() { exec(`INSERT INTO oauth_registrations(client_id) VALUES($1)`) }\n" +
+			"func markRegistrationUsed() { exec(`UPDATE oauth_registrations SET last_used_at=now() WHERE client_id=$1`) }\n" +
+			"func (r *Repository) PruneRegistrations() { exec(`UPDATE oauth_registrations SET client_name=$2 WHERE client_id=$1`) }\n" +
+			"func (r *Repository) Rename() { exec(`UPDATE oauth_registrations SET client_name=$2 WHERE client_id=$1`) }\n" +
+			"func (r *Repository) Find() { get(`SELECT client_id FROM oauth_registrations WHERE client_id=$1`) }\n",
+		"billing/adapters/billingpg/x.go": "package billingpg\n" +
+			"func purge() { exec(`DELETE FROM oauth_registrations`) }\n",
+	})
+	expectViolations(t, registrationWriteViolations(files, map[string]bool{
+		"oauth/adapters/oauthpg (*Repository).SaveRegistration":   true,
+		"oauth/adapters/oauthpg markRegistrationUsed":             true,
+		"oauth/adapters/oauthpg (*Repository).PruneRegistrations": true,
+		"oauth/adapters/oauthpg (*Repository).Gone":               true,
+	}),
+		"billing/adapters/billingpg/x.go:2: purge writes oauth_registrations",
+		"oauth/adapters/oauthpg (*Repository).Gone: function not found",
+		"oauth/adapters/oauthpg/registration.go:4: (*Repository).PruneRegistrations changes a registration beyond last_used_at",
+		"oauth/adapters/oauthpg/registration.go:5: (*Repository).Rename writes oauth_registrations",
+	)
+}
+
 // networkBeforeTx is M-5 as a lint: the OAuth flows resolve an external
 // client (a network read of its document, a write of its row) before the
 // authorization transaction opens, never inside it. Complete may call these

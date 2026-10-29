@@ -28,13 +28,16 @@ const (
 	PresetNetworkLocal     = "local"
 )
 
-// ExternalClient is a client named by a Client ID Metadata Document (its
-// client_id is an https URL) as a protected resource sees it. Host and
-// Preset are the only facts IAMKit vouches for; the name and logo are the
-// document's own words.
+// ExternalClient is a client IAMKit did not register by hand, as a
+// protected resource sees it: named by a Client ID Metadata Document (Source
+// "cimd", client_id an https URL) or registered at /oauth/register (Source
+// "dcr", client_id dcr_…, no Host). Host and Preset are the only facts
+// IAMKit vouches for; the name and logo are the client's own words.
 type ExternalClient struct {
 	// ID is the client's row id, used by Approve, Block and the like.
-	ID                 string     `json:"id"`
+	ID string `json:"id"`
+	// Source is "cimd" or "dcr".
+	Source             string     `json:"source"`
 	ClientID           string     `json:"client_id"`
 	ProtectedResource  string     `json:"protected_resource_id"`
 	Name               string     `json:"client_name"`

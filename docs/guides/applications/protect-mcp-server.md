@@ -9,9 +9,9 @@ pages and call your server with an access token issued for it alone.
 
 This guide covers what ships today: pre-registered clients, RFC 8707 resource
 indicators, scopes mapped to permissions with step-up, and the
-resource-server SDKs, and clients named by a Client ID Metadata Document
-with IT approval (see below). Dynamic client registration comes in a later
-phase.
+resource-server SDKs, clients named by a Client ID Metadata Document
+with IT approval, and dynamic client registration (RFC 7591), off unless
+you turn it on (see below).
 
 A runnable example with a seeded stack is in
 [`examples/mcp-server`](../../../examples/mcp-server/README.md).
@@ -336,8 +336,8 @@ environment that has an active protected resource allowing metadata
 documents (`allow_client_metadata`). Otherwise the field is `false`, so an
 MCP client does not offer a `client_id` URL that every server would refuse.
 The answer is cached for a minute (shared by the replicas with `REDIS_URL`),
-so a change shows within it. IAMKit advertises no `registration_endpoint`:
-there is no dynamic client registration.
+so a change shows within it. `registration_endpoint` is advertised under the
+same kind of rule; see [Dynamic client registration](#dynamic-client-registration).
 
 When an MCP client uses a URL anyway (the feature is off in the environment,
 or the server takes registered clients only), the user sees a page that says
@@ -396,6 +396,96 @@ or forwarded:
   `development_clients` feature.
 - Deactivating or deleting a server counts its external clients next to the
   active sessions.
+
+## Dynamic client registration
+
+Some MCP clients publish no metadata document and have no template. They
+register themselves at `POST /oauth/register`
+([RFC 7591](https://www.rfc-editor.org/rfc/rfc7591)) and use the
+`client_id` they get back. IAMKit supports this, **off by default**: the
+environment feature `dynamic_client_registration` and the server's
+`allow_dynamic_registration` must both be on.
+
+```sh
+curl -X PUT "$IAMKIT_URL/management/v1/environments/$ENV/features/dynamic_client_registration" \
+  -H "X-API-Key: $MGMT" -H 'Content-Type: application/json' -d '{"enabled":true}'
+curl -X PATCH "$IAMKIT_URL/management/v1/environments/$ENV/protected-resources/$SERVER" \
+  -H "X-API-Key: $MGMT" -H 'Content-Type: application/json' -d '{"allow_dynamic_registration":true}'
+```
+
+CLI: `iam features set dynamic_client_registration true` and
+`iam protected-resources update $SERVER --allow-dynamic-registration`. In the
+console: **Features (beta)** and the switch *Allow dynamically registered
+clients* in the server's client settings, which warns while the feature is off.
+
+### What a registration is
+
+```sh
+curl -X POST "$IAMKIT_URL/oauth/register" -H 'Content-Type: application/json' \
+  -d '{"client_name":"My tool","redirect_uris":["http://127.0.0.1/callback"]}'
+# 201 {"client_id":"dcr_9f0c…","client_id_issued_at":…,"token_endpoint_auth_method":"none",
+#      "grant_types":["authorization_code","refresh_token"],"response_types":["code"],
+#      "redirect_uris":["http://127.0.0.1/callback"],"client_name":"My tool"}
+```
+
+- **Public and immutable.** `client_id` is `dcr_` followed by 32 hex
+  characters; there is no secret, `token_endpoint_auth_method` is `none`
+  only and the grants are `authorization_code` and `refresh_token`. There is
+  no registration management (RFC 7592): a client that needs other metadata
+  registers again.
+- **Validated like documents.** 1 to 10 redirect URIs under the same RFC
+  8252 rules (a loopback `http://127.0.0.1` matches any port); `client_name`
+  at most 100 characters; a body of at most 5 KB; `jwks`, `jwks_uri`,
+  `software_statement`, other grants and authentication methods are refused.
+  Errors are RFC 7591 JSON: `400 {"error":"invalid_redirect_uri"|"invalid_client_metadata","error_description":…}`.
+- **Inert until used.** A registration is not tied to an environment and
+  writes nothing an operator sees: no client row, no event. It becomes a
+  client of an environment the first time a **signed-in user** asks, with
+  it, for a server that allows dynamic registration in an environment with
+  the feature on. From then on it is an external client of that server like
+  a metadata-document client: it waits in **Pending** with the people who
+  asked.
+
+### Admission
+
+IAMKit cannot verify who runs a registered client: anyone can register any
+name and loopback redirect. So:
+
+- **No allowlist entry or preset ever admits one**, whatever its origin and
+  path. Only an approval by hand or an `open` server admits it.
+- The console and the hosted page show its `client_id` where a document
+  client shows its host, mark its name *Unverified* and never show a logo.
+  Approve one only when you know where that `client_id` came from (the
+  person who asked can tell you, it is in their tool's configuration).
+- The approval's `metadata_hash` covers the same fields as for documents;
+  a registration never changes, so it never returns to pending for a change.
+- Turning `allow_dynamic_registration` off demotes the server's registered
+  clients (reason `dynamic_registration_disabled`) and revokes their grants
+  in the same transaction; turning the feature off refuses them at once and
+  the `client_documents_reconcile` job demotes them (`feature_disabled`).
+  Clients refused this way see the hosted page that asks for a client ID
+  made from a template.
+
+### Discovery and abuse limits
+
+`registration_endpoint` (`<issuer>/oauth/register`) appears in
+`/.well-known/oauth-authorization-server` and `openid-configuration` only
+while some environment has the feature on **and** an active server that
+allows dynamic registration (cached for a minute, like
+`client_id_metadata_document_supported`). Otherwise `POST /oauth/register`
+answers 404.
+
+| Limit | Value | What happens |
+|-------|-------|--------------|
+| Registrations per client address | 10 a minute | 429 `{"error":"temporarily_unavailable"}` |
+| Unused registrations in the deployment | 10 000 | 429 `temporarily_unavailable` until the prune job frees room |
+| Unused registration kept | 24 hours | deleted by `client_registration_prune` |
+| Used registration kept | while a client row holds it, then 30 days idle | the same job |
+
+Behind a proxy set `IAMKIT_TRUSTED_PROXIES`, or every registration counts as
+the proxy's address. The registration endpoint logs `oauth client registered`
+with the `client_id` and `software_id`; operator-visible events start at the
+first access request, as for documents.
 
 ## What a client asks for and gets
 

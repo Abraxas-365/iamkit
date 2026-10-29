@@ -21,6 +21,8 @@ export interface ProtectedResource {
   active: boolean;
   /** Clients named by an https `client_id` URL (a Client ID Metadata Document) may ask for this server. */
   allow_client_metadata: boolean;
+  /** Clients registered at `/oauth/register` (RFC 7591) may ask for this server, while the environment's `dynamic_client_registration` feature is on. */
+  allow_dynamic_registration: boolean;
   /** How such clients are admitted the first time: reviewed unless allowlisted (`allowlist`) or any (`open`). */
   client_admission: ClientAdmissionMode;
   created_at: string;
@@ -37,13 +39,16 @@ export interface ProtectedResourceImpact {
 }
 
 /**
- * A client named by a Client ID Metadata Document as a protected resource sees
- * it. `host` and `preset` are the only facts IAMKit vouches for; the name and
- * logo are the document's own words.
+ * A client IAMKit did not register by hand, as a protected resource sees it:
+ * named by a Client ID Metadata Document (`source` `cimd`) or registered at
+ * `/oauth/register` (`dcr`, `client_id` `dcr_…`, no `host`). `host` and
+ * `preset` are the only facts IAMKit vouches for; the name and logo are the
+ * client's own words.
  */
 export interface ExternalClient {
   /** The client's row id, used by approve, block and the like. */
   id: string;
+  source: "cimd" | "dcr";
   client_id: string;
   protected_resource_id: string;
   client_name: string;
@@ -152,7 +157,7 @@ export interface ProtectedResourceCreate {
 
 /** Only the given fields change; `active: false` ends every authorization. */
 export type ProtectedResourceUpdate = Partial<
-  Pick<ProtectedResource, "name" | "default_scopes" | "idle_ttl_seconds" | "max_ttl_seconds" | "active" | "allow_client_metadata" | "client_admission">
+  Pick<ProtectedResource, "name" | "default_scopes" | "idle_ttl_seconds" | "max_ttl_seconds" | "active" | "allow_client_metadata" | "allow_dynamic_registration" | "client_admission">
 >;
 
 /** The environment's TTL ceilings for its protected resources. */

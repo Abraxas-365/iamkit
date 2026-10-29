@@ -81,9 +81,11 @@ func publicDocument(path string) bool {
 
 // publicEndpoint are the OAuth endpoints public clients call from a
 // browser of any origin: the preflight is open, the answer readable only
-// when the client is public (oauthhttp.PublicClientLocal).
+// when the client is public (oauthhttp.PublicClientLocal). Dynamic
+// registration (/oauth/register) is always public: its answer holds no
+// secret, so it sets the local itself.
 func publicEndpoint(path string) bool {
-	return path == "/oauth/token" || path == "/oauth/revoke"
+	return path == "/oauth/token" || path == "/oauth/revoke" || path == "/oauth/register"
 }
 
 // publicHeaders are the request headers an open preflight admits.

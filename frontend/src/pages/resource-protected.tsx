@@ -18,8 +18,22 @@ export interface ProtectedResource {
   idle_ttl_seconds: number; max_ttl_seconds: number; active: boolean; created_at: string
   /** Whether clients may name themselves with a metadata document URL. */
   allow_client_metadata?: boolean
-  /** How a new metadata-document client is admitted: only through the allowlist, or any URL. */
+  /** Whether clients registered at /oauth/register (RFC 7591) may ask for it. */
+  allow_dynamic_registration?: boolean
+  /** How a new external client is admitted: only through the allowlist (or an approval), or any. */
   client_admission?: 'allowlist' | 'open'
+}
+
+/** DynamicRegistrationOff tells that the environment's feature is off, so the
+ * server's switch has no effect until it is turned on. */
+function DynamicRegistrationOff({ base }: { base: string }) {
+  const [on, setOn] = useState<boolean | null>(null)
+  useEffect(() => { api.get<{ enabled: boolean }>(`${base}/features/dynamic_client_registration`).then(f => setOn(f.enabled)).catch(() => setOn(null)) }, [base])
+  const { project, environment } = useParams()
+  if (on !== false) return null
+  return <p role="status" className="text-xs text-warning">
+    {rich('The {{feature}} feature is off for this environment, so this has no effect. Turn it on under {{link}}.', { feature: <code>{'dynamic_client_registration'}</code>, link: <Link className="underline" to={`/projects/${project}/environments/${environment}/features`}>{t('Features (beta)')}</Link> })}
+  </p>
 }
 
 /** TemplatePicker offers the template presets (Cursor, Antigravity, Gemini CLI)
@@ -105,12 +119,15 @@ export function ProtectedResourceSection({ base, resource: target, canWrite }: {
       <h3 className="text-sm font-semibold">{t('Client settings')}</h3>
       <SwitchField label={t('Allow clients with a metadata document')} hint={t('Clients such as Claude or VS Code name themselves with a URL (client_id) that serves their metadata. Off, only registered clients and the ones you create from templates can use this server.')}
         checked={server.allow_client_metadata ?? false} disabled={!canWrite || busy} onCheckedChange={v => void patch({ allow_client_metadata: v }, v ? t('Metadata-document clients allowed') : t('Metadata-document clients refused'))} />
-      {server.allow_client_metadata && <div className="space-y-1.5">
+      <SwitchField label={t('Allow dynamically registered clients')} hint={t('Clients without a metadata document register themselves at /oauth/register (RFC 7591) and get a dcr_ client ID. IAMKit cannot verify who they are, so no allowlist entry admits them: each waits for an approval unless admission is open.')}
+        checked={server.allow_dynamic_registration ?? false} disabled={!canWrite || busy} onCheckedChange={v => void patch({ allow_dynamic_registration: v }, v ? t('Dynamically registered clients allowed') : t('Dynamically registered clients refused'))} />
+      {server.allow_dynamic_registration && <DynamicRegistrationOff base={base} />}
+      {(server.allow_client_metadata || server.allow_dynamic_registration) && <div className="space-y-1.5">
         <label htmlFor="client-admission" className="text-sm font-medium">{t('Client admission')}</label>
         <select id="client-admission" className={`${selectClass} max-w-md`} value={server.client_admission ?? 'allowlist'} disabled={!canWrite || busy}
           onChange={e => e.target.value === 'open' ? setOpening(true) : void patch({ client_admission: 'allowlist' }, t('Admission set to allowlist'))}>
           <option value="allowlist">{t('Allowlist: others wait for approval')}</option>
-          <option value="open">{t('Open: any URL is admitted')}</option>
+          <option value="open">{t('Open: any client is admitted')}</option>
         </select>
         {(server.client_admission ?? 'allowlist') === 'open'
           ? <p className="text-xs text-warning">{t('Any client that serves a valid metadata document is admitted without review. Anyone on the internet can have their client ask your users for access.')}</p>
@@ -130,6 +147,6 @@ export function ProtectedResourceSection({ base, resource: target, canWrite }: {
       confirmLabel={t('Delete')} confirmationText={server.uri} onClose={() => setEnding(null)}
       confirm={async () => { await api.delete(path); toast.success(t('MCP server deleted')); load() }} />}
   </DetailSection>
-  <ClientsSection path={path} canWrite={canWrite} refresh={`${server.allow_client_metadata}${version}`} />
+  <ClientsSection path={path} canWrite={canWrite} refresh={`${server.allow_client_metadata}${server.allow_dynamic_registration}${version}`} />
   </>
 }

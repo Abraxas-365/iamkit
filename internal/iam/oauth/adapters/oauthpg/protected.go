@@ -22,7 +22,7 @@ func NewProtectedResources(db *sqlx.DB) *ProtectedResources { return &ProtectedR
 
 var _ oauth.ProtectedResourceRepository = (*ProtectedResources)(nil)
 
-const protectedColumns = `id,environment_id,application_id,resource_id,uri,name,default_scopes,idle_ttl_seconds,max_ttl_seconds,active,allow_client_metadata,client_admission,created_at`
+const protectedColumns = `id,environment_id,application_id,resource_id,uri,name,default_scopes,idle_ttl_seconds,max_ttl_seconds,active,allow_client_metadata,allow_dynamic_registration,client_admission,created_at`
 
 type protectedResourceRow struct {
 	ID          identity.ProtectedResourceID `db:"id"`
@@ -36,6 +36,7 @@ type protectedResourceRow struct {
 	Max         int64                        `db:"max_ttl_seconds"`
 	Active      bool                         `db:"active"`
 	AllowMeta   bool                         `db:"allow_client_metadata"`
+	AllowDCR    bool                         `db:"allow_dynamic_registration"`
 	Admission   string                       `db:"client_admission"`
 	CreatedAt   time.Time                    `db:"created_at"`
 }
@@ -45,7 +46,7 @@ func (r protectedResourceRow) domain() oauth.ProtectedResource {
 	if scopes == nil {
 		scopes = []string{}
 	}
-	return oauth.ProtectedResource{ID: r.ID, Environment: r.Environment, Application: r.Application, Resource: r.Resource, URI: r.URI, Name: r.Name, DefaultScopes: scopes, IdleTTLSeconds: r.Idle, MaxTTLSeconds: r.Max, Active: r.Active, AllowClientMetadata: r.AllowMeta, ClientAdmission: r.Admission, CreatedAt: r.CreatedAt}
+	return oauth.ProtectedResource{ID: r.ID, Environment: r.Environment, Application: r.Application, Resource: r.Resource, URI: r.URI, Name: r.Name, DefaultScopes: scopes, IdleTTLSeconds: r.Idle, MaxTTLSeconds: r.Max, Active: r.Active, AllowClientMetadata: r.AllowMeta, AllowDynamicRegistration: r.AllowDCR, ClientAdmission: r.Admission, CreatedAt: r.CreatedAt}
 }
 
 // protectedConflict maps the table's constraints to their meaning.
@@ -98,9 +99,10 @@ func (r *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oaut
 		// the change takes back or lets in (M-2, L-3).
 		var before struct {
 			Allow     bool   `db:"allow_client_metadata"`
+			AllowDCR  bool   `db:"allow_dynamic_registration"`
 			Admission string `db:"client_admission"`
 		}
-		if err := tx.GetContext(ctx, &before, `SELECT allow_client_metadata,client_admission FROM protected_resources WHERE id=$1 AND environment_id=$2 FOR NO KEY UPDATE`, id, m.Environment); errors.Is(err, sql.ErrNoRows) {
+		if err := tx.GetContext(ctx, &before, `SELECT allow_client_metadata,allow_dynamic_registration,client_admission FROM protected_resources WHERE id=$1 AND environment_id=$2 FOR NO KEY UPDATE`, id, m.Environment); errors.Is(err, sql.ErrNoRows) {
 			return errx.NotFound("protected resource not found")
 		} else if err != nil {
 			return failure(err)
@@ -120,9 +122,9 @@ func (r *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oaut
 		var row protectedResourceRow
 		err := tx.GetContext(ctx, &row, `UPDATE protected_resources SET name=COALESCE($3,name),default_scopes=COALESCE($4::text[],default_scopes),
 			idle_ttl_seconds=COALESCE($5,idle_ttl_seconds),max_ttl_seconds=COALESCE($6,max_ttl_seconds),active=COALESCE($7,active),
-			allow_client_metadata=COALESCE($8,allow_client_metadata),client_admission=COALESCE($9,client_admission)
+			allow_client_metadata=COALESCE($8,allow_client_metadata),client_admission=COALESCE($9,client_admission),allow_dynamic_registration=COALESCE($10,allow_dynamic_registration)
 			WHERE id=$1 AND environment_id=$2 RETURNING `+protectedColumns,
-			id, m.Environment, input.Name, scopes, input.IdleTTLSeconds, input.MaxTTLSeconds, input.Active, input.AllowClientMetadata, input.ClientAdmission)
+			id, m.Environment, input.Name, scopes, input.IdleTTLSeconds, input.MaxTTLSeconds, input.Active, input.AllowClientMetadata, input.ClientAdmission, input.AllowDynamicRegistration)
 		if errors.Is(err, sql.ErrNoRows) {
 			return errx.NotFound("protected resource not found")
 		} else if err != nil {
@@ -131,7 +133,7 @@ func (r *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oaut
 		p := row.domain()
 		// The clients first, then the sessions (W4-3): the lock order of a
 		// block and of Complete.
-		if err = reconcileAdmission(ctx, tx, m, p, before.Allow, before.Admission); err != nil {
+		if err = reconcileAdmission(ctx, tx, m, p, oauth.ProtectedResource{AllowClientMetadata: before.Allow, AllowDynamicRegistration: before.AllowDCR, ClientAdmission: before.Admission}); err != nil {
 			return err
 		}
 		if !p.Active {
@@ -143,34 +145,41 @@ func (r *ProtectedResources) UpdateProtectedResource(ctx context.Context, m oaut
 	})
 }
 
-// reconcileAdmission applies a change of a server's document-client
-// settings to the clients it already holds, in the update's transaction:
-//   - allow_client_metadata turned off: every approved client (manual too)
-//     returns to pending and loses its grants (M-2);
-//   - client_admission left open, or an allowlist narrowed elsewhere: the
-//     clients that policy admitted lose their approval unless an allowlist
-//     entry still admits them (M-2);
-//   - allow_client_metadata turned on, or the server turned open: pending
-//     clients that policy now admits are approved, as a new allowlist entry
-//     does (L-3).
+// reconcileAdmission applies a change of a server's external-client
+// settings (was: the settings before) to the clients it already holds, in
+// the update's transaction:
+//   - allow_client_metadata or allow_dynamic_registration turned off:
+//     every approved client of that source (manual too) returns to pending
+//     and loses its grants (M-2);
+//   - client_admission left open: the clients that policy admitted lose
+//     their approval unless an allowlist entry still admits them (M-2);
+//   - a source turned on, or the server turned open: pending clients that
+//     policy now admits are approved, as a new allowlist entry does (L-3).
 //
-// One update can do both of the last two (allow_client_metadata on and
-// open → allowlist, W-5): what policy took back is reconciled, then what
-// it admits is let in.
-func reconcileAdmission(ctx context.Context, tx *sqlx.Tx, m oauth.Mutation, p oauth.ProtectedResource, wasAllowed bool, wasAdmission string) error {
-	if wasAllowed && !p.AllowClientMetadata {
-		_, err := demoteApproved(ctx, tx, m.Environment, m.Actor, &p.ID, 1<<30, oauth.DemotionDocumentsOff, true)
-		return err
+// One update can do several (a source on and open → allowlist, W-5): what
+// was turned off goes first, then what policy took back, then what it
+// admits is let in (admitByPolicy only takes sources the server allows).
+func reconcileAdmission(ctx context.Context, tx *sqlx.Tx, m oauth.Mutation, p, was oauth.ProtectedResource) error {
+	if was.AllowClientMetadata && !p.AllowClientMetadata {
+		if _, err := demoteApproved(ctx, tx, m.Environment, m.Actor, &p.ID, oauth.SourceCIMD, 1<<30, oauth.DemotionDocumentsOff, true); err != nil {
+			return err
+		}
 	}
-	if !p.AllowClientMetadata {
+	if was.AllowDynamicRegistration && !p.AllowDynamicRegistration {
+		if _, err := demoteApproved(ctx, tx, m.Environment, m.Actor, &p.ID, oauth.SourceDCR, 1<<30, oauth.DemotionRegistrationOff, true); err != nil {
+			return err
+		}
+	}
+	if !p.AllowClientMetadata && !p.AllowDynamicRegistration {
 		return nil
 	}
-	if wasAdmission == oauth.ClientAdmissionOpen && p.ClientAdmission != oauth.ClientAdmissionOpen {
+	if was.ClientAdmission == oauth.ClientAdmissionOpen && p.ClientAdmission != oauth.ClientAdmissionOpen {
 		if err := reconcilePolicy(ctx, tx, m.Environment, m.Actor, &p.ID, ""); err != nil {
 			return err
 		}
 	}
-	if !wasAllowed || (wasAdmission != oauth.ClientAdmissionOpen && p.ClientAdmission == oauth.ClientAdmissionOpen) {
+	turnedOn := (!was.AllowClientMetadata && p.AllowClientMetadata) || (!was.AllowDynamicRegistration && p.AllowDynamicRegistration)
+	if turnedOn || (was.ClientAdmission != oauth.ClientAdmissionOpen && p.ClientAdmission == oauth.ClientAdmissionOpen) {
 		return admitByPolicy(ctx, tx, m, &p.ID, "", nil)
 	}
 	return nil

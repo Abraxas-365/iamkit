@@ -22,7 +22,14 @@ import (
 const (
 	SourceRegistered = "registered"
 	SourceCIMD       = "cimd"
+	// SourceDCR: a client registered at POST /oauth/register (RFC 7591),
+	// named by its registration's client_id (DynamicClientID).
+	SourceDCR = "dcr"
 )
+
+// ExternalSources are the sources of clients named outside IAMKit's
+// registry: a metadata document URL or a dynamic registration.
+var ExternalSources = []string{SourceCIMD, SourceDCR}
 
 // Admission states of an external client.
 const (
@@ -48,9 +55,16 @@ const maxMetadataRedirects = 10
 // maxClientName bounds client_name.
 const maxClientName = 100
 
-// ExternalClientID reports whether a client_id names a Client ID Metadata
-// Document (an https URL) rather than a registered client (a uuid).
+// ExternalClientID reports whether a client_id names an external client (a
+// Client ID Metadata Document URL or a dynamic registration) rather than a
+// registered client (a uuid).
 func ExternalClientID(raw string) bool {
+	return ClientURL(raw) || DynamicClientID(raw)
+}
+
+// ClientURL reports whether a client_id is a URL: a Client ID Metadata
+// Document (ParseClientIDURL checks the rest).
+func ClientURL(raw string) bool {
 	return strings.HasPrefix(raw, "https://")
 }
 
@@ -60,7 +74,7 @@ func ExternalClientID(raw string) bool {
 // returns the URL as sent (client_id comparison is exact).
 func ParseClientIDURL(raw string) (*url.URL, error) {
 	invalid := errx.Validation("client_id must be an https URL of a client metadata document")
-	if len(raw) > maxClientIDURL || !ExternalClientID(raw) {
+	if len(raw) > maxClientIDURL || !ClientURL(raw) {
 		return nil, invalid
 	}
 	u, err := url.Parse(raw)
@@ -128,9 +142,12 @@ func ParseClientMetadata(body []byte) (ClientMetadata, error) {
 	return m, nil
 }
 
-// ExternalClient is what IAMKit keeps of a valid document: the fields an
-// oauth_clients row of source cimd stores.
+// ExternalClient is what IAMKit keeps of a valid document or dynamic
+// registration: the fields an oauth_clients row of an external source
+// stores.
 type ExternalClient struct {
+	// Source is SourceCIMD or SourceDCR ("" reads as SourceCIMD).
+	Source     string
 	ExternalID string
 	Name       string
 	ClientURI  string
@@ -142,6 +159,15 @@ type ExternalClient struct {
 
 // Public reports whether the client authenticates with none.
 func (e ExternalClient) Public() bool { return e.Auth.Method == identity.AuthNone }
+
+// RowSource is the oauth_clients.source of the client (SourceCIMD when
+// unset).
+func (e ExternalClient) RowSource() string {
+	if e.Source == "" {
+		return SourceCIMD
+	}
+	return e.Source
+}
 
 // Validate checks a document fetched from clientID and reduces it to what
 // IAMKit honours (D16, D18):
@@ -209,7 +235,7 @@ func (m ClientMetadata) Validate(clientID *url.URL) (ExternalClient, error) {
 	if utf8.RuneCountInString(name) > maxClientName || strings.ContainsFunc(name, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
 		return ExternalClient{}, errx.Validation("client_name must be at most 100 printable characters")
 	}
-	out := ExternalClient{ExternalID: clientID.String(), Name: name, Redirects: slices.Clone(m.RedirectURIs), GrantTypes: grants, Auth: auth}
+	out := ExternalClient{Source: SourceCIMD, ExternalID: clientID.String(), Name: name, Redirects: slices.Clone(m.RedirectURIs), GrantTypes: grants, Auth: auth}
 	if u, err := url.Parse(m.ClientURI); err == nil && u.Scheme == "https" && u.Host != "" && len(m.ClientURI) <= maxClientIDURL {
 		out.ClientURI = m.ClientURI
 	}
@@ -346,23 +372,20 @@ func (e AllowlistEntry) Matches(u *url.URL) bool {
 	return strings.HasPrefix(u.Path, prefix)
 }
 
-// InitialAdmission is the admission of a client seen for the first time:
-// approved when the server is open or an entry matches, else pending.
+// InitialAdmission is the admission of a client_id URL seen for the first
+// time: approved when the server is open or an entry matches, else pending
+// (ExternalTarget.Admission for any client_id).
 func InitialAdmission(mode string, entries []AllowlistEntry, u *url.URL) string {
-	if mode == ClientAdmissionOpen {
-		return AdmissionApproved
-	}
-	for _, e := range entries {
-		if e.Matches(u) {
-			return AdmissionApproved
-		}
-	}
-	return AdmissionPending
+	return ExternalTarget{ClientAdmission: mode, Allowlist: entries}.Admission(u.String())
 }
 
 // ExternalClientView is an external client as operators see it.
 type ExternalClientView struct {
-	ID                 identity.ClientID            `json:"id"`
+	ID identity.ClientID `json:"id"`
+	// Source is how the client names itself: SourceCIMD (client_id is
+	// the URL of its metadata document) or SourceDCR (registered at
+	// /oauth/register; nothing about it is verified).
+	Source             string                       `json:"source"`
 	ClientID           string                       `json:"client_id"`
 	Protected          identity.ProtectedResourceID `json:"protected_resource_id"`
 	Name               string                       `json:"client_name"`

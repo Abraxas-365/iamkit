@@ -14,7 +14,8 @@ import (
 // shows the preset's name with a check; any other name is the document's
 // own claim and is marked unverified. The logo is shown only when it is
 // served from the client_id's own host (oauth.LogoShown); IAMKit proxies
-// no image.
+// no image. A dynamically registered client has no host (Host ""): only
+// its unverified name is shown.
 type ClientApplication struct {
 	Host string
 	// Verified is the preset's name ("" when the client matches none).

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"net/netip"
-	"net/url"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
@@ -24,17 +23,18 @@ func (s *Service) SetExternalClients(documents oauth.MetadataDocuments, features
 }
 
 func (s *Service) ExternalClient(ctx context.Context, raw string, resource []string) (*oauth.Client, error) {
-	if s.documents == nil {
+	source := oauth.SourceCIMD
+	if oauth.DynamicClientID(raw) {
+		source = oauth.SourceDCR
+	} else if s.documents == nil {
 		return nil, errx.Validation("unknown client_id")
-	}
-	clientID, err := oauth.ParseClientIDURL(raw)
-	if err != nil {
+	} else if _, err := oauth.ParseClientIDURL(raw); err != nil {
 		return nil, err
 	}
-	// The resource names the server, and with it the environment: a URL
-	// client exists only for the protected resource it asks for.
+	// The resource names the server, and with it the environment: an
+	// external client exists only for the protected resource it asks for.
 	if len(resource) != 1 {
-		return nil, errx.Validation("a client identified by a metadata document must name one resource (RFC 8707)")
+		return nil, errx.Validation("a client_id URL or a dynamically registered client must name one resource (RFC 8707)")
 	}
 	uri, err := oauth.CanonicalResource(resource[0])
 	if err != nil {
@@ -47,32 +47,48 @@ func (s *Service) ExternalClient(ctx context.Context, raw string, resource []str
 		}
 		return nil, errx.Validation("the resource is not a protected resource of this deployment")
 	}
-	if !target.AllowClientMetadata {
-		return nil, oauth.WithClient(oauth.ErrClientRegisteredOnly(), target.Environment, clientID.String(), "", "")
+	// A dynamically registered client a server or environment does not
+	// take is told the server takes registered clients only: one page for
+	// both, as nothing about such a client deserves more.
+	if !target.Allows(source) {
+		return nil, oauth.WithClient(oauth.ErrClientRegisteredOnly(), target.Environment, raw, "", "")
 	}
-	if s.features != nil {
-		on, err := s.features.Enabled(ctx, target.Environment, config.FeatureClientMetadataDocuments)
-		if err != nil {
-			return nil, err
-		}
-		if !on {
-			return nil, oauth.WithClient(oauth.ErrClientDisabled(), target.Environment, clientID.String(), "", "")
-		}
-	}
-	return s.resolve(ctx, target, clientID)
-}
-
-// resolve reads the document at clientID and finds the client it names at
-// target. An approved client (or one policy approves: allowlist, preset,
-// open server) is materialized now; one nobody approved and no row holds is
-// only described, with ID zero: it is written when a signed-in user asks
-// for access (RequestAccess), so an anonymous request leaves nothing.
-func (s *Service) resolve(ctx context.Context, target oauth.ExternalTarget, clientID *url.URL) (*oauth.Client, error) {
-	known, err := s.repository.ExternalClientID(ctx, target.Protected, clientID.String())
+	on, err := s.sourceOn(ctx, target.Environment, source)
 	if err != nil {
 		return nil, err
 	}
-	doc, fetched, err := s.documents.Document(ctx, clientID, s.admitFetch(ctx, target.Environment, known.IsZero()))
+	if !on {
+		refusal := oauth.ErrClientDisabled()
+		if source == oauth.SourceDCR {
+			refusal = oauth.ErrClientRegisteredOnly()
+		}
+		return nil, oauth.WithClient(refusal, target.Environment, raw, "", "")
+	}
+	return s.resolve(ctx, target, raw)
+}
+
+// sourceOn reports whether the environment takes clients of source (its
+// oauth.SourceFeature). Without a feature service, documents are on and
+// dynamic registrations off (as discovery advertises them).
+func (s *Service) sourceOn(ctx context.Context, environment identity.EnvironmentID, source string) (bool, error) {
+	if s.features == nil {
+		return source != oauth.SourceDCR, nil
+	}
+	return s.features.Enabled(ctx, environment, oauth.SourceFeature(source))
+}
+
+// resolve describes the client clientID names (its metadata document, or
+// its dynamic registration) and finds it at target. An approved client (or
+// one policy approves: allowlist, preset, open server) is materialized now;
+// one nobody approved and no row holds is only described, with ID zero: it
+// is written when a signed-in user asks for access (RequestAccess), so an
+// anonymous request leaves nothing.
+func (s *Service) resolve(ctx context.Context, target oauth.ExternalTarget, clientID string) (*oauth.Client, error) {
+	known, err := s.repository.ExternalClientID(ctx, target.Protected, clientID)
+	if err != nil {
+		return nil, err
+	}
+	doc, fetched, err := s.describe(ctx, target, clientID, known)
 	if err != nil {
 		// M-4: an approved client whose document cannot be read now (the
 		// host is down or answers an error, or the fetch budget is spent)
@@ -105,6 +121,31 @@ func (s *Service) resolve(ctx context.Context, target oauth.ExternalTarget, clie
 		return nil, oauth.WithClient(oauth.ErrClientBlocked(), client.Environment, client.ExternalID, client.Name, client.LogoURI)
 	}
 	return client, nil
+}
+
+// describe is what clientID says of itself: its dynamic registration
+// (immutable; fetched is when it was made, so a row written from it is
+// never rewritten), else its metadata document, read through the fetch
+// budgets.
+func (s *Service) describe(ctx context.Context, target oauth.ExternalTarget, clientID string, known identity.ClientID) (oauth.ExternalClient, time.Time, error) {
+	if oauth.DynamicClientID(clientID) {
+		registered, found, err := s.repository.Registration(ctx, clientID)
+		if err != nil {
+			return oauth.ExternalClient{}, time.Time{}, err
+		}
+		if !found {
+			return oauth.ExternalClient{}, time.Time{}, errx.Validation("unknown client_id")
+		}
+		return registered.Client(), registered.CreatedAt, nil
+	}
+	if s.documents == nil {
+		return oauth.ExternalClient{}, time.Time{}, errx.Validation("unknown client_id")
+	}
+	u, err := oauth.ParseClientIDURL(clientID)
+	if err != nil {
+		return oauth.ExternalClient{}, time.Time{}, err
+	}
+	return s.documents.Document(ctx, u, s.admitFetch(ctx, target.Environment, known.IsZero()))
 }
 
 // stale is the client to serve when reading err's document failed: only an
@@ -188,22 +229,18 @@ func (s *Service) TicketClient(ctx context.Context, ticket oauth.Ticket) (*oauth
 		// The ticket's row was stored by the server: either kind.
 		return s.Holder(ctx, ticket.Client)
 	}
-	if ticket.External == nil || s.documents == nil {
+	if ticket.External == nil || !oauth.ExternalClientID(*ticket.External) {
 		return nil, errx.Validation("invalid client")
-	}
-	clientID, err := oauth.ParseClientIDURL(*ticket.External)
-	if err != nil {
-		return nil, err
 	}
 	target, err := s.repository.ExternalTargetByID(ctx, ticket.Protected)
 	if err != nil {
 		return nil, err
 	}
-	return s.resolve(ctx, target, clientID)
+	return s.resolve(ctx, target, *ticket.External)
 }
 
 func (s *Service) RequestAccess(ctx context.Context, client *oauth.Client, user identity.UserID, organization identity.OrganizationID) error {
-	if !client.External() || client.Protected == nil || client.Admission == oauth.AdmissionBlocked || s.documents == nil {
+	if !client.External() || client.Protected == nil || client.Admission == oauth.AdmissionBlocked {
 		return nil
 	}
 	target, err := s.repository.ExternalTargetByID(ctx, client.Protected.ID)

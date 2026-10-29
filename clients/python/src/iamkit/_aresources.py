@@ -764,8 +764,10 @@ class ProtectedResources(_Resource):
 
     async def update(self, protected_id: str, **fields: Any) -> JSON:
         """Patches ``name``, ``default_scopes``, ``idle_ttl_seconds``, ``max_ttl_seconds``, ``active``
-        (``active=False`` ends every authorization), ``allow_client_metadata`` or ``client_admission``
-        (``"allowlist"`` or ``"open"``: open admits any client named by a metadata document)."""
+        (``active=False`` ends every authorization), ``allow_client_metadata``,
+        ``allow_dynamic_registration`` (clients registered at ``/oauth/register``, while the environment's
+        ``dynamic_client_registration`` feature is on) or ``client_admission`` (``"allowlist"`` or
+        ``"open"``: open admits any such client without review)."""
         path = f"{self._c.env()}/protected-resources/{seg(protected_id)}"
         return await self._c.request("PATCH", path, json=fields)  # type: ignore[no-any-return]
 

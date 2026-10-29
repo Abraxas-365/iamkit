@@ -409,18 +409,43 @@ func TestMetadataHash(t *testing.T) {
 func TestAdmissionSource(t *testing.T) {
 	u := mustURL(t, "https://claude.ai/oauth/claude-code-client-metadata")
 	listed := ExternalTarget{ClientAdmission: ClientAdmissionAllowlist, Allowlist: []AllowlistEntry{{Origin: "https://claude.ai", PathPrefix: "/oauth/claude-code-client-metadata"}}}
-	if got := listed.AdmissionSource(u); got != SourceAllowlist {
+	if got := listed.AdmissionSource(u.String()); got != SourceAllowlist {
 		t.Fatalf("allowlist = %q", got)
 	}
 	listed.Allowlist[0].Preset = "claude_code"
-	if got := listed.AdmissionSource(u); got != SourcePreset {
+	if got := listed.AdmissionSource(u.String()); got != SourcePreset {
 		t.Fatalf("preset = %q", got)
 	}
-	if got := (ExternalTarget{ClientAdmission: ClientAdmissionOpen}).AdmissionSource(u); got != SourceOpen {
+	if got := (ExternalTarget{ClientAdmission: ClientAdmissionOpen}).AdmissionSource(u.String()); got != SourceOpen {
 		t.Fatalf("open = %q", got)
 	}
-	if got := (ExternalTarget{ClientAdmission: ClientAdmissionAllowlist}).AdmissionSource(u); got != "" {
+	if got := (ExternalTarget{ClientAdmission: ClientAdmissionAllowlist}).AdmissionSource(u.String()); got != "" {
 		t.Fatalf("unlisted = %q", got)
+	}
+	// A dynamically registered client_id names nothing an entry vouches
+	// for, even an entry that matches everything: only an open server
+	// admits it.
+	dcr := "dcr_0123456789abcdef0123456789abcdef"
+	everything := ExternalTarget{ClientAdmission: ClientAdmissionAllowlist, Allowlist: []AllowlistEntry{{Origin: "https://claude.ai", PathPrefix: "/"}}}
+	if got := everything.AdmissionSource(dcr); got != "" {
+		t.Fatalf("dcr on allowlist = %q", got)
+	}
+	if got := (ExternalTarget{ClientAdmission: ClientAdmissionOpen}).AdmissionSource(dcr); got != SourceOpen {
+		t.Fatalf("dcr open = %q", got)
+	}
+	if (ExternalTarget{ClientAdmission: ClientAdmissionAllowlist}).Admission(dcr) != AdmissionPending {
+		t.Fatal("dcr must wait on an allowlist server")
+	}
+}
+
+func TestExternalTargetAllows(t *testing.T) {
+	documents := ExternalTarget{AllowClientMetadata: true}
+	if !documents.Allows(SourceCIMD) || documents.Allows(SourceDCR) {
+		t.Fatal("documents only")
+	}
+	registered := ExternalTarget{AllowDynamicRegistration: true}
+	if registered.Allows(SourceCIMD) || !registered.Allows(SourceDCR) {
+		t.Fatal("registrations only")
 	}
 }
 

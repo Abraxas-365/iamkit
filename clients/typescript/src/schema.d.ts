@@ -7631,6 +7631,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/oauth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** register is POST /oauth/register. */
+        post: operations["postOauthRegister"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/oauth/revoke": {
         parameters: {
             query?: never;
@@ -8217,6 +8234,19 @@ export interface components {
             token_endpoint_auth_method?: string;
             token_endpoint_auth_signing_alg?: string;
         };
+        ClientRegistrationInput: {
+            client_name?: string;
+            client_uri?: string;
+            grant_types?: string[] | null;
+            jwks?: unknown | null;
+            jwks_uri?: string;
+            redirect_uris?: string[] | null;
+            response_types?: string[] | null;
+            software_id?: string;
+            software_statement?: string;
+            software_version?: string;
+            token_endpoint_auth_method?: string;
+        };
         ClientUpdateInput: {
             access_token_format?: string | null;
             allowed_origins?: string[] | null;
@@ -8597,6 +8627,7 @@ export interface components {
             issuer: string;
             jwks_uri: string;
             prompt_values_supported: string[] | null;
+            registration_endpoint?: string;
             response_types_supported: string[] | null;
             revocation_endpoint: string;
             revocation_endpoint_auth_methods_supported: string[] | null;
@@ -8742,6 +8773,7 @@ export interface components {
             /** @description UUID (empty when unset) */
             protected_resource_id: string;
             redirect_uris: string[] | null;
+            source: string;
             token_endpoint_auth_method: string;
         };
         ExternalIdentityView: {
@@ -9805,6 +9837,7 @@ export interface components {
         ProtectedResource: {
             active: boolean;
             allow_client_metadata: boolean;
+            allow_dynamic_registration: boolean;
             /** @description UUID (empty when unset) */
             application_id: string;
             client_admission: string;
@@ -9847,6 +9880,7 @@ export interface components {
         ProtectedResourceUpdateInput: {
             active?: boolean | null;
             allow_client_metadata?: boolean | null;
+            allow_dynamic_registration?: boolean | null;
             client_admission?: string | null;
             default_scopes?: string[] | null;
             idle_ttl_seconds?: number | null;
@@ -9916,6 +9950,18 @@ export interface components {
             resource_id?: string;
             token_endpoint_auth_method?: string;
             token_endpoint_auth_signing_alg?: string;
+        };
+        RegistrationResponse: {
+            client_id: string;
+            client_id_issued_at: number;
+            client_name?: string;
+            client_uri?: string;
+            grant_types: string[] | null;
+            redirect_uris: string[] | null;
+            response_types: string[] | null;
+            software_id?: string;
+            software_version?: string;
+            token_endpoint_auth_method: string;
         };
         ReplayInput: {
             from?: number;
@@ -42026,6 +42072,76 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    postOauthRegister: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ClientRegistrationInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegistrationResponse"];
+                };
+            };
+            /** @description Response 400 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        error_description: string;
+                    };
+                };
+            };
+            /** @description Response 404 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Response 429 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        error_description: string;
+                    };
+                };
+            };
+            /** @description Response 500 */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
             };
         };
     };

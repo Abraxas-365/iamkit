@@ -51,6 +51,11 @@ const (
 	// (MCP Inspector); off by default, turn it on in development
 	// environments only.
 	FeatureDevelopmentClients = "development_clients"
+	// FeatureDynamicClientRegistration accepts clients registered at
+	// POST /oauth/register (RFC 7591) on the environment's protected
+	// resources that allow them; off by default (nothing about such a
+	// client is verifiable).
+	FeatureDynamicClientRegistration = "dynamic_client_registration"
 )
 
 // Flags is the registry, in display order.
@@ -62,6 +67,7 @@ var Flags = []Flag{
 	{Name: FeatureRiskSignals, Default: true, Scope: FeatureEnvironment, Description: "Record sign-in attempts and apply the environment's risk policy and restrictions"},
 	{Name: FeatureClientMetadataDocuments, Default: true, Scope: FeatureEnvironment, Description: "Accept MCP clients identified by a Client ID Metadata Document URL on protected resources"},
 	{Name: FeatureDevelopmentClients, Default: false, Scope: FeatureEnvironment, Description: "Offer development-only client presets such as MCP Inspector (development environments only)"},
+	{Name: FeatureDynamicClientRegistration, Default: false, Scope: FeatureEnvironment, Description: "Accept MCP clients registered dynamically (RFC 7591) on protected resources that allow them"},
 }
 
 // FindFlag returns the registered flag called name.

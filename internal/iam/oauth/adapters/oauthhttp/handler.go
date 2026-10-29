@@ -49,14 +49,16 @@ type Handler struct {
 	refuse func(c *fiber.Ctx, err error) error
 	// offers says what discovery may advertise (nil: only what the
 	// document always holds).
-	offers   oauth.Capabilities
-	commands oauth.Commands
-	queries  oauth.Queries
-	flows    oauth.Flows
-	provider Provider
-	tokens   Tokens
-	issuer   string
-	actor    func(*fiber.Ctx) string
+	offers oauth.Capabilities
+	// registrations serves POST /oauth/register (nil: not routed).
+	registrations oauth.Registrations
+	commands      oauth.Commands
+	queries       oauth.Queries
+	flows         oauth.Flows
+	provider      Provider
+	tokens        Tokens
+	issuer        string
+	actor         func(*fiber.Ctx) string
 	// signedOut renders the end_session result page (hosted module);
 	// problem is nil after a successful logout.
 	signedOut func(c *fiber.Ctx, environment identity.EnvironmentID, problem error) error
@@ -330,6 +332,9 @@ func (h *Handler) Register(app *fiber.App) {
 		app.Post("/oauth/device_authorization", endpointErrors, h.deviceAuthorization)
 	}
 	app.Post("/oauth/revoke", endpointErrors, h.revoke)
+	if h.registrations != nil {
+		app.Post("/oauth/register", h.register)
+	}
 	app.Post("/oauth/introspect", endpointErrors, h.introspect)
 	app.Get("/oauth/userinfo", h.userinfo)
 	app.Post("/oauth/userinfo", h.userinfo)

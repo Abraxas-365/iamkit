@@ -24,6 +24,10 @@ type ProtectedResource struct {
 	// AllowClientMetadata lets clients named by an https client_id URL (a
 	// Client ID Metadata Document) ask for this server.
 	AllowClientMetadata bool `json:"allow_client_metadata"`
+	// AllowDynamicRegistration lets clients registered at /oauth/register
+	// (RFC 7591) ask for this server, while the environment's
+	// dynamic_client_registration feature is on.
+	AllowDynamicRegistration bool `json:"allow_dynamic_registration"`
 	// ClientAdmission is ClientAdmissionAllowlist or ClientAdmissionOpen:
 	// how such clients are admitted the first time.
 	ClientAdmission string    `json:"client_admission"`
@@ -64,6 +68,9 @@ type ProtectedResourceUpdate struct {
 	// ClientAdmissionOpen (open admits any such client without review).
 	AllowClientMetadata *bool   `json:"allow_client_metadata,omitempty"`
 	ClientAdmission     *string `json:"client_admission,omitempty"`
+	// AllowDynamicRegistration turns dynamically registered clients on or
+	// off for this server (off demotes their approvals).
+	AllowDynamicRegistration *bool `json:"allow_dynamic_registration,omitempty"`
 }
 
 // ProtectedResourcePolicy are the environment's TTL ceilings for its

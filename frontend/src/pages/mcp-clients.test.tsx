@@ -11,12 +11,14 @@ const env = '/environments/env1'
 let role = 'owner'
 let server: Record<string, unknown>
 const resource = { id: 'res1', name: 'Invoices', prefix: 'invoices', audience: 'https://invoices.example', permissions: ['invoices:read'] }
-const base = { protected_resource_id: 'pr1', client_uri: '', logo_uri: '', redirect_uris: ['http://localhost/callback'], token_endpoint_auth_method: 'none', jwks_uri: '', metadata_hash: 'hash-1', admission_expires_at: null, admission_source: '', preset: '', preset_name: '', access_requests: 0, metadata_fetched_at: null, last_used_at: null, created_at: '2026-10-01T00:00:00Z' }
+const base = { source: 'cimd', protected_resource_id: 'pr1', client_uri: '', logo_uri: '', redirect_uris: ['http://localhost/callback'], token_endpoint_auth_method: 'none', jwks_uri: '', metadata_hash: 'hash-1', admission_expires_at: null, admission_source: '', preset: '', preset_name: '', access_requests: 0, metadata_fetched_at: null, last_used_at: null, created_at: '2026-10-01T00:00:00Z' }
 const clients = [
   { ...base, id: 'c1', client_id: 'https://evil.example/oauth/client.json', host: 'evil.example', client_name: 'Totally Claude', logo_uri: 'https://cdn.other.example/logo.png', admission: 'pending', access_requests: 2 },
   { ...base, id: 'c2', client_id: 'https://claude.ai/oauth/mcp-oauth-client-metadata', host: 'claude.ai', client_name: 'Claude', logo_uri: 'https://claude.ai/logo.png', admission: 'approved', admission_source: 'preset', preset: 'claude', preset_name: 'Claude' },
   { ...base, id: 'c3', client_id: 'https://blocked.example/c.json', host: 'blocked.example', client_name: 'Nope', admission: 'blocked' },
+  { ...base, id: 'c4', source: 'dcr', client_id: 'dcr_0123456789abcdef0123456789abcdef', host: '', client_name: 'Claude Code', logo_uri: 'https://claude.ai/logo.png', admission: 'pending' },
 ]
+let registrationFeature: boolean
 const presets = [
   { key: 'claude', name: 'Claude', mechanism: 'metadata_document', network: 'public', source_ranges: ['160.79.104.0/21'], development_only: false, warnings: [] },
   { key: 'vscode', name: 'VS Code', mechanism: 'metadata_document', network: 'local', development_only: false, warnings: [] },
@@ -27,6 +29,7 @@ let allowlist: unknown[]
 beforeEach(() => {
   role = 'owner'
   server = { id: 'pr1', resource_id: 'res1', uri: 'https://mcp.example/mcp', name: 'Invoices MCP', default_scopes: [], idle_ttl_seconds: 604800, max_ttl_seconds: 2592000, active: true, created_at: '2026-01-01T00:00:00Z', allow_client_metadata: true, client_admission: 'allowlist' }
+  registrationFeature = false
   allowlist = [{ id: 'a1', environment_id: 'env1', protected_resource_id: null, origin: 'https://claude.ai', path_prefix: '/oauth/', preset: 'claude', created_at: '2026-10-01T00:00:00Z' }]
   vi.stubGlobal('fetch', fetchMock)
   vi.stubGlobal('matchMedia', vi.fn().mockImplementation((query: string) => ({ matches: false, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })))
@@ -44,6 +47,7 @@ beforeEach(() => {
         path === '/projects/project1/environments' ? [{ id: 'env1', name: 'Production' }] :
           path === `${env}/resources/res1` ? resource :
             path === `${env}/organizations` ? page([]) :
+            path === `${env}/features/dynamic_client_registration` ? { name: 'dynamic_client_registration', enabled: registrationFeature } :
               path === `${env}/protected-resources` ? page([server]) :
                 path === `${env}/protected-resources/pr1/impact` ? { active_sessions: 3, external_clients: 2 } :
                   path === `${env}/protected-resources/pr1/clients/c1/impact` ? { active_sessions: 4, users: 3 } :
@@ -72,7 +76,13 @@ it('lists pending clients by host, marks document names unverified and counts ev
   expect(within(row).getByText('Totally Claude')).toBeTruthy()
   // A logo from another host is never loaded.
   expect(row.querySelector('img')).toBeNull()
-  expect(screen.getByRole('tab', { name: /Pending/ }).textContent).toContain('1')
+  expect(screen.getByRole('tab', { name: /Pending/ }).textContent).toContain('2')
+  // A registered client has no host: its client ID stands in, its name is
+  // unverified, and it never shows a logo.
+  const dcr = screen.getByText('dcr_0123456789abcdef0123456789abcdef').closest('tr')!
+  expect(within(dcr).getByText('Unverified')).toBeTruthy()
+  expect(within(dcr).getByText('Dynamic registration')).toBeTruthy()
+  expect(dcr.querySelector('img')).toBeNull()
   await waitFor(() => expect(screen.getByRole('tab', { name: /Approved/ }).textContent).toContain('1'))
   await userEvent.click(screen.getByRole('tab', { name: /Approved/ }))
   await screen.findByText('claude.ai')
@@ -221,4 +231,31 @@ it('hides write controls from viewers', async () => {
   await screen.findByText('/oauth/')
   expect(screen.queryByRole('button', { name: /Add entry/ })).toBeNull()
   expect(screen.queryByRole('button', { name: 'Enable' })).toBeNull()
+})
+
+it('warns before approving a registered client and toggles dynamic registration', async () => {
+  const u = userEvent.setup()
+  server = { ...server, allow_dynamic_registration: true }
+  open('/resources/res1')
+  // The environment's feature is off: the switch says it has no effect.
+  await screen.findByText(/feature is off for this environment/)
+  await screen.findByText('dcr_0123456789abcdef0123456789abcdef')
+  await u.click(screen.getByRole('button', { name: 'Actions for dcr_0123456789abcdef0123456789abcdef' }))
+  await u.click(await screen.findByRole('menuitem', { name: 'Approve' }))
+  const dialog = await screen.findByRole('dialog')
+  expect(within(dialog).getByText(/IAMKit cannot vouch for who runs it/)).toBeTruthy()
+  expect(within(dialog).queryByText(/If the client changes/)).toBeNull()
+  await u.keyboard('{Escape}')
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  await u.click(screen.getByRole('switch', { name: 'Allow dynamically registered clients' }))
+  await waitFor(() => expect(calls('PATCH')[0]?.body).toEqual({ allow_dynamic_registration: false }))
+})
+
+it('says nothing about the feature while it is on', async () => {
+  registrationFeature = true
+  server = { ...server, allow_dynamic_registration: true }
+  open('/resources/res1')
+  await screen.findByText('evil.example')
+  await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/features/dynamic_client_registration'))).toBe(true))
+  expect(screen.queryByText(/feature is off for this environment/)).toBeNull()
 })

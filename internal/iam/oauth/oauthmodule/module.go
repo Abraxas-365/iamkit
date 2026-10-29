@@ -110,7 +110,10 @@ func New(deps Deps) Module {
 	handler := oauthhttp.New(service, service, service, provider, deps.Tokens, deps.Issuer, deps.ActorID)
 	handler.Accounts(oauthfosite.NewAccounts(deps.DB, clients, deps.Issuer, fetcher))
 	handler.Exchanges(service)
-	handler.Offers(oauthsvc.NewCapabilities(clients, deps.Features, deps.Cache))
+	offers := oauthsvc.NewCapabilities(clients, deps.Features, deps.Cache)
+	handler.Offers(offers)
+	registrations := oauthsvc.NewRegistrations(clients, offers)
+	handler.Registrations(registrations)
 	logouts := oauthsvc.NewLogouts(clients, oauthfosite.NewLogoutSender(deps.Keys, deps.Issuer, deps.Transport))
 	protected := oauthsvc.NewProtectedResources(oauthpg.NewProtectedResources(deps.DB))
 	admissions := oauthsvc.NewAdmissions(oauthpg.NewAdmission(deps.DB), deps.Features)
@@ -122,10 +125,12 @@ func New(deps Deps) Module {
 			// approval; this job revokes the client's tokens and sessions
 			// eagerly and records oauth_client.expired.
 			{Name: "client_admission_expire", Interval: config.ClientExpireInterval, Run: admissions.ExpireApprovals},
-			// The client_metadata_documents feature belongs to another
-			// module: when it is off, approvals are taken back here
+			// The client_metadata_documents and dynamic_client_registration
+			// features belong to another module: when one is off, approvals
+			// of that source are taken back here
 			// (the check at use is immediate; Client.Disabled).
 			{Name: "client_documents_reconcile", Interval: config.ClientExpireInterval, Run: admissions.ReconcileDocuments},
 			{Name: "client_pending_prune", Interval: time.Hour, Run: service.PruneExternal},
+			{Name: "client_registration_prune", Interval: time.Hour, Run: registrations.PruneRegistrations},
 		}}
 }

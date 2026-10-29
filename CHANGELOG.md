@@ -4,6 +4,29 @@ Changes that can affect existing deployments, newest first. Each entry lists
 its **incompatible changes** first: what behaved differently before, and what
 to do about it.
 
+## Unreleased — MCP authorization, phase (c): dynamic client registration
+
+### Incompatible changes
+
+- **External client views carry `source`.** `GET …/protected-resources/:id/clients`
+  and `…/clients/:client` add `source` (`cimd` or `dcr`). A `dcr` client has
+  an empty `host`: its `client_id` (`dcr_…`) is all there is to show.
+  `iamclient.ExternalClient.Source` and the Node/Python types follow; the CLI
+  `clients list` adds a `KIND` column and prints `(unverified)` for the host.
+- **The `client_documents_reconcile` job follows both features.** It now also
+  demotes approved dynamically registered clients of environments whose
+  `dynamic_client_registration` feature is off (`feature_disabled`).
+
+Dynamic client registration (RFC 7591, migration 023) is off by default:
+the environment feature `dynamic_client_registration` and a server's
+`allow_dynamic_registration` turn it on. `POST /oauth/register` and
+discovery's `registration_endpoint` exist only while some environment takes
+such clients (404 and absent otherwise). Registrations are public,
+immutable and inert until a signed-in user asks for a server that allows
+them; no allowlist entry or preset admits them. New job
+`client_registration_prune`. See
+[Protect an MCP server](docs/guides/applications/protect-mcp-server.md#dynamic-client-registration).
+
 ## Unreleased — MCP authorization, phase (b): client admission
 
 ### Incompatible changes

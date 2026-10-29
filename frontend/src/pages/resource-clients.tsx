@@ -15,9 +15,9 @@ import { t } from '@/lib/i18n'
 export type Admission = 'pending' | 'approved' | 'blocked'
 
 /** oauth.ExternalClientView: an external client (named by a metadata document
- * URL) as one protected resource sees it. */
+ * URL, or registered at /oauth/register) as one protected resource sees it. */
 export interface ExternalClient {
-  id: string; client_id: string; protected_resource_id: string
+  id: string; source: 'cimd' | 'dcr'; client_id: string; protected_resource_id: string
   client_name: string; client_uri: string; logo_uri: string; host: string
   admission: Admission; admission_expires_at: string | null
   admission_source: 'manual' | 'allowlist' | 'preset' | 'open' | ''
@@ -34,19 +34,21 @@ const tabs: Admission[] = ['pending', 'approved', 'blocked']
 const tabLabel = (a: Admission) => a === 'pending' ? t('Pending') : a === 'approved' ? t('Approved') : t('Blocked')
 
 /** hostOf is the host of a client_id URL: the one thing about the client IAMKit
- * can vouch for. The server sends it; this is only the fallback. */
-const hostOf = (c: ExternalClient) => c.host || (() => { try { return new URL(c.client_id).host } catch { return c.client_id } })()
+ * can vouch for. The server sends it; this is only the fallback. A dynamically
+ * registered client has none: its client ID stands in. */
+const hostOf = (c: ExternalClient) => c.source === 'dcr' ? c.client_id : c.host || (() => { try { return new URL(c.client_id).host } catch { return c.client_id } })()
 
 /** logoOf is the document's logo only when it is https on the client_id's own
  * host: a document must not make the console load an image from elsewhere. */
 function logoOf(c: ExternalClient) {
+  if (c.source === 'dcr') return ''
   try {
     const logo = new URL(c.logo_uri)
     return logo.protocol === 'https:' && logo.host === new URL(c.client_id).host ? logo.href : ''
   } catch { return '' }
 }
 
-const sourceLabel = (c: ExternalClient) => c.admission_source === 'preset' ? t('Template') : t('Metadata document')
+const sourceLabel = (c: ExternalClient) => c.admission_source === 'preset' ? t('Template') : c.source === 'dcr' ? t('Dynamic registration') : t('Metadata document')
 
 /** ClientIdentity names the client: its host first (verified), then the name the
  * document claims. A name is marked "unverified" unless a preset vouches for it. */
@@ -88,8 +90,10 @@ function ApproveDialog({ path, client, onClose, onDone }: { path: string; client
     } finally { setBusy(false) }
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose() }}><DialogContent>
-    <DialogTitle className="pr-6 text-base font-semibold">{t('Approve {{host}}?', { host: hostOf(client) })}</DialogTitle>
-    <DialogDescription className="text-muted-foreground">{t('Its users can then authorize it to use this MCP server. IAMKit vouches only for the host; the name and logo in its document are its own claim.')}</DialogDescription>
+    <DialogTitle className="pr-6 text-base font-semibold [overflow-wrap:anywhere]">{t('Approve {{host}}?', { host: hostOf(client) })}</DialogTitle>
+    <DialogDescription className="text-muted-foreground">{client.source === 'dcr'
+      ? t('Its users can then authorize it to use this MCP server. It registered itself: IAMKit cannot vouch for who runs it, and its name is its own claim. Approve it only if you know where this client ID comes from.')
+      : t('Its users can then authorize it to use this MCP server. IAMKit vouches only for the host; the name and logo in its document are its own claim.')}</DialogDescription>
     <p className="break-all font-mono text-xs text-muted-foreground">{client.client_id}</p>
     <div className="space-y-1 text-xs">
       <p className="font-medium">{t('You approve exactly this')}</p>
@@ -97,7 +101,7 @@ function ApproveDialog({ path, client, onClose, onDone }: { path: string; client
         {client.redirect_uris.map(uri => <li key={uri} className="break-all">{uri}</li>)}
         <li>{t('Authentication: {{method}}', { method: client.token_endpoint_auth_method })}{client.jwks_uri ? <span className="break-all"> · {client.jwks_uri}</span> : null}</li>
       </ul>
-      <p className="text-muted-foreground">{t('If the client changes any of this later, it waits for approval again.')}</p>
+      {client.source !== 'dcr' && <p className="text-muted-foreground">{t('If the client changes any of this later, it waits for approval again.')}</p>}
     </div>
     <div className="space-y-1.5">
       <label htmlFor="approval-expiry" className="text-sm font-medium">{t('Approval expires')} <span className="font-normal text-muted-foreground">{t('(optional)')}</span></label>
@@ -118,7 +122,7 @@ function RequestsDialog({ path, client, onClose }: { path: string; client: Exter
       .catch(e => setError(message(e)))
   }, [path, client.id])
   return <Dialog open onOpenChange={open => { if (!open) onClose() }}><DialogContent>
-    <DialogTitle className="pr-6 text-base font-semibold">{t('Access requests for {{host}}', { host: hostOf(client) })}</DialogTitle>
+    <DialogTitle className="pr-6 text-base font-semibold [overflow-wrap:anywhere]">{t('Access requests for {{host}}', { host: hostOf(client) })}</DialogTitle>
     <DialogDescription className="text-muted-foreground">{t('People who tried to use this client while it was waiting for approval.')}</DialogDescription>
     {error ? <ErrorState error={error} /> : rows === null ? <p role="status" className="text-sm text-muted-foreground">{t('Loading data…')}</p> :
       rows.length === 0 ? <p className="text-sm text-muted-foreground">{t('Nobody has asked yet.')}</p> :
@@ -174,7 +178,7 @@ export function ClientsSection({ path, canWrite, refresh }: { path: string; canW
   const empty = <EmptyState icon={<BadgeCheck />} title={admission === 'pending' ? t('No clients are waiting') : admission === 'approved' ? t('No approved clients') : t('No blocked clients')}
     description={admission === 'pending' ? t('A client whose metadata URL is not on the allowlist shows up here the first time someone tries to use it.') : undefined} />
 
-  return <DetailSection title={t('Clients')} description={t('MCP clients that name themselves with a URL (Client ID Metadata Documents), and the fixed clients created from templates, as this server sees them.')}>
+  return <DetailSection title={t('Clients')} description={t('MCP clients that name themselves with a URL (Client ID Metadata Documents) or registered themselves (dynamic registration), and the fixed clients created from templates, as this server sees them.')}>
     <div className="flex flex-wrap items-center gap-3">
       <div role="tablist" aria-label={t('Filter clients by admission')} className="inline-flex rounded-lg border p-0.5">
         {tabs.map(a => <button key={a} type="button" role="tab" aria-selected={admission === a} onClick={() => setAdmission(a)}

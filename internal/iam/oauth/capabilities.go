@@ -8,14 +8,17 @@ import (
 
 // Offers is what this deployment really takes today, as discovery
 // advertises it: a capability is listed only when a client could use it
-// (never because the code supports it). Fields are added here as features
-// land (e.g. the registration endpoint, only where dynamic client
-// registration is enabled in some environment).
+// (never because the code supports it).
 type Offers struct {
 	// ClientMetadataDocuments: some environment has feature
 	// client_metadata_documents on and an active protected resource of it
 	// allows client metadata documents.
 	ClientMetadataDocuments bool
+	// DynamicRegistration: some environment has feature
+	// dynamic_client_registration on and an active protected resource of it
+	// allows dynamic registration (POST /oauth/register answers, discovery
+	// lists registration_endpoint).
+	DynamicRegistration bool
 }
 
 // Capabilities reads Offers (cached briefly, config.CapabilityCacheTTL).
@@ -29,10 +32,17 @@ type CapabilityRepository interface {
 	// protected resource (of an active application) that allows client
 	// metadata documents.
 	ClientMetadataEnvironments(ctx context.Context) ([]identity.EnvironmentID, error)
+	// DynamicRegistrationEnvironments are those with one that allows
+	// dynamic registration.
+	DynamicRegistrationEnvironments(ctx context.Context) ([]identity.EnvironmentID, error)
 }
 
 // With sets the metadata fields that depend on the deployment.
 func (d Discovery) With(o Offers) Discovery {
 	d.ClientIDMetadataDocumentSupported = o.ClientMetadataDocuments
+	d.RegistrationEndpoint = ""
+	if o.DynamicRegistration {
+		d.RegistrationEndpoint = d.Issuer + "/oauth/register"
+	}
 	return d
 }

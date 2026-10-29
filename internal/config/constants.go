@@ -137,6 +137,24 @@ const (
 	ClientExpireBatch    = 100
 )
 
+// Dynamic client registration (RFC 7591, POST /oauth/register). A request
+// body is at most ClientRegistrationMaxBytes; one address registers at
+// most ClientRegistrationsPerIPPerMinute clients a minute, and the
+// deployment keeps at most ClientRegistrationMaxUnused registrations no
+// authorization request named yet (a full store answers 429). A
+// registration never used goes after ClientRegistrationUnusedTTL; a used
+// one once no protected resource holds a client of it and nothing named it
+// for ClientRegistrationIdleTTL (client_registration_prune,
+// ClientRegistrationPruneBatch rows a round).
+const (
+	ClientRegistrationMaxBytes        = 5 * 1024
+	ClientRegistrationsPerIPPerMinute = 10
+	ClientRegistrationMaxUnused       = 10000
+	ClientRegistrationUnusedTTL       = 24 * time.Hour
+	ClientRegistrationIdleTTL         = 30 * 24 * time.Hour
+	ClientRegistrationPruneBatch      = 500
+)
+
 // OAuth 2.0 / OIDC lifespans (fosite).
 const (
 	OAuthAuthorizeCodeLifespan = 5 * time.Minute

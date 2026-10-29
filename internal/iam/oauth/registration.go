@@ -260,13 +260,15 @@ type Pending struct {
 type AdmissionState struct {
 	Admission string
 	Expires   *time.Time
-	// Disabled: the protected resource takes registered clients only
-	// (allow_client_metadata off).
+	// Disabled: the protected resource no longer takes clients of the
+	// row's source (allow_client_metadata or allow_dynamic_registration
+	// off).
 	Disabled bool
 }
 
 // Admitted reports whether the state lets the client finish an
-// authorization at now (Client.Admitted).
+// authorization at now (Client.Admitted; the source only has to be
+// external).
 func (a AdmissionState) Admitted(now time.Time) bool {
 	return Client{Source: SourceCIMD, Admission: a.Admission, AdmissionExpiresAt: a.Expires, Disabled: a.Disabled}.Admitted(now)
 }

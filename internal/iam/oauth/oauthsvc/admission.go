@@ -180,30 +180,33 @@ func (s *Admissions) ExpireApprovals(ctx context.Context) (bool, error) {
 	return n >= config.ClientExpireBatch, err
 }
 
-// ReconcileDocuments: see oauth.AdmissionCommands. An environment's flag is
-// read through the feature service (cached, shared by the replicas).
+// ReconcileDocuments: see oauth.AdmissionCommands. Each external source
+// has its own feature (oauth.SourceFeature), read through the feature
+// service (cached, shared by the replicas).
 func (s *Admissions) ReconcileDocuments(ctx context.Context) (bool, error) {
 	if s.features == nil {
 		return false, nil
 	}
-	environments, err := s.repository.ApprovedEnvironments(ctx)
-	if err != nil {
-		return false, err
-	}
 	more := false
-	for _, environment := range environments {
-		on, err := s.features.Enabled(ctx, environment, config.FeatureClientMetadataDocuments)
+	for _, source := range oauth.ExternalSources {
+		environments, err := s.repository.ApprovedEnvironments(ctx, source)
 		if err != nil {
 			return more, err
 		}
-		if on {
-			continue
+		for _, environment := range environments {
+			on, err := s.features.Enabled(ctx, environment, oauth.SourceFeature(source))
+			if err != nil {
+				return more, err
+			}
+			if on {
+				continue
+			}
+			n, err := s.repository.DemoteSource(ctx, environment, source, config.ClientExpireBatch)
+			if err != nil {
+				return more, err
+			}
+			more = more || n >= config.ClientExpireBatch
 		}
-		n, err := s.repository.DemoteDocuments(ctx, environment, config.ClientExpireBatch)
-		if err != nil {
-			return more, err
-		}
-		more = more || n >= config.ClientExpireBatch
 	}
 	return more, nil
 }

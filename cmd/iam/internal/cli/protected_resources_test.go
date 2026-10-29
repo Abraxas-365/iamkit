@@ -53,8 +53,8 @@ func TestProtectedResourceClients(t *testing.T) {
 }
 
 func TestProtectedResourceUpdateAndImpact(t *testing.T) {
-	_, _, seen, err := runCLI(t, ok(200, `{"id":"p1"}`), "protected-resources", "update", "p1", "--allow-client-metadata", "--client-admission", "open")
-	if err != nil || seen[0].Method != "PATCH" || !reflect.DeepEqual(seen[0].Body, map[string]any{"allow_client_metadata": true, "client_admission": "open"}) {
+	_, _, seen, err := runCLI(t, ok(200, `{"id":"p1"}`), "protected-resources", "update", "p1", "--allow-client-metadata", "--allow-dynamic-registration=false", "--client-admission", "open")
+	if err != nil || seen[0].Method != "PATCH" || !reflect.DeepEqual(seen[0].Body, map[string]any{"allow_client_metadata": true, "allow_dynamic_registration": false, "client_admission": "open"}) {
 		t.Fatalf("update: %v %+v", err, seen)
 	}
 	for _, args := range [][]string{{"protected-resources", "update", "p1"}, {"protected-resources", "update", "p1", "--client-admission", "maybe"}} {

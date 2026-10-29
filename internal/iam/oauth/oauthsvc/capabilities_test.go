@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/internal/cache/cachememory"
+	"github.com/Abraxas-365/iamkit/internal/config"
 	"github.com/Abraxas-365/iamkit/internal/iam/oauth"
 	"github.com/Abraxas-365/iamkit/internal/identity"
 )
 
 type fakeCapabilities struct {
 	environments []identity.EnvironmentID
+	registering  []identity.EnvironmentID
 	err          error
 	reads        int
 }
@@ -21,10 +23,44 @@ func (f *fakeCapabilities) ClientMetadataEnvironments(context.Context) ([]identi
 	return f.environments, f.err
 }
 
+func (f *fakeCapabilities) DynamicRegistrationEnvironments(context.Context) ([]identity.EnvironmentID, error) {
+	return f.registering, f.err
+}
+
 type flagsByEnvironment map[identity.EnvironmentID]bool
 
 func (f flagsByEnvironment) Enabled(_ context.Context, e identity.EnvironmentID, _ string) (bool, error) {
 	return f[e], nil
+}
+
+// flagsByName answers per (environment, feature).
+type flagsByName map[identity.EnvironmentID]map[string]bool
+
+func (f flagsByName) Enabled(_ context.Context, e identity.EnvironmentID, name string) (bool, error) {
+	return f[e][name], nil
+}
+
+func TestCapabilitiesDynamicRegistration(t *testing.T) {
+	ctx := context.Background()
+	a, b := identity.NewEnvironmentID(), identity.NewEnvironmentID()
+	for _, tc := range []struct {
+		name      string
+		documents []identity.EnvironmentID
+		register  []identity.EnvironmentID
+		flags     oauth.Features
+		want      oauth.Offers
+	}{
+		{"no feature service: never offered", nil, []identity.EnvironmentID{a}, nil, oauth.Offers{}},
+		{"allowed, feature off", nil, []identity.EnvironmentID{a}, flagsByName{a: {config.FeatureClientMetadataDocuments: true}}, oauth.Offers{}},
+		{"allowed and on", nil, []identity.EnvironmentID{a}, flagsByName{a: {config.FeatureDynamicClientRegistration: true}}, oauth.Offers{DynamicRegistration: true}},
+		{"on where nothing allows it", []identity.EnvironmentID{a}, []identity.EnvironmentID{b}, flagsByName{a: {config.FeatureDynamicClientRegistration: true}}, oauth.Offers{}},
+		{"each source by its own feature", []identity.EnvironmentID{a}, []identity.EnvironmentID{a}, flagsByName{a: {config.FeatureClientMetadataDocuments: true, config.FeatureDynamicClientRegistration: true}}, oauth.Offers{ClientMetadataDocuments: true, DynamicRegistration: true}},
+	} {
+		got, err := NewCapabilities(&fakeCapabilities{environments: tc.documents, registering: tc.register}, tc.flags, nil).Offered(ctx)
+		if err != nil || got != tc.want {
+			t.Errorf("%s: %+v, %v", tc.name, got, err)
+		}
+	}
 }
 
 func TestCapabilitiesClientMetadata(t *testing.T) {

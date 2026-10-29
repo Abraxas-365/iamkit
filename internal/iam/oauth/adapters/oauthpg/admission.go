@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"maps"
-	"net/url"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -63,11 +62,12 @@ func revokeClients(ctx context.Context, tx *sqlx.Tx, environment identity.Enviro
 }
 
 // externalRowView is the columns of an operator's view of a client.
-const externalViewColumns = `c.id,c.external_id,c.protected_resource_id,c.client_name,c.client_uri,c.logo_uri,c.redirect_uris,c.token_endpoint_auth_method,c.jwks_uri,c.admission,c.admission_expires_at,c.admission_source,c.metadata_fetched_at,c.last_used_at,c.discovered_at,
+const externalViewColumns = `c.id,c.source,c.external_id,c.protected_resource_id,c.client_name,c.client_uri,c.logo_uri,c.redirect_uris,c.token_endpoint_auth_method,c.jwks_uri,c.admission,c.admission_expires_at,c.admission_source,c.metadata_fetched_at,c.last_used_at,c.discovered_at,
 	(SELECT count(*) FROM oauth_client_access_requests a WHERE a.client_id=c.id) AS access_requests`
 
 type viewRow struct {
 	ID         identity.ClientID            `db:"id"`
+	Kind       string                       `db:"source"`
 	ExternalID string                       `db:"external_id"`
 	Protected  identity.ProtectedResourceID `db:"protected_resource_id"`
 	Name       string                       `db:"client_name"`
@@ -96,7 +96,7 @@ func (v viewRow) domain() oauth.ExternalClientView {
 	} else if v.Admission != oauth.AdmissionApproved {
 		source = ""
 	}
-	out := oauth.ExternalClientView{ID: v.ID, ClientID: v.ExternalID, Protected: v.Protected, Name: v.Name, ClientURI: v.ClientURI, LogoURI: v.LogoURI, Host: oauth.ClientHost(v.ExternalID), Redirects: redirects,
+	out := oauth.ExternalClientView{ID: v.ID, Source: v.Kind, ClientID: v.ExternalID, Protected: v.Protected, Name: v.Name, ClientURI: v.ClientURI, LogoURI: v.LogoURI, Host: oauth.ClientHost(v.ExternalID), Redirects: redirects,
 		AuthMethod: v.Method, JWKSURI: v.JWKSURI, Admission: v.Admission, AdmissionExpiresAt: v.Expires, AdmissionSource: source, AccessRequests: v.Requests, MetadataFetchedAt: v.Fetched, MetadataHash: oauth.MetadataHash(redirects, v.JWKSURI, v.Method), LastUsedAt: v.LastUsed, CreatedAt: v.Created}
 	if p, ok := oauth.PresetForClient(v.ExternalID); ok {
 		out.Preset, out.PresetName = p.Key, p.Name
@@ -105,7 +105,7 @@ func (v viewRow) domain() oauth.ExternalClientView {
 }
 
 func (r *Admission) ListExternalClients(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, filter oauth.ExternalClientFilter, page query.Pagination) (query.Paginated[oauth.ExternalClientView], error) {
-	where := `c.environment_id=$1 AND c.protected_resource_id=$2 AND c.source='cimd' AND ($3='' OR c.admission=$3)`
+	where := `c.environment_id=$1 AND c.protected_resource_id=$2 AND c.source<>'registered' AND ($3='' OR c.admission=$3)`
 	var total int
 	if err := r.db.GetContext(ctx, &total, `SELECT count(*) FROM oauth_clients c WHERE `+where, environment, protected, filter.Admission); err != nil {
 		return query.Paginated[oauth.ExternalClientView]{}, failure(err)
@@ -123,7 +123,7 @@ func (r *Admission) ListExternalClients(ctx context.Context, environment identit
 
 func (r *Admission) FindExternalClient(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID) (oauth.ExternalClientView, error) {
 	var row viewRow
-	err := r.db.GetContext(ctx, &row, `SELECT `+externalViewColumns+` FROM oauth_clients c WHERE c.environment_id=$1 AND c.protected_resource_id=$2 AND c.id=$3 AND c.source='cimd'`, environment, protected, client)
+	err := r.db.GetContext(ctx, &row, `SELECT `+externalViewColumns+` FROM oauth_clients c WHERE c.environment_id=$1 AND c.protected_resource_id=$2 AND c.id=$3 AND c.source<>'registered'`, environment, protected, client)
 	if errors.Is(err, sql.ErrNoRows) {
 		return oauth.ExternalClientView{}, errx.NotFound("client not found")
 	}
@@ -138,10 +138,10 @@ func (r *Admission) ExternalClientImpact(ctx context.Context, environment identi
 		Sessions int  `db:"sessions"`
 		Users    int  `db:"users"`
 	}
-	err := r.db.GetContext(ctx, &out, `SELECT EXISTS(SELECT 1 FROM oauth_clients WHERE id=$3 AND environment_id=$1 AND protected_resource_id=$2 AND source='cimd') AS found,
+	err := r.db.GetContext(ctx, &out, `SELECT EXISTS(SELECT 1 FROM oauth_clients WHERE id=$3 AND environment_id=$1 AND protected_resource_id=$2 AND source<>'registered') AS found,
 		count(s.id) AS sessions, count(DISTINCT s.user_id) AS users
 		FROM sessions s WHERE s.environment_id=$1 AND s.oauth_client_id=$3 AND s.revoked_at IS NULL AND s.expires_at>now()
-		AND EXISTS(SELECT 1 FROM oauth_clients WHERE id=$3 AND environment_id=$1 AND protected_resource_id=$2 AND source='cimd')`, environment, protected, client)
+		AND EXISTS(SELECT 1 FROM oauth_clients WHERE id=$3 AND environment_id=$1 AND protected_resource_id=$2 AND source<>'registered')`, environment, protected, client)
 	if err != nil {
 		return oauth.ExternalClientImpact{}, failure(err)
 	}
@@ -187,7 +187,7 @@ func lockClientForDelete(ctx context.Context, tx *sqlx.Tx, environment identity.
 
 func lockClientAs(ctx context.Context, tx *sqlx.Tx, environment identity.EnvironmentID, protected identity.ProtectedResourceID, client identity.ClientID, lock string) (externalRow, error) {
 	var row externalRow
-	err := tx.GetContext(ctx, &row, `SELECT id,client_name,client_uri,logo_uri,redirect_uris,grant_types,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks_uri,metadata_fetched_at,admission,admission_source,approved_metadata_hash FROM oauth_clients WHERE id=$1 AND environment_id=$2 AND protected_resource_id=$3 AND source='cimd' `+lock, client, environment, protected)
+	err := tx.GetContext(ctx, &row, `SELECT id,client_name,client_uri,logo_uri,redirect_uris,grant_types,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks_uri,metadata_fetched_at,admission,admission_source,approved_metadata_hash FROM oauth_clients WHERE id=$1 AND environment_id=$2 AND protected_resource_id=$3 AND source<>'registered' `+lock, client, environment, protected)
 	if errors.Is(err, sql.ErrNoRows) {
 		return row, errx.NotFound("client not found")
 	}
@@ -286,7 +286,7 @@ func (r *Admission) ExpireApprovals(ctx context.Context, limit int) (int, error)
 			Protected   identity.ProtectedResourceID `db:"protected_resource_id"`
 		}
 		var rows []due
-		if err := tx.SelectContext(ctx, &rows, `SELECT id,environment_id,protected_resource_id FROM oauth_clients WHERE source='cimd' AND admission='approved' AND admission_expires_at IS NOT NULL AND admission_expires_at<=now() ORDER BY admission_expires_at LIMIT $1 FOR NO KEY UPDATE SKIP LOCKED`, limit); err != nil {
+		if err := tx.SelectContext(ctx, &rows, `SELECT id,environment_id,protected_resource_id FROM oauth_clients WHERE source<>'registered' AND admission='approved' AND admission_expires_at IS NOT NULL AND admission_expires_at<=now() ORDER BY admission_expires_at LIMIT $1 FOR NO KEY UPDATE SKIP LOCKED`, limit); err != nil {
 			return failure(err)
 		}
 		for _, d := range rows {
@@ -308,16 +308,16 @@ func (r *Admission) ExpireApprovals(ctx context.Context, limit int) (int, error)
 	return count, err
 }
 
-func (r *Admission) ApprovedEnvironments(ctx context.Context) ([]identity.EnvironmentID, error) {
+func (r *Admission) ApprovedEnvironments(ctx context.Context, source string) ([]identity.EnvironmentID, error) {
 	var out []identity.EnvironmentID
-	err := r.db.SelectContext(ctx, &out, `SELECT DISTINCT environment_id FROM oauth_clients WHERE source='cimd' AND admission='approved'`)
+	err := r.db.SelectContext(ctx, &out, `SELECT DISTINCT environment_id FROM oauth_clients WHERE source=$1 AND source<>'registered' AND admission='approved'`, source)
 	return out, failure(err)
 }
 
-func (r *Admission) DemoteDocuments(ctx context.Context, environment identity.EnvironmentID, limit int) (int, error) {
+func (r *Admission) DemoteSource(ctx context.Context, environment identity.EnvironmentID, source string, limit int) (int, error) {
 	n := 0
 	err := eventpg.Tx(ctx, r.db, func(tx *sqlx.Tx) (err error) {
-		n, err = demoteApproved(ctx, tx, environment, "", nil, limit, oauth.DemotionFeatureOff, false)
+		n, err = demoteApproved(ctx, tx, environment, "", nil, source, limit, oauth.DemotionFeatureOff, false)
 		return err
 	})
 	return n, err
@@ -396,7 +396,7 @@ func admitByPolicy(ctx context.Context, tx *sqlx.Tx, m oauth.Mutation, protected
 	}
 	if err := tx.SelectContext(ctx, &rows, `SELECT c.id,c.external_id,c.protected_resource_id,c.client_name,c.client_uri,c.logo_uri,c.redirect_uris,c.grant_types,c.token_endpoint_auth_method,c.token_endpoint_auth_signing_alg,c.jwks_uri,c.metadata_fetched_at,c.admission,c.admission_source,c.approved_metadata_hash,pr.client_admission
 		FROM oauth_clients c JOIN protected_resources pr ON pr.id=c.protected_resource_id AND pr.environment_id=c.environment_id
-		WHERE c.environment_id=$1 AND c.source='cimd' AND c.admission='pending' AND pr.allow_client_metadata AND c.external_id LIKE $3 AND ($2::uuid IS NULL OR c.protected_resource_id=$2) ORDER BY c.id FOR NO KEY UPDATE OF c`, m.Environment, arg, prefix+"%"); err != nil {
+		WHERE c.environment_id=$1 AND c.source<>'registered' AND c.admission='pending' AND `+allowsSource+` AND c.external_id LIKE $3 AND ($2::uuid IS NULL OR c.protected_resource_id=$2) ORDER BY c.id FOR NO KEY UPDATE OF c`, m.Environment, arg, prefix+"%"); err != nil {
 		return failure(err)
 	}
 	entries, err := allowlistOf(ctx, tx, m.Environment)
@@ -404,11 +404,7 @@ func admitByPolicy(ctx context.Context, tx *sqlx.Tx, m oauth.Mutation, protected
 		return err
 	}
 	for _, row := range rows {
-		u, err := url.Parse(row.ExternalID)
-		if err != nil {
-			continue
-		}
-		source := oauth.ExternalTarget{ClientAdmission: row.Mode, Allowlist: entriesFor(entries, row.Protected)}.AdmissionSource(u)
+		source := oauth.ExternalTarget{ClientAdmission: row.Mode, Allowlist: entriesFor(entries, row.Protected)}.AdmissionSource(row.ExternalID)
 		if source == "" {
 			continue
 		}
@@ -480,13 +476,14 @@ func demote(ctx context.Context, tx *sqlx.Tx, environment identity.EnvironmentID
 	return nil
 }
 
-// demoteApproved takes back every approval of the protected resource (or
-// the whole environment when protected is nil), manual ones too: the
-// server no longer takes clients named by a document. wait decides a row
+// demoteApproved takes back every approval of clients of source (SourceCIMD
+// or SourceDCR) at the protected resource (or the whole environment when
+// protected is nil), manual ones too: the server, or the environment, no
+// longer takes clients of that source. wait decides a row
 // held by a running authorization (Complete): an operator's change waits
 // for it (N-2), so no approval survives the change; the reconcile job skips
 // it and takes it on its next round.
-func demoteApproved(ctx context.Context, tx *sqlx.Tx, environment identity.EnvironmentID, actor string, protected *identity.ProtectedResourceID, limit int, reason string, wait bool) (int, error) {
+func demoteApproved(ctx context.Context, tx *sqlx.Tx, environment identity.EnvironmentID, actor string, protected *identity.ProtectedResourceID, source string, limit int, reason string, wait bool) (int, error) {
 	var arg any
 	if protected != nil {
 		arg = *protected
@@ -497,7 +494,7 @@ func demoteApproved(ctx context.Context, tx *sqlx.Tx, environment identity.Envir
 	}
 	var rows []approvedRow
 	if err := tx.SelectContext(ctx, &rows, `SELECT c.id,c.external_id,c.protected_resource_id,c.admission_source,'' AS client_admission FROM oauth_clients c
-		WHERE c.environment_id=$1 AND c.source='cimd' AND c.admission='approved' AND ($2::uuid IS NULL OR c.protected_resource_id=$2) ORDER BY c.id LIMIT $3 `+lock, environment, arg, limit); err != nil {
+		WHERE c.environment_id=$1 AND c.source=$4 AND c.source<>'registered' AND c.admission='approved' AND ($2::uuid IS NULL OR c.protected_resource_id=$2) ORDER BY c.id LIMIT $3 `+lock, environment, arg, limit, source); err != nil {
 		return 0, failure(err)
 	}
 	return len(rows), demote(ctx, tx, environment, actor, rows, reason)
@@ -515,7 +512,7 @@ func reconcilePolicy(ctx context.Context, tx *sqlx.Tx, environment identity.Envi
 	}
 	var rows []approvedRow
 	if err := tx.SelectContext(ctx, &rows, `SELECT c.id,c.external_id,c.protected_resource_id,c.admission_source,pr.client_admission FROM oauth_clients c JOIN protected_resources pr ON pr.id=c.protected_resource_id AND pr.environment_id=c.environment_id
-		WHERE c.environment_id=$1 AND c.source='cimd' AND c.admission='approved' AND c.admission_source IN ('allowlist','open','preset') AND ($2::uuid IS NULL OR c.protected_resource_id=$2) AND c.external_id LIKE $3 ORDER BY c.id FOR NO KEY UPDATE OF c`, environment, arg, prefix+"%"); err != nil {
+		WHERE c.environment_id=$1 AND c.source<>'registered' AND c.admission='approved' AND c.admission_source IN ('allowlist','open','preset') AND ($2::uuid IS NULL OR c.protected_resource_id=$2) AND c.external_id LIKE $3 ORDER BY c.id FOR NO KEY UPDATE OF c`, environment, arg, prefix+"%"); err != nil {
 		return failure(err)
 	}
 	if len(rows) == 0 {
@@ -527,11 +524,7 @@ func reconcilePolicy(ctx context.Context, tx *sqlx.Tx, environment identity.Envi
 	}
 	var gone []approvedRow
 	for _, row := range rows {
-		u, err := url.Parse(row.ExternalID)
-		source := ""
-		if err == nil {
-			source = oauth.ExternalTarget{ClientAdmission: row.Mode, Allowlist: entriesFor(entries, row.Protected)}.AdmissionSource(u)
-		}
+		source := oauth.ExternalTarget{ClientAdmission: row.Mode, Allowlist: entriesFor(entries, row.Protected)}.AdmissionSource(row.ExternalID)
 		switch {
 		case source == "":
 			gone = append(gone, row)

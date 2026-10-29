@@ -27,6 +27,13 @@ type fakeExternal struct {
 	target   oauth.ExternalTarget
 	// stored, when set, is the row FindExternal answers.
 	stored *oauth.Client
+	// registrations are the dynamic registrations Registration finds.
+	registrations map[string]oauth.Registered
+}
+
+func (f *fakeExternal) Registration(_ context.Context, clientID string) (oauth.Registered, bool, error) {
+	r, ok := f.registrations[clientID]
+	return r, ok, nil
 }
 
 func (f *fakeExternal) ExternalTarget(context.Context, string) (oauth.ExternalTarget, error) {
@@ -127,7 +134,7 @@ func mustParse(t *testing.T, raw string) *url.URL {
 func TestResolveWritesNothingForUnapprovedClient(t *testing.T) {
 	target := oauth.ExternalTarget{Environment: identity.NewEnvironmentID(), Protected: identity.NewProtectedResourceID(), ClientAdmission: oauth.ClientAdmissionAllowlist}
 	s, repo, _, _ := newExternal(t, target)
-	client, err := s.resolve(context.Background(), target, mustParse(t, "https://claude.ai/oauth/app"))
+	client, err := s.resolve(context.Background(), target, "https://claude.ai/oauth/app")
 	if err != nil || !client.ID.IsZero() || client.Admission != oauth.AdmissionPending {
 		t.Fatalf("client = %+v, %v", client, err)
 	}
@@ -140,7 +147,7 @@ func TestResolveWritesNothingForUnapprovedClient(t *testing.T) {
 func TestResolvePersistsApprovedByPolicy(t *testing.T) {
 	target := oauth.ExternalTarget{Environment: identity.NewEnvironmentID(), Protected: identity.NewProtectedResourceID(), ClientAdmission: oauth.ClientAdmissionOpen}
 	s, repo, _, _ := newExternal(t, target)
-	if _, err := s.resolve(context.Background(), target, mustParse(t, "https://claude.ai/oauth/app")); err != nil {
+	if _, err := s.resolve(context.Background(), target, "https://claude.ai/oauth/app"); err != nil {
 		t.Fatal(err)
 	}
 	if len(repo.saved) != 1 || repo.saved[0].Admission != oauth.AdmissionApproved || repo.saved[0].Source != oauth.SourceOpen {
@@ -153,7 +160,7 @@ func TestResolveRefreshesKnownRow(t *testing.T) {
 	target := oauth.ExternalTarget{Environment: identity.NewEnvironmentID(), Protected: identity.NewProtectedResourceID(), ClientAdmission: oauth.ClientAdmissionAllowlist}
 	s, repo, _, _ := newExternal(t, target)
 	repo.known = identity.NewClientID()
-	if _, err := s.resolve(context.Background(), target, mustParse(t, "https://claude.ai/oauth/app")); err != nil {
+	if _, err := s.resolve(context.Background(), target, "https://claude.ai/oauth/app"); err != nil {
 		t.Fatal(err)
 	}
 	if len(repo.saved) != 1 || repo.unsaved != 0 {
@@ -168,7 +175,7 @@ func TestFetchBudgetPerEnvironment(t *testing.T) {
 	target := oauth.ExternalTarget{Environment: identity.NewEnvironmentID(), Protected: identity.NewProtectedResourceID(), ClientAdmission: oauth.ClientAdmissionAllowlist}
 	s, repo, docs, _ := newExternal(t, target)
 	read := func(target oauth.ExternalTarget, i int) error {
-		_, err := s.resolve(context.Background(), target, mustParse(t, "https://claude.ai/oauth/app"+strconv.Itoa(i)))
+		_, err := s.resolve(context.Background(), target, "https://claude.ai/oauth/app"+strconv.Itoa(i))
 		return err
 	}
 	budget := func(err error) bool {
@@ -211,7 +218,7 @@ func TestFetchBudgetPerAddress(t *testing.T) {
 	s, _, docs, _ := newExternal(t, target)
 	from := func(ip string, i int) error {
 		ctx := identity.WithClientInfo(context.Background(), identity.NewClientInfo(ip, ""))
-		_, err := s.resolve(ctx, target, mustParse(t, "https://claude.ai/oauth/ip"+strconv.Itoa(i)))
+		_, err := s.resolve(ctx, target, "https://claude.ai/oauth/ip"+strconv.Itoa(i))
 		return err
 	}
 	for i := range config.ClientMetadataFetchesPerIPPerMinute {
@@ -251,7 +258,7 @@ func TestStaleIfError(t *testing.T) {
 	for name, failure := range map[string]error{"unavailable": oauth.ErrDocumentUnavailable("host down"), "budget": oauth.ErrFetchBudget()} {
 		docs.fail = failure
 		stored(oauth.AdmissionApproved, config.ClientMetadataMaxTTL)
-		c, err := s.resolve(context.Background(), target, u)
+		c, err := s.resolve(context.Background(), target, u.String())
 		if err != nil || c == nil || c.ID != repo.known {
 			t.Fatalf("%s: stored metadata not served: %v", name, err)
 		}
@@ -261,23 +268,23 @@ func TestStaleIfError(t *testing.T) {
 	}
 	docs.fail = oauth.ErrDocumentUnavailable("host down")
 	stored(oauth.AdmissionApproved, config.ClientMetadataMaxTTL+config.ClientMetadataStaleFor+time.Minute)
-	if _, err := s.resolve(context.Background(), target, u); err == nil {
+	if _, err := s.resolve(context.Background(), target, u.String()); err == nil {
 		t.Fatal("served past the staleness bound")
 	}
 	stored(oauth.AdmissionPending, time.Hour)
-	if _, err := s.resolve(context.Background(), target, u); err == nil {
+	if _, err := s.resolve(context.Background(), target, u.String()); err == nil {
 		t.Fatal("a pending client was served from storage")
 	}
 	// The document is wrong, not unreachable: it stands.
 	docs.fail = errx.Validation("redirect_uris is required")
 	stored(oauth.AdmissionApproved, time.Hour)
-	if _, err := s.resolve(context.Background(), target, u); err == nil {
+	if _, err := s.resolve(context.Background(), target, u.String()); err == nil {
 		t.Fatal("an invalid document was replaced by storage")
 	}
 	// A client with no row has nothing to serve.
 	docs.fail = oauth.ErrDocumentUnavailable("host down")
 	repo.known = identity.ClientID{}
-	if _, err := s.resolve(context.Background(), target, u); err == nil {
+	if _, err := s.resolve(context.Background(), target, u.String()); err == nil {
 		t.Fatal("served a client with no row")
 	}
 }
@@ -328,5 +335,124 @@ func TestPruneExternalReportsMore(t *testing.T) {
 	repo.pruned = 3
 	if more, err := s.PruneExternal(context.Background()); err != nil || more {
 		t.Fatalf("short batch: %v %v", more, err)
+	}
+}
+
+// flagsOn turns on the named features in every environment.
+type flagsOn map[string]bool
+
+func (f flagsOn) Enabled(_ context.Context, _ identity.EnvironmentID, name string) (bool, error) {
+	return f[name], nil
+}
+
+const testDCR = "dcr_0123456789abcdef0123456789abcdef"
+
+// A dynamically registered client is resolved from its registration (no
+// fetch), refused unless the server and the environment take such clients,
+// and, on an allowlist server, waits without a row.
+func TestExternalClientDynamicRegistration(t *testing.T) {
+	ctx := context.Background()
+	resource := []string{"https://mcp.example/mcp"}
+	target := oauth.ExternalTarget{Environment: identity.NewEnvironmentID(), Protected: identity.NewProtectedResourceID(), AllowClientMetadata: true, ClientAdmission: oauth.ClientAdmissionAllowlist}
+	s, repo, docs, _ := newExternal(t, target)
+	repo.registrations = map[string]oauth.Registered{testDCR: {ClientID: testDCR, Name: "Tool", Redirects: []string{"http://127.0.0.1/cb"}, GrantTypes: []string{"authorization_code"}, CreatedAt: time.Now()}}
+	code := func(err error) string {
+		var e *errx.Error
+		if errors.As(err, &e) {
+			return e.Code
+		}
+		return ""
+	}
+	// No feature service: dynamic registration is off.
+	if _, err := s.ExternalClient(ctx, testDCR, resource); code(err) != oauth.CodeClientRegisteredOnly {
+		t.Fatalf("server without dcr: %v", err)
+	}
+	repo.target.AllowDynamicRegistration = true
+	if _, err := s.ExternalClient(ctx, testDCR, resource); code(err) != oauth.CodeClientRegisteredOnly {
+		t.Fatalf("feature off: %v", err)
+	}
+	s.SetExternalClients(docs, flagsOn{config.FeatureDynamicClientRegistration: true}, nil)
+	client, err := s.ExternalClient(ctx, testDCR, resource)
+	if err != nil || client == nil || !client.ID.IsZero() || client.Admission != oauth.AdmissionPending {
+		t.Fatalf("pending dcr client: %+v %v", client, err)
+	}
+	if docs.asked != 0 || len(repo.saved) != 0 || repo.unsaved != 1 {
+		t.Fatalf("asked=%d saved=%d unsaved=%d", docs.asked, len(repo.saved), repo.unsaved)
+	}
+	// An unknown registration is an unknown client.
+	if _, err := s.ExternalClient(ctx, "dcr_ffffffffffffffffffffffffffffffff", resource); err == nil || code(err) == oauth.CodeClientRegisteredOnly {
+		t.Fatalf("unknown registration: %v", err)
+	}
+	// An open server admits it by policy and writes the row.
+	repo.target.ClientAdmission = oauth.ClientAdmissionOpen
+	if _, err := s.ExternalClient(ctx, testDCR, resource); err != nil || len(repo.saved) != 1 {
+		t.Fatalf("open: %v saved=%d", err, len(repo.saved))
+	}
+	saved := repo.saved[0]
+	if saved.Document.RowSource() != oauth.SourceDCR || saved.Admission != oauth.AdmissionApproved || saved.Source != oauth.SourceOpen {
+		t.Fatalf("saved %+v", saved)
+	}
+	// Documents stay governed by their own flag.
+	if _, err := s.ExternalClient(ctx, "https://claude.ai/oauth/app", resource); code(err) != oauth.CodeClientDisabled {
+		t.Fatalf("document with its feature off: %v", err)
+	}
+}
+
+type fakeRegistrations struct {
+	saved     []oauth.Registered
+	maxUnused int
+	full      bool
+	pruned    int
+}
+
+func (f *fakeRegistrations) SaveRegistration(_ context.Context, r oauth.Registered, maxUnused int) error {
+	if f.full {
+		return oauth.ErrRegistrationsFull()
+	}
+	f.saved = append(f.saved, r)
+	f.maxUnused = maxUnused
+	return nil
+}
+
+func (f *fakeRegistrations) PruneRegistrations(_ context.Context, unusedBefore, idleBefore time.Time, limit int) (int, error) {
+	if limit != config.ClientRegistrationPruneBatch || time.Since(unusedBefore) < config.ClientRegistrationUnusedTTL-time.Minute || time.Since(idleBefore) < config.ClientRegistrationIdleTTL-time.Minute {
+		return 0, errors.New("wrong prune arguments")
+	}
+	return f.pruned, nil
+}
+
+type fixedOffers oauth.Offers
+
+func (f fixedOffers) Offered(context.Context) (oauth.Offers, error) { return oauth.Offers(f), nil }
+
+func TestRegister(t *testing.T) {
+	ctx := context.Background()
+	input := oauth.ClientRegistration{RedirectURIs: []string{"http://127.0.0.1:33418/callback"}, ClientName: "Tool"}
+	repo := &fakeRegistrations{}
+	// Not offered anywhere: 404, nothing stored.
+	for _, offers := range []oauth.Capabilities{nil, fixedOffers{ClientMetadataDocuments: true}} {
+		if _, err := NewRegistrations(repo, offers).Register(ctx, input); err == nil || len(repo.saved) != 0 {
+			t.Fatalf("registered while not offered: %v", err)
+		}
+	}
+	s := NewRegistrations(repo, fixedOffers{DynamicRegistration: true})
+	got, err := s.Register(ctx, input)
+	if err != nil || !oauth.DynamicClientID(got.ClientID) || got.CreatedAt.IsZero() || len(repo.saved) != 1 || repo.maxUnused != config.ClientRegistrationMaxUnused {
+		t.Fatalf("register: %+v %v", got, err)
+	}
+	if resp := got.Response(); resp.TokenEndpointAuthMethod != "none" || resp.ClientID != got.ClientID {
+		t.Fatalf("response %+v", resp)
+	}
+	// Invalid metadata is refused before anything is stored.
+	if _, err := s.Register(ctx, oauth.ClientRegistration{RedirectURIs: []string{"http://evil.example/cb"}}); err == nil || len(repo.saved) != 1 {
+		t.Fatalf("invalid redirect: %v", err)
+	}
+	repo.full = true
+	if _, err := s.Register(ctx, input); err == nil {
+		t.Fatal("registered past the cap")
+	}
+	repo.pruned = config.ClientRegistrationPruneBatch
+	if more, err := s.PruneRegistrations(ctx); err != nil || !more {
+		t.Fatalf("prune: %v %v", more, err)
 	}
 }

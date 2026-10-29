@@ -408,9 +408,10 @@ func (s *Store) Refusal(ctx context.Context) error {
 
 // admitted locks an external client's row in tx and reports whether it
 // admits the client now, with the state it read; a row that is gone does
-// not (nil state). It does not read the client_metadata_documents feature
-// (W5-4): the handler's at-use Client.Admitted check does, and a flag
-// turned off between that check and this transaction is caught by the
+// not (nil state). It does not read the source's feature
+// (client_metadata_documents, dynamic_client_registration; W5-4): the
+// handler's at-use Client.Admitted check does, and a flag turned off
+// between that check and this transaction is caught by the
 // client_documents_reconcile job, which demotes and revokes.
 func (s *Store) admitted(ctx context.Context, tx *sqlx.Tx, client identity.ClientID) (bool, *oauth.AdmissionState, error) {
 	var row struct {
@@ -418,7 +419,7 @@ func (s *Store) admitted(ctx context.Context, tx *sqlx.Tx, client identity.Clien
 		Expires   *time.Time `db:"admission_expires_at"`
 		Allow     bool       `db:"allow_client_metadata"`
 	}
-	err := tx.GetContext(ctx, &row, `SELECT c.admission,c.admission_expires_at,pr.allow_client_metadata FROM oauth_clients c JOIN protected_resources pr ON pr.id=c.protected_resource_id AND pr.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND c.source='cimd' AND c.active FOR SHARE OF c`, client, s.Environment)
+	err := tx.GetContext(ctx, &row, `SELECT c.admission,c.admission_expires_at,CASE c.source WHEN 'dcr' THEN pr.allow_dynamic_registration ELSE pr.allow_client_metadata END AS allow_client_metadata FROM oauth_clients c JOIN protected_resources pr ON pr.id=c.protected_resource_id AND pr.environment_id=c.environment_id WHERE c.id=$1 AND c.environment_id=$2 AND c.source<>'registered' AND c.active FOR SHARE OF c`, client, s.Environment)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil, nil
 	}

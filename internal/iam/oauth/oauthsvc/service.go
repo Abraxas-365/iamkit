@@ -247,10 +247,10 @@ func (s *Service) lookup(ctx context.Context, id identity.ClientID, find func(co
 // (refresh, introspection, opaque tokens, tickets) is refused at once
 // without waiting for the reconcile job (M-2).
 func (s *Service) gated(ctx context.Context, client *oauth.Client) (*oauth.Client, error) {
-	if client == nil || !client.External() || s.features == nil {
+	if client == nil || !client.External() {
 		return client, nil
 	}
-	on, err := s.features.Enabled(ctx, client.Environment, config.FeatureClientMetadataDocuments)
+	on, err := s.sourceOn(ctx, client.Environment, client.Source)
 	if err != nil {
 		return nil, err
 	}

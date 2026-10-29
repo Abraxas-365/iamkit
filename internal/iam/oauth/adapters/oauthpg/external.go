@@ -19,6 +19,11 @@ import (
 
 var _ oauth.ExternalRepository = (*Repository)(nil)
 
+// allowsSource is whether the protected resource pr takes clients of the
+// source of the client row c: dynamic registrations need
+// allow_dynamic_registration, documents allow_client_metadata.
+const allowsSource = `CASE c.source WHEN 'dcr' THEN pr.allow_dynamic_registration ELSE pr.allow_client_metadata END`
+
 func (r *Repository) ExternalTarget(ctx context.Context, uri string) (oauth.ExternalTarget, error) {
 	return r.externalTarget(ctx, "pr.uri=$1", uri)
 }
@@ -40,16 +45,17 @@ func (r *Repository) externalTarget(ctx context.Context, where string, arg any) 
 		Application identity.ApplicationID       `db:"application_id"`
 		Resource    identity.ResourceID          `db:"resource_id"`
 		Allow       bool                         `db:"allow_client_metadata"`
+		AllowDCR    bool                         `db:"allow_dynamic_registration"`
 		Admission   string                       `db:"client_admission"`
 	}
-	err := r.db.GetContext(ctx, &row, `SELECT pr.environment_id,pr.id,pr.application_id,pr.resource_id,pr.allow_client_metadata,pr.client_admission FROM protected_resources pr JOIN applications a ON a.id=pr.application_id AND a.environment_id=pr.environment_id WHERE `+where+` AND pr.active AND a.active`, arg)
+	err := r.db.GetContext(ctx, &row, `SELECT pr.environment_id,pr.id,pr.application_id,pr.resource_id,pr.allow_client_metadata,pr.allow_dynamic_registration,pr.client_admission FROM protected_resources pr JOIN applications a ON a.id=pr.application_id AND a.environment_id=pr.environment_id WHERE `+where+` AND pr.active AND a.active`, arg)
 	if errors.Is(err, sql.ErrNoRows) {
 		return oauth.ExternalTarget{}, errx.NotFound("protected resource not found")
 	}
 	if err != nil {
 		return oauth.ExternalTarget{}, failure(err)
 	}
-	out := oauth.ExternalTarget{Environment: row.Environment, Protected: row.Protected, Application: row.Application, Resource: row.Resource, AllowClientMetadata: row.Allow, ClientAdmission: row.Admission}
+	out := oauth.ExternalTarget{Environment: row.Environment, Protected: row.Protected, Application: row.Application, Resource: row.Resource, AllowClientMetadata: row.Allow, AllowDynamicRegistration: row.AllowDCR, ClientAdmission: row.Admission}
 	err = r.db.SelectContext(ctx, &out.Allowlist, `SELECT id,environment_id,protected_resource_id,origin,path_prefix,preset,created_at FROM oauth_client_allowlist WHERE environment_id=$1 AND (protected_resource_id IS NULL OR protected_resource_id=$2)`, row.Environment, row.Protected)
 	return out, failure(err)
 }
@@ -79,7 +85,7 @@ func (r *Repository) UnsavedExternal(ctx context.Context, target oauth.ExternalT
 	}
 	return &oauth.Client{Environment: target.Environment, Application: target.Application, Resource: target.Resource, Audience: row.Audience, Redirects: slices.Clone(doc.Redirects),
 		Public: doc.Public(), HostedLogin: true, Auth: doc.Auth, AccessTokenFormat: oauth.TokenFormatJWT, GrantTypes: slices.Clone(doc.GrantTypes), Protected: row.target(),
-		Source: oauth.SourceCIMD, ExternalID: doc.ExternalID, Name: doc.Name, ClientURI: doc.ClientURI, LogoURI: doc.LogoURI, Admission: oauth.AdmissionPending}, nil
+		Source: doc.RowSource(), ExternalID: doc.ExternalID, Name: doc.Name, ClientURI: doc.ClientURI, LogoURI: doc.LogoURI, Admission: oauth.AdmissionPending}, nil
 }
 
 // externalRow is what a client's document set on its row.
@@ -138,12 +144,17 @@ func insertExternal(ctx context.Context, tx *sqlx.Tx, target oauth.ExternalTarge
 	} else {
 		source = ""
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,hosted_login,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks_uri,grant_types,source,external_id,protected_resource_id,admission,admission_source,approved_metadata_hash,client_name,client_uri,logo_uri,metadata_fetched_at) VALUES($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,'cimd',$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
-		id, target.Environment, target.Application, target.Resource, pq.StringArray(doc.Redirects), doc.Public(), doc.Auth.Method, doc.Auth.SigningAlg, doc.Auth.JWKSURI, pq.StringArray(doc.GrantTypes), doc.ExternalID, target.Protected, admission, source, hash, doc.Name, doc.ClientURI, doc.LogoURI, fetched); err != nil {
+	if doc.RowSource() == oauth.SourceDCR {
+		if err := markRegistrationUsed(ctx, tx, doc.ExternalID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO oauth_clients(id,environment_id,application_id,resource_id,redirect_uris,public,hosted_login,token_endpoint_auth_method,token_endpoint_auth_signing_alg,jwks_uri,grant_types,source,external_id,protected_resource_id,admission,admission_source,approved_metadata_hash,client_name,client_uri,logo_uri,metadata_fetched_at) VALUES($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$20,$11,$12,$13,$14,$15,$16,$17,$18,$19)`,
+		id, target.Environment, target.Application, target.Resource, pq.StringArray(doc.Redirects), doc.Public(), doc.Auth.Method, doc.Auth.SigningAlg, doc.Auth.JWKSURI, pq.StringArray(doc.GrantTypes), doc.ExternalID, target.Protected, admission, source, hash, doc.Name, doc.ClientURI, doc.LogoURI, fetched, doc.RowSource()); err != nil {
 		return failure(err)
 	}
 	return eventpg.Emit(ctx, tx, target.Environment, "", event.OAuthClientDiscovered, event.Subject{Kind: "oauth_client", ID: id.String()},
-		map[string]any{"client_id": doc.ExternalID, "client_name": doc.Name, "protected_resource_id": target.Protected.String(), "admission": admission})
+		map[string]any{"client_id": doc.ExternalID, "client_name": doc.Name, "protected_resource_id": target.Protected.String(), "admission": admission, "source": doc.RowSource()})
 }
 
 func (r *Repository) SaveExternalClient(ctx context.Context, save oauth.ExternalSave) (identity.ClientID, error) {
@@ -188,7 +199,7 @@ func (r *Repository) SaveExternalClient(ctx context.Context, save oauth.External
 			row.ID, pq.StringArray(doc.Redirects), doc.Public(), doc.Auth.Method, doc.Auth.SigningAlg, doc.Auth.JWKSURI, pq.StringArray(doc.GrantTypes), doc.Name, doc.ClientURI, doc.LogoURI, fetched, admission, revoked, hash); err != nil {
 			return failure(err)
 		}
-		data := map[string]any{"client_id": doc.ExternalID, "protected_resource_id": target.Protected.String(), "source": oauth.SourceCIMD}
+		data := map[string]any{"client_id": doc.ExternalID, "protected_resource_id": target.Protected.String(), "source": doc.RowSource()}
 		if changed {
 			data["approval_metadata_changed"] = true
 			data["admission_source"] = row.Source
@@ -253,7 +264,7 @@ func (r *Repository) RequestExternalAccess(ctx context.Context, access oauth.Acc
 				return failure(err)
 			}
 			var pending int
-			if err = tx.GetContext(ctx, &pending, `SELECT count(*) FROM oauth_clients WHERE environment_id=$1 AND source='cimd' AND admission='pending'`, target.Environment); err != nil {
+			if err = tx.GetContext(ctx, &pending, `SELECT count(*) FROM oauth_clients WHERE environment_id=$1 AND source<>'registered' AND admission='pending'`, target.Environment); err != nil {
 				return failure(err)
 			}
 			if pending >= access.MaxPending {
@@ -330,7 +341,7 @@ func hostOf(raw string) string {
 }
 
 func (r *Repository) TouchExternal(ctx context.Context, client identity.ClientID, interval time.Duration) error {
-	_, err := r.db.ExecContext(ctx, `UPDATE oauth_clients SET last_used_at=now() WHERE id=$1 AND source='cimd' AND (last_used_at IS NULL OR last_used_at <= now()-make_interval(secs => $2))`, client, interval.Seconds())
+	_, err := r.db.ExecContext(ctx, `UPDATE oauth_clients SET last_used_at=now() WHERE id=$1 AND source<>'registered' AND (last_used_at IS NULL OR last_used_at <= now()-make_interval(secs => $2))`, client, interval.Seconds())
 	return failure(err)
 }
 
@@ -346,7 +357,7 @@ func (r *Repository) PruneExternal(ctx context.Context, before time.Time, limit 
 		// lost, then demoted) is not idle: those reference it without
 		// cascading, and deleting it would fail the whole batch every round
 		// (W5-5).
-		if err := tx.SelectContext(ctx, &ids, `SELECT c.id FROM oauth_clients c WHERE c.source='cimd' AND c.admission='pending' AND c.last_used_at IS NULL AND c.discovered_at < $1
+		if err := tx.SelectContext(ctx, &ids, `SELECT c.id FROM oauth_clients c WHERE c.source<>'registered' AND c.admission='pending' AND c.last_used_at IS NULL AND c.discovered_at < $1
 			AND NOT EXISTS (SELECT 1 FROM oauth_client_access_requests a WHERE a.client_id=c.id AND a.requested_at >= $1)
 			AND NOT EXISTS (SELECT 1 FROM oauth_requests q WHERE q.client_id=c.id)
 			AND NOT EXISTS (SELECT 1 FROM oauth_device_codes d WHERE d.client_id=c.id)

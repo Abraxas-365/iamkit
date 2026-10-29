@@ -12,6 +12,9 @@ a feature-flag service for your applications.
 | `captcha` | environment | on | [Bot protection](../sign-in/bot-protection.md): off skips every CAPTCHA check and renders no widget, keeping the saved configuration. A kill switch for a misbehaving provider |
 | `risk_signals` | environment | on | [Risk signals](../sign-in/risk-signals.md): off stops recording sign-in attempts and devices and skips detections, restrictions and the `risk` input of actions |
 | `actions` | environment | on | [Actions](actions.md): off skips every sign-in, token and request hook without deleting its targets or executions |
+| `client_metadata_documents` | environment | on | MCP clients named by a [Client ID Metadata Document](../applications/protect-mcp-server.md#admit-clients-named-by-a-metadata-document) on protected resources that allow them (`allow_client_metadata`). Off refuses them at once and demotes their approvals |
+| `development_clients` | environment | off | Development-only client presets such as MCP Inspector (`…/client-templates`, the preset gallery). Development environments only |
+| `dynamic_client_registration` | environment | off | MCP clients registered at `POST /oauth/register` ([dynamic client registration](../applications/protect-mcp-server.md#dynamic-client-registration), RFC 7591) on protected resources that allow them (`allow_dynamic_registration`). Off refuses them at once and demotes their approvals |
 | `saml_idp` | deployment | on | IAMKit as a [SAML identity provider](../applications/saml-apps.md): off unmounts `/saml/:environment/*` and the `…/saml/service-providers` API (404) |
 
 The defaults reproduce IAMKit without flags.

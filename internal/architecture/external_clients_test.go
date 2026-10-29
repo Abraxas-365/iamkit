@@ -153,14 +153,16 @@ func (s *Service) Guarded(c *Client) error { return c.Delegable() }
 
 // lookupSources are the client lookups that decide which kind of client a
 // presented client_id may name (H-1). A registered client is named by its
-// row uuid, a client named by a metadata document by its URL; the uuid of a
-// document client must never work as a client_id, or the guards that only a
-// URL client_id meets (the grant allowlist of the token endpoint, the
-// allow_client_metadata and feature checks of authorize) are skipped.
+// row uuid, an external client by its URL (a metadata document) or its dcr_
+// client_id (a dynamic registration); the uuid of an external client must
+// never work as a client_id, or the guards that only its public client_id
+// meets (the grant allowlist of the token endpoint, the source and feature
+// checks of authorize) are skipped. FindExternal reads oauth.ExternalSources,
+// so a new source joins every external lookup at once.
 // Each function must reference the identifier shown.
 var lookupSources = map[string]string{
 	"oauth/adapters/oauthpg (*Repository).FindActive":   "SourceRegistered",
-	"oauth/adapters/oauthpg (*Repository).FindExternal": "SourceCIMD",
+	"oauth/adapters/oauthpg (*Repository).FindExternal": "ExternalSources",
 }
 
 // sourceFiltered are the SQL-bearing lookups whose statement must filter by

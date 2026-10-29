@@ -39,11 +39,13 @@ type Client struct {
 	// Protected is the protected resource behind the client's resource
 	// (nil: none, or inactive): the target of RFC 8707 resource requests.
 	Protected *ProtectedTarget
-	// Source is SourceRegistered (operator-registered, named by its uuid)
-	// or SourceCIMD (a Client ID Metadata Document, named outside IAMKit by
-	// ExternalID, its URL). "" reads as registered.
+	// Source is SourceRegistered (operator-registered, named by its uuid),
+	// SourceCIMD (a Client ID Metadata Document, named outside IAMKit by
+	// ExternalID, its URL) or SourceDCR (registered at /oauth/register,
+	// named by ExternalID, its registration's client_id). "" reads as
+	// registered.
 	Source string
-	// ExternalID is the client_id URL of an external client ("" otherwise).
+	// ExternalID is the client_id of an external client ("" otherwise).
 	ExternalID string
 	// Name is the document's client_name ("" for registered clients).
 	Name string
@@ -60,9 +62,10 @@ type Client struct {
 	Admission          string
 	AdmissionExpiresAt *time.Time
 	// Disabled is set at use when the client's protected resource no longer
-	// takes clients named by a metadata document (allow_client_metadata off,
-	// or the client_metadata_documents feature off in the environment):
-	// such a client holds no live token, whatever its row says (M-2).
+	// takes clients of its source (allow_client_metadata or
+	// allow_dynamic_registration off, or the source's feature off in the
+	// environment): such a client holds no live token, whatever its row
+	// says (M-2).
 	Disabled bool
 	// LoopbackAnyPort lets registered http://localhost redirect URIs match
 	// on any port (external clients always may, RFC 8252 §7.3).
@@ -81,10 +84,11 @@ type Client struct {
 // it (a request for access) never keeps a port the client did not publish.
 func (c Client) Document() ExternalClient {
 	redirects := slices.DeleteFunc(slices.Clone(c.Redirects), func(r string) bool { return c.admitted != "" && r == c.admitted })
-	return ExternalClient{ExternalID: c.ExternalID, Name: c.Name, ClientURI: c.ClientURI, LogoURI: c.LogoURI, Redirects: redirects, GrantTypes: slices.Clone(c.GrantTypes), Auth: c.Auth}
+	return ExternalClient{Source: c.Source, ExternalID: c.ExternalID, Name: c.Name, ClientURI: c.ClientURI, LogoURI: c.LogoURI, Redirects: redirects, GrantTypes: slices.Clone(c.GrantTypes), Auth: c.Auth}
 }
 
-// External reports whether the client comes from a metadata document.
+// External reports whether the client is named outside IAMKit's registry
+// (a metadata document or a dynamic registration).
 func (c Client) External() bool { return c.Source != "" && c.Source != SourceRegistered }
 
 // PublicID is the client_id the client uses outside IAMKit: the document

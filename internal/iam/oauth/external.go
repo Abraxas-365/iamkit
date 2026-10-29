@@ -24,6 +24,9 @@ type ExternalTarget struct {
 	// AllowClientMetadata is false when the server takes registered
 	// clients only.
 	AllowClientMetadata bool
+	// AllowDynamicRegistration lets dynamically registered clients ask for
+	// the server (off by default).
+	AllowDynamicRegistration bool
 	// ClientAdmission is ClientAdmissionAllowlist or ClientAdmissionOpen.
 	ClientAdmission string
 	// Allowlist are the entries of the environment that apply to this
@@ -31,10 +34,22 @@ type ExternalTarget struct {
 	Allowlist []AllowlistEntry
 }
 
+// Allows reports whether the server takes clients of source (SourceCIMD or
+// SourceDCR).
+func (t ExternalTarget) Allows(source string) bool {
+	if source == SourceDCR {
+		return t.AllowDynamicRegistration
+	}
+	return t.AllowClientMetadata
+}
+
 // Admission is the admission of a client seen at this server for the
 // first time.
-func (t ExternalTarget) Admission(clientID *url.URL) string {
-	return InitialAdmission(t.ClientAdmission, t.Allowlist, clientID)
+func (t ExternalTarget) Admission(clientID string) string {
+	if t.AdmissionSource(clientID) != "" {
+		return AdmissionApproved
+	}
+	return AdmissionPending
 }
 
 // Admission sources: who approved an external client (the
@@ -46,15 +61,21 @@ const (
 	SourcePreset    = "preset"
 )
 
-// AdmissionSource is why InitialAdmission approves clientID: a preset's or
-// an operator's allowlist entry, else an open server ("" when it does not).
-func (t ExternalTarget) AdmissionSource(clientID *url.URL) string {
-	for _, e := range t.Allowlist {
-		if e.Matches(clientID) {
-			if e.Preset != "" {
-				return SourcePreset
+// AdmissionSource is why policy approves clientID: a preset's or an
+// operator's allowlist entry, else an open server ("" when it does not).
+// Entries match URLs only: a dynamically registered client_id names
+// nothing an entry could vouch for, so only an open server admits it.
+func (t ExternalTarget) AdmissionSource(clientID string) string {
+	if ClientURL(clientID) {
+		if u, err := url.Parse(clientID); err == nil {
+			for _, e := range t.Allowlist {
+				if e.Matches(u) {
+					if e.Preset != "" {
+						return SourcePreset
+					}
+					return SourceAllowlist
+				}
 			}
-			return SourceAllowlist
 		}
 	}
 	if t.ClientAdmission == ClientAdmissionOpen {
@@ -112,6 +133,12 @@ type ExternalRepository interface {
 	// ExternalClientID is the row of the (server, URL) pair, zero when
 	// the pair was never persisted.
 	ExternalClientID(ctx context.Context, protected identity.ProtectedResourceID, externalID string) (identity.ClientID, error)
+	// Registration is the dynamic registration clientID names (found
+	// false when none). Reading it marks nothing: a registration counts as used
+	// once a client row is written from it (SaveExternalClient,
+	// RequestExternalAccess), so anonymous authorization requests cannot
+	// keep unused registrations from the cap or the prune.
+	Registration(ctx context.Context, clientID string) (Registered, bool, error)
 	// FindExternal is the live client named by a metadata document with
 	// this row id (found through its URL, a stored grant or a ticket);
 	// FindActive never returns one (H-1).

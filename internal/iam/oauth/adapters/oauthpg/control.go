@@ -252,7 +252,7 @@ func (t *authorization) Admission(ctx context.Context, client identity.ClientID)
 	}
 	// FOR SHARE: a block of the client waits for this transaction and then
 	// revokes what it issued.
-	err := t.tx.GetContext(ctx, &row, `SELECT c.admission,c.admission_expires_at,pr.allow_client_metadata FROM oauth_clients c JOIN protected_resources pr ON pr.id=c.protected_resource_id AND pr.environment_id=c.environment_id WHERE c.id=$1 AND c.source='cimd' AND c.active FOR SHARE OF c`, client)
+	err := t.tx.GetContext(ctx, &row, `SELECT c.admission,c.admission_expires_at,`+allowsSource+` AS allow_client_metadata FROM oauth_clients c JOIN protected_resources pr ON pr.id=c.protected_resource_id AND pr.environment_id=c.environment_id WHERE c.id=$1 AND c.source<>'registered' AND c.active FOR SHARE OF c`, client)
 	return oauth.AdmissionState{Admission: row.Admission, Expires: row.Expires, Disabled: !row.Allow}, lookup(err)
 }
 func (t *authorization) Session(ctx context.Context, id identity.SessionID) (oauth.SessionInfo, error) {

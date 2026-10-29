@@ -43,6 +43,9 @@ type Discovery struct {
 	// Only true where a client could use it (Offers.ClientMetadataDocuments);
 	// NewDiscovery leaves it false and Discovery.With sets it.
 	ClientIDMetadataDocumentSupported bool `json:"client_id_metadata_document_supported"`
+	// RFC 7591: POST /oauth/register, listed only where a dynamically
+	// registered client could use it (Offers.DynamicRegistration).
+	RegistrationEndpoint string `json:"registration_endpoint,omitempty"`
 }
 
 // NewDiscovery is the metadata for issuer.

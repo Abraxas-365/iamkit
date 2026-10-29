@@ -36,6 +36,11 @@ type ProtectedResource struct {
 	// (client_id = https URL) ask for this server; off: registered clients
 	// only.
 	AllowClientMetadata bool `json:"allow_client_metadata"`
+	// AllowDynamicRegistration lets clients registered at /oauth/register
+	// (RFC 7591) ask for this server, admitted like document clients but
+	// never by an allowlist entry (off by default; the environment's
+	// dynamic_client_registration feature must be on too).
+	AllowDynamicRegistration bool `json:"allow_dynamic_registration"`
 	// ClientAdmission is ClientAdmissionAllowlist (a document client waits
 	// for IT unless an allowlist entry admits it) or ClientAdmissionOpen.
 	ClientAdmission string    `json:"client_admission"`
@@ -99,9 +104,11 @@ type ProtectedResourceUpdate struct {
 	MaxTTLSeconds  *int64    `json:"max_ttl_seconds"`
 	Active         *bool     `json:"active"`
 	// AllowClientMetadata and ClientAdmission set the server's policy for
-	// clients identified by a metadata document.
-	AllowClientMetadata *bool   `json:"allow_client_metadata"`
-	ClientAdmission     *string `json:"client_admission"`
+	// clients identified by a metadata document; AllowDynamicRegistration
+	// for dynamically registered ones.
+	AllowClientMetadata      *bool   `json:"allow_client_metadata"`
+	AllowDynamicRegistration *bool   `json:"allow_dynamic_registration"`
+	ClientAdmission          *string `json:"client_admission"`
 }
 
 func (u ProtectedResourceUpdate) Validate() error {
@@ -143,6 +150,9 @@ func (u ProtectedResourceUpdate) Apply(current ProtectedResource) ProtectedResou
 	}
 	if u.AllowClientMetadata != nil {
 		current.AllowClientMetadata = *u.AllowClientMetadata
+	}
+	if u.AllowDynamicRegistration != nil {
+		current.AllowDynamicRegistration = *u.AllowDynamicRegistration
 	}
 	if u.ClientAdmission != nil {
 		current.ClientAdmission = *u.ClientAdmission

@@ -498,6 +498,11 @@ func (s *Server) App() *fiber.App {
 	app.Use("/oauth/authorize", s.rateLimiter(max(1, rateLimit/config.OAuthAuthorizeRateDivisor)))
 	app.Use("/oauth/token", countTokens, s.rateLimiter(rateLimit*5))
 	app.Use("/oauth/device_authorization", s.rateLimiter(rateLimit))
+	// Each registration is a row until it is pruned: few per address,
+	// refused in RFC 7591 form (clients parse error/error_description).
+	app.Use("/oauth/register", s.limit(limiter.Config{Max: config.ClientRegistrationsPerIPPerMinute, Expiration: time.Minute, LimitReached: func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{"error": "temporarily_unavailable", "error_description": "too many registrations from this address; retry later"})
+	}}))
 	app.Use("/oauth/introspect", s.rateLimiter(rateLimit*5))
 	app.Use("/oauth/userinfo", s.rateLimiter(rateLimit*5))
 	app.Use("/oauth/end_session", s.rateLimiter(30))

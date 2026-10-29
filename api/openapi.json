@@ -1396,6 +1396,67 @@
         },
         "type": "object"
       },
+      "ClientRegistrationInput": {
+        "properties": {
+          "client_name": {
+            "type": "string"
+          },
+          "client_uri": {
+            "type": "string"
+          },
+          "grant_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "jwks": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "jwks_uri": {
+            "type": "string"
+          },
+          "redirect_uris": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "response_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "software_id": {
+            "type": "string"
+          },
+          "software_statement": {
+            "type": "string"
+          },
+          "software_version": {
+            "type": "string"
+          },
+          "token_endpoint_auth_method": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "ClientUpdateInput": {
         "properties": {
           "access_token_format": {
@@ -2876,6 +2937,9 @@
               "null"
             ]
           },
+          "registration_endpoint": {
+            "type": "string"
+          },
           "response_types_supported": {
             "items": {
               "type": "string"
@@ -3457,6 +3521,9 @@
               "null"
             ]
           },
+          "source": {
+            "type": "string"
+          },
           "token_endpoint_auth_method": {
             "type": "string"
           }
@@ -3481,6 +3548,7 @@
           "preset_name",
           "protected_resource_id",
           "redirect_uris",
+          "source",
           "token_endpoint_auth_method"
         ],
         "type": "object"
@@ -7659,6 +7727,9 @@
           "allow_client_metadata": {
             "type": "boolean"
           },
+          "allow_dynamic_registration": {
+            "type": "boolean"
+          },
           "application_id": {
             "description": "UUID (empty when unset)",
             "type": "string"
@@ -7707,6 +7778,7 @@
         "required": [
           "active",
           "allow_client_metadata",
+          "allow_dynamic_registration",
           "application_id",
           "client_admission",
           "created_at",
@@ -7802,6 +7874,12 @@
             ]
           },
           "allow_client_metadata": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "allow_dynamic_registration": {
             "type": [
               "boolean",
               "null"
@@ -8088,6 +8166,67 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "RegistrationResponse": {
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "client_id_issued_at": {
+            "type": "integer"
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "client_uri": {
+            "type": "string"
+          },
+          "grant_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "redirect_uris": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "response_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "software_id": {
+            "type": "string"
+          },
+          "software_version": {
+            "type": "string"
+          },
+          "token_endpoint_auth_method": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "client_id_issued_at",
+          "grant_types",
+          "redirect_uris",
+          "response_types",
+          "token_endpoint_auth_method"
+        ],
         "type": "object"
       },
       "ReplayInput": {
@@ -62156,6 +62295,116 @@
           }
         },
         "summary": "introspect is RFC 7662 token introspection for confidential clients of the token's environment.",
+        "tags": [
+          "OAuth 2.0 / OpenID Connect"
+        ]
+      }
+    },
+    "/oauth/register": {
+      "post": {
+        "operationId": "postOauthRegister",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientRegistrationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResponse"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "error_description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "error_description"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response 400"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response 404"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "error_description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "error_description"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response 429"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response 500"
+          }
+        },
+        "summary": "register is POST /oauth/register.",
         "tags": [
           "OAuth 2.0 / OpenID Connect"
         ]

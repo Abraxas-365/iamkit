@@ -26,6 +26,15 @@ list them with "clients list", then approve or block them.`,
 	return cmd
 }
 
+// clientHost is what vouches for an external client: the host of its
+// client_id URL, or "(unverified)" for one registered dynamically.
+func clientHost(m map[string]any) string {
+	if h := str(m, "host"); h != "" {
+		return h
+	}
+	return "(unverified)"
+}
+
 func prPath(id string) string { return envPath() + "/protected-resources/" + url.PathEscape(id) }
 
 func prClientPath(id, client string) string {
@@ -33,7 +42,7 @@ func prClientPath(id, client string) string {
 }
 
 func prColumns(m map[string]any) []string {
-	return []string{str(m, "id"), str(m, "name"), str(m, "uri"), activeStr(m, "active"), str(m, "allow_client_metadata"), str(m, "client_admission")}
+	return []string{str(m, "id"), str(m, "name"), str(m, "uri"), activeStr(m, "active"), str(m, "allow_client_metadata"), str(m, "allow_dynamic_registration"), str(m, "client_admission")}
 }
 
 func prListCmd() *cobra.Command {
@@ -46,7 +55,7 @@ func prListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			newPrinter().table(data, []string{"ID", "NAME", "URI", "STATUS", "CIMD", "ADMISSION"}, prColumns)
+			newPrinter().table(data, []string{"ID", "NAME", "URI", "STATUS", "CIMD", "DCR", "ADMISSION"}, prColumns)
 			return nil
 		},
 	}
@@ -113,15 +122,19 @@ func prCreateCmd() *cobra.Command {
 func prUpdateCmd() *cobra.Command {
 	var name, scopes, admission string
 	var idle, max int
-	var active, metadata bool
+	var active, metadata, registration bool
 	cmd := &cobra.Command{
 		Use:   "update ID",
 		Short: "Change a protected resource",
 		Long: `Change a protected resource. --active=false ends every authorization.
 --allow-client-metadata lets clients named by a metadata document ask for the
-server; --client-admission allowlist reviews them unless allowlisted, open
-admits any such client without review.`,
+server; --allow-dynamic-registration lets clients registered at /oauth/register
+(RFC 7591) ask for it while the environment's dynamic_client_registration
+feature is on (no allowlist entry ever names them: only an approval or an open
+server admits them); --client-admission allowlist reviews them unless
+allowlisted, open admits any such client without review.`,
 		Example: `  iam protected-resources update ID --allow-client-metadata
+  iam protected-resources update ID --allow-dynamic-registration
   iam protected-resources update ID --client-admission allowlist`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -144,6 +157,9 @@ admits any such client without review.`,
 			}
 			if flags.Changed("allow-client-metadata") {
 				body["allow_client_metadata"] = metadata
+			}
+			if flags.Changed("allow-dynamic-registration") {
+				body["allow_dynamic_registration"] = registration
 			}
 			if flags.Changed("client-admission") {
 				if admission != "allowlist" && admission != "open" {
@@ -169,6 +185,7 @@ admits any such client without review.`,
 	f.IntVar(&max, "max-ttl-seconds", 0, "Authorization lifetime")
 	f.BoolVar(&active, "active", true, "Active (false ends every authorization)")
 	f.BoolVar(&metadata, "allow-client-metadata", false, "Allow clients named by a metadata document")
+	f.BoolVar(&registration, "allow-dynamic-registration", false, "Allow clients registered at /oauth/register (RFC 7591)")
 	f.StringVar(&admission, "client-admission", "", "allowlist or open (open admits any such client without review)")
 	return cmd
 }
@@ -243,8 +260,8 @@ func prClientsListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			newPrinter().table(data, []string{"ID", "HOST", "NAME", "VERIFIED AS", "ADMISSION", "SOURCE", "REQUESTS", "LAST USED"}, func(m map[string]any) []string {
-				return []string{str(m, "id"), str(m, "host"), str(m, "client_name"), str(m, "preset_name"), str(m, "admission"), str(m, "admission_source"), str(m, "access_requests"), str(m, "last_used_at")}
+			newPrinter().table(data, []string{"ID", "KIND", "HOST", "NAME", "VERIFIED AS", "ADMISSION", "SOURCE", "REQUESTS", "LAST USED"}, func(m map[string]any) []string {
+				return []string{str(m, "id"), str(m, "source"), clientHost(m), str(m, "client_name"), str(m, "preset_name"), str(m, "admission"), str(m, "admission_source"), str(m, "access_requests"), str(m, "last_used_at")}
 			})
 			return nil
 		},
@@ -333,7 +350,7 @@ approves that.`,
 					return err
 				}
 				hash = str(view, "metadata_hash")
-				fmt.Fprintf(os.Stderr, "Approving %s (%s)\n  redirect_uris: %v\n  token_endpoint_auth_method: %s  jwks_uri: %s\n  metadata_hash: %s\n", str(view, "client_id"), str(view, "host"), view["redirect_uris"], str(view, "token_endpoint_auth_method"), str(view, "jwks_uri"), hash)
+				fmt.Fprintf(os.Stderr, "Approving %s (%s)\n  redirect_uris: %v\n  token_endpoint_auth_method: %s  jwks_uri: %s\n  metadata_hash: %s\n", str(view, "client_id"), clientHost(view), view["redirect_uris"], str(view, "token_endpoint_auth_method"), str(view, "jwks_uri"), hash)
 			}
 			body := map[string]any{"metadata_hash": hash}
 			if expires != "" {

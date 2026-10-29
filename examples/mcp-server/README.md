@@ -32,7 +32,7 @@ certificate from your local mkcert CA), seeds an environment (`scripts/seed.mjs`
 prints the commands below with the seeded client IDs. Two users exist: `reader@mcp.example` (`notes:read`) and `writer@mcp.example`
 (`notes:read`, `notes:write`), both with the printed password.
 
-Phase (a) has no dynamic client registration, so the seed pre-registers one public client per MCP client in the server's application:
+The seed pre-registers one public client per MCP client in the server's application, so the example works without metadata documents or dynamic client registration (both are off by default; see [the guide](../../docs/guides/applications/protect-mcp-server.md#dynamic-client-registration)):
 
 | Client | Redirect URIs |
 |--------|---------------|
