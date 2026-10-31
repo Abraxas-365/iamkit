@@ -1,10 +1,10 @@
 # IAMKit Console
 
 Pure React + TypeScript + Vite, using Tailwind CSS 4 and shadcn/Base UI components.
-The design system is copied/adapted from `~/Personal/freerouter/web`: identical
-light/dark color tokens, Inter body text, JetBrains Mono headings, 4px base radius,
-and Base UI button/input/card/dialog/table/badge primitives. The shell uses its
-inset sidebar, compact navigation, and monospace section labels. Dark is the default;
+The design system: light/dark color tokens, Inter body text, JetBrains Mono
+headings, 4px base radius, and Base UI button/input/card/dialog/table/badge
+primitives. The shell has an inset sidebar, compact navigation, and monospace
+section labels. Dark is the default;
 the theme toggle preserves your preference. No Next.js, SSR, or BFF.
 
 IAM-specific forms, searchable entity selectors, authorization, and routing remain

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Fail when project-specific names leak into the generic product tree (D42).
+"""Fail when project-specific names leak into the generic product (D42).
 
-Scans tracked and untracked, not ignored files (git ls-files) under the product directories for the
-forbidden words, case-insensitively, and prints file:line for each hit.
+Scans every tracked and untracked, not ignored file of the repository (git ls-files) for the
+forbidden words, case-insensitively, and prints file:line for each hit. Only this script, which
+must name them, is skipped.
 """
 import re
 import subprocess
@@ -10,8 +11,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DIRS = ["internal", "sdk", "clients", "migrations", "docs", "api",
-        "frontend/src", "cmd", "examples"]
+SELF = Path(__file__).resolve().relative_to(ROOT).as_posix()
 FORBIDDEN = re.compile(r"odicea|freerouter", re.IGNORECASE)
 SKIP_PARTS = {"node_modules", ".next", "dist", "build"}
 
@@ -20,10 +20,10 @@ def tracked():
     # Tracked and untracked (not ignored) files: a new file fails before
     # it is committed.
     out = subprocess.run(["git", "ls-files", "-z", "--cached", "--others",
-                          "--exclude-standard", "--", *DIRS], cwd=ROOT,
+                          "--exclude-standard"], cwd=ROOT,
                          check=True, capture_output=True).stdout
     for name in out.decode("utf-8", "surrogateescape").split("\0"):
-        if name and not SKIP_PARTS.intersection(Path(name).parts):
+        if name and name != SELF and not SKIP_PARTS.intersection(Path(name).parts):
             yield name
 
 
