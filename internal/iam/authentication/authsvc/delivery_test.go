@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Abraxas-365/iamkit/internal/errx"
@@ -55,9 +56,18 @@ func (prefixCipher) Open(sealed string) ([]byte, error) {
 	return []byte(plain), nil
 }
 
-type recordingDelivery struct{ got []authentication.Message }
+// recordingDelivery keeps the messages sent. deliverLater sends each from
+// its own goroutine, so Send takes a lock (an unguarded append lost one of
+// two concurrent approval emails); tests read got after WaitDeliveries,
+// whose WaitGroup orders the reads after every Send.
+type recordingDelivery struct {
+	mu  sync.Mutex
+	got []authentication.Message
+}
 
 func (d *recordingDelivery) Send(_ context.Context, m authentication.Message) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	d.got = append(d.got, m)
 	return nil
 }
