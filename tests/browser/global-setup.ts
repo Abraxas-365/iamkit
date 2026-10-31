@@ -12,6 +12,7 @@ import { createWriteStream, cpSync, existsSync, mkdirSync, readFileSync, rmSync,
 import { createServer as createHTTP, request, type Server } from "node:http";
 import { createServer as createHTTPS } from "node:https";
 import type { AddressInfo } from "node:net";
+import { createServer as createTCP } from "node:net";
 import path from "node:path";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { GenericContainer, Wait } from "testcontainers";
@@ -73,10 +74,11 @@ function receiver() {
   return server;
 }
 
-/** proxy terminates TLS for IAMKit at https://localhost:<port>. */
-function proxy(upstream: number, cert: Buffer, key: Buffer) {
+/** proxy terminates TLS for IAMKit at https://localhost:<port>; upstream
+ * is read per request (IAMKit's port is known only once it is listening). */
+function proxy(upstream: () => number, cert: Buffer, key: Buffer) {
   return createHTTPS({ cert, key }, (req, res) => {
-    const out = request({ host: "127.0.0.1", port: upstream, method: req.method, path: req.url, headers: req.headers }, (back) => {
+    const out = request({ host: "127.0.0.1", port: upstream(), method: req.method, path: req.url, headers: req.headers }, (back) => {
       res.writeHead(back.statusCode ?? 502, back.headers);
       back.pipe(res);
     });
@@ -87,15 +89,68 @@ function proxy(upstream: number, cert: Buffer, key: Buffer) {
 
 async function waitFor(url: string, what: string, child: ChildProcess) {
   for (let i = 0; i < 120; i++) {
-    if (child.exitCode !== null) throw new Error(`${what} exited (${child.exitCode}); see ${stack}/iamkit.log`);
+    if (child.exitCode !== null) throw new Exited(`${what} exited (${child.exitCode}); see ${stack}/iamkit.log`);
     try {
-      if ((await fetch(url)).ok) return;
+      // Whatever holds the port may never answer: each check gives up soon.
+      if ((await fetch(url, { signal: AbortSignal.timeout(2000) })).ok) return;
     } catch {
       /* not yet */
     }
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error(`${what} did not start; see ${stack}/iamkit.log`);
+}
+
+class Exited extends Error {}
+
+/** A port is free only until someone binds it: IAMKit gets one that nothing
+ * in this process holds (the proxy and receiver listen first), and when
+ * another process takes it in between, IAMKit fails to bind and starts again
+ * on another. The output is kept across attempts: the first boot prints the
+ * bootstrap key before it binds, and a restart (same database) skips
+ * bootstrap. */
+const bindAttempts = 5;
+const bindRefused = /failed to listen: .*address already in use/;
+
+async function startIAMKit(binary: string, env: NodeJS.ProcessEnv) {
+  const log = createWriteStream(path.join(stack, "iamkit.log"));
+  let output = "";
+  for (let attempt = 1; ; attempt++) {
+    const port = await freePort();
+    // IAMKIT_BROWSER_PORT_COLLISION=<n> holds the port of the first n
+    // attempts, so the retry is exercised on demand.
+    const squatter = attempt <= Number(process.env.IAMKIT_BROWSER_PORT_COLLISION ?? 0) ? createTCP((s) => s.destroy()) : undefined;
+    if (squatter) await new Promise<void>((r) => squatter.listen(port, "0.0.0.0", r));
+    const child = spawn(binary, [], { env: { ...env, SERVER_PORT: String(port) }, stdio: ["ignore", "pipe", "pipe"] });
+    const closed = new Promise((r) => child.once("close", r));
+    // A failed setup returns no teardown: never leave IAMKit running.
+    const kill = () => child.kill("SIGKILL");
+    process.once("exit", kill);
+    let attemptOutput = "";
+    const take = (c: Buffer) => { output += c; attemptOutput += c; log.write(c); };
+    child.stdout!.on("data", take);
+    child.stderr!.on("data", take);
+    try {
+      await waitFor(`http://127.0.0.1:${port}/health`, "IAMKit", child);
+      // Another IAMKit on the port answers /health too: ours must be alive
+      // and must not have failed to bind.
+      await new Promise((r) => setTimeout(r, 200));
+      if (child.exitCode !== null || bindRefused.test(attemptOutput)) throw new Exited(`IAMKit exited (${child.exitCode}); see ${stack}/iamkit.log`);
+      if (squatter) {
+        squatter.close();
+        throw new Error(`IAMKit bound port ${port} although another listener held it`);
+      }
+      return { child, port, output };
+    } catch (err) {
+      kill();
+      process.off("exit", kill);
+      // Its last words (the bind error) may arrive after the exit.
+      if (err instanceof Exited) await closed;
+      squatter?.close();
+      if (!(err instanceof Exited) || !bindRefused.test(attemptOutput) || attempt === bindAttempts) throw err;
+      log.write(`--- port ${port} was taken; starting again (attempt ${attempt + 1} of ${bindAttempts})\n`);
+    }
+  }
 }
 
 export default async function globalSetup() {
@@ -114,47 +169,41 @@ export default async function globalSetup() {
 
   const hooks = receiver();
   const hooksPort = await listen(hooks);
-  const iamPort = await freePort();
-  const tls = proxy(iamPort, readFileSync(path.join(stack, "tls.crt")), readFileSync(path.join(stack, "tls.key")));
+  // The proxy listens before IAMKit picks its port (the issuer needs the
+  // proxy's), so the two can never share one; it reads IAMKit's port per
+  // request.
+  let iamPort = 0;
+  const tls = proxy(() => iamPort, readFileSync(path.join(stack, "tls.crt")), readFileSync(path.join(stack, "tls.key")));
   const tlsPort = await listen(tls);
   const issuer = `https://localhost:${tlsPort}`;
 
   const bootstrapPassword = "Bootstrap-password-2026!";
   const operator = { email: "owner@browser.example", password: bootstrapPassword, newPassword: "Operator-password-2026!" };
-  const log = createWriteStream(path.join(stack, "iamkit.log"));
-  const child = spawn(binary, [], {
-    env: {
-      PATH: process.env.PATH,
-      HOME: process.env.HOME,
-      DATABASE_URL: `${db.getConnectionUri()}?sslmode=disable`,
-      SERVER_PORT: String(iamPort),
-      JWT_ISSUER: issuer,
-      JWT_PRIVATE_KEY_PATH: path.join(stack, "jwt.pem"),
-      OIDC_HMAC_SECRET: randomBytes(32).toString("hex"),
-      IAMKIT_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
-      // Real SMTP: Mailpit on loopback (plaintext is allowed only there).
-      EMAIL_PROVIDER: "smtp",
-      SMTP_HOST: "127.0.0.1",
-      SMTP_PORT: String(mail.getMappedPort(1025)),
-      EMAIL_FROM: "no-reply@browser.example",
-      EMAIL_FROM_NAME: "IAMKit browser tests",
-      // Action targets and webhooks on the loopback receiver.
-      IAMKIT_ALLOW_PRIVATE_DELIVERY: "true",
-      // The console makes many calls per page; tests are one IP.
-      RATE_LIMIT_PER_MINUTE: "100000",
-      IAMKIT_BOOTSTRAP_EMAIL: operator.email,
-      IAMKIT_BOOTSTRAP_WORKSPACE: "Browser tests",
-      IAMKIT_BOOTSTRAP_PASSWORD: bootstrapPassword,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
+  const started = await startIAMKit(binary, {
+    PATH: process.env.PATH,
+    HOME: process.env.HOME,
+    DATABASE_URL: `${db.getConnectionUri()}?sslmode=disable`,
+    JWT_ISSUER: issuer,
+    JWT_PRIVATE_KEY_PATH: path.join(stack, "jwt.pem"),
+    OIDC_HMAC_SECRET: randomBytes(32).toString("hex"),
+    IAMKIT_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    // Real SMTP: Mailpit on loopback (plaintext is allowed only there).
+    EMAIL_PROVIDER: "smtp",
+    SMTP_HOST: "127.0.0.1",
+    SMTP_PORT: String(mail.getMappedPort(1025)),
+    EMAIL_FROM: "no-reply@browser.example",
+    EMAIL_FROM_NAME: "IAMKit browser tests",
+    // Action targets and webhooks on the loopback receiver.
+    IAMKIT_ALLOW_PRIVATE_DELIVERY: "true",
+    // The console makes many calls per page; tests are one IP.
+    RATE_LIMIT_PER_MINUTE: "100000",
+    IAMKIT_BOOTSTRAP_EMAIL: operator.email,
+    IAMKIT_BOOTSTRAP_WORKSPACE: "Browser tests",
+    IAMKIT_BOOTSTRAP_PASSWORD: bootstrapPassword,
   });
-  // A failed setup returns no teardown: never leave IAMKit running.
-  process.once("exit", () => child.kill("SIGKILL"));
-  let output = "";
-  child.stdout!.on("data", (c) => { output += c; log.write(c); });
-  child.stderr!.on("data", (c) => log.write(c));
-  await waitFor(`http://127.0.0.1:${iamPort}/health`, "IAMKit", child);
-  const key = output.match(/ik_mgmt_\S+/)?.[0];
+  const child = started.child;
+  iamPort = started.port;
+  const key = started.output.match(/ik_mgmt_\S+/)?.[0];
   if (!key) throw new Error("no bootstrap management key in the IAMKit output");
 
   const fixture = await seed(`http://127.0.0.1:${iamPort}`, key);

@@ -55,7 +55,12 @@ console (bootstrap password change, CRUD, change history, features, limits,
 sign-in texts, actions, webhooks, console languages, the org-admin portal) and
 the hosted pages (password, emailed code over real SMTP, reset, TOTP
 enrollment, sign-up, browser language). CI runs it as the `browser` job;
-failures upload the trace, screenshots and `.stack/iamkit.log`.
+failures upload the trace, screenshots and `.stack/iamkit.log`. IAMKit gets a
+loopback port the setup does not hold; when another process takes it first,
+IAMKit fails to bind and the setup starts it again on another port (up to five
+attempts, logged in `iamkit.log`). `IAMKIT_BROWSER_PORT_COLLISION=<n>` occupies
+the port of the first `n` attempts to exercise that path. The suite runs on
+Node 22, as in CI.
 
 ## TypeScript clients and the custom sign-in parity suite
 
