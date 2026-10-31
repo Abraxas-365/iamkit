@@ -48,14 +48,19 @@ it('narrows sessions to an organization and an application', async () => {
   const organization = screen.getByLabelText('Filter by organization')
   await screen.findByRole('option', { name: 'Acme' })
   await u.selectOptions(organization, 'o1')
-  await waitFor(() => expect(screen.queryByText('s2@example.com')).toBeNull())
-  expect(screen.getByText('s1@example.com')).toBeTruthy()
+  // Wait for the refetched list (it is empty while the request is in flight).
+  await waitFor(() => {
+    expect(screen.queryByText('s2@example.com')).toBeNull()
+    expect(screen.getByText('s1@example.com')).toBeTruthy()
+  })
   expect(queries.at(-1)!.get('organization_id')).toBe('o1')
 
   await screen.findByRole('option', { name: 'Mobile' })
   await u.selectOptions(screen.getByLabelText('Filter by application'), 'a2')
-  await waitFor(() => expect(screen.queryByText('s1@example.com')).toBeNull())
-  expect(screen.getByText('s3@example.com')).toBeTruthy()
+  await waitFor(() => {
+    expect(screen.queryByText('s1@example.com')).toBeNull()
+    expect(screen.getByText('s3@example.com')).toBeTruthy()
+  })
   expect(Object.fromEntries(queries.at(-1)!)).toMatchObject({ organization_id: 'o1', application_id: 'a2' })
 
   await u.selectOptions(organization, '')

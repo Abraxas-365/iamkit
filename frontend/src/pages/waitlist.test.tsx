@@ -70,8 +70,11 @@ it('filters by status and searches by email prefix', async () => {
   await u.selectOptions(screen.getByRole('combobox', { name: 'Filter by status' }), '')
   await u.type(screen.getByRole('textbox', { name: 'Search by email' }), 'bo')
   await waitFor(() => expect(listCalls().some(url => url.includes('email=bo'))).toBe(true))
-  await waitFor(() => expect(screen.queryByText('ana@example.com')).toBeNull())
-  expect(screen.getByText('bob@example.com')).toBeTruthy()
+  // Wait for the refetched list (it is empty while the request is in flight).
+  await waitFor(() => {
+    expect(screen.queryByText('ana@example.com')).toBeNull()
+    expect(screen.getByText('bob@example.com')).toBeTruthy()
+  })
 })
 
 it('approves one entry from its menu', async () => {

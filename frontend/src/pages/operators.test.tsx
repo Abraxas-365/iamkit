@@ -158,8 +158,12 @@ it('searches the visible operators by email', async () => {
   open('/operators')
   await screen.findByText('ann@acme.com')
   await user.type(screen.getByLabelText('Search operators'), 'BOB')
-  await waitFor(() => expect(screen.queryByText('ann@acme.com')).toBeNull())
-  expect(screen.getByText('bob@acme.com')).toBeTruthy()
+  // The search is debounced and refetched: between the two answers the list
+  // is empty, so wait for the settled list, not just ann's absence.
+  await waitFor(() => {
+    expect(screen.queryByText('ann@acme.com')).toBeNull()
+    expect(screen.getByText('bob@acme.com')).toBeTruthy()
+  })
   expect(screen.getByText('1–1 of 1 operators')).toBeTruthy()
 })
 
