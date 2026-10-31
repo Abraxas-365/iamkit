@@ -15,6 +15,8 @@ func TestHistoryAndExport(t *testing.T) {
 		switch r.URL.Path {
 		case "/api/v1/environments/env/roles/r1/history":
 			w.Write([]byte(`{"items":[{"id":4,"type":"role.updated"}],"next":0}`))
+		case "/api/v1/environments/env/event-retention":
+			w.Write([]byte(`{"security_retention_seconds":null,"default_retention_seconds":null,"ceilings":{"security":31536000,"default":7776000},"effective":{"security":31536000,"default":7776000}}`))
 		case "/api/v1/environments/env/events/export":
 			w.Write([]byte("{\"id\":1}\n{\"id\":2}\n"))
 		default:
@@ -27,6 +29,9 @@ func TestHistoryAndExport(t *testing.T) {
 	page, err := env.History(context.Background(), "roles", "r1", EventFilter{})
 	if err != nil || len(page.Items) != 1 || page.Items[0].Type != "role.updated" {
 		t.Fatalf("history = %+v %v", page, err)
+	}
+	if r, err := env.EventRetention(context.Background()); err != nil || r.Effective.Security != 31536000 || r.SecuritySeconds != nil {
+		t.Fatalf("retention = %+v %v", r, err)
 	}
 	n := 0
 	if err := env.ExportEvents(context.Background(), EventFilter{}, func(Event) error { n++; return nil }); err != nil || n != 2 {

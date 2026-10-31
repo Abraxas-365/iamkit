@@ -3559,6 +3559,9 @@
               "null"
             ]
           },
+          "retention_class": {
+            "type": "string"
+          },
           "subject": {
             "$ref": "#/components/schemas/Subject"
           },
@@ -3572,6 +3575,7 @@
           "environment_id",
           "id",
           "occurred_at",
+          "retention_class",
           "subject",
           "type"
         ],
@@ -8882,6 +8886,67 @@
           "kind",
           "note",
           "value"
+        ],
+        "type": "object"
+      },
+      "Retention": {
+        "properties": {
+          "ceilings": {
+            "$ref": "#/components/schemas/RetentionSeconds"
+          },
+          "default_retention_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "effective": {
+            "$ref": "#/components/schemas/RetentionSeconds"
+          },
+          "security_retention_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "ceilings",
+          "default_retention_seconds",
+          "effective",
+          "security_retention_seconds"
+        ],
+        "type": "object"
+      },
+      "RetentionPolicyInput": {
+        "properties": {
+          "default_retention_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "security_retention_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "RetentionSeconds": {
+        "properties": {
+          "default": {
+            "type": "integer"
+          },
+          "security": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "default",
+          "security"
         ],
         "type": "object"
       },
@@ -14985,6 +15050,63 @@
           }
         ],
         "summary": "EffectiveRoles serves GET /effective-roles?user_id=[&organization_id=]: without organization_id it covers every organization of the user.",
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
+    "/api/v1/environments/{environment}/event-retention": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentEventRetention",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Retention"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "Get answers the effective retention per class, the deployment ceilings and the environment's overrides (/api/v1 mounts it with iam:events:read).",
         "tags": [
           "Scoped API"
         ]
@@ -42141,6 +42263,133 @@
           }
         ],
         "summary": "EffectiveRoles serves GET /effective-roles?user_id=[&organization_id=]: without organization_id it covers every organization of the user.",
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
+    "/management/v1/environments/{environment}/event-retention": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentEventRetention",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Retention"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "Get answers the effective retention per class, the deployment ceilings and the environment's overrides (/api/v1 mounts it with iam:events:read).",
+        "tags": [
+          "Management API"
+        ]
+      },
+      "put": {
+        "operationId": "putManagementEnvironmentsbyEnvironmentEventRetention",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetentionPolicyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Retention"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "Set replaces the overrides: {\"security_retention_seconds\": n|null, \"default_retention_seconds\": n|null}.",
         "tags": [
           "Management API"
         ]

@@ -107,6 +107,7 @@ var routes = []route{
 	{"PUT", "/features/:feature", FeatureUpdated, "feature", "feature"},
 	{"DELETE", "/features/:feature", FeatureReset, "feature", "feature"},
 	{"PUT", "/limits", LimitsUpdated, "environment", ""},
+	{"PUT", "/event-retention", EventRetentionUpdated, "environment", ""},
 	{"DELETE", "/sessions/:session", "", "", ""},
 }
 

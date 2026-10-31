@@ -145,6 +145,15 @@ export {
   type UserDevice,
 } from "./security.js";
 export {
+  EventRetentionClient,
+  EventRetentionManagement,
+  type EventRetention,
+  type EventRetentionClientOptions,
+  type EventRetentionInput,
+  type EventRetentionManagementOptions,
+  type RetentionSeconds,
+} from "./event-retention.js";
+export {
   WaitlistClient,
   type WaitlistApproved,
   type WaitlistClientOptions,

@@ -16,7 +16,7 @@ import { ConfirmDialog, CopyText, DataTable, EmptyState, EntityRef, PageHeader, 
 import { language, t } from '@/lib/i18n'
 
 interface Session { id: string; user_id: string; user_name: string; user_email: string; organization_id: string; organization_name: string; application_id: string; application_name: string; resource_id: string; resource_name: string; authenticated_at: string; expires_at: string; revoked_at: string | null; ip_address?: string | null; user_agent?: string | null; impersonated?: boolean; impersonator?: string; impersonation_reason?: string }
-interface IAMEvent { id: number; type: string; actor: { kind: string; id: string }; subject: { kind: string; id: string }; organization_id?: string; data?: Record<string, unknown>; occurred_at: string }
+interface IAMEvent { id: number; type: string; actor: { kind: string; id: string }; subject: { kind: string; id: string }; organization_id?: string; data?: Record<string, unknown>; occurred_at: string; retention_class?: 'security' | 'default' }
 interface EventPage { items: IAMEvent[]; next: number }
 interface AuditEvent { id: string; actor_id: string; actor_label: string; actor_kind?: string; action: string; target_id: string; target_label?: string; created_at: string }
 
@@ -35,7 +35,7 @@ const nouns: Record<string, string> = {
   'oauth-clients': t('OAuth client'), 'provisioning-credentials': t('SCIM credential'), directories: t('SCIM credential'), memberships: t('membership'), members: t('member'),
   groups: t('group'), domains: t('domain'), invitations: t('invitation'), sessions: t('session'), 'login-settings': t('hosted login settings'),
   clients: t('client style'), 'sign-in': t('sign-in methods'), factors: t('second factors'), identities: t('linked identity'), 'mfa-policy': t('MFA policy'),
-  verify: t('domain verification'), 'setup-links': t('setup link'), resend: t('invitation'), revoke: t('credential'), 'logout-deliveries': t('logout delivery'), links: t('application link'), 'delivery-settings': t('notification settings'),
+  verify: t('domain verification'), 'setup-links': t('setup link'), resend: t('invitation'), revoke: t('credential'), 'logout-deliveries': t('logout delivery'), links: t('application link'), 'delivery-settings': t('notification settings'), 'event-retention': t('event retention'),
 }
 const named: Record<string, string> = {
   'federation.jit': t('User signed up through federation'), 'federation.email': t('User linked by verified email through federation'),
@@ -122,7 +122,7 @@ export function describeAction(action: string, target = '') {
 const eventWords: Record<string, string> = {
   api_key: t('API key'), api_key_policy: t('API key policy'), action: t('action'), action_execution: t('action binding'), action_target: t('action target'), application: t('application'), branding: t('branding'),
   connection: t('federation connection'), delivery: t('email delivery'), device: t('device sign-in'), domain: t('domain'), email_template: t('email template'),
-  feature: t('feature'), grant: t('grant'), group: t('group'), group_role: t('group role'), identity: t('linked identity'), impersonation: t('impersonation'),
+  event_retention: t('event retention'), feature: t('feature'), grant: t('grant'), group: t('group'), group_role: t('group role'), identity: t('linked identity'), impersonation: t('impersonation'),
   invitation: t('invitation'), login: t('sign-in'), logout_delivery: t('logout delivery'), membership: t('membership'), mfa: t('second factor'),
   oauth_client: t('OAuth client'), org_admin_portal: t('organization admin portal'), org_setup_link: t('setup link'), org_unit: t('org unit'), organization: t('organization'),
   password_policy: t('password policy'), position: t('position'), protected_resource: t('MCP server'), protected_resource_policy: t('MCP server lifetime ceilings'), provisioning_credential: t('SCIM credential'), provisioning_identity: t('SCIM identity'),
@@ -158,6 +158,7 @@ const eventVerbs: Record<string, (subject: string) => string> = {
 }
 const eventNamed: Record<string, string> = {
   'api_key.created': t('API key created'), 'api_key.revoked': t('API key revoked'), 'api_key_policy.updated': t('API key policy updated'),
+  'event_retention.updated': t('Event retention updated'),
   'captcha.updated': t('Bot protection updated'), 'captcha.deleted': t('Bot protection deleted'),
   'risk_policy.updated': t('Risk policy updated'), 'risk_policy.deleted': t('Risk policy reset'),
   'risk_restriction.created': t('Risk restriction added'), 'risk_restriction.deleted': t('Risk restriction removed'),

@@ -8,6 +8,9 @@ func (s *Server) administrationRoutes(e fiber.Router) {
 		s.Events.Register(e)
 		s.Events.RegisterHistory(e)
 	}
+	if s.EventRetention != nil {
+		s.EventRetention.Register(e)
+	}
 	if s.AuditLogEvents != nil {
 		s.AuditLogEvents.Register(e)
 		s.AuditLogActions.Register(e)

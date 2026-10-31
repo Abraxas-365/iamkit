@@ -52,6 +52,9 @@ type Event struct {
 	Organization *identity.OrganizationID `json:"organization_id,omitempty"`
 	Data         json.RawMessage          `json:"data"`
 	OccurredAt   time.Time                `json:"occurred_at"`
+	// RetentionClass is security or default (RetentionClassOf): which
+	// retention the event is pruned by.
+	RetentionClass string `json:"retention_class"`
 }
 
 // Filter narrows the event log. With After (0 = the beginning) the log is

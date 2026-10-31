@@ -19,13 +19,16 @@ import (
 
 type Deps struct {
 	DB *sqlx.DB
-	// Retention is how long events are kept (IAMKIT_EVENT_RETENTION).
-	Retention time.Duration
+	// Ceilings are the deployment's retention per class
+	// (IAMKIT_EVENT_RETENTION, IAMKIT_SECURITY_EVENT_RETENTION).
+	Ceilings event.Ceilings
 	// Cipher seals webhook secrets (IAMKIT_ENCRYPTION_KEY).
 	Cipher event.Cipher
 	// Transport reaches webhook endpoints (nil: public addresses only).
 	Transport http.RoundTripper
 	ActorID   func(*fiber.Ctx) string
+	// Owner reports whether the operator is a workspace owner.
+	Owner func(*fiber.Ctx) bool
 }
 
 type Module struct {
@@ -34,6 +37,8 @@ type Module struct {
 	HTTP     *eventhttp.Handler
 	// Webhooks serves event webhook subscriptions.
 	Webhooks *eventhttp.Subscriptions
+	// Retention serves the environment's event retention.
+	Retention *eventhttp.Retention
 	// Dispatcher sends one round of due webhook deliveries now (tests).
 	Dispatcher event.Dispatcher
 	// Jobs prunes events past the retention, delivers webhooks and
@@ -42,9 +47,9 @@ type Module struct {
 }
 
 func New(deps Deps) Module {
-	service := eventsvc.New(eventpg.New(deps.DB), deps.Retention)
+	service := eventsvc.New(eventpg.New(deps.DB), eventpg.NewRetention(deps.DB), deps.Ceilings)
 	hooks := eventsvc.NewSubscriptions(eventpg.NewSubscriptions(deps.DB), eventhook.Sender{Transport: deps.Transport}, deps.Cipher, eventhook.Secrets{})
-	return Module{Queries: service, Commands: service, HTTP: eventhttp.New(service),
+	return Module{Queries: service, Commands: service, HTTP: eventhttp.New(service), Retention: eventhttp.NewRetention(service, service, deps.ActorID, deps.Owner),
 		Webhooks: eventhttp.NewSubscriptions(hooks, hooks, deps.ActorID), Dispatcher: hooks, Jobs: []worker.Job{
 			{Name: "event_prune", Interval: time.Hour, Run: service.Prune},
 			{Name: "event_webhook", Interval: config.EventWebhookInterval, Run: hooks.DispatchRound, Lag: hooks.Lag},

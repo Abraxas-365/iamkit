@@ -48,6 +48,8 @@ it('describes semantic event types', () => {
   expect(describeEvent('risk.detected')).toBe('Risk detected at sign-in')
   expect(describeEvent('sign_in.blocked')).toBe('Sign-in blocked')
   expect(describeEvent('captcha.updated')).toBe('Bot protection updated')
+  expect(describeEvent('event_retention.updated')).toBe('Event retention updated')
+  expect(describeAction('PUT', `${env}/event-retention`)).toBe('Set event retention')
   expect(describeEvent('risk_restriction.created')).toBe('Risk restriction added')
   expect(describeAction('risk_policy.delete')).toBe('Reset the risk policy')
 })

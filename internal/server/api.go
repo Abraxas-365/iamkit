@@ -194,6 +194,11 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 		read := apiauth.RequirePermission(authorization.PermEventsRead)
 		e.Get("/events/export", read, h.Export)
 		e.Get("/events", read, h.List)
+		if r := s.APIHandlers.EventRetention; r != nil {
+			// Read only: shortening the retention deletes events, so it is
+			// a workspace owner's call in the management API.
+			e.Get("/event-retention", read, r.Get)
+		}
 		// An entity's history needs reading the entity and the log.
 		for collection, perm := range map[string]string{
 			"users": authorization.PermUsersRead, "organizations": authorization.PermOrgsRead,

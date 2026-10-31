@@ -4,6 +4,45 @@ Changes that can affect existing deployments, newest first. Each entry lists
 its **incompatible changes** first: what behaved differently before, and what
 to do about it.
 
+## Unreleased — Security event retention (D39)
+
+### Incompatible changes
+
+- **Security events live longer than other events.** Events now have a
+  `retention_class`: `security` (sign-ins, sessions, tokens, credentials,
+  consents, MFA, signing keys, SAML, impersonation, lockouts and password
+  changes) is pruned after the new `IAMKIT_SECURITY_EVENT_RETENTION` (default
+  `8760h`, 365 days); every other event after `IAMKIT_EVENT_RETENTION`
+  (default `2160h`, 90 days, unchanged). Nothing is pruned earlier than
+  before; security events are kept up to 275 days longer.
+- **`oauth_consent_prune` follows `IAMKIT_SECURITY_EVENT_RETENTION`** instead
+  of the fixed 365 days (`config.SecurityRetention` is now
+  `config.SecurityEventRetention`; `bootstrap.WithSecurityEventRetention`).
+- **Events carry `retention_class`** in `GET …/events`, history, export and
+  webhook bodies (`iamclient.Event.RetentionClass`, `@iamkit/node`
+  `WebhookEvent`, `sdk/webhook.Event`). An added field only.
+- **The `events_created` index is replaced** by `events_retention
+  (environment_id, retention_class, created_at)`, so the prune job can walk one
+  environment and class at a time. The ceiling index
+  `(created_at)` no longer exists: queries by time alone, if you run any
+  against the database, scan.
+
+Migration 025 adds `events.retention_class` (set at insert by a trigger from
+`event_retention_class(type)`, which an architecture test keeps equal to the
+Go catalog; existing rows are classified in the same migration with one
+`UPDATE`, so it takes a lock proportional to the size of `events` — run it
+in a quiet window on very large logs) and `event_retention_policies`.
+Environments may keep either class for less, never more:
+`GET`/`PUT …/event-retention` (`GET` also on `/api/v1` with
+`iam:events:read`; `PUT` for workspace owners, audited as
+`event_retention.updated`), `iam event-retention get|set`, the console page
+**Event retention**, `iamclient`/`apiclient`, `@iamkit/node`
+(`EventRetentionClient`, `EventRetentionManagement`) and Python
+(`iam.event_retention`). `event_prune` deletes in batches of 5000 rows per
+statement, so inserts never wait for it. The database is not an archive: use
+[log streams](docs/guides/platform/log-streams.md) to keep events longer. See
+[Event retention](docs/reference/events.md#retention).
+
 ## Unreleased — MCP authorization, phase (d): consent and revocation
 
 ### Incompatible changes

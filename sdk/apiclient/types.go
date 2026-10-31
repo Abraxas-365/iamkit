@@ -61,6 +61,8 @@ type (
 	EmailTemplateSummary    = iamclient.EmailTemplateSummary
 	Event                   = iamclient.Event
 	EventFilter             = iamclient.EventFilter
+	EventRetention          = iamclient.EventRetention
+	RetentionSeconds        = iamclient.RetentionSeconds
 	EventPage               = iamclient.EventPage
 	EventParty              = iamclient.EventParty
 	Factor                  = iamclient.Factor

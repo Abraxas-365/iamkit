@@ -20,18 +20,43 @@ type Queries interface {
 
 // Commands maintains the event log.
 type Commands interface {
-	// Prune deletes events older than the retention in batches; more asks
-	// for another round.
+	// Prune deletes events past their effective retention (environment ×
+	// class), at most event.PruneBatch rows per statement; more asks for
+	// another round.
 	Prune(ctx context.Context) (more bool, err error)
+}
+
+// RetentionCommands changes an environment's event retention.
+type RetentionCommands interface {
+	// SetRetention replaces the environment's overrides (audited
+	// event_retention.updated); values must lie between MinRetention and
+	// the deployment ceiling.
+	SetRetention(ctx context.Context, m Mutation, input RetentionPolicy) (Retention, error)
+}
+
+// RetentionQueries reads an environment's event retention.
+type RetentionQueries interface {
+	Retention(ctx context.Context, environment identity.EnvironmentID) (Retention, error)
+}
+
+// RetentionRepository stores the environments' overrides.
+type RetentionRepository interface {
+	// Policy is the environment's stored overrides (none: both nil).
+	Policy(ctx context.Context, environment identity.EnvironmentID) (RetentionPolicy, error)
+	SavePolicy(ctx context.Context, m Mutation, policy RetentionPolicy) error
 }
 
 // Repository persists and reads events (writers use eventpg in their own
 // transactions).
 type Repository interface {
 	List(ctx context.Context, environment identity.EnvironmentID, filter Filter, limit int) ([]Event, error)
-	// Prune deletes at most batch events created before cutoff and returns
-	// how many it deleted.
-	Prune(ctx context.Context, cutoff time.Time, batch int) (int, error)
+	// Environments are the environments with their stored retention
+	// overrides (none stored: both nil).
+	Environments(ctx context.Context) ([]EnvironmentPolicy, error)
+	// Prune deletes at most batch events of the environment and class
+	// created before cutoff and returns how many it deleted. It runs as one
+	// autocommit statement: inserts never wait on it.
+	Prune(ctx context.Context, environment identity.EnvironmentID, class string, cutoff time.Time, batch int) (int, error)
 }
 
 // SubscriptionCommands manages event webhook subscriptions.

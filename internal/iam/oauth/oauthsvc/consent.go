@@ -22,16 +22,10 @@ var (
 	_ oauth.ConsentQueries  = (*Consents)(nil)
 )
 
-func NewConsents(r oauth.ConsentRepository) *Consents {
-	return &Consents{repository: r, retention: config.SecurityRetention}
-}
-
-// SetRetention sets how long revoked consents and grants are kept
-// (non-positive: config.SecurityRetention).
-func (s *Consents) SetRetention(d time.Duration) {
-	if d > 0 {
-		s.retention = d
-	}
+// NewConsents keeps revoked consents and grants for retention, the
+// deployment's security event ceiling (must be positive).
+func NewConsents(r oauth.ConsentRepository, retention time.Duration) *Consents {
+	return &Consents{repository: r, retention: retention}
 }
 
 func (s *Consents) Disconnect(ctx context.Context, m oauth.Mutation, input oauth.Disconnect) error {

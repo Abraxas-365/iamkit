@@ -75,6 +75,8 @@ type APIHandlerSet struct {
 	SetupLinks *orgadminhttp.SetupLinks
 	// Events serves the event log (iam:events:read).
 	Events *eventhttp.Handler
+	// EventRetention serves GET …/event-retention (iam:events:read).
+	EventRetention *eventhttp.Retention
 	// Webhooks serves event webhook subscriptions (iam:webhooks:*).
 	Webhooks *eventhttp.Subscriptions
 	// LogStreams serves log streams (iam:audit-logs:read/manage).
@@ -151,8 +153,10 @@ type Server struct {
 	// SetupLinks serves organization setup links to operators and the
 	// public exchange of a link for a setup bearer.
 	SetupLinks *orgadminhttp.SetupLinks
-	// Events serves the environment's event log.
-	Events *eventhttp.Handler
+	// Events serves the environment's event log; EventRetention its
+	// retention (management GET/PUT).
+	Events         *eventhttp.Handler
+	EventRetention *eventhttp.Retention
 	// AuditLogEvents and AuditLogActions serve the app audit log.
 	AuditLogEvents  *auditloghttp.Events
 	AuditLogActions *auditloghttp.Actions

@@ -20,6 +20,14 @@ func (e Environment) Events(ctx context.Context, filter EventFilter) (EventPage,
 	return out, err
 }
 
+// EventRetention reads how long the environment keeps events (needs
+// iam:events:read). Changing it is a management call (iamclient).
+func (e Environment) EventRetention(ctx context.Context) (EventRetention, error) {
+	var out EventRetention
+	err := e.client.do(ctx, "GET", e.path("event-retention"), nil, nil, &out)
+	return out, err
+}
+
 // History reads one entity's events newest first (collection "users",
 // "organizations", "applications", "roles" or "resources"; needs the
 // collection's read permission and iam:events:read). Updates carry

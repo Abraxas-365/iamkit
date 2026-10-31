@@ -256,6 +256,10 @@ const (
 	// LimitsUpdated: the environment's limits were replaced (data.limits:
 	// the limits set, absent = the deployment's).
 	LimitsUpdated = "limits.updated"
+	// EventRetentionUpdated: the environment's event retention was
+	// replaced (data.security_retention_seconds / default_retention_seconds,
+	// null = the deployment's).
+	EventRetentionUpdated = "event_retention.updated"
 
 	SMSUpdated = "sms.updated"
 	SMSDeleted = "sms.deleted"

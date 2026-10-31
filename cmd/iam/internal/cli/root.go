@@ -93,6 +93,7 @@ Workspace-level commands (me, projects, environments, operators, keys) do not.`,
 	cmd.AddCommand(featuresCmd())
 	cmd.AddCommand(limitsCmd())
 	cmd.AddCommand(usageCmd())
+	cmd.AddCommand(eventRetentionCmd())
 	cmd.AddCommand(actionsCmd())
 	cmd.AddCommand(samlAppsCmd())
 	cmd.AddCommand(seedCmd())

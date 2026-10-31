@@ -191,12 +191,19 @@ const SAMLResponseMax = 64 << 10
 // IAMKIT_EVENT_RETENTION says otherwise.
 const EventRetention = 90 * 24 * time.Hour
 
-// SecurityRetention is how long security records outlive their end:
-// revoked consents and administrator grants (oauth_consent_prune).
-const SecurityRetention = 365 * 24 * time.Hour
+// SecurityEventRetention is the deployment ceiling for security records:
+// security-class events (event.RetentionClassOf) and the revoked consents
+// and administrator grants oauth_consent_prune deletes, unless
+// IAMKIT_SECURITY_EVENT_RETENTION says otherwise. It is the one value both
+// read; an environment may only shorten it for events.
+const SecurityEventRetention = 365 * 24 * time.Hour
+
+// MinSecurityEventRetention is the least IAMKIT_SECURITY_EVENT_RETENTION
+// and an environment's event retention override may be.
+const MinSecurityEventRetention = 24 * time.Hour
 
 // Consent jobs: client_grant_expire revokes grants past expires_at,
-// oauth_consent_prune deletes revoked records after SecurityRetention
+// oauth_consent_prune deletes revoked records after SecurityEventRetention
 // (ConsentJobBatch rows a round each).
 const (
 	ConsentJobInterval = time.Minute

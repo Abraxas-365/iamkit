@@ -434,6 +434,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/event-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get answers the effective retention per class, the deployment ceilings and the environment's overrides (/api/v1 mounts it with iam:events:read). */
+        get: operations["getApiEnvironmentsbyEnvironmentEventRetention"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/events": {
         parameters: {
             query?: never;
@@ -4709,6 +4726,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/management/v1/environments/{environment}/event-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get answers the effective retention per class, the deployment ceilings and the environment's overrides (/api/v1 mounts it with iam:events:read). */
+        get: operations["getManagementEnvironmentsbyEnvironmentEventRetention"];
+        /** Set replaces the overrides: {"security_retention_seconds": n|null, "default_retention_seconds": n|null}. */
+        put: operations["putManagementEnvironmentsbyEnvironmentEventRetention"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/management/v1/environments/{environment}/events": {
         parameters: {
             query?: never;
@@ -8955,6 +8990,7 @@ export interface components {
             occurred_at: string;
             /** @description UUID (empty when unset) */
             organization_id?: string | null;
+            retention_class: string;
             subject: components["schemas"]["Subject"];
             type: string;
         };
@@ -10316,6 +10352,20 @@ export interface components {
             kind: string;
             note: string;
             value: string;
+        };
+        Retention: {
+            ceilings: components["schemas"]["RetentionSeconds"];
+            default_retention_seconds: number | null;
+            effective: components["schemas"]["RetentionSeconds"];
+            security_retention_seconds: number | null;
+        };
+        RetentionPolicyInput: {
+            default_retention_seconds?: number | null;
+            security_retention_seconds?: number | null;
+        };
+        RetentionSeconds: {
+            default: number;
+            security: number;
         };
         RetireInput: {
             force?: boolean;
@@ -12953,6 +13003,47 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["EffectiveRoleView"][] | null;
                     };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getApiEnvironmentsbyEnvironmentEventRetention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Retention"];
                 };
             };
             /** @description Client error */
@@ -29840,6 +29931,92 @@ export interface operations {
                     "application/json": {
                         items: components["schemas"]["EffectiveRoleView"][] | null;
                     };
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getManagementEnvironmentsbyEnvironmentEventRetention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Retention"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putManagementEnvironmentsbyEnvironmentEventRetention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RetentionPolicyInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Retention"];
                 };
             };
             /** @description Client error */

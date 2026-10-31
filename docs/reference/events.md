@@ -91,7 +91,7 @@ Types are `<subject>.<verb>`. The catalog lives in
 | `webhook.*` | `created`, `updated`, `deleted`, `secret_rotated`, `replayed`, `delivery_retried`, `disabled` (by IAMKit after three days of failures; actor `system`) |
 | `action.*`, `action_target.*`, `action_execution.*` | [Actions](../guides/platform/actions.md): `action.failed` (a target failed or was skipped; subject = the target, `data.condition`, `outcome`, `error`, `interrupted`; actor `system`), `action_target.created`/`updated`/`deleted`/`secret_rotated`, `action_execution.updated`/`deleted` (subject = the condition) |
 | `audit_log_action.*` | [App audit log](../guides/audit-logs.md) actions: `audit_log_action.created`/`updated`/`deleted` (subject = the action; the app events themselves are not in this log) |
-| Settings | `branding.*`, `sign_in_options.*`, `password_policy.*`, `sign_in_policy.*`, `delivery.*`, `email_template.*`, `sign_in_texts.*`, `sms.*`, `signing_key.*`, `saml_service_provider.*`, `feature.*` (`updated`: `data.enabled`; `reset`; subject = the feature name), `limits.updated` (`data.limits`: the environment's limits) |
+| Settings | `branding.*`, `sign_in_options.*`, `password_policy.*`, `sign_in_policy.*`, `delivery.*`, `email_template.*`, `sign_in_texts.*`, `sms.*`, `signing_key.*`, `saml_service_provider.*`, `feature.*` (`updated`: `data.enabled`; `reset`; subject = the feature name), `limits.updated` (`data.limits`: the environment's limits), `event_retention.updated` (the environment's [event retention](#per-environment-retention)) |
 
 `data` never contains secrets, password hashes or codes. Unknown fields may be
 added to `data` at any time; new types may be added to a family.
@@ -158,10 +158,59 @@ To have events pushed to you instead of polling, add an
 
 ## Retention
 
-Events older than `IAMKIT_EVENT_RETENTION` (a Go duration, default `2160h` =
-90 days, at least `1h`) are deleted hourly by the `event_prune`
-[background job](../operations/observability.md#background-jobs). Export what
-you need to keep longer with [export](#export).
+Every event has a `retention_class`, set when it is written from IAMKit's
+catalog and never changed:
+
+| Class | Events | Kept for (ceiling) |
+| --- | --- | --- |
+| `security` | `session.*`, `sign_in.*`, `login.*`, `risk.*`, `impersonation.*`, `token.*`, `device.*`, `oauth_client.*`, `oauth_consent.*`, `api_key.*`, `mfa.*`, `identity.*`, `signing_key.*`, `saml.*`, and `user.locked`, `user.unlocked`, `user.password_changed`, `user.password_change_required`, `user.sessions_revoked` | `IAMKIT_SECURITY_EVENT_RETENTION`, default `8760h` (365 days) |
+| `default` | every other event | `IAMKIT_EVENT_RETENTION`, default `2160h` (90 days) |
+
+Both are Go durations (`IAMKIT_SECURITY_EVENT_RETENTION` at least `24h`, `IAMKIT_EVENT_RETENTION` at least `1h`). The `event_prune`
+[background job](../operations/observability.md#background-jobs) deletes
+expired events hourly, per environment and class, in batches of at most 5000
+rows, so pruning never blocks the writes of new events. The retention class is
+in every event's JSON (`retention_class`), including webhook bodies and the
+export.
+
+### Per-environment retention
+
+The ceilings are the deployment's. An environment may keep either class for
+**less**, never for more:
+
+```http
+GET /management/v1/environments/ENVIRONMENT_ID/event-retention
+PUT /management/v1/environments/ENVIRONMENT_ID/event-retention
+X-API-Key: ik_mgmt_…
+Content-Type: application/json
+
+{"security_retention_seconds": 15552000, "default_retention_seconds": null}
+```
+
+`null` keeps the ceiling; a number must be between `86400` (24 hours) and the
+ceiling, otherwise the answer is 422 `RETENTION_OUT_OF_RANGE`. `PUT` replaces
+both values, is limited to workspace owners (like `…/limits`) and is recorded
+as `event_retention.updated` (`data.security_retention_seconds`,
+`data.default_retention_seconds`). `GET` is also served at
+`/api/v1/environments/ENVIRONMENT_ID/event-retention` to tokens holding
+`iam:events:read`. The response:
+
+```json
+{
+  "security_retention_seconds": 15552000,
+  "default_retention_seconds": null,
+  "ceilings": {"security": 31536000, "default": 7776000},
+  "effective": {"security": 15552000, "default": 7776000}
+}
+```
+
+Lowering a value takes effect at the next `event_prune` round: events past the
+new cutoff are deleted then and cannot be recovered.
+
+**The database is not an archive.** To keep events longer than the ceilings —
+a year of security events, say — send them to S3 or Datadog with a
+[log stream](../guides/platform/log-streams.md) or [export](#export) them;
+IAMKit prunes its own copy regardless.
 
 ## CLI
 
@@ -170,4 +219,6 @@ iam events list --type user.* --type login.failed
 iam events list --after 0 --limit 200   # read the log as a feed
 iam events history users 33b4…          # one entity's history with its changes
 iam events export --file events.ndjson  # archive (resume with --after <last id>)
+iam event-retention get                 # effective retention, ceilings, own values
+iam event-retention set --security 180d --default 30d   # shorten (owners only)
 ```

@@ -39,6 +39,7 @@ import (
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/adapters/authzhttp"
 	"github.com/Abraxas-365/iamkit/internal/iam/authorization/authzmodule"
+	"github.com/Abraxas-365/iamkit/internal/iam/event"
 	"github.com/Abraxas-365/iamkit/internal/iam/event/eventmodule"
 	"github.com/Abraxas-365/iamkit/internal/iam/feature"
 	"github.com/Abraxas-365/iamkit/internal/iam/feature/featuremodule"
@@ -108,6 +109,7 @@ type options struct {
 	origins                               []string
 	ldapDial                              fedldap.Dialer
 	retention                             time.Duration
+	securityRetention                     time.Duration
 	auditRetention                        time.Duration
 	webhooks                              http.RoundTripper
 	logStreams                            http.RoundTripper
@@ -193,6 +195,13 @@ func WithSAMLLogoutTransport(t http.RoundTripper) Option {
 // WithEventRetention sets how long the event log keeps events
 // (IAMKIT_EVENT_RETENTION, default config.EventRetention).
 func WithEventRetention(d time.Duration) Option { return func(o *options) { o.retention = d } }
+
+// WithSecurityEventRetention sets the ceiling for security-class events and
+// for revoked consents and administrator grants
+// (IAMKIT_SECURITY_EVENT_RETENTION, default config.SecurityEventRetention).
+func WithSecurityEventRetention(d time.Duration) Option {
+	return func(o *options) { o.securityRetention = d }
+}
 
 // WithAuditLogRetention sets how long the app audit log keeps events
 // (IAMKIT_AUDIT_LOG_RETENTION, default config.AuditLogRetention).
@@ -287,6 +296,9 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	if o.retention <= 0 {
 		o.retention = config.EventRetention
 	}
+	if o.securityRetention <= 0 {
+		o.securityRetention = config.SecurityEventRetention
+	}
 	if o.sealer == nil {
 		o.sealer = &cryptox.Sealer{}
 	}
@@ -373,7 +385,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	if fetchWindow == nil {
 		fetchWindow = usagememory.New()
 	}
-	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, ClientMetadataTransport: o.clientMetadata, Cache: metadataStore(o.metadataCache, shared), Window: fetchWindow, MaxPending: o.clientPending, MaxRequestsPerUser: o.clientUserRequests, MaxRequestsPerOrganization: o.clientOrgRequests, Features: featureModule.Queries, Tokens: s.Tokens, ActorID: server.OperatorID})
+	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, ClientMetadataTransport: o.clientMetadata, Cache: metadataStore(o.metadataCache, shared), Window: fetchWindow, MaxPending: o.clientPending, MaxRequestsPerUser: o.clientUserRequests, MaxRequestsPerOrganization: o.clientOrgRequests, Features: featureModule.Queries, Tokens: s.Tokens, SecurityRetention: o.securityRetention, ActorID: server.OperatorID})
 	s.OAuth = oauthModule.HTTP
 	s.ClientOrigins = oauthModule.Queries
 	s.LogoutDeliveries = oauthModule.Logouts
@@ -384,8 +396,9 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		return s.Tokens.Validate(c, environment, audience)
 	})
 	s.LogoutDispatcher = oauthModule.Dispatcher
-	eventModule := eventmodule.New(eventmodule.Deps{DB: db, Retention: o.retention, Cipher: o.sealer, Transport: o.webhooks, ActorID: server.OperatorID})
+	eventModule := eventmodule.New(eventmodule.Deps{DB: db, Ceilings: event.Ceilings{Security: o.securityRetention, Default: o.retention}, Owner: server.Owner, Cipher: o.sealer, Transport: o.webhooks, ActorID: server.OperatorID})
 	s.Events = eventModule.HTTP
+	s.EventRetention = eventModule.Retention
 	s.Webhooks = eventModule.Webhooks
 	s.WebhookDispatcher = eventModule.Dispatcher
 	logStreamModule := logstreammodule.New(logstreammodule.Deps{DB: db, Cipher: o.sealer, Transport: o.logStreams, ActorID: server.OperatorID})
@@ -497,6 +510,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		SMS:      authhttp.NewSMSHandler(authenticationModule.SMS, authenticationModule.SMSQueries, actor),
 		OrgAdmin: orgAdmin.HTTP, SetupLinks: orgadminhttp.NewSetupLinks(orgAdmin.SetupLinkCommands, orgAdmin.SetupLinkQueries, actor),
 		Events:             eventModule.HTTP,
+		EventRetention:     eventModule.Retention.WithActor(actor),
 		AuditLogEvents:     auditLogModule.Events,
 		AuditLogActions:    auditLogModule.Actions.WithActor(actor),
 		Webhooks:           eventModule.Webhooks.WithActor(actor),
@@ -617,6 +631,14 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		}
 		retention = d
 	}
+	securityRetention := config.SecurityEventRetention
+	if v := os.Getenv("IAMKIT_SECURITY_EVENT_RETENTION"); v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d < config.MinSecurityEventRetention {
+			return nil, errx.Validation("IAMKIT_SECURITY_EVENT_RETENTION must be a duration of at least 24h (e.g. 8760h)")
+		}
+		securityRetention = d
+	}
 	auditRetention := config.AuditLogRetention
 	if v := os.Getenv("IAMKIT_AUDIT_LOG_RETENTION"); v != "" {
 		d, err := time.ParseDuration(v)
@@ -661,7 +683,7 @@ func FromEnvironment(db *sqlx.DB) (*server.Server, error) {
 		// A country header is only believed from a trusted proxy.
 		return nil, errx.Validation("IAMKIT_GEOIP_HEADER needs IAMKIT_TRUSTED_PROXIES")
 	}
-	opts := []Option{WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso), WithWebAuthnOrigins(list(os.Getenv("IAMKIT_WEBAUTHN_ORIGINS"))), WithEventRetention(retention), WithAuditLogRetention(auditRetention), WithFeatures(features), WithLimits(limits),
+	opts := []Option{WithSealer(sealer), WithMail(mail), WithOperatorSSO(sso), WithWebAuthnOrigins(list(os.Getenv("IAMKIT_WEBAUTHN_ORIGINS"))), WithEventRetention(retention), WithSecurityEventRetention(securityRetention), WithAuditLogRetention(auditRetention), WithFeatures(features), WithLimits(limits),
 		WithSignInAttemptRetention(attemptRetention), WithWaitlistRetention(waitlistRetention), WithGeoIP(strings.TrimSpace(os.Getenv("IAMKIT_GEOIP_DB")), geoHeader)}
 	if warning, err := checkReplicas(os.Getenv("IAMKIT_REPLICAS"), os.Getenv("REDIS_URL") != ""); err != nil {
 		return nil, err

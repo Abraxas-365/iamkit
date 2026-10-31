@@ -23,6 +23,9 @@ type Event struct {
 	OrganizationID string          `json:"organization_id,omitempty"`
 	Data           json.RawMessage `json:"data,omitempty"`
 	OccurredAt     time.Time       `json:"occurred_at"`
+	// RetentionClass is "security" or "default": which retention prunes the
+	// event (see EventRetention).
+	RetentionClass string `json:"retention_class"`
 }
 
 // EventParty is an event's actor or subject. Actor kinds are "operator",

@@ -674,6 +674,29 @@ class Risk(_Resource):
         await self._c.request("POST", f"{self._c.env()}/captcha/test")
 
 
+class EventRetention(_Resource):
+    """How long the environment keeps events (``/event-retention``).
+
+    The deployment sets a ceiling per class (``IAMKIT_SECURITY_EVENT_RETENTION``, ``IAMKIT_EVENT_RETENTION``);
+    the environment's own values can only shorten them. Only workspace owners may ``set`` (403 otherwise).
+    """
+
+    async def get(self) -> JSON:
+        """``{"security_retention_seconds", "default_retention_seconds", "ceilings", "effective"}``; own values
+        are ``None`` when the ceiling applies, ``effective`` is what events are pruned by."""
+        return await self._c.request("GET", f"{self._c.env()}/event-retention")  # type: ignore[no-any-return]
+
+    async def set(
+        self, *, security_retention_seconds: int | None = None, default_retention_seconds: int | None = None
+    ) -> JSON:
+        """Replaces both values; ``None`` goes back to the ceiling (else 422 ``RETENTION_OUT_OF_RANGE``)."""
+        body = {
+            "security_retention_seconds": security_retention_seconds,
+            "default_retention_seconds": default_retention_seconds,
+        }
+        return await self._c.request("PUT", f"{self._c.env()}/event-retention", json=body)  # type: ignore[no-any-return]
+
+
 class Waitlist(_Resource):
     """The sign-up waitlist (``/waitlist``, on with the sign-in policy's ``waitlist``).
 

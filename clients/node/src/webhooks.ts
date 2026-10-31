@@ -38,6 +38,8 @@ export interface WebhookEvent {
   /** `{"truncated": true}` past 64 KiB: read the event log for it. */
   data?: unknown;
   occurred_at: string;
+  /** `security` or `default`: which retention prunes the event in IAMKit's log. */
+  retention_class?: "security" | "default";
 }
 
 export interface VerifyOptions {

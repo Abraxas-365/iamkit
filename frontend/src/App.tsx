@@ -37,6 +37,7 @@ import SigningKeysPage from '@/pages/signing-keys'
 import SecurityPage from '@/pages/security'
 import FeaturesPage from '@/pages/features'
 import UsagePage from '@/pages/usage'
+import EventRetentionPage from '@/pages/event-retention'
 import ActionsPage, { ActionTargetPage } from '@/pages/actions'
 import AuditLogsPage from '@/pages/audit-logs'
 import LogStreamsPage from '@/pages/log-streams'
@@ -90,6 +91,7 @@ export default function App() {
         <Route path="signing-keys" element={<SigningKeysPage />} />
         <Route path="features" element={<FeaturesPage />} />
         <Route path="usage" element={<UsagePage />} />
+        <Route path="event-retention" element={<EventRetentionPage />} />
         <Route path="saml-apps" element={<SAMLAppsPage />} />
         <Route path="hosted-login/default" element={<BrandingEditorPage key="default" />} />
         <Route path="hosted-login/texts" element={<SignInTextsPage />} />

@@ -50,6 +50,10 @@ type Deps struct {
 	// MaxRequestsPerUser and MaxRequestsPerOrganization cap a user's, and an
 	// organization's, requests for pending clients (0: the config defaults).
 	MaxRequestsPerUser, MaxRequestsPerOrganization int
+	// SecurityRetention is how long revoked consents and administrator
+	// grants are kept: the deployment's security event ceiling
+	// (IAMKIT_SECURITY_EVENT_RETENTION), the same value the event log uses.
+	SecurityRetention time.Duration
 	// Tokens reads, signs and answers IAMKit's own bearer tokens
 	// (authhttp.Tokens).
 	Tokens  oauthhttp.Tokens
@@ -121,7 +125,10 @@ func New(deps Deps) Module {
 	logouts := oauthsvc.NewLogouts(clients, oauthfosite.NewLogoutSender(deps.Keys, deps.Issuer, deps.Transport))
 	protected := oauthsvc.NewProtectedResources(oauthpg.NewProtectedResources(deps.DB))
 	admissions := oauthsvc.NewAdmissions(oauthpg.NewAdmission(deps.DB), deps.Features)
-	consents := oauthsvc.NewConsents(oauthpg.NewConsents(deps.DB))
+	if deps.SecurityRetention <= 0 {
+		deps.SecurityRetention = config.SecurityEventRetention
+	}
+	consents := oauthsvc.NewConsents(oauthpg.NewConsents(deps.DB), deps.SecurityRetention)
 	handler.Consents(consents)
 	return Module{Commands: service, Queries: service, Flows: service, Devices: service, HTTP: handler, Logouts: oauthhttp.NewLogouts(logouts, logouts, deps.ActorID), Dispatcher: logouts,
 		ProtectedResources: oauthhttp.NewProtectedResources(protected, protected, deps.ActorID), Admissions: oauthhttp.NewAdmissions(admissions, admissions, deps.ActorID), Consents: oauthhttp.NewConsents(consents, consents, deps.ActorID), Jobs: []worker.Job{

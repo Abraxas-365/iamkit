@@ -13,7 +13,9 @@ falls back to the database (see [Redis](scaling-and-abuse.md#redis-optional)).
 The server binary also runs background jobs (OAuth back-channel logout delivery
 and pruning; SAML back-channel logout delivery and pruning when the `saml_idp`
 feature is enabled; `event_prune`, which deletes
-[events](../reference/events.md) past `IAMKIT_EVENT_RETENTION`; `event_webhook`
+[events](../reference/events.md#retention) past their class's retention
+(`IAMKIT_SECURITY_EVENT_RETENTION` and `IAMKIT_EVENT_RETENTION`, or the
+environment's shorter values); `event_webhook`
 and `event_webhook_maintenance`, which send
 [event webhooks](../reference/event-webhooks.md) and disable failing
 subscriptions; `log_stream_delivery` and `log_stream_maintenance`, which send

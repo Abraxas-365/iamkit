@@ -52,6 +52,9 @@ type Event struct {
 	OrganizationID string          `json:"organization_id,omitempty"`
 	Data           json.RawMessage `json:"data,omitempty"`
 	OccurredAt     time.Time       `json:"occurred_at"`
+	// RetentionClass is "security" or "default": which retention prunes
+	// the event in IAMKit's log.
+	RetentionClass string `json:"retention_class,omitempty"`
 }
 
 // Party is an event's actor or subject.

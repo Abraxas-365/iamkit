@@ -52,12 +52,15 @@ const (
 // turned off after failing for config.EventWebhookDisableAfter.
 const DisabledFailing = "failing"
 
-// Mutation is an audited subscription change.
+// Mutation is an audited change of subscriptions or event retention.
 type Mutation struct {
 	Environment identity.EnvironmentID
 	Actor       string
 	Action      string
 	Target      string
+	// Owner says whether the operator is a workspace owner: only owners
+	// change the event retention (read by SetRetention only).
+	Owner bool
 }
 
 type Subscription struct {
