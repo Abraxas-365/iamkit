@@ -560,7 +560,9 @@ After signing in, the user sees IAMKit's consent page. It shows:
 
 - the client's host (`vscode.dev`), or its name when a preset vouches for it;
 - the server's name;
-- the scopes to allow, with profile scopes worded ("Your email address");
+- the scopes to allow, each by its [display name and description](#describe-your-permissions)
+  when the server's resource has them (the permission's name stays beside it,
+  greyed), and profile scopes worded ("Your email address");
 - collapsed, the scopes the user does not hold yet (the client gets them
   only once an administrator gives them to the user);
 - collapsed, the scopes already allowed.
@@ -579,6 +581,36 @@ The page's texts are part of the hosted catalog (`hosted.consent.*`), so
 environment, client or organization and locale. The defaults say "an
 administrator", never a team name.
 
+### Describe your permissions
+
+A permission's name (`notes:read`) is for code. People read a **display name**
+(80 characters) and a **description** (300 characters, plain text), per
+language, set on the resource. The consent page, `<ConnectedApps>`, the
+console and `GET /identity/v1/authorize/:ticket` all use them; a permission
+without text shows its name, so nothing breaks while you write them.
+
+```bash
+curl -X PUT "$IAMKIT_URL/management/v1/environments/$ENV/resources/$RESOURCE/permission-descriptions" -H "X-API-Key: $MGMT" \
+  -H 'Content-Type: application/json' -d '{"items":[
+    {"permission":"notes:read","locale":"","display_name":"Read your notes","description":"See your notes and folders."},
+    {"permission":"notes:read","locale":"es","display_name":"Leer tus notas","description":"Ver tus notas y carpetas."}]}'
+```
+
+`PUT` replaces the whole set (`{"items":[]}` clears it); `GET` returns it.
+`locale` `""` is the default text; other values are the languages IAMKit
+speaks (`es`, `pt-BR`, …). A reader gets the exact locale, then its base
+language (`es-PE` → `es`), then the default, then the name. Hosted pages
+choose the language like the rest of the page (`ui_locales`, then
+`Accept-Language`); connected apps accept `?locale=`. The permission must be
+in the resource's catalog, and removing it from the catalog deletes its
+texts. [Permissions as code](permissions-as-code.md) keeps them in the
+manifest, and the console edits them in the resource's detail page. CLI: `iam
+resources descriptions get|set RESOURCE_ID --file descriptions.json`.
+
+In `consent.scopes` and in connected apps, `scopes` are objects
+`{name, display_name, description}` (`display_name` is the name when nothing
+describes it).
+
 ### A consent page of your own
 
 An environment with a [custom sign-in UI](custom-sign-in-ui.md) can ask for
@@ -593,7 +625,9 @@ Then, when `POST /oauth/authorize/complete` answers `consent_required: true`:
 
 1. Describe the ticket again: `GET /identity/v1/authorize/:ticket` returns
    `consent_required` and `consent` (client, server, `scopes`,
-   `unheld_scopes`, `agreed_scopes`, `ui`).
+   `unheld_scopes`, `agreed_scopes`, `ui`). Each scope is
+   `{name, display_name, description}` in the language of the request's
+   `Accept-Language`.
 2. Show your page.
 3. Send the decision from the same browser:
    `POST /identity/v1/authorize/:ticket/consent` with `{"approve": true}` or

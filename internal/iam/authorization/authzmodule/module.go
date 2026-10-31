@@ -21,9 +21,12 @@ type Module struct {
 	GrantQueries          authorization.GrantQueries
 	ResourceGrantCommands authorization.ResourceGrantCommands
 	ResourceGrantQueries  authorization.ResourceGrantQueries
+	DescriptionCommands   authorization.DescriptionCommands
+	DescriptionQueries    authorization.DescriptionQueries
 	HTTP                  *authzhttp.Handler
 	Grants                *authzhttp.Grants
 	ResourceGrants        *authzhttp.ResourceGrants
+	Descriptions          *authzhttp.Descriptions
 }
 
 func New(deps Deps) Module {
@@ -31,7 +34,9 @@ func New(deps Deps) Module {
 	resources := authzsvc.New(repository)
 	grants := authzsvc.NewGrants(repository)
 	resourceGrants := authzsvc.NewResourceGrants(repository)
-	return Module{ResourceCommands: resources, ResourceQueries: resources, GrantCommands: grants, GrantQueries: grants,
+	descriptions := authzsvc.NewDescriptions(repository)
+	return Module{DescriptionCommands: descriptions, DescriptionQueries: descriptions, Descriptions: authzhttp.NewDescriptions(descriptions, descriptions, deps.ActorID),
+		ResourceCommands: resources, ResourceQueries: resources, GrantCommands: grants, GrantQueries: grants,
 		ResourceGrantCommands: resourceGrants, ResourceGrantQueries: resourceGrants,
 		HTTP: authzhttp.New(resources, resources, deps.ActorID), Grants: authzhttp.NewGrants(grants, grants, deps.ActorID),
 		ResourceGrants: authzhttp.NewResourceGrants(resourceGrants, resourceGrants, deps.ActorID)}

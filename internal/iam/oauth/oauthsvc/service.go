@@ -344,7 +344,7 @@ func (s *Service) ConsentPrompt(ctx context.Context, ticket, binding string) (oa
 	held, unheld, agreed := oauth.NewConsentPrompt(p.Ticket.ConsentScopes, asked, access.Permissions)
 	shown := oauth.ConnectedClient{ID: client.ID, ClientID: client.PublicID(), Source: client.Source, Name: client.Name, Preset: client.Preset}.Describe(client.LogoURI)
 	return oauth.ConsentPrompt{Client: shown, Protected: target.ID, Resource: target.URI, ResourceName: target.Name, User: info.User, Organization: info.Organization,
-		Pending: held, Unheld: unheld, Agreed: agreed, UI: target.ConsentUI, Environment: client.Environment, Form: p.Form}, nil
+		Pending: held, Unheld: unheld, Agreed: agreed, ResourceID: client.Resource, UI: target.ConsentUI, Environment: client.Environment, Form: p.Form}, nil
 }
 
 func invalidTicket() error {

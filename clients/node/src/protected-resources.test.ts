@@ -84,7 +84,7 @@ describe("ProtectedResourcesClient", () => {
       if (call.method === "DELETE") return { status: 204, body: undefined };
       if (call.method === "PUT") return { body: { id: "g1", client_id: "c1", scopes: ["notes:read"], organization_id: "o1" } };
       if (path.endsWith("/grants")) return { body: { items: null } };
-      return { body: { items: [{ client: { id: "c1", host: "claude.ai" }, scopes: ["notes:read"], active_sessions: 2 }] } };
+      return { body: { items: [{ client: { id: "c1", host: "claude.ai" }, scopes: [{ name: "notes:read", display_name: "Read notes", description: "" }], active_sessions: 2 }] } };
     });
     const client = new ProtectedResourcesClient({ baseUrl: issuer, token: "at", fetch });
     expect(await client.grants("e1", "p1", "c1")).toEqual([]);
@@ -92,7 +92,9 @@ describe("ProtectedResourcesClient", () => {
     const grant = await client.grantClient("e1", "p1", "c1", { scopes: ["notes:read"], organization_id: "o1", expires_at: "2030-01-01T00:00:00Z" });
     expect(grant.id).toBe("g1");
     await client.revokeGrant("e1", "p1", "c1", "g1");
-    expect((await client.userConnectedApps("e1", "u1", { organizationId: "o1" }))[0].active_sessions).toBe(2);
+    const apps = await client.userConnectedApps("e1", "u1", { organizationId: "o1" });
+    expect(apps[0].active_sessions).toBe(2);
+    expect(apps[0].scopes[0].display_name).toBe("Read notes");
     await client.disconnectUserApp("e1", "u1", "c1");
     expect(calls.map((c) => `${c.method} ${c.url.replace(issuer, "")}`)).toEqual([
       "GET /api/v1/environments/e1/protected-resources/p1/clients/c1/grants",

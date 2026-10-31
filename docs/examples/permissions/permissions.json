@@ -1,11 +1,16 @@
 {
   "resource": {"name": "Invoices API", "prefix": "invoices"},
   "permissions": [
-    {"name": "invoices:invoices:read", "label": "View invoices"},
-    {"name": "invoices:invoices:write", "label": "Create and edit invoices"},
-    {"name": "invoices:invoices:review", "label": "Approve or reject invoices"},
-    {"name": "invoices:reports:read", "label": "View reports"},
-    {"name": "invoices:reports:export", "label": "Export reports"}
+    {"name": "invoices:invoices:read", "label": "View invoices", "description": "See invoices and their status.",
+      "translations": {"es": {"label": "Ver facturas", "description": "Ver las facturas y su estado."}}},
+    {"name": "invoices:invoices:write", "label": "Create and edit invoices", "description": "Create invoices and change drafts.",
+      "translations": {"es": {"label": "Crear y editar facturas", "description": "Crear facturas y modificar borradores."}}},
+    {"name": "invoices:invoices:review", "label": "Approve or reject invoices", "description": "Decide whether a submitted invoice is paid.",
+      "translations": {"es": {"label": "Aprobar o rechazar facturas", "description": "Decidir si se paga una factura enviada."}}},
+    {"name": "invoices:reports:read", "label": "View reports", "description": "Open the reports built from invoices.",
+      "translations": {"es": {"label": "Ver reportes", "description": "Abrir los reportes creados a partir de las facturas."}}},
+    {"name": "invoices:reports:export", "label": "Export reports", "description": "Download reports as files.",
+      "translations": {"es": {"label": "Exportar reportes", "description": "Descargar los reportes como archivos."}}}
   ],
   "roles": [
     {"name": "Invoices admin", "permissions": ["invoices:invoices:read", "invoices:invoices:write", "invoices:invoices:review", "invoices:reports:read", "invoices:reports:export"]},

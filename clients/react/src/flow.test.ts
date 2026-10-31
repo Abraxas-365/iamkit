@@ -140,7 +140,7 @@ describe("SignInFlow", () => {
     resource: "https://mcp.example.com/mcp",
     resource_name: "Docs MCP",
     organization_id: "org",
-    scopes: ["mcp:tools:read"],
+    scopes: [{ name: "mcp:tools:read", display_name: "mcp:tools:read", description: "" }],
     unheld_scopes: [],
     agreed_scopes: [],
     ui: "custom",

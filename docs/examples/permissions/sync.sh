@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync one resource's permission catalog and roles from a manifest.
+# Sync one resource's permission catalog, descriptions and roles from a manifest.
 # Idempotent; see docs/guides/applications/permissions-as-code.md.
 #
 #   IAMKIT_URL=… MGMT=ik_mgmt_… ENVIRONMENT=<environment id> \
@@ -10,9 +10,10 @@
 # audience never change afterwards.
 #
 # Without --prune, permissions that left the manifest stay in the catalog and in
-# the roles holding them: removing a permission from the catalog strips it from
-# every role, grant and service account at once. Prune only once no deployed
-# code checks it. Roles not in the manifest are left alone.
+# the roles holding them (and keep their descriptions): removing a permission
+# from the catalog strips it from every role, grant and service account at once
+# and deletes its descriptions. Prune only once no deployed code checks it.
+# Roles not in the manifest are left alone.
 # Never enable shell tracing: the management key is in play.
 set -euo pipefail
 : "${IAMKIT_URL:?Set IAMKIT_URL}"
@@ -33,6 +34,9 @@ problems=$(jq -r '
   .resource.prefix as $p | [.permissions[].name] as $c
   | [$c[] | select(startswith($p + ":") | not) | "\(.) does not start with \($p):"]
   + [$c | group_by(.)[] | select(length > 1) | "\(.[0]) is listed twice"]
+  + [.permissions[] | select((.label // "" | length) > 80) | "\(.name): label is longer than 80 characters"]
+  + [.permissions[] | select((.description // "" | length) > 300) | "\(.name): description is longer than 300 characters"]
+  + [.permissions[] | .name as $n | (.translations // {} | to_entries[]) | select((.value.label // "" | length) > 80 or (.value.description // "" | length) > 300) | "\($n): translation \(.key) is too long"]
   + [.roles[]? as $r | $r.permissions[] | select(IN($c[]) | not) | "role \($r.name): \(.) is not in the catalog"]
   | .[]' "$MANIFEST")
 [[ -z "$problems" ]] || { printf 'invalid manifest:\n%s\n' "$problems" >&2; exit 1; }
@@ -73,6 +77,30 @@ else
     say "catalog: $diff"
   else printf 'catalog: unchanged (%s permissions)\n' "$(jq length <<<"$catalog")"; fi
 fi
+
+# Descriptions (label → display_name, description, translations) replace the
+# whole set of the resource: the manifest's rows, plus those of permissions kept
+# in the catalog without --prune. Nothing is sent when the texts are unchanged.
+texts=$(jq -c '[.permissions[] | . as $p
+  | ({permission:$p.name, locale:"", display_name:($p.label // ""), description:($p.description // "")}),
+    ((.translations // {}) | to_entries[] | {permission:$p.name, locale:.key, display_name:(.value.label // ""), description:(.value.description // "")})
+  | select(.display_name != "" or .description != "")] | sort_by(.permission, .locale)' "$MANIFEST")
+if [[ "$resource" == dry-run ]]; then stored='[]'
+else stored=$(api GET "/resources/$resource/permission-descriptions" </dev/null | jq -c '.items // []'); fi
+(( prune )) || texts=$(jq -cn --argjson t "$texts" --argjson s "$stale" --argjson o "$stored" \
+  '$t + [$o[] | select(.permission as $p | $s | index($p))] | sort_by(.permission, .locale)')
+# text_changes OLD NEW -> "+a/es ~b -c/es" (empty when equal).
+text_changes() { jq -rn --argjson o "$1" --argjson n "$2" '
+  def k: "\(.permission)\(if .locale == "" then "" else "/" + .locale end)";
+  ($o | map({(k): .}) | add // {}) as $old | ($n | map({(k): .}) | add // {}) as $new
+  | [($new | keys[] | select($old[.] == null) | "+" + .),
+     ($new | to_entries[] | select($old[.key] != null and $old[.key] != .value) | "~" + .key),
+     ($old | keys[] | select($new[.] == null) | "-" + .)] | join(" ")'; }
+diff=$(text_changes "$stored" "$texts")
+if [[ -n "$diff" ]]; then
+  jq -n --argjson i "$texts" '{items:$i}' | write PUT "/resources/$resource/permission-descriptions" >/dev/null
+  say "descriptions: $diff"
+else printf 'descriptions: unchanged (%s texts)\n' "$(jq length <<<"$texts")"; fi
 
 # Roles are per resource; /roles is paged (100 per page is plenty for one app).
 roles=$(if [[ "$resource" == dry-run ]]; then echo '[]'; else api GET "/roles?limit=100" </dev/null | jq -c --arg r "$resource" '[.items[] | select(.resource_id == $r)]'; fi)

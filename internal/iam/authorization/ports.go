@@ -96,3 +96,31 @@ type ResourceGrantRepository interface {
 	ListResourceGrants(ctx context.Context, environment identity.EnvironmentID, filter ResourceGrantFilter, page query.Pagination) (query.Paginated[ResourceGrant], error)
 	FindResourceGrant(ctx context.Context, environment identity.EnvironmentID, grant identity.ResourceGrantID) (ResourceGrant, error)
 }
+
+// DescriptionCommands edit how people read a resource's permissions (D40).
+type DescriptionCommands interface {
+	// SetDescriptions replaces the resource's whole set of descriptions
+	// (idempotent, so a catalog sync can repeat it). Every permission must
+	// be in the catalog; an empty set clears them. Audited
+	// resource.descriptions_updated.
+	SetDescriptions(ctx context.Context, m Mutation, resource identity.ResourceID, descriptions []PermissionDescription) error
+}
+
+// DescriptionQueries read them.
+type DescriptionQueries interface {
+	// Descriptions is the stored set, ordered by permission then locale.
+	Descriptions(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID) ([]PermissionDescription, error)
+	// Describe resolves permissions for a reader who prefers locales (see
+	// Describe): exact locale, base language, default text, the name.
+	Describe(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, permissions []string, locales ...string) ([]DescribedPermission, error)
+}
+
+// DescriptionRepository persists descriptions next to the catalog they
+// describe.
+type DescriptionRepository interface {
+	FindResource(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID) (Resource, error)
+	// ReplaceDescriptions swaps the set in one transaction, checking it
+	// against the catalog as locked there, and records the event.
+	ReplaceDescriptions(ctx context.Context, m Mutation, resource identity.ResourceID, descriptions []PermissionDescription) error
+	ListDescriptions(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID) ([]PermissionDescription, error)
+}

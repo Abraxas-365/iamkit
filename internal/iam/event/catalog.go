@@ -155,8 +155,11 @@ const (
 	ResourceCreated       = "resource.created"
 	ResourceUpdated       = "resource.updated"
 	ResourceAccessUpdated = "resource.access_updated"
-	ResourceGrantUpdated  = "resource_grant.updated"
-	ResourceGrantDeleted  = "resource_grant.deleted"
+	// ResourceDescriptionsUpdated: a resource's permission descriptions
+	// were replaced (D40); subject = the resource.
+	ResourceDescriptionsUpdated = "resource.descriptions_updated"
+	ResourceGrantUpdated        = "resource_grant.updated"
+	ResourceGrantDeleted        = "resource_grant.deleted"
 
 	RoleCreated         = "role.created"
 	RoleUpdated         = "role.updated"

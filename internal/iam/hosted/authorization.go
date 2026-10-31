@@ -67,9 +67,12 @@ type ConsentInfo struct {
 	// the others to agree to, which the user does not hold yet (granted
 	// only once they do: show them apart, collapsed); AgreedScopes the
 	// asked scopes already agreed to.
-	Scopes       []string `json:"scopes"`
-	UnheldScopes []string `json:"unheld_scopes"`
-	AgreedScopes []string `json:"agreed_scopes"`
+	// Each is worded with the resource's permission descriptions in the
+	// reader's language (D40): display_name is the scope's name when
+	// nothing describes it.
+	Scopes       []oauth.ScopeInfo `json:"scopes"`
+	UnheldScopes []oauth.ScopeInfo `json:"unheld_scopes"`
+	AgreedScopes []oauth.ScopeInfo `json:"agreed_scopes"`
 	// UI is the environment's consent_ui: "custom" lets this UI decide;
 	// "hosted" means IAMKit's consent page (HostedURL) decides.
 	UI        string `json:"ui"`
@@ -77,10 +80,11 @@ type ConsentInfo struct {
 }
 
 // NewConsentInfo describes prompt; hostedURL is IAMKit's consent page for
-// the ticket.
-func NewConsentInfo(prompt oauth.ConsentPrompt, hostedURL string) *ConsentInfo {
+// the ticket and words the descriptions of its permission scopes by name
+// (nil: none described).
+func NewConsentInfo(prompt oauth.ConsentPrompt, hostedURL string, words map[string]oauth.ScopeText) *ConsentInfo {
 	return &ConsentInfo{Client: prompt.Client, Protected: prompt.Protected, Resource: prompt.Resource, ResourceName: prompt.ResourceName, Organization: prompt.Organization,
-		Scopes: prompt.Pending, UnheldScopes: prompt.Unheld, AgreedScopes: prompt.Agreed, UI: prompt.UI, HostedURL: hostedURL}
+		Scopes: oauth.NewScopeInfos(prompt.Pending, words), UnheldScopes: oauth.NewScopeInfos(prompt.Unheld, words), AgreedScopes: oauth.NewScopeInfos(prompt.Agreed, words), UI: prompt.UI, HostedURL: hostedURL}
 }
 
 // ConsentPage is what IAMKit's consent page renders: the prompt, branded
@@ -90,7 +94,10 @@ type ConsentPage struct {
 	Prompt   oauth.ConsentPrompt
 	Settings Settings
 	Language string
-	Texts    TextScope
+	// Words are the permission descriptions of the prompt's scopes in
+	// Language, by scope name (D40).
+	Words map[string]oauth.ScopeText
+	Texts TextScope
 	// Account is who consents (a failed read leaves it empty).
 	Account authentication.Profile
 }

@@ -375,6 +375,9 @@ export function SignInForm(props: SignInFormProps) {
   );
 }
 
+/** A scope of the consent step: the permission and, when its server describes it, a display name and a sentence. */
+type ConsentScope = { name: string; display_name?: string; description?: string };
+
 /** Profile data scopes the consent step words; permissions show by name. */
 const profileScopes = ["profile", "email", "phone"];
 
@@ -392,10 +395,14 @@ function Consent(props: { consent: ConsentInfo; t: Translate; part: (name: keyof
   const agreed = consent.agreed_scopes ?? [];
   const unheld = consent.unheld_scopes ?? [];
   const scopes = consent.scopes ?? [];
-  const list = (items: string[], name: string) => (
+  const list = (items: ConsentScope[], name: string) => (
     <ul {...part("scopes")} data-list={name}>
-      {items.map((s) => {
-        const label = profileScopes.includes(s) ? t(`hosted.consent.scope.${s}`) : s;
+      {items.map((scope) => {
+        const s = scope.name;
+        // The resource's own wording first (display_name differs from the
+        // name only when the server describes the permission), then the
+        // profile scopes' catalog text, then the name itself.
+        const label = scope.display_name && scope.display_name !== s ? scope.display_name : profileScopes.includes(s) ? t(`hosted.consent.scope.${s}`) : s;
         return (
           <li key={s}>
             {label}
@@ -405,6 +412,7 @@ function Consent(props: { consent: ConsentInfo; t: Translate; part: (name: keyof
                 <code>{s}</code>
               </>
             ) : null}
+            {scope.description ? <small {...part("notice")}>{scope.description}</small> : null}
           </li>
         );
       })}

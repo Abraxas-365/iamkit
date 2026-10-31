@@ -45,3 +45,13 @@ it('keeps separate lists independently expandable using the keyboard', async () 
   expect(within(screen.getByRole('region', { name: 'First' })).getByText(scopes[4])).toBeTruthy()
   expect(within(screen.getByRole('region', { name: 'Second' })).queryByText(scopes[4])).toBeNull()
 })
+
+it('shows the display name with the raw name beside it, and the raw name alone when undescribed', () => {
+  const text = (p: string) => p === 'api:read'
+    ? { name: p, display_name: 'Read everything', description: 'Lets the app read.', described: true }
+    : { name: p, display_name: p, description: '', described: false }
+  render(<CollapsibleScopes scopes={['api:read', 'api:write']} text={text} />)
+  expect(screen.getByText('Read everything', { exact: false }).getAttribute('title')).toBe('Lets the app read.')
+  expect(screen.getByText('api:read')).toBeTruthy()
+  expect(screen.getByText('api:write')).toBeTruthy()
+})

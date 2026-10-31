@@ -30,6 +30,9 @@ func (s *Server) managementRoutes(r fiber.Router) {
 	}
 	s.Organizations.Register(e)
 	s.Authorization.Register(e)
+	if s.Descriptions != nil {
+		s.Descriptions.Register(e)
+	}
 	if s.ResourceGrants != nil {
 		s.ResourceGrants.Register(e)
 	}

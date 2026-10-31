@@ -47,6 +47,14 @@ statement, so inserts never wait for it. The database is not an archive: use
 
 ### Incompatible changes
 
+- **`scopes` are objects in the consent ticket and in connected apps.**
+  `consent.scopes`, `unheld_scopes` and `agreed_scopes` of `GET
+  /identity/v1/authorize/:ticket`, and `scopes` of `/identity/v1/me/connected-apps`
+  and `…/users/:id/connected-apps`, were arrays of permission names. They are
+  now arrays of `{name, display_name, description}` (`display_name` is the name
+  when the permission has no text). Read `scope.name` where you read the
+  string. `@iamkit/react`, `@iamkit/js`, `@iamkit/node`, the Python package and
+  the Go SDKs (`authclient.ConnectedApp.Scopes` is `[]ConnectedScope`) follow.
 - **Third-party clients ask for consent.** Clients named by a metadata
   document, registered dynamically or made from a preset template now show
   IAMKit's consent page the next time each user authorizes them for an MCP
@@ -67,6 +75,21 @@ statement, so inserts never wait for it. The database is not an archive: use
   `consent`.** `POST /oauth/authorize/complete` may answer
   `consent_required: true` with `redirect_to` = IAMKit's consent page. A
   custom sign-in UI that follows `redirect_to` keeps working.
+
+Permission descriptions (D40, migration 026) give each permission of a
+resource a display name (≤ 80 characters) and a description (≤ 300), per
+language, with `locale` `""` as the default text: `GET`/`PUT
+…/resources/:id/permission-descriptions` (management and `/api/v1` with the
+resources permissions), audited as `resource.descriptions_updated`. The hosted
+consent page, `GET /identity/v1/authorize/:ticket`, connected apps (`?locale=`
+or `Accept-Language`), the console and `<ConnectedApps>` show them with the
+permission's name as subtitle; a permission without text keeps showing its
+name. Removing a permission from the catalog deletes its texts.
+`docs/examples/permissions` syncs them (`description`, `translations`). New:
+`iam resources descriptions get|set`, `Environment.PermissionDescriptions`/
+`SetPermissionDescriptions` in the Go SDKs, `PermissionDescriptionsClient`
+(`@iamkit/node`) and `permission_descriptions` (Python). See
+[Protect an MCP server](docs/guides/applications/protect-mcp-server.md#describe-your-permissions).
 
 Migration 024 adds per-client consent policies, per-user consents
 (`oauth_consents`), administrator grants with optional expiry

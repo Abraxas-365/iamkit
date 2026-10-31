@@ -131,6 +131,10 @@ func (s *Server) apiRoutes(app *fiber.App, rateLimit int) {
 	res.Get("/resources/:id", s.APIHandlers.Authorization.Find)
 	res.Put("/resources/:id", s.APIHandlers.Authorization.Update)
 	res.Put("/resources/:resource/api-key-permissions", s.APIHandlers.Authorization.UpdateAPIKeyPermissions)
+	if h := s.APIHandlers.Descriptions; h != nil {
+		res.Get("/resources/:resource/permission-descriptions", h.Get)
+		res.Put("/resources/:resource/permission-descriptions", h.Put)
+	}
 	res.Post("/application-resources", s.APIHandlers.Authorization.Link)
 	res.Delete("/application-resources/:application/:resource", s.APIHandlers.Authorization.Unlink)
 	res.Get("/applications/:application/resources", s.APIHandlers.Authorization.ListByApplication)

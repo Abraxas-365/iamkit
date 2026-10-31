@@ -54,6 +54,9 @@ type Deps struct {
 	// grants are kept: the deployment's security event ceiling
 	// (IAMKIT_SECURITY_EVENT_RETENTION), the same value the event log uses.
 	SecurityRetention time.Duration
+	// Describer words connected apps' scopes with the resources'
+	// permission descriptions (nil: scope names only).
+	Describer oauth.PermissionDescriber
 	// Tokens reads, signs and answers IAMKit's own bearer tokens
 	// (authhttp.Tokens).
 	Tokens  oauthhttp.Tokens
@@ -129,6 +132,9 @@ func New(deps Deps) Module {
 		deps.SecurityRetention = config.SecurityEventRetention
 	}
 	consents := oauthsvc.NewConsents(oauthpg.NewConsents(deps.DB), deps.SecurityRetention)
+	if deps.Describer != nil {
+		consents.SetDescriber(deps.Describer)
+	}
 	handler.Consents(consents)
 	return Module{Commands: service, Queries: service, Flows: service, Devices: service, HTTP: handler, Logouts: oauthhttp.NewLogouts(logouts, logouts, deps.ActorID), Dispatcher: logouts,
 		ProtectedResources: oauthhttp.NewProtectedResources(protected, protected, deps.ActorID), Admissions: oauthhttp.NewAdmissions(admissions, admissions, deps.ActorID), Consents: oauthhttp.NewConsents(consents, consents, deps.ActorID), Jobs: []worker.Job{

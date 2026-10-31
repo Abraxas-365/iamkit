@@ -100,7 +100,9 @@ type Flow interface {
 	// ConsentPage is the hosted consent page of an authorization waiting
 	// for consent (any client: a custom UI that does not ask for consent
 	// falls back to it).
-	ConsentPage(ctx context.Context, r Request) (ConsentPage, error)
+	// acceptLanguage is the browser's, to word the permissions in the
+	// language the page is shown in.
+	ConsentPage(ctx context.Context, r Request, acceptLanguage string) (ConsentPage, error)
 	// Identify routes an email (by its domain) or a username (always to
 	// the password page).
 	Identify(ctx context.Context, r Request, login string) (Route, error)
@@ -170,6 +172,13 @@ type SecondFactor interface {
 	// address; VerifyRisk checks it (neither enrolls a factor).
 	SendRisk(ctx context.Context, boundary authentication.Context, user identity.UserID) (authentication.CodeSent, error)
 	VerifyRisk(ctx context.Context, boundary authentication.Context, user identity.UserID, proof authentication.Proof) error
+}
+
+// PermissionDescriber words the permissions of a catalog resource for a
+// reader who prefers locales (best first): authorization.DescriptionQueries,
+// adapted in bootstrap. Only described permissions are returned (D40).
+type PermissionDescriber interface {
+	DescribeScopes(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, scopes []string, locales ...string) (map[string]oauth.ScopeText, error)
 }
 
 // Captcha is the part of the risk module the hosted pages use: what the

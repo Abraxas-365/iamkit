@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { PaginationBar } from '@/components/ui/pagination-bar'
 import { SearchSelect } from '@/components/ui/search-select'
 import { CollapsibleScopes } from '@/components/ui/collapsible-scopes'
+import { usePermissionText } from '@/lib/descriptions'
 import { PermissionPicker } from '@/components/ui/permission-picker'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { ConfirmDialog, CopyText, DataTable, EmptyState, EntityRef, FormDialog, PageHeader, Status, splitList } from '@/components/library/patterns'
@@ -245,7 +246,9 @@ export default function EntitiesPage({ kind }: { kind: Kind }) {
       {secondary ?? <CopyText value={row.id} short label={copyIds[kind]} />}
     </span>
   }
-  const permissions = (row: Entity) => row.permissions?.length ? <CollapsibleScopes key={row.id} scopes={row.permissions} /> : <span className="text-xs text-muted-foreground">{t('No permissions')}</span>
+  // Descriptions of the resources on the page (roles and grants name theirs; a resource row is its own).
+  const text = usePermissionText(base, list.data.map(row => kind === 'resources' ? row.id : row.resource_id))
+  const permissions = (row: Entity) => row.permissions?.length ? <CollapsibleScopes key={row.id} scopes={row.permissions} text={p => text(kind === 'resources' ? row.id : row.resource_id, p)} /> : <span className="text-xs text-muted-foreground">{t('No permissions')}</span>
   const columns: Column[] = kind === 'users' ? [{ header: t('User') }, { header: t('State') }]
     : kind === 'organizations' ? [{ header: t('Organization') }, { header: t('Status') }]
       : kind === 'applications' ? [{ header: t('Application') }, { header: t('Redirect URIs'), hideBelow: 'md' }, { header: t('Status') }]

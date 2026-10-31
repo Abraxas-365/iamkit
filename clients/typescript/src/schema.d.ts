@@ -2316,6 +2316,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/environments/{environment}/resources/{resource}/permission-descriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get returns the stored descriptions, every locale. */
+        get: operations["getApiEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions"];
+        /** Put replaces the whole set; an empty items clears it. */
+        put: operations["putApiEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/environments/{environment}/risk-policy": {
         parameters: {
             query?: never;
@@ -6459,6 +6477,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/management/v1/environments/{environment}/resources/{resource}/permission-descriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get returns the stored descriptions, every locale. */
+        get: operations["getManagementEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions"];
+        /** Put replaces the whole set; an empty items clears it. */
+        put: operations["putManagementEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/management/v1/environments/{environment}/risk-policy": {
         parameters: {
             query?: never;
@@ -8599,7 +8635,7 @@ export interface components {
             protected_resource_id: string;
             resource: string;
             resource_name: string;
-            scopes: string[] | null;
+            scopes: components["schemas"]["ScopeInfo"][] | null;
         };
         ConnectedClient: {
             client_id: string;
@@ -8712,7 +8748,7 @@ export interface components {
             update_profile: boolean;
         };
         ConsentInfo: {
-            agreed_scopes: string[] | null;
+            agreed_scopes: components["schemas"]["ScopeInfo"][] | null;
             client: components["schemas"]["ConnectedClient"];
             hosted_url: string;
             /** @description UUID (empty when unset) */
@@ -8721,9 +8757,9 @@ export interface components {
             protected_resource_id: string;
             resource: string;
             resource_name: string;
-            scopes: string[] | null;
+            scopes: components["schemas"]["ScopeInfo"][] | null;
             ui: string;
-            unheld_scopes: string[] | null;
+            unheld_scopes: components["schemas"]["ScopeInfo"][] | null;
         };
         Context: {
             location?: string;
@@ -8872,6 +8908,12 @@ export interface components {
             last_failure: components["schemas"]["Attempt"] | null;
             provider: string;
             source: string;
+        };
+        DescriptionSet: {
+            items: components["schemas"]["PermissionDescription"][] | null;
+        };
+        DescriptionSetInput: {
+            items?: components["schemas"]["PermissionDescriptionInput"][] | null;
         };
         Device: {
             /** Format: date-time */
@@ -9993,6 +10035,18 @@ export interface components {
             set: boolean;
             usable: boolean;
         };
+        PermissionDescription: {
+            description: string;
+            display_name: string;
+            locale: string;
+            permission: string;
+        };
+        PermissionDescriptionInput: {
+            description?: string;
+            display_name?: string;
+            locale?: string;
+            permission?: string;
+        };
         PhoneCodeSent: {
             destination: string;
             /** Format: date-time */
@@ -10578,6 +10632,11 @@ export interface components {
             /** Format: date-time */
             updated_at?: string | null;
             version: number;
+        };
+        ScopeInfo: {
+            description: string;
+            display_name: string;
+            name: string;
         };
         SelfInputInput: {
             audience?: string;
@@ -20772,6 +20831,92 @@ export interface operations {
             };
         };
     };
+    getApiEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                resource: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescriptionSet"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putApiEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                resource: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DescriptionSetInput"];
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getApiEnvironmentsbyEnvironmentRiskPolicy: {
         parameters: {
             query?: never;
@@ -22593,6 +22738,7 @@ export interface operations {
     getApiEnvironmentsbyEnvironmentUsersbyIdConnectedApps: {
         parameters: {
             query?: {
+                locale?: string;
                 organization_id?: string;
             };
             header?: never;
@@ -25664,6 +25810,7 @@ export interface operations {
             query?: {
                 audience?: string;
                 environment_id?: string;
+                locale?: string;
                 organization_id?: string;
             };
             header?: never;
@@ -37750,6 +37897,92 @@ export interface operations {
             };
         };
     };
+    getManagementEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                resource: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DescriptionSet"];
+                };
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putManagementEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                environment: string;
+                resource: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["DescriptionSetInput"];
+            };
+        };
+        responses: {
+            /** @description No content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Client error */
+            "4XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                    "text/plain": unknown;
+                };
+            };
+            /** @description Server error */
+            "5XX": {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getManagementEnvironmentsbyEnvironmentRiskPolicy: {
         parameters: {
             query?: never;
@@ -40308,6 +40541,7 @@ export interface operations {
     getManagementEnvironmentsbyEnvironmentUsersbyIdConnectedApps: {
         parameters: {
             query?: {
+                locale?: string;
                 organization_id?: string;
             };
             header?: never;

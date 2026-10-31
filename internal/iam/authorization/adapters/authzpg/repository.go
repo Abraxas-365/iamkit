@@ -241,6 +241,10 @@ func (r *Repository) UpdateCatalog(ctx context.Context, m authorization.Mutation
 	if n == 0 {
 		return errx.NotFound("resource not found")
 	}
+	// A removed permission loses its descriptions with it (D40).
+	if _, err = tx.ExecContext(ctx, `DELETE FROM permission_descriptions WHERE resource_id=$1 AND permission<>ALL($2::text[])`, id, array(input.Permissions)); err != nil {
+		return failure(err)
+	}
 	for _, query := range []string{
 		`UPDATE grants SET permissions=ARRAY(SELECT unnest(permissions) INTERSECT SELECT unnest($3::text[])) WHERE environment_id=$1 AND resource_id=$2`,
 		`UPDATE roles SET permissions=ARRAY(SELECT unnest(permissions) INTERSECT SELECT unnest($3::text[])) WHERE environment_id=$1 AND resource_id=$2`,

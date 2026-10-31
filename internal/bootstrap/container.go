@@ -373,6 +373,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	s.Grants = authorizationModule.Grants
 	s.Authorization = authorizationModule.HTTP
 	s.ResourceGrants = authorizationModule.ResourceGrants
+	s.Descriptions = authorizationModule.Descriptions
 	federationModule := fedmodule.New(fedmodule.Deps{DB: db, Issuer: issuer, Cipher: o.sealer, Keys: signingModule.Keyring, Transport: o.transport, LDAPAllowed: list(os.Getenv("IAMKIT_LDAP_ALLOWED_HOSTS")), LDAPDial: o.ldapDial, Sessions: authenticationModule.Sessions, Actions: actionModule.Runner, Quota: usageModule.Commands, Discovery: shared, ActorID: server.OperatorID, Respond: s.RespondLogin})
 	s.Federation = federationModule.HTTP
 	provisioningModule := provmodule.New(provmodule.Deps{DB: db, Quota: usageModule.Commands, ActorID: server.OperatorID})
@@ -385,7 +386,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 	if fetchWindow == nil {
 		fetchWindow = usagememory.New()
 	}
-	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Passwords: authpassword.Hasher{}, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, ClientMetadataTransport: o.clientMetadata, Cache: metadataStore(o.metadataCache, shared), Window: fetchWindow, MaxPending: o.clientPending, MaxRequestsPerUser: o.clientUserRequests, MaxRequestsPerOrganization: o.clientOrgRequests, Features: featureModule.Queries, Tokens: s.Tokens, SecurityRetention: o.securityRetention, ActorID: server.OperatorID})
+	oauthModule := oauthmodule.New(oauthmodule.Deps{DB: db, Describer: scopeDescriber{authorizationModule.DescriptionQueries}, Passwords: authpassword.Hasher{}, Keys: signingModule.Keyring, Issuer: issuer, HMACSecret: func() string { return os.Getenv("OIDC_HMAC_SECRET") }, Transport: o.transport, ClientMetadataTransport: o.clientMetadata, Cache: metadataStore(o.metadataCache, shared), Window: fetchWindow, MaxPending: o.clientPending, MaxRequestsPerUser: o.clientUserRequests, MaxRequestsPerOrganization: o.clientOrgRequests, Features: featureModule.Queries, Tokens: s.Tokens, SecurityRetention: o.securityRetention, ActorID: server.OperatorID})
 	s.OAuth = oauthModule.HTTP
 	s.ClientOrigins = oauthModule.Queries
 	s.LogoutDeliveries = oauthModule.Logouts
@@ -436,7 +437,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		// Tests run the delivery job once with Workers.RunOnce("saml_logout_delivery").
 		s.Workers.Add(samlModule.Jobs...)
 	}
-	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: tickets{oauth: oauthModule.Flows, saml: samlModule.Flows}, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Passkeys: authenticationModule.Passkeys, Features: featureModule.Queries, Captcha: hostedCaptcha{riskModule.Captchas, riskModule.Captcha}, Risk: riskModule.Evaluator, Issuer: issuer, Finish: finisher(oauthModule.HTTP.Finish, samlModule.HTTP), ActorID: server.OperatorID})
+	hostedModule := hostedmodule.New(hostedmodule.Deps{DB: db, Authorizations: tickets{oauth: oauthModule.Flows, saml: samlModule.Flows}, Authenticator: authenticationModule.Authenticator, Challenges: authenticationModule.Commands, Federation: federationModule.Flows, Invitations: invitations{invitationModule.Commands, invitationModule.Queries}, SecondFactor: mfaModule.Logins, SignInPolicies: authenticationModule.SignInPolicies, Signups: authenticationModule.Signups, Passkeys: authenticationModule.Passkeys, Features: featureModule.Queries, Captcha: hostedCaptcha{riskModule.Captchas, riskModule.Captcha}, Describer: scopeDescriber{authorizationModule.DescriptionQueries}, Risk: riskModule.Evaluator, Issuer: issuer, Finish: finisher(oauthModule.HTTP.Finish, samlModule.HTTP), ActorID: server.OperatorID})
 	s.Hosted = hostedModule.HTTP
 	samlModule.HTTP.PostForm(hostedModule.HTTP.PostForm)
 	federationModule.HTTP.Continue(hostedModule.HTTP.Federated)
@@ -503,6 +504,7 @@ func New(db *sqlx.DB, key *rsa.PrivateKey, issuer string, delivery authenticatio
 		Authorization:   authzhttp.New(authorizationModule.ResourceCommands, authorizationModule.ResourceQueries, actor),
 		Grants:          authzhttp.NewGrants(authorizationModule.GrantCommands, authorizationModule.GrantQueries, actor),
 		ResourceGrants:  authzhttp.NewResourceGrants(authorizationModule.ResourceGrantCommands, authorizationModule.ResourceGrantQueries, actor),
+		Descriptions:    authorizationModule.Descriptions.WithActor(actor),
 		ServiceAccounts: saccthttp.New(serviceAccountModule.Commands, serviceAccountModule.Queries, actor, nil),
 		Factors:         mfaModule.HTTP.WithActor(actor),
 		Delivery: authhttp.NewDeliveryHandler(authenticationModule.DeliveryService, authenticationModule.DeliveryService, actor).

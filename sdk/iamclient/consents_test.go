@@ -29,7 +29,7 @@ func TestClientGrantsAndConnectedApps(t *testing.T) {
 		case "DELETE /management/v1/environments/env/protected-resources/p1/clients/c1/grants/g1":
 			w.WriteHeader(http.StatusNoContent)
 		case "GET /management/v1/environments/env/users/u1/connected-apps":
-			w.Write([]byte(`{"items":[{"client":{"id":"c1","client_id":"https://claude.ai/m.json","name":"Claude","host":"claude.ai"},"scopes":["notes:read"],"active_sessions":2,"consented_at":null,"last_used_at":null}]}`))
+			w.Write([]byte(`{"items":[{"client":{"id":"c1","client_id":"https://claude.ai/m.json","name":"Claude","host":"claude.ai"},"scopes":[{"name":"notes:read","display_name":"Read notes","description":"See your notes."}],"active_sessions":2,"consented_at":null,"last_used_at":null}]}`))
 		case "DELETE /management/v1/environments/env/users/u1/connected-apps/c1":
 			w.WriteHeader(http.StatusNoContent)
 		default:

@@ -98,7 +98,7 @@ func (h *Consents) userApps(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.ConnectedApps(c.UserContext(), env(c), user, oauth.ConnectedAppFilter{Organization: org})
+	out, err := h.queries.ConnectedApps(c.UserContext(), env(c), user, oauth.ConnectedAppFilter{Organization: org, Locales: readerLocales(c)})
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func (h *Consents) myApps(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	out, err := h.queries.ConnectedApps(c.UserContext(), t.EnvironmentID, t.Subject, oauth.ConnectedAppFilter{Organization: org})
+	out, err := h.queries.ConnectedApps(c.UserContext(), t.EnvironmentID, t.Subject, oauth.ConnectedAppFilter{Organization: org, Locales: readerLocales(c)})
 	if err != nil {
 		return err
 	}
@@ -235,4 +235,11 @@ func (h *Consents) revokeGrant(c *fiber.Ctx) error {
 		return err
 	}
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+// readerLocales are the languages the caller prefers, best first: the
+// `locale` query parameter, then Accept-Language (D40; permission
+// descriptions are worded in the first the catalog has).
+func readerLocales(c *fiber.Ctx) []string {
+	return []string{c.Query("locale"), c.Get(fiber.HeaderAcceptLanguage)}
 }

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ConfirmDialog, DataTable, DetailSection, EmptyState, ErrorState, Time } from '@/components/library/patterns'
 import { SearchSelect } from '@/components/ui/search-select'
+import { usePermissionText } from '@/lib/descriptions'
 import { t } from '@/lib/i18n'
 
 export type Admission = 'pending' | 'approved' | 'blocked'
@@ -140,7 +141,7 @@ interface ClientGrant { id: string; organization_id: string | null; scopes: stri
 
 /** Grants are what GrantsDialog needs: the environment base path (organization
  * search) and the server's permission catalog (grantable scopes). */
-export interface Grants { base: string; scopes: string[] }
+export interface Grants { base: string; scopes: string[]; resource?: string }
 
 /** GrantsDialog lists a client's live administrator grants at this server,
  * grants scopes (replacing the live grant of the same organization) and revokes
@@ -156,6 +157,7 @@ function GrantsDialog({ path, client, grants, onClose }: { path: string; client:
   const [org, setOrg] = useState('')
   const [expires, setExpires] = useState('')
   const [revoking, setRevoking] = useState<ClientGrant | null>(null)
+  const text = usePermissionText(grants.base, [grants.resource])
   const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
   const load = () => api.get<{ items: ClientGrant[] }>(url).then(r => setRows(r.items ?? [])).catch(e => setError(message(e)))
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,8 +192,9 @@ function GrantsDialog({ path, client, grants, onClose }: { path: string; client:
       <fieldset className="space-y-1.5" disabled={busy}>
         <legend className="text-sm font-medium">{t('Scopes to grant')}</legend>
         <div className="grid max-h-48 gap-1 overflow-y-auto sm:grid-cols-2">
-          {grants.scopes.map(s => <label key={s} className="flex items-center gap-2 font-mono text-xs">
-            <input type="checkbox" className="accent-primary" checked={scopes.includes(s)} onChange={e => setScopes(v => e.target.checked ? [...v, s] : v.filter(x => x !== s))} />{s}
+          {grants.scopes.map(s => <label key={s} className="flex items-center gap-2 text-xs" title={text(grants.resource, s).description || undefined}>
+            <input type="checkbox" className="accent-primary" checked={scopes.includes(s)} onChange={e => setScopes(v => e.target.checked ? [...v, s] : v.filter(x => x !== s))} />
+            {text(grants.resource, s).described ? <span>{text(grants.resource, s).display_name} <span className="font-mono text-[11px] text-muted-foreground">{s}</span></span> : <span className="font-mono">{s}</span>}
           </label>)}
         </div>
       </fieldset>

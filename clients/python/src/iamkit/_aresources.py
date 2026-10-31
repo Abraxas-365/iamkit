@@ -697,6 +697,36 @@ class EventRetention(_Resource):
         return await self._c.request("PUT", f"{self._c.env()}/event-retention", json=body)  # type: ignore[no-any-return]
 
 
+class PermissionDescriptions(_Resource):
+    """How people read a resource's permissions (``/resources/{id}/permission-descriptions``).
+
+    Each item is ``{"permission", "locale", "display_name", "description"}``: ``locale`` is ``""`` for the default
+    text, otherwise an available language code (``"es"``, ``"pt-BR"``); names are at most 80 characters and
+    sentences 300, plain text. The permission must be in the resource's catalog, and removing it from the catalog
+    deletes its descriptions. The hosted consent page, the consent ticket and connected apps use them.
+    """
+
+    async def get(self, resource_id: str) -> list[JSON]:
+        """The stored descriptions, every language."""
+        out = await self._c.request("GET", f"{self._c.env()}/resources/{seg(resource_id)}/permission-descriptions")
+        return list((out or {}).get("items") or [])
+
+    async def set(self, resource_id: str, descriptions: Sequence[Mapping[str, Any]]) -> None:
+        """Replaces the whole set; an empty sequence clears it (422 for a permission outside the catalog)."""
+        items = [
+            {
+                "permission": d["permission"],
+                "locale": d.get("locale") or "",
+                "display_name": d.get("display_name") or "",
+                "description": d.get("description") or "",
+            }
+            for d in descriptions
+        ]
+        await self._c.request(
+            "PUT", f"{self._c.env()}/resources/{seg(resource_id)}/permission-descriptions", json={"items": items}
+        )
+
+
 class Waitlist(_Resource):
     """The sign-up waitlist (``/waitlist``, on with the sign-in policy's ``waitlist``).
 

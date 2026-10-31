@@ -2,6 +2,7 @@ package oauthsvc
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/Abraxas-365/iamkit/internal/config"
@@ -15,7 +16,12 @@ type Consents struct {
 	repository oauth.ConsentRepository
 	// retention is how long revoked records are kept.
 	retention time.Duration
+	describer oauth.PermissionDescriber
 }
+
+// SetDescriber words connected apps' scopes with permission descriptions
+// (without it they carry none).
+func (s *Consents) SetDescriber(d oauth.PermissionDescriber) { s.describer = d }
 
 var (
 	_ oauth.ConsentCommands = (*Consents)(nil)
@@ -73,7 +79,37 @@ func (s *Consents) Agreed(ctx context.Context, key oauth.ConsentKey, admin bool)
 }
 
 func (s *Consents) ConnectedApps(ctx context.Context, environment identity.EnvironmentID, user identity.UserID, filter oauth.ConnectedAppFilter) ([]oauth.ConnectedApp, error) {
-	return s.repository.ConnectedApps(ctx, environment, user, filter)
+	apps, err := s.repository.ConnectedApps(ctx, environment, user, filter)
+	if err != nil {
+		return nil, err
+	}
+	// One lookup per catalog resource; a failed one only leaves its apps
+	// with the raw names.
+	words := map[identity.ResourceID]map[string]oauth.ScopeText{}
+	for i := range apps {
+		app := &apps[i]
+		if s.describer == nil || len(app.Scopes) == 0 || app.ResourceID.IsZero() {
+			continue
+		}
+		text, done := words[app.ResourceID]
+		if !done {
+			names := make([]string, len(app.Scopes))
+			for j, scope := range app.Scopes {
+				names[j] = scope.Name
+			}
+			var derr error
+			if text, derr = s.describer.DescribeScopes(ctx, environment, app.ResourceID, names, filter.Locales...); derr != nil {
+				slog.WarnContext(ctx, "permission descriptions unavailable; connected apps show scope names", "err", derr)
+			}
+			words[app.ResourceID] = text
+		}
+		for j, scope := range app.Scopes {
+			if t, ok := text[scope.Name]; ok {
+				app.Scopes[j] = oauth.NewScopeInfos([]string{scope.Name}, map[string]oauth.ScopeText{scope.Name: t})[0]
+			}
+		}
+	}
+	return apps, nil
 }
 
 func (s *Consents) ListClientGrants(ctx context.Context, environment identity.EnvironmentID, protected identity.ProtectedResourceID, filter oauth.ClientGrantFilter) ([]oauth.ClientGrant, error) {

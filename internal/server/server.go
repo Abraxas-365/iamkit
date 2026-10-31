@@ -65,6 +65,7 @@ type APIHandlerSet struct {
 	Authorization   *authzhttp.Handler
 	Grants          *authzhttp.Grants
 	ResourceGrants  *authzhttp.ResourceGrants
+	Descriptions    *authzhttp.Descriptions
 	ServiceAccounts *saccthttp.Handler
 	Factors         *mfahttp.Handler
 	Delivery        *authhttp.DeliveryHandler
@@ -115,6 +116,7 @@ type Server struct {
 	Federation          *fedhttp.Handler
 	Authorization       *authzhttp.Handler
 	ResourceGrants      *authzhttp.ResourceGrants
+	Descriptions        *authzhttp.Descriptions
 	Organizations       *orghttp.Handler
 	Control             *mgmthttp.Handler
 	OperatorSSO         *mgmthttp.SSO // console login options, operator SSO, linked identities

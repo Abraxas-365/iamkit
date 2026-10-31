@@ -232,6 +232,15 @@ export interface ConnectedClient {
  * at one protected resource in one organization: a live consent, live
  * sessions, or both (a first-party client has sessions only).
  */
+export interface ConnectedScope {
+  /** The permission. */
+  name: string;
+  /** Its short name in the reader's language; `name` itself when nothing describes it. */
+  display_name: string;
+  /** A sentence ("" when none). */
+  description: string;
+}
+
 export interface ConnectedApp {
   client: ConnectedClient;
   protected_resource_id: string;
@@ -239,8 +248,8 @@ export interface ConnectedApp {
   resource: string;
   resource_name: string;
   organization_id: string;
-  /** What the user consented to (empty for a first-party client). */
-  scopes: string[];
+  /** What the user consented to (empty for a first-party client), worded with the resource's permission descriptions. */
+  scopes: ConnectedScope[];
   consented_at: string | null;
   active_sessions: number;
   last_used_at: string | null;

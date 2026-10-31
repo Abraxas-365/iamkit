@@ -68,6 +68,7 @@ var routes = []route{
 	{"PUT", "/resources/:resource", ResourceUpdated, "resource", "resource"},
 	{"PUT", "/resources/:resource/access", ResourceAccessUpdated, "resource", "resource"},
 	{"PUT", "/resources/:resource/api-key-permissions", ResourceUpdated, "resource", "resource"},
+	{"PUT", "/resources/:resource/permission-descriptions", ResourceDescriptionsUpdated, "resource", "resource"},
 	{"PUT", "/resource-grants", ResourceGrantUpdated, "resource_grant", ""},
 	{"DELETE", "/resource-grants/:resource_grant", ResourceGrantDeleted, "resource_grant", "resource_grant"},
 	{"POST", "/roles", RoleCreated, "role", ""},

@@ -19,6 +19,7 @@ func resourcesCmd() *cobra.Command {
 	cmd.AddCommand(resourcesUpdateCmd())
 	cmd.AddCommand(resourcesAccessCmd())
 	cmd.AddCommand(resourceAPIKeyPermissionsCmd())
+	cmd.AddCommand(resourceDescriptionsCmd())
 	cmd.AddCommand(resourceGrantsCmd())
 	return cmd
 }

@@ -2034,7 +2034,7 @@
           },
           "scopes": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ScopeInfo"
             },
             "type": [
               "array",
@@ -2487,7 +2487,7 @@
         "properties": {
           "agreed_scopes": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ScopeInfo"
             },
             "type": [
               "array",
@@ -2516,7 +2516,7 @@
           },
           "scopes": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ScopeInfo"
             },
             "type": [
               "array",
@@ -2528,7 +2528,7 @@
           },
           "unheld_scopes": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ScopeInfo"
             },
             "type": [
               "array",
@@ -3059,6 +3059,37 @@
           "provider",
           "source"
         ],
+        "type": "object"
+      },
+      "DescriptionSet": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionDescription"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "DescriptionSetInput": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionDescriptionInput"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "Device": {
@@ -7543,6 +7574,46 @@
         ],
         "type": "object"
       },
+      "PermissionDescription": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "display_name",
+          "locale",
+          "permission"
+        ],
+        "type": "object"
+      },
+      "PermissionDescriptionInput": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "locale": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PhoneCodeSent": {
         "properties": {
           "destination": {
@@ -9721,6 +9792,25 @@
           "non_conforming",
           "schema",
           "version"
+        ],
+        "type": "object"
+      },
+      "ScopeInfo": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "display_name",
+          "name"
         ],
         "type": "object"
       },
@@ -27905,6 +27995,136 @@
         ]
       }
     },
+    "/api/v1/environments/{environment}/resources/{resource}/permission-descriptions": {
+      "get": {
+        "operationId": "getApiEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DescriptionSet"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "Get returns the stored descriptions, every locale.",
+        "tags": [
+          "Scoped API"
+        ]
+      },
+      "put": {
+        "operationId": "putApiEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DescriptionSetInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "accessToken": []
+          }
+        ],
+        "summary": "Put replaces the whole set; an empty items clears it.",
+        "tags": [
+          "Scoped API"
+        ]
+      }
+    },
     "/api/v1/environments/{environment}/risk-policy": {
       "delete": {
         "operationId": "deleteApiEnvironmentsbyEnvironmentRiskPolicy",
@@ -30797,6 +31017,13 @@
             "in": "path",
             "name": "id",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
             "schema": {
               "type": "string"
             }
@@ -35655,6 +35882,13 @@
           {
             "in": "query",
             "name": "environment_id",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
             "schema": {
               "type": "string"
             }
@@ -55359,6 +55593,142 @@
         ]
       }
     },
+    "/management/v1/environments/{environment}/resources/{resource}/permission-descriptions": {
+      "get": {
+        "operationId": "getManagementEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DescriptionSet"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "Get returns the stored descriptions, every locale.",
+        "tags": [
+          "Management API"
+        ]
+      },
+      "put": {
+        "operationId": "putManagementEnvironmentsbyEnvironmentResourcesbyResourcePermissionDescriptions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "environment",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "resource",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DescriptionSetInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "4XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              },
+              "text/plain": {}
+            },
+            "description": "Client error"
+          },
+          "5XX": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Server error"
+          }
+        },
+        "security": [
+          {
+            "managementKey": []
+          },
+          {
+            "operatorSession": []
+          }
+        ],
+        "summary": "Put replaces the whole set; an empty items clears it.",
+        "tags": [
+          "Management API"
+        ]
+      }
+    },
     "/management/v1/environments/{environment}/risk-policy": {
       "delete": {
         "operationId": "deleteManagementEnvironmentsbyEnvironmentRiskPolicy",
@@ -59556,6 +59926,13 @@
             "in": "path",
             "name": "id",
             "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "locale",
             "schema": {
               "type": "string"
             }

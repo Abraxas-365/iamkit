@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { BackLink, ConfirmDialog, CopyText, DataTable, DetailSection, EmptyState, EntityRef, ErrorState, PageHeader, SwitchField, Time } from '@/components/library/patterns'
 import { HistorySection } from './history'
 import { ApiKeyAllowlist } from './resource-api-keys'
+import { PermissionDescriptionsEditor } from './resource-descriptions'
 import { ProtectedResourceSection } from './resource-protected'
 import { rich, t } from '@/lib/i18n'
 
@@ -165,6 +166,8 @@ export default function ResourceDetailPage() {
           ] : []} />,
         ])} />
     </div>}
+
+    <PermissionDescriptionsEditor base={base} resource={resource} canWrite={canWrite} />
 
     <ApiKeyAllowlist base={base} resource={resource} canWrite={canWrite} system={system} onSaved={load} />
 

@@ -336,6 +336,18 @@ type Resource struct {
 	APIKeyPermissions *APIKeyPermissions `json:"api_key_permissions,omitempty"`
 }
 
+// PermissionDescription is how people read one permission of a resource:
+// a short name and a sentence, in one language. Locale "" is the default
+// text, otherwise an available language code ("es", "pt-BR"). Names are at
+// most 80 characters and sentences 300, plain text on one line. The
+// permission must be in the resource's catalog.
+type PermissionDescription struct {
+	Permission  string `json:"permission"`
+	Locale      string `json:"locale"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+}
+
 // ResourceAccess sets a resource's owner organization (nil = the
 // environment) and grant requirement.
 type ResourceAccess struct {
@@ -707,6 +719,31 @@ func (e Environment) Resource(ctx context.Context, id string) (Resource, error) 
 	var out Resource
 	err := e.operation(ctx, "GET", []string{"resources", id}, nil, &out)
 	return out, err
+}
+
+// PermissionDescriptions returns the resource's stored permission
+// descriptions, every language; requires iam:resources:read.
+func (e Environment) PermissionDescriptions(ctx context.Context, resource string) ([]PermissionDescription, error) {
+	var out struct {
+		Items []PermissionDescription `json:"items"`
+	}
+	err := e.operation(ctx, "GET", []string{"resources", resource, "permission-descriptions"}, nil, &out)
+	if out.Items == nil {
+		out.Items = []PermissionDescription{}
+	}
+	return out.Items, err
+}
+
+// SetPermissionDescriptions replaces the resource's whole set of
+// permission descriptions (putting the same set again changes nothing; an
+// empty one clears them); requires iam:resources:write. Every permission
+// must be in the catalog, and removing a permission from the catalog
+// deletes its descriptions.
+func (e Environment) SetPermissionDescriptions(ctx context.Context, resource string, descriptions []PermissionDescription) error {
+	if descriptions == nil {
+		descriptions = []PermissionDescription{}
+	}
+	return e.operation(ctx, "PUT", []string{"resources", resource, "permission-descriptions"}, map[string]any{"items": descriptions}, nil)
 }
 
 func (e Environment) UpdateResource(ctx context.Context, id string, input ResourcePatch) error {

@@ -3,6 +3,7 @@ package hostedsvc
 
 import (
 	"context"
+	"log/slog"
 	"net/url"
 	"slices"
 	"strings"
@@ -34,6 +35,7 @@ type Service struct {
 	passkeys       hosted.Passkeys
 	features       hosted.Features
 	captcha        hosted.Captcha
+	describer      hosted.PermissionDescriber
 	risk           hosted.Risk
 	// issuer is IAMKit's public URL (the hosted consent page's base).
 	issuer string
@@ -66,6 +68,36 @@ func (s *Service) SetFeatures(features hosted.Features) { s.features = features 
 // SetCaptcha lets Authorization tell custom sign-in UIs which CAPTCHA the
 // headless steps need (without it none is announced).
 func (s *Service) SetCaptcha(captcha hosted.Captcha) { s.captcha = captcha }
+
+// SetDescriber words consent scopes with permission descriptions (without
+// it the pages show the permission names).
+func (s *Service) SetDescriber(d hosted.PermissionDescriber) { s.describer = d }
+
+// words describes the permission scopes of an authorization of resource for
+// a reader preferring locales. A failure only logs: the page then shows the
+// names.
+func (s *Service) words(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, locales []string, scopes ...[]string) map[string]oauth.ScopeText {
+	if s.describer == nil || resource.IsZero() {
+		return nil
+	}
+	var names []string
+	for _, group := range scopes {
+		for _, n := range group {
+			if !slices.Contains(oauth.ConsentableOIDCScopes, n) && !slices.Contains(names, n) {
+				names = append(names, n)
+			}
+		}
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	out, err := s.describer.DescribeScopes(ctx, environment, resource, names, locales...)
+	if err != nil {
+		slog.WarnContext(ctx, "permission descriptions unavailable; the page shows permission names", "err", err)
+		return nil
+	}
+	return out
+}
 
 // SetRisk applies risk evaluation (restrictions, detections, the attempt
 // log, challenges) to the pages (without it none of it runs).
@@ -237,7 +269,8 @@ func (s *Service) Authorization(ctx context.Context, r hosted.Request, acceptLan
 		if err != nil {
 			return hosted.Authorization{}, err
 		}
-		out.ConsentRequired, out.Consent = true, hosted.NewConsentInfo(prompt, s.consentURL(r.Ticket))
+		out.ConsentRequired, out.Consent = true, hosted.NewConsentInfo(prompt, s.consentURL(r.Ticket),
+			s.words(ctx, prompt.Environment, prompt.ResourceID, []string{uiLocales(p), acceptLanguage}, prompt.Pending, prompt.Unheld, prompt.Agreed))
 	}
 	return out, nil
 }
@@ -250,7 +283,7 @@ func (s *Service) consentURL(ticket string) string {
 // ConsentPage brands the consent page of an authorization waiting for
 // consent like its sign-in pages, in the organization the user signed in
 // to; any client (hosted login or not) consents here.
-func (s *Service) ConsentPage(ctx context.Context, r hosted.Request) (hosted.ConsentPage, error) {
+func (s *Service) ConsentPage(ctx context.Context, r hosted.Request, acceptLanguage string) (hosted.ConsentPage, error) {
 	p, err := s.authorizations.Pending(ctx, r.Ticket, r.Binding)
 	if err != nil {
 		return hosted.ConsentPage{}, err
@@ -265,7 +298,12 @@ func (s *Service) ConsentPage(ctx context.Context, r hosted.Request) (hosted.Con
 	}
 	// The page shows who consents; a failed read only hides it.
 	account, _ := s.authenticator.Account(ctx, prompt.Environment, prompt.User)
-	return hosted.ConsentPage{Prompt: prompt, Settings: settings, Language: settings.Preferred(uiLocales(p)), Texts: hosted.TextScope{Client: prompt.Client.ID, Organization: prompt.Organization}, Account: account}, nil
+	language := settings.Preferred(uiLocales(p))
+	// The page is shown in the negotiated language (the handler negotiates
+	// the same way); its permissions are worded in the reader's tags first.
+	shown := settings.Negotiate(language, acceptLanguage)
+	words := s.words(ctx, prompt.Environment, prompt.ResourceID, []string{shown}, prompt.Pending, prompt.Unheld, prompt.Agreed)
+	return hosted.ConsentPage{Prompt: prompt, Settings: settings, Language: language, Words: words, Texts: hosted.TextScope{Client: prompt.Client.ID, Organization: prompt.Organization}, Account: account}, nil
 }
 
 // offered checks the pending authorization and that its client offers the

@@ -409,6 +409,7 @@ func (r *Consents) ConnectedApps(ctx context.Context, environment identity.Envir
 		Protected    identity.ProtectedResourceID `db:"protected_resource_id"`
 		Resource     string                       `db:"uri"`
 		ResourceName string                       `db:"resource_name"`
+		ResourceID   identity.ResourceID          `db:"catalog_resource_id"`
 		Org          identity.OrganizationID      `db:"organization_id"`
 		Scopes       pq.StringArray               `db:"scopes"`
 		Consented    *time.Time                   `db:"consented_at"`
@@ -425,7 +426,7 @@ func (r *Consents) ConnectedApps(ctx context.Context, environment identity.Envir
 			 GROUP BY 1, 2, 3
 		)
 		SELECT k.client_id, oc.external_id, oc.source, COALESCE(NULLIF(oc.client_name,''), a.name) AS name, oc.logo_uri, oc.preset,
-		       k.protected_resource_id, pr.uri, pr.name AS resource_name, k.organization_id,
+		       k.protected_resource_id, pr.uri, pr.name AS resource_name, pr.resource_id AS catalog_resource_id, k.organization_id,
 		       COALESCE(c.scopes, '{}') AS scopes, c.created_at AS consented_at, COALESCE(s.sessions, 0) AS sessions, s.last_authorized_at
 		  FROM (SELECT client_id, protected_resource_id, organization_id FROM c UNION SELECT client_id, protected_resource_id, organization_id FROM s) k
 		  LEFT JOIN c USING (client_id, protected_resource_id, organization_id)
@@ -443,7 +444,7 @@ func (r *Consents) ConnectedApps(ctx context.Context, environment identity.Envir
 		}
 		client := oauth.ConnectedClient{ID: row.Client, ClientID: id, Source: row.Source, Name: row.Name, Preset: row.Preset}.Describe(row.Logo)
 		out = append(out, oauth.ConnectedApp{Client: client, Protected: row.Protected, Resource: row.Resource, ResourceName: row.ResourceName, Organization: row.Org,
-			Scopes: nonNil([]string(row.Scopes)), ConsentedAt: row.Consented, Sessions: row.Sessions, LastUsedAt: row.Authorized})
+			Scopes: oauth.NewScopeInfos([]string(row.Scopes), nil), ResourceID: row.ResourceID, ConsentedAt: row.Consented, Sessions: row.Sessions, LastUsedAt: row.Authorized})
 	}
 	return out, failure(err)
 }

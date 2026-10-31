@@ -14,7 +14,7 @@ func TestUserConnectedApps(t *testing.T) {
 		calls = append(calls, r.Method+" "+r.URL.RequestURI())
 		if r.Method == "GET" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"items":[{"client":{"id":"c1","name":"Claude"},"resource":"https://mcp.example/mcp","scopes":["notes:read"],"active_sessions":1}]}`))
+			w.Write([]byte(`{"items":[{"client":{"id":"c1","name":"Claude"},"resource":"https://mcp.example/mcp","scopes":[{"name":"notes:read","display_name":"Read notes","description":"See your notes."}],"active_sessions":1}]}`))
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)

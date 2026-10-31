@@ -237,7 +237,7 @@ func TestConsent(t *testing.T) {
 	}
 	app := apps[0].(map[string]any)
 	client := app["client"].(map[string]any)
-	if client["host"] != "claude.ai" || client["verified_name"] != "Claude Code" || app["resource"] != mcpURI || app["active_sessions"].(float64) < 1 || !jsonEqual(app["scopes"], []any{"mcp:tools:read"}) {
+	if client["host"] != "claude.ai" || client["verified_name"] != "Claude Code" || app["resource"] != mcpURI || app["active_sessions"].(float64) < 1 || !jsonEqual(scopeNames(app["scopes"]), []any{"mcp:tools:read"}) {
 		t.Fatalf("connected app = %v", app)
 	}
 	// The operator reads the same list.
@@ -408,7 +408,7 @@ func TestConsentCustomUI(t *testing.T) {
 	var described map[string]any
 	json.Unmarshal([]byte(info.Body), &described)
 	consent, _ := described["consent"].(map[string]any)
-	if info.Status != 200 || described["consent_required"] != true || consent["ui"] != "hosted" || !jsonEqual(consent["scopes"], []any{"mcp:tools:read"}) {
+	if info.Status != 200 || described["consent_required"] != true || consent["ui"] != "hosted" || !jsonEqual(scopeNames(consent["scopes"]), []any{"mcp:tools:read"}) {
 		t.Fatalf("ticket waiting for hosted consent: %d %s", info.Status, info.Body)
 	}
 	if r := decide(b, ticket, true, true); r.Status != 403 || r.JSON["error"].(map[string]any)["code"] != "CONSENT_UI_HOSTED" {

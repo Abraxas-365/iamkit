@@ -18,6 +18,7 @@ type (
 	IssuedAPIKey            = iamclient.IssuedAPIKey
 	NewAPIKey               = iamclient.NewAPIKey
 	Page                    = iamclient.Page
+	PermissionDescription   = iamclient.PermissionDescription
 	Paging                  = iamclient.Paging
 	AuditLogAction          = iamclient.AuditLogAction
 	AuditLogActionInput     = iamclient.AuditLogActionInput

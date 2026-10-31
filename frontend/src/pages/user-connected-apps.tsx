@@ -13,7 +13,7 @@ import { t } from '@/lib/i18n'
 export interface ConnectedApp {
   client: { id: string; client_id: string; source: string; name: string; host: string; logo_uri: string; preset: string; verified_name: string }
   protected_resource_id: string; resource: string; resource_name: string; organization_id: string
-  scopes: string[] | null; consented_at: string | null; active_sessions: number; last_used_at: string | null
+  scopes: { name: string; display_name: string; description: string }[] | null; consented_at: string | null; active_sessions: number; last_used_at: string | null
 }
 
 /** AppIdentity names the client as IAMKit can vouch for it: the preset's
@@ -60,7 +60,7 @@ export function UserConnectedApps({ base, userId, userLabel, canWrite }: { base:
         <AppIdentity app={a} />,
         <span title={a.resource}>{a.resource_name || a.resource}</span>,
         orgs[a.organization_id] ?? <span className="font-mono text-xs">{a.organization_id}</span>,
-        a.scopes?.length ? <span className="break-all font-mono text-xs">{a.scopes.join(' ')}</span> : <span className="text-muted-foreground">{t('Granted by an administrator')}</span>,
+        a.scopes?.length ? <ul className="space-y-0.5">{a.scopes.map(s => <li key={s.name} className="text-xs" title={s.description || undefined}>{s.display_name && s.display_name !== s.name ? <>{s.display_name} <span className="font-mono text-[11px] text-muted-foreground">{s.name}</span></> : <span className="break-all font-mono">{s.name}</span>}</li>)}</ul> : <span className="text-muted-foreground">{t('Granted by an administrator')}</span>,
         <Time value={a.consented_at} />,
         <Time value={a.last_used_at} />,
         String(a.active_sessions),

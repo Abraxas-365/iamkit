@@ -13,7 +13,7 @@ func TestConnectedAppEndpoints(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		calls = append(calls, r.Method+" "+r.URL.RequestURI()+" "+r.Header.Get("Authorization"))
 		if r.Method == "GET" {
-			w.Write([]byte(`{"items":[{"client":{"id":"c1","client_id":"https://claude.ai/m.json","source":"cimd","name":"Claude","host":"claude.ai","verified_name":"Claude"},"protected_resource_id":"p1","resource":"https://mcp.example/mcp","resource_name":"Notes","organization_id":"o1","scopes":["notes:read"],"consented_at":"2026-01-02T03:04:05Z","active_sessions":2,"last_used_at":null}]}`))
+			w.Write([]byte(`{"items":[{"client":{"id":"c1","client_id":"https://claude.ai/m.json","source":"cimd","name":"Claude","host":"claude.ai","verified_name":"Claude"},"protected_resource_id":"p1","resource":"https://mcp.example/mcp","resource_name":"Notes","organization_id":"o1","scopes":[{"name":"notes:read","display_name":"Read notes","description":"See your notes."}],"consented_at":"2026-01-02T03:04:05Z","active_sessions":2,"last_used_at":null}]}`))
 			return
 		}
 		w.WriteHeader(204)
@@ -24,6 +24,9 @@ func TestConnectedAppEndpoints(t *testing.T) {
 	apps, err := c.ListConnectedApps(ctx, "tok", "env", "https://a.example", "")
 	if err != nil || len(apps) != 1 || apps[0].Client.ID != "c1" || apps[0].Client.VerifiedName != "Claude" || apps[0].ActiveSessions != 2 || apps[0].ConsentedAt == nil || apps[0].LastUsedAt != nil {
 		t.Fatalf("apps = %+v %v", apps, err)
+	}
+	if len(apps[0].Scopes) != 1 || apps[0].Scopes[0].Name != "notes:read" || apps[0].Scopes[0].DisplayName != "Read notes" || apps[0].Scopes[0].Description != "See your notes." {
+		t.Fatalf("scopes = %+v", apps[0].Scopes)
 	}
 	if err := c.DisconnectApp(ctx, "tok", "env", "https://a.example", "c1", "o1"); err != nil {
 		t.Fatal(err)

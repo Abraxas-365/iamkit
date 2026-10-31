@@ -43,16 +43,24 @@ type ConsentView struct {
 type ScopeLine struct {
 	Name  string
 	Label string
+	// Detail is the permission's description, when it has one (D40).
+	Detail string
 }
 
 // consentScopes labels scopes: profile data scopes in the page's
-// language, permissions by name.
-func consentScopes(v view, scopes []string) []ScopeLine {
+// language, permissions with their description's display name and sentence
+// (words, in the page's language) or else by name.
+func consentScopes(v view, scopes []string, words map[string]oauth.ScopeText) []ScopeLine {
 	out := make([]ScopeLine, 0, len(scopes))
 	for _, s := range scopes {
 		line := ScopeLine{Name: s, Label: s}
 		if slices.Contains(oauth.ConsentableOIDCScopes, s) {
 			line.Label = v.T("hosted.consent.scope." + s)
+		} else if t, ok := words[s]; ok {
+			if t.DisplayName != "" {
+				line.Label = t.DisplayName
+			}
+			line.Detail = t.Description
 		}
 		out = append(out, line)
 	}
@@ -61,7 +69,7 @@ func consentScopes(v view, scopes []string) []ScopeLine {
 
 // consentView renders the page of an authorization waiting for consent.
 func (h *Handler) consentView(c *fiber.Ctx, r hosted.Request) (view, error) {
-	page, err := h.flow.ConsentPage(c.UserContext(), r)
+	page, err := h.flow.ConsentPage(c.UserContext(), r, c.Get(fiber.HeaderAcceptLanguage))
 	if err != nil {
 		return view{}, err
 	}
@@ -73,7 +81,7 @@ func (h *Handler) consentView(c *fiber.Ctx, r hosted.Request) (view, error) {
 	if resource == "" {
 		resource = prompt.Resource
 	}
-	v.Consent = &ConsentView{Application: app, Resource: resource, Scopes: consentScopes(v, prompt.Pending), Unheld: consentScopes(v, prompt.Unheld), Agreed: consentScopes(v, prompt.Agreed)}
+	v.Consent = &ConsentView{Application: app, Resource: resource, Scopes: consentScopes(v, prompt.Pending, page.Words), Unheld: consentScopes(v, prompt.Unheld, page.Words), Agreed: consentScopes(v, prompt.Agreed, page.Words)}
 	who := app.Verified
 	if who == "" {
 		who = app.Host

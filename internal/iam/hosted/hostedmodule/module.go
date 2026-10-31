@@ -33,6 +33,9 @@ type Deps struct {
 	// device pages and announces the headless one to custom UIs (nil:
 	// never).
 	Captcha hosted.Captcha
+	// Describer words consent scopes with the resources' permission
+	// descriptions (nil: permission names).
+	Describer hosted.PermissionDescriber
 	// Risk applies restrictions, detections and challenges (nil: none).
 	Risk hosted.Risk
 	// Issuer is IAMKit's public URL: custom UIs are told the absolute
@@ -70,6 +73,9 @@ func New(deps Deps) Module {
 	}
 	if deps.Captcha != nil {
 		service.SetCaptcha(deps.Captcha)
+	}
+	if deps.Describer != nil {
+		service.SetDescriber(deps.Describer)
 	}
 	if deps.Risk != nil {
 		service.SetRisk(deps.Risk)

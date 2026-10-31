@@ -200,8 +200,11 @@ type ConnectedApp struct {
 	ResourceName string                       `json:"resource_name"`
 	Organization identity.OrganizationID      `json:"organization_id"`
 	// Scopes are what the user consented to (empty for a first-party
-	// client, which never asks).
-	Scopes []string `json:"scopes"`
+	// client, which never asks), worded with the server's permission
+	// descriptions (D40).
+	Scopes []ScopeInfo `json:"scopes"`
+	// ResourceID is the catalog resource behind the server.
+	ResourceID identity.ResourceID `json:"-"`
 	// ConsentedAt is when the user first consented (nil: never asked).
 	ConsentedAt *time.Time `json:"consented_at"`
 	// Sessions are the client's live sessions for the user there;
@@ -246,6 +249,50 @@ func (c ConnectedClient) Describe(logo string) ConnectedClient {
 // (nil: every organization of the user).
 type ConnectedAppFilter struct {
 	Organization *identity.OrganizationID
+	// Locales are the reader's preferred languages, best first (an
+	// Accept-Language header's tags): the scopes' descriptions are worded
+	// in the first the catalog has, else its default text.
+	Locales []string
+}
+
+// ScopeText is how people read a permission scope: a short name and a
+// sentence, from the permission descriptions of its resource (D40). A
+// scope the catalog does not describe has none: show the scope itself.
+type ScopeText struct {
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+}
+
+// ScopeInfo is a scope as people read it (D40): Name is the scope itself,
+// DisplayName its short name (the Name when nothing describes it) and
+// Description a sentence (empty when none).
+type ScopeInfo struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+}
+
+// NewScopeInfos words names with text (the described ones, by name).
+func NewScopeInfos(names []string, text map[string]ScopeText) []ScopeInfo {
+	out := make([]ScopeInfo, len(names))
+	for i, n := range names {
+		out[i] = ScopeInfo{Name: n, DisplayName: n}
+		if t, ok := text[n]; ok {
+			if t.DisplayName != "" {
+				out[i].DisplayName = t.DisplayName
+			}
+			out[i].Description = t.Description
+		}
+	}
+	return out
+}
+
+// PermissionDescriber words the permissions of a catalog resource for a reader
+// (authorization.DescriptionQueries, adapted in bootstrap). Only described
+// permissions are returned; a failure leaves the raw names, never blocks
+// the page.
+type PermissionDescriber interface {
+	DescribeScopes(ctx context.Context, environment identity.EnvironmentID, resource identity.ResourceID, scopes []string, locales ...string) (map[string]ScopeText, error)
 }
 
 // Disconnect ends a user's connection to a client: their live consents to
@@ -401,6 +448,9 @@ type ConsentPrompt struct {
 	Pending      []string
 	Unheld       []string
 	Agreed       []string
+	// ResourceID is the catalog resource behind the protected resource,
+	// whose permission descriptions word the scopes (D40).
+	ResourceID identity.ResourceID
 	// UI is the environment's consent_ui: a custom UI may decide only
 	// when it is ConsentUICustom (the hosted page always may).
 	UI string

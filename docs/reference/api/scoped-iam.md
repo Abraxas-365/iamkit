@@ -51,7 +51,7 @@ GET/HEAD select the read permission; mutations select write.
 | `/organizations/:id/setup-links` (`GET`, `POST`, `DELETE /:link`; see [setup links](../../guides/organizations/organization-administration.md#setup-links)) | `iam:orgs:read` (`GET`), `iam:orgs:write` |
 | `/memberships`, `/organizations/:organization/members`, member removal, structure and group routes | `iam:members:read`, `iam:members:write` |
 | `/applications`, `/applications/:id` (create/list/get/patch) | `iam:apps:read`, `iam:apps:write` |
-| Resources, `PUT /resources/:id/access`, `PUT /resources/:id/api-key-permissions`, application-resource bindings, application resource lists | `iam:resources:read`, `iam:resources:write` |
+| Resources, `PUT /resources/:id/access`, `PUT /resources/:id/api-key-permissions`, `GET`/`PUT /resources/:id/permission-descriptions`, application-resource bindings, application resource lists | `iam:resources:read`, `iam:resources:write` |
 | Roles, role assignments, group role assignments, effective roles, `/resource-grants` | `iam:roles:read`, `iam:roles:write` |
 | Grants | `iam:grants:read`, `iam:grants:write` |
 | API keys (`/api-keys`, `/api-keys/:key`, `/api-key-policy`; see [API keys](../../guides/machines/api-keys.md)) | `iam:api-keys:read`, `iam:api-keys:write` |

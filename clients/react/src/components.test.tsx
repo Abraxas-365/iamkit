@@ -57,9 +57,9 @@ describe("SignInForm", () => {
       resource: "https://mcp.example.com/mcp",
       resource_name: "",
       organization_id: "org",
-      scopes: ["email", "docs:read"],
-      unheld_scopes: ["docs:write"],
-      agreed_scopes: ["profile"],
+      scopes: [{ name: "email", display_name: "email", description: "" }, { name: "docs:read", display_name: "Read your documents", description: "Lets the app open your documents." }],
+      unheld_scopes: [{ name: "docs:write", display_name: "docs:write", description: "" }],
+      agreed_scopes: [{ name: "profile", display_name: "profile", description: "" }],
       ui: "custom",
       hosted_url: "https://id.example.com/hosted/consent?ticket=ik_ticket",
     };
@@ -76,6 +76,10 @@ describe("SignInForm", () => {
     expect(screen.getByText("cli.example.dev wants more access to https://mcp.example.com/mcp on your behalf.")).toBeTruthy();
     expect(screen.getByText("Your email address")).toBeTruthy();
     expect(screen.getByText("docs:write")).toBeTruthy();
+    // A described permission shows its display name and sentence, the raw name beside it.
+    expect(screen.getByText(/Read your documents/)).toBeTruthy();
+    expect(screen.getByText("Lets the app open your documents.")).toBeTruthy();
+    expect(screen.getByText("docs:read")).toBeTruthy();
     expect(screen.queryByText("Unverified name")).toBeNull();
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Allow" }));

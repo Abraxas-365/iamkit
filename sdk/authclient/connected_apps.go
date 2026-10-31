@@ -22,6 +22,16 @@ type ConnectedClient struct {
 	VerifiedName string `json:"verified_name"`
 }
 
+// ConnectedScope is a scope as people read it: Name is the permission,
+// DisplayName its short name (Name itself when nothing describes it) and
+// Description a sentence ("" when none), in the language the request asked
+// for (Accept-Language or the locale query parameter).
+type ConnectedScope struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Description string `json:"description"`
+}
+
 // ConnectedApp is a client that holds, or may get without asking, access
 // to the user's account at one protected resource in one organization: a
 // live consent, live sessions, or both (a first-party client has sessions
@@ -33,8 +43,9 @@ type ConnectedApp struct {
 	Resource            string `json:"resource"`
 	ResourceName        string `json:"resource_name"`
 	OrganizationID      string `json:"organization_id"`
-	// Scopes are what the user consented to (empty for a first-party client).
-	Scopes []string `json:"scopes"`
+	// Scopes are what the user consented to (empty for a first-party
+	// client), worded with the resource's permission descriptions.
+	Scopes []ConnectedScope `json:"scopes"`
 	// ConsentedAt is when the user first consented (nil: never asked).
 	ConsentedAt *time.Time `json:"consented_at"`
 	// ActiveSessions are the client's live sessions for the user there;

@@ -163,6 +163,11 @@ export {
   type WaitlistStatus,
 } from "./waitlist.js";
 export {
+  PermissionDescriptionsClient,
+  type PermissionDescription,
+  type PermissionDescriptionsClientOptions,
+} from "./permission-descriptions.js";
+export {
   MeConnectedApps,
   ProtectedResourcesClient,
   type Admission,
@@ -173,6 +178,7 @@ export {
   type ClientGrantInput,
   type ConnectedApp,
   type ConnectedClient,
+  type ConnectedScope,
   type ConsentMode,
   type ConsentPolicy,
   type ConsentUI,

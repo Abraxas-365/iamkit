@@ -28,6 +28,8 @@ type browser struct {
 	// ip, when set, is the client address sent as X-Forwarded-For (the
 	// server must trust the proxy: Server.TrustedProxies).
 	ip string
+	// acceptLanguage, when set, is sent as Accept-Language.
+	acceptLanguage string
 }
 
 type page struct {
@@ -53,6 +55,9 @@ func (b *browser) do(method, path string, form url.Values) page {
 	}
 	if b.ip != "" {
 		req.Header.Set("X-Forwarded-For", b.ip)
+	}
+	if b.acceptLanguage != "" {
+		req.Header.Set("Accept-Language", b.acceptLanguage)
 	}
 	for _, c := range b.cookies {
 		req.AddCookie(c)

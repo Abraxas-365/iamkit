@@ -373,12 +373,12 @@
 {{with .Account}}{{if .Email}}<div class="account">{{if .AvatarURL}}<img class="avatar" src="{{.AvatarURL}}" alt="" width="40" height="40" referrerpolicy="no-referrer">{{end}}<div><strong>{{.Name}}</strong><p class="muted">{{.Email}}</p></div></div>{{end}}{{end}}
 {{with .Consent}}
 {{if .Scopes}}<p><strong>{{$.T "hosted.consent.asks"}}</strong></p>
-<ul class="scopes">{{range .Scopes}}<li>{{.Label}}{{if ne .Label .Name}} <code>{{.Name}}</code>{{end}}</li>{{end}}</ul>{{end}}
+<ul class="scopes">{{range .Scopes}}<li>{{.Label}}{{if ne .Label .Name}} <code>{{.Name}}</code>{{end}}{{with .Detail}}<span class="muted detail">{{.}}</span>{{end}}</li>{{end}}</ul>{{end}}
 {{if .Unheld}}<details class="unheld"><summary>{{$.T "hosted.consent.unheld"}}</summary>
 <p class="muted">{{$.T "hosted.consent.unheld_help"}}</p>
-<ul class="scopes">{{range .Unheld}}<li>{{.Label}}{{if ne .Label .Name}} <code>{{.Name}}</code>{{end}}</li>{{end}}</ul></details>{{end}}
+<ul class="scopes">{{range .Unheld}}<li>{{.Label}}{{if ne .Label .Name}} <code>{{.Name}}</code>{{end}}{{with .Detail}}<span class="muted detail">{{.}}</span>{{end}}</li>{{end}}</ul></details>{{end}}
 {{if .Agreed}}<details class="agreed"><summary>{{$.T "hosted.consent.agreed"}}</summary>
-<ul class="scopes">{{range .Agreed}}<li>{{.Label}}{{if ne .Label .Name}} <code>{{.Name}}</code>{{end}}</li>{{end}}</ul></details>{{end}}
+<ul class="scopes">{{range .Agreed}}<li>{{.Label}}{{if ne .Label .Name}} <code>{{.Name}}</code>{{end}}{{with .Detail}}<span class="muted detail">{{.}}</span>{{end}}</li>{{end}}</ul></details>{{end}}
 {{end}}
 <p class="muted">{{.T "hosted.consent.revoke_help"}}</p>
 <form method="post" action="/hosted/consent">

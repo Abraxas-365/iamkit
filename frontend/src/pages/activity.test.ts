@@ -50,6 +50,8 @@ it('describes semantic event types', () => {
   expect(describeEvent('captcha.updated')).toBe('Bot protection updated')
   expect(describeEvent('event_retention.updated')).toBe('Event retention updated')
   expect(describeAction('PUT', `${env}/event-retention`)).toBe('Set event retention')
+  expect(describeEvent('resource.descriptions_updated')).toBe('Permission descriptions updated')
+  expect(describeAction('PUT', `${env}/resources/${id}/permission-descriptions`)).toBe('Set permission descriptions')
   expect(describeEvent('risk_restriction.created')).toBe('Risk restriction added')
   expect(describeAction('risk_policy.delete')).toBe('Reset the risk policy')
 })

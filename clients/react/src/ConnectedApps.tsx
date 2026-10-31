@@ -83,7 +83,7 @@ function Apps(props: ConnectedAppsProps) {
               <span {...part("meta")}>
                 {[
                   t("account.apps.server", app.resource_name || app.resource),
-                  app.scopes?.length ? t("account.apps.scopes", app.scopes.join(", ")) : t("account.apps.no_scopes"),
+                  app.scopes?.length ? t("account.apps.scopes", app.scopes.map((scope) => scope.display_name || scope.name).join(", ")) : t("account.apps.no_scopes"),
                   app.consented_at ? t("account.apps.connected", when(app.consented_at)) : "",
                   app.last_used_at ? t("account.apps.last_used", when(app.last_used_at)) : "",
                   app.active_sessions ? t("account.apps.sessions", String(app.active_sessions)) : "",

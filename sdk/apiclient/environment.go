@@ -348,6 +348,35 @@ func (e Environment) Resource(ctx context.Context, id string) (Resource, error) 
 	return out, e.client.Do(ctx, "GET", e.path("resources", id), nil, &out)
 }
 
+// PermissionDescriptions returns the resource's stored permission
+// descriptions, every language; requires iam:resources:read.
+func (e Environment) PermissionDescriptions(ctx context.Context, resource string) ([]PermissionDescription, error) {
+	if err := safeSegment(resource); err != nil {
+		return nil, err
+	}
+	var out struct {
+		Items []PermissionDescription `json:"items"`
+	}
+	err := e.client.Do(ctx, "GET", e.path("resources", resource, "permission-descriptions"), nil, &out)
+	if out.Items == nil {
+		out.Items = []PermissionDescription{}
+	}
+	return out.Items, err
+}
+
+// SetPermissionDescriptions replaces the resource's whole set of
+// permission descriptions (an empty one clears them); requires
+// iam:resources:write.
+func (e Environment) SetPermissionDescriptions(ctx context.Context, resource string, descriptions []PermissionDescription) error {
+	if err := safeSegment(resource); err != nil {
+		return err
+	}
+	if descriptions == nil {
+		descriptions = []PermissionDescription{}
+	}
+	return e.client.Do(ctx, "PUT", e.path("resources", resource, "permission-descriptions"), map[string]any{"items": descriptions}, nil)
+}
+
 func (e Environment) UpdateResource(ctx context.Context, id string, input ResourcePatch) error {
 	return e.client.Do(ctx, "PUT", e.path("resources", id), input, nil)
 }

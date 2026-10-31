@@ -30,6 +30,7 @@ const verbs: Record<string, (thing: string) => string> = {
   PATCH: thing => t('Updated {{thing}}', { thing }), DELETE: thing => t('Deleted {{thing}}', { thing }),
 }
 const nouns: Record<string, string> = {
+  'permission-descriptions': t('permission descriptions'),
   users: t('user'), organizations: t('organization'), applications: t('application'), resources: t('resource'), roles: t('role'), grants: t('grant'),
   'role-assignments': t('role assignment'), 'group-role-assignments': t('group role assignment'), 'service-accounts': t('service account'), 'federation-connections': t('federation connection'),
   'oauth-clients': t('OAuth client'), 'provisioning-credentials': t('SCIM credential'), directories: t('SCIM credential'), memberships: t('membership'), members: t('member'),
@@ -158,7 +159,7 @@ const eventVerbs: Record<string, (subject: string) => string> = {
 }
 const eventNamed: Record<string, string> = {
   'api_key.created': t('API key created'), 'api_key.revoked': t('API key revoked'), 'api_key_policy.updated': t('API key policy updated'),
-  'event_retention.updated': t('Event retention updated'),
+  'event_retention.updated': t('Event retention updated'), 'resource.descriptions_updated': t('Permission descriptions updated'),
   'captcha.updated': t('Bot protection updated'), 'captcha.deleted': t('Bot protection deleted'),
   'risk_policy.updated': t('Risk policy updated'), 'risk_policy.deleted': t('Risk policy reset'),
   'risk_restriction.created': t('Risk restriction added'), 'risk_restriction.deleted': t('Risk restriction removed'),

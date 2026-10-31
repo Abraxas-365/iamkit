@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -247,5 +248,37 @@ func TestAPIKeyRowFormatting(t *testing.T) {
 	}
 	if got := apiKeyRow(map[string]any{"expires": true, "expires_at": "2027-01-01T00:00:00Z"}); got[6] != "2027-01-01T00:00:00Z" {
 		t.Fatalf("expiry = %q", got[6])
+	}
+}
+
+func TestResourceDescriptions(t *testing.T) {
+	out, _, seen, err := runCLI(t, ok(200, `{"items":[{"permission":"a:read","locale":"es","display_name":"Leer","description":"Ver"}]}`), "resources", "descriptions", "get", "r1")
+	if err != nil || seen[0].Method != "GET" || seen[0].Path != base+"/resources/r1/permission-descriptions" || !strings.Contains(out, "Leer") {
+		t.Fatalf("get: %v %q %+v", err, out, seen)
+	}
+	file := filepath.Join(t.TempDir(), "d.json")
+	os.WriteFile(file, []byte(`{"items":[{"permission":"a:read","display_name":"Read","description":"See"},{"permission":"a:read","locale":"es","display_name":"Leer"}]}`), 0o600)
+	_, _, seen, err = runCLI(t, ok(204, ""), "resources", "descriptions", "set", "r1", "--file", file)
+	if err != nil || seen[0].Method != "PUT" || seen[0].Path != base+"/resources/r1/permission-descriptions" {
+		t.Fatalf("set: %v %+v", err, seen)
+	}
+	items, _ := seen[0].Body["items"].([]any)
+	if len(items) != 2 || items[1].(map[string]any)["locale"] != "es" || items[0].(map[string]any)["locale"] != "" {
+		t.Fatalf("body = %v", seen[0].Body)
+	}
+	// Clearing needs an explicit empty list; unknown fields and a missing
+	// file fail before any request.
+	os.WriteFile(file, []byte(`{"items":[]}`), 0o600)
+	if _, _, seen, err = runCLI(t, ok(204, ""), "resources", "descriptions", "set", "r1", "--file", file); err != nil || len(seen) != 1 {
+		t.Fatalf("clear: %v %+v", err, seen)
+	}
+	for name, content := range map[string]string{"no items": `{}`, "unknown field": `{"items":[],"x":1}`} {
+		os.WriteFile(file, []byte(content), 0o600)
+		if _, _, seen, err := runCLI(t, ok(204, ""), "resources", "descriptions", "set", "r1", "--file", file); err == nil || len(seen) != 0 {
+			t.Fatalf("%s must fail locally: %v", name, err)
+		}
+	}
+	if _, _, seen, err := runCLI(t, ok(204, ""), "resources", "descriptions", "set", "r1"); err == nil || len(seen) != 0 {
+		t.Fatalf("no --file must fail locally: %v", err)
 	}
 }

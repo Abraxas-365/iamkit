@@ -181,6 +181,6 @@ export function ProtectedResourceSection({ base, resource: target, canWrite }: {
       confirmLabel={t('Delete')} confirmationText={server.uri} onClose={() => setEnding(null)}
       confirm={async () => { await api.delete(path); toast.success(t('MCP server deleted')); load() }} />}
   </DetailSection>
-  <ClientsSection path={path} canWrite={canWrite} refresh={`${server.allow_client_metadata}${server.allow_dynamic_registration}${version}`} grants={server.consent_mode === 'admin_granted' ? { base, scopes: target.permissions } : undefined} />
+  <ClientsSection path={path} canWrite={canWrite} refresh={`${server.allow_client_metadata}${server.allow_dynamic_registration}${version}`} grants={server.consent_mode === 'admin_granted' ? { base, scopes: target.permissions, resource } : undefined} />
   </>
 }

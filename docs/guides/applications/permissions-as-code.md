@@ -41,7 +41,9 @@ Commit a single file, for example `iam/permissions.json`. The
 {
   "resource": {"name": "Invoices API", "prefix": "invoices"},
   "permissions": [
-    {"name": "invoices:invoices:read", "label": "View invoices"},
+    {"name": "invoices:invoices:read", "label": "View invoices",
+      "description": "See invoices and their status.",
+      "translations": {"es": {"label": "Ver facturas", "description": "Ver las facturas y su estado."}}},
     {"name": "invoices:invoices:write", "label": "Create and edit invoices"}
   ],
   "roles": [
@@ -50,8 +52,12 @@ Commit a single file, for example `iam/permissions.json`. The
 }
 ```
 
-- `permissions` is the resource catalog. Labels are user-facing text for role
-  editors and permission pickers, in your application's language.
+- `permissions` is the resource catalog. `label` is the permission's display
+  name (≤ 80 characters) and `description` a sentence (≤ 300), in your
+  application's default language: consent screens, connected apps and the
+  console show them, with the permission's name beside them. `translations`
+  holds the same two fields per IAMKit language (`es`, `pt-BR`, …). All three
+  are optional; a permission without text shows its name.
 - `roles` are the roles your application defines on that resource.
   Organizations may add their own, and the sync leaves those alone.
 - Add what your project needs, for example a role `kind`, or the `iam:*`
@@ -103,8 +109,8 @@ Cheap tests catch every way the manifest and the code can disagree:
 Use one script for every environment, local included, instead of separate
 "seed" and "sync" scripts. It finds the resource by prefix and roles by name,
 creates what is missing and updates what changed. The
-[example script](../../examples/permissions/sync.sh) does this for the catalog
-and roles of one resource:
+[example script](../../examples/permissions/sync.sh) does this for the catalog,
+the descriptions and the roles of one resource:
 
 ```sh
 IAMKIT_URL=https://iam.example.com MGMT=ik_mgmt_… ENVIRONMENT=<environment id> \
@@ -114,14 +120,20 @@ AUDIENCE=https://api.example.com bash docs/examples/permissions/sync.sh --dry-ru
 Three rules make it safe:
 
 - **`--dry-run` first.** It prints every change (`catalog: +a -b`,
-  `role Viewer: +c`) and writes nothing.
+  `descriptions: +a/es ~b -c`, `role Viewer: +c`) and writes nothing.
 - **Additions are applied; removals are not.** Updating a resource's catalog
   (`PUT /resources/:id`) silently removes every dropped permission from all
   roles, grants and service accounts of that resource, in the same
   transaction. So a permission that left the manifest stays in the catalog and
   in the roles holding it, and the script reports it as kept.
 - **`--prune` removes them**, only when you ask, once no running version of
-  your code checks them.
+  your code checks them. Removing a permission deletes its descriptions too, so
+  without `--prune` the script keeps the texts of kept permissions.
+
+The descriptions are sent after the catalog as one `PUT
+/resources/:id/permission-descriptions`, which replaces the whole set, so
+texts edited in the console and absent from the manifest are removed. Keep the
+manifest as the only place you edit them.
 
 Service accounts have no route for changing their permissions. If your
 manifest changes a service account's permissions, revoke it and create it
@@ -150,7 +162,7 @@ again, which issues a new secret.
 
 ## Checklist
 
-1. `iam/permissions.json` with the resource, permissions (with labels) and roles.
+1. `iam/permissions.json` with the resource, permissions (with labels, descriptions and translations) and roles.
 2. A generator for backend and frontend constants, with its output committed.
 3. Route guards and frontend checks use only the generated constants and types.
 4. Drift tests in CI.

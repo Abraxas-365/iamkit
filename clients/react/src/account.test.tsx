@@ -313,7 +313,7 @@ describe("ConnectedApps", () => {
   const verified = {
     client: { id: "c1", client_id: "https://claude.ai/oauth/claude-code-client-metadata", source: "cimd", name: "Claude Code", host: "claude.ai", logo_uri: "https://claude.ai/logo.png", preset: "claude_code", verified_name: "Claude Code" },
     protected_resource_id: "pr1", resource: "https://mcp.example.com/mcp", resource_name: "Notes", organization_id: "org1",
-    scopes: ["notes:read"], consented_at: "2030-01-01T00:00:00Z", active_sessions: 2, last_used_at: null,
+    scopes: [{ name: "notes:read", display_name: "Read notes", description: "See your notes." }], consented_at: "2030-01-01T00:00:00Z", active_sessions: 2, last_used_at: null,
   };
   const unverified = {
     ...verified,
@@ -331,6 +331,9 @@ describe("ConnectedApps", () => {
     const first = document.querySelector<HTMLElement>('li[data-client="c1"]')!;
     expect(within(first).getByText("Claude Code")).toBeTruthy();
     expect(within(first).getByText("at claude.ai")).toBeTruthy();
+    // Scopes show the resource's display name, not the permission.
+    expect(first.textContent).toContain("Read notes");
+    expect(first.textContent).not.toContain("notes:read");
     expect(first.querySelector("img")?.getAttribute("src")).toBe("https://claude.ai/logo.png");
     // A self-named client is shown by its host, its name marked, no logo.
     const second = document.querySelector<HTMLElement>('li[data-client="c2"]')!;

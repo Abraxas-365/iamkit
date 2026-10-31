@@ -153,6 +153,8 @@ iam api-keys policy get
 iam api-keys policy set --user-keys --organization-keys --max-ttl-days 365 --max-per-user 10 --max-per-organization 50
 iam resources api-key-permissions set RESOURCE_ID --user invoices:read --organization invoices:read,invoices:write
 iam resources api-key-permissions get RESOURCE_ID
+iam resources descriptions get RESOURCE_ID
+iam resources descriptions set RESOURCE_ID --file descriptions.json   # replaces the whole set; "-" reads stdin
 
 iam api-keys create --organization ORG_ID --resource RESOURCE_ID --name "warehouse sync" \
   --permission invoices:read --expires-in 2160h      # organization key; --expires-in never or omitted = no expiry
