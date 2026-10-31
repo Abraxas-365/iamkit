@@ -63,7 +63,7 @@ function mcpServer(claims: ResourceClaims): McpServer {
     "whoami",
     { description: "Show the token's subject, organization and scopes" },
     async () => ({
-      content: [{ type: "text", text: JSON.stringify({ user: claims.sub, organization: claims.organizationId, client: claims.oauthClientId, scopes: claims.scopes }, null, 2) }],
+      content: [{ type: "text", text: JSON.stringify({ user: claims.sub, organization: claims.organizationId, client: claims.clientId, scopes: claims.scopes }, null, 2) }],
     }),
   );
   return server;

@@ -161,12 +161,21 @@ func TestExternalClients(t *testing.T) {
 		t.Fatalf("code exchange: %d %v", status, tokens)
 	}
 	c := claims(t, tokens["access_token"].(string))
-	if !equal(strs(c["aud"]), []string{mcpURI}) || c["oauth_client_id"] != rowID {
+	if !equal(strs(c["aud"]), []string{mcpURI}) || c["oauth_client_id"] != rowID || c["client_id"] != claudeCodeID {
 		t.Fatalf("claims: %v", c)
+	}
+	// Introspection names the client as the token does (resource servers
+	// compare them): the URL, not the row.
+	introspector := e.Must("POST", e.Base+"/oauth-clients", e.Owner, fiber.Map{"application_id": e.Client, "resource_id": e.Res, "redirect_uris": []string{"https://app.example/callback"}}, 201).JSON
+	if got := e.introspectAs(introspector["client_id"].(string), introspector["client_secret"].(string), tokens["access_token"].(string)); got["active"] != true || got["client_id"] != claudeCodeID {
+		t.Fatalf("introspection: %v", got)
 	}
 	status, refreshed, _ := e.tokenCall(refreshForm(claudeCodeID, tokens["refresh_token"].(string)), "")
 	if status != 200 {
 		t.Fatalf("refresh: %d %v", status, refreshed)
+	}
+	if c := claims(t, refreshed["access_token"].(string)); c["client_id"] != claudeCodeID {
+		t.Fatalf("refreshed claims: %v", c)
 	}
 	// The document is cached: one read for all of the above.
 	if n := host.Reads(claudeCodeID); n != 1 {

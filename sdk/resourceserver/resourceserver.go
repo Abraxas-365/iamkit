@@ -81,7 +81,12 @@ type Claims struct {
 	ApplicationID  string
 	ResourceID     string
 	SessionID      string
-	OAuthClientID  string
+	// ClientID is the client_id the OAuth client uses (RFC 9068): its
+	// Client ID Metadata Document URL or dcr_ id for external clients, else
+	// the registered client's id. OAuthClientID is IAMKit's id of the
+	// client row (equal to ClientID for registered clients).
+	ClientID      string
+	OAuthClientID string
 	// Resource is the protected resource the authorization named (the
 	// token's resource claim; empty only with AllowTokensWithoutResource).
 	Resource string
@@ -240,6 +245,7 @@ type tokenClaims struct {
 	ResourceID     string           `json:"resource_id"`
 	SessionID      string           `json:"sid"`
 	OAuthClientID  string           `json:"oauth_client_id"`
+	ClientID       string           `json:"client_id"`
 	Purpose        string           `json:"purpose"`
 	Resource       string           `json:"resource"`
 	Scp            []string         `json:"scp"`
@@ -303,7 +309,7 @@ func (s *Server) Verify(ctx context.Context, raw string) (*Claims, error) {
 		scopes = strings.Fields(c.Scope)
 	}
 	out := &Claims{Subject: c.Subject, EnvironmentID: c.EnvironmentID, OrganizationID: c.OrganizationID, ApplicationID: c.ApplicationID, ResourceID: c.ResourceID,
-		SessionID: c.SessionID, OAuthClientID: c.OAuthClientID, Resource: c.Resource, Scopes: scopes, Permissions: permissionsOf(scopes), AMR: c.AMR}
+		SessionID: c.SessionID, ClientID: c.ClientID, OAuthClientID: c.OAuthClientID, Resource: c.Resource, Scopes: scopes, Permissions: permissionsOf(scopes), AMR: c.AMR}
 	if c.AuthTime != nil {
 		out.AuthTime = c.AuthTime.Time
 	}

@@ -169,6 +169,10 @@ class ResourceClaims:
     #: The granted scopes that are permissions; the token's ``permissions`` claim is never read.
     permissions: tuple[str, ...]
     exp: int
+    #: The ``client_id`` the OAuth client uses (RFC 9068): its Client ID Metadata Document URL or ``dcr_`` id for
+    #: external clients, else the registered client's id.
+    client_id: str | None = None
+    #: IAMKit's id of the client row (equal to ``client_id`` for registered clients).
     oauth_client_id: str | None = None
     #: The protected resource the authorization named (the ``resource`` claim); ``None`` only with
     #: ``allow_tokens_without_resource``.
@@ -528,6 +532,7 @@ class ResourceServerBase:
             application_id=text("application_id"),
             resource_id=text("resource_id"),
             session_id=text("sid"),
+            client_id=text("client_id") or None,
             oauth_client_id=text("oauth_client_id") or None,
             resource=marker or None,
             scopes=scopes,
@@ -540,12 +545,16 @@ class ResourceServerBase:
         )
 
     def _describes(self, answer: Introspection, claims: ResourceClaims) -> bool:
-        """Whether IAMKit's answer is an active access token that is this token: the same subject and session,
-        with the resource in its audience."""
+        """Whether IAMKit's answer is an active access token that is this token: the same subject, session and
+        client, the same granted scopes (as a set), and the resource in its audience. Anything else describes
+        another token, or a grant that changed."""
         return (
             answer.active
             and answer.token_use == "access_token"
             and answer.sub == claims.sub
             and answer.sid == claims.session_id
+            and bool(claims.client_id)
+            and answer.client_id == claims.client_id
+            and set((answer.scope or "").split()) == set(claims.scopes)
             and any(self._is_resource(a) for a in answer.aud or [])
         )

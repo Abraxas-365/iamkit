@@ -20,7 +20,7 @@ dev = [
 package = false
 
 [tool.uv.sources]
-iamkit = { path = "../../clients/python" }
+iamkit = { path = "../../clients/python", editable = true }
 
 [tool.ruff]
 line-length = 120

@@ -165,6 +165,13 @@ export interface ResourceClaims {
   applicationId: string;
   resourceId: string;
   sessionId: string;
+  /**
+   * The client_id the OAuth client uses (RFC 9068): its Client ID Metadata
+   * Document URL or `dcr_` id for external clients, else the registered
+   * client's id.
+   */
+  clientId?: string;
+  /** IAMKit's id of the client row (equal to clientId for registered clients). */
   oauthClientId?: string;
   /**
    * The protected resource the authorization named (the token's `resource`
@@ -316,7 +323,7 @@ export function createResourceServer(options: ResourceServerOptions): ResourceSe
     const scp = list("scp");
     const scopes = scp.length ? scp : text("scope").split(" ").filter(Boolean);
     if (introspector) {
-      const live = await introspector.check(token, { sub: text("sub"), sessionId: text("sid"), exp: Number(p.exp) }, (a) => canonicalResource(a) === resource);
+      const live = await introspector.check(token, { sub: text("sub"), sessionId: text("sid"), clientId: text("client_id"), scopes, exp: Number(p.exp) }, (a) => canonicalResource(a) === resource);
       if (live === "unavailable") throw new ResourceError("unavailable");
       if (live === "inactive") throw new ResourceError("invalid_token");
     }
@@ -327,6 +334,7 @@ export function createResourceServer(options: ResourceServerOptions): ResourceSe
       applicationId: text("application_id"),
       resourceId: text("resource_id"),
       sessionId: text("sid"),
+      clientId: text("client_id") || undefined,
       oauthClientId: text("oauth_client_id") || undefined,
       resource: marker || undefined,
       scopes,

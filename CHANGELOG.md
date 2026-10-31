@@ -4,6 +4,29 @@ Changes that can affect existing deployments, newest first. Each entry lists
 its **incompatible changes** first: what behaved differently before, and what
 to do about it.
 
+## Unreleased — Resource servers match introspection to the token
+
+### Incompatible changes
+
+- **With introspection on, the resource-server SDKs also compare `client_id`
+  and the granted scopes.** `sdk/resourceserver`, `@iamkit/node/resource-server`
+  and `iamkit.resource_server` accepted an introspection answer that was
+  active, an access token, of the same subject and session and with the
+  server in its audience. They now also need the answer's `client_id` to
+  equal the token's `client_id` claim and its `scope` to hold exactly the
+  token's granted scopes (as a set); otherwise `401 invalid_token`. A token
+  without a `client_id` claim is refused while introspection is on.
+- **User access tokens from `/oauth/token` carry `client_id`** (RFC 9068):
+  the id the client uses, which introspection also answers. For registered
+  clients it equals `oauth_client_id`; for clients named by a Client ID
+  Metadata Document it is the document URL, for dynamically registered
+  clients the `dcr_` id. Tokens issued before this change lack it: with
+  introspection on they are refused until the client refreshes (at most the
+  server's access token lifetime). Actions could never set `client_id`.
+- The verified claims expose it: `Claims.ClientID` (Go), `clientId`
+  (Node), `client_id` (Python), next to the unchanged `OAuthClientID` /
+  `oauthClientId` / `oauth_client_id` (IAMKit's id of the client).
+
 ## Unreleased — Security event retention (D39)
 
 ### Incompatible changes

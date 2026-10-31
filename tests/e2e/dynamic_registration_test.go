@@ -188,8 +188,12 @@ func TestDynamicClientRegistration(t *testing.T) {
 	if status != 200 || tokens["refresh_token"] == nil {
 		t.Fatalf("code exchange: %d %v", status, tokens)
 	}
-	if c := claims(t, tokens["access_token"].(string)); !equal(strs(c["aud"]), []string{mcpURI}) || c["oauth_client_id"] != rowID {
+	if c := claims(t, tokens["access_token"].(string)); !equal(strs(c["aud"]), []string{mcpURI}) || c["oauth_client_id"] != rowID || c["client_id"] != clientID {
 		t.Fatalf("claims: %v", c)
+	}
+	introspector := e.Must("POST", e.Base+"/oauth-clients", e.Owner, fiber.Map{"application_id": e.Client, "resource_id": e.Res, "redirect_uris": []string{"https://app.example/callback"}}, 201).JSON
+	if got := e.introspectAs(introspector["client_id"].(string), introspector["client_secret"].(string), tokens["access_token"].(string)); got["active"] != true || got["client_id"] != clientID {
+		t.Fatalf("introspection: %v", got)
 	}
 	status, refreshed, _ := e.tokenCall(refreshForm(clientID, tokens["refresh_token"].(string)), "")
 	if status != 200 {

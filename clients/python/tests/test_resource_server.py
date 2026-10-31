@@ -46,6 +46,7 @@ def claims(**over: Any) -> dict[str, Any]:
         "aud": [RESOURCE],
         "resource": RESOURCE,
         "scp": ["notes:read"],
+        "client_id": "client-1",
         "oauth_client_id": "client-1",
         "application_id": "app-1",
         "resource_id": "res-1",
@@ -174,7 +175,7 @@ def test_verify_ok(signer: Signer, jwks: respx.Route) -> None:
     assert isinstance(got, ResourceClaims)
     assert got.sub == "user-1" and got.organization_id == "org-1" and got.session_id == "sess-1"
     assert got.environment_id == ENV and got.application_id == "app-1" and got.resource_id == "res-1"
-    assert got.oauth_client_id == "client-1" and got.resource == RESOURCE
+    assert got.client_id == "client-1" and got.oauth_client_id == "client-1" and got.resource == RESOURCE
     assert got.scopes == ("openid", "notes:read", "urn:iamkit:org:id:org-1")
     assert got.permissions == ("notes:read",)  # the `permissions` claim is never read
     assert got.amr == ("pwd", "mfa") and got.auth_time is not None
@@ -325,7 +326,15 @@ def test_denial_replies() -> None:
 
 # -- introspection -------------------------------------------------------------------------------------
 def answer(**over: Any) -> dict[str, Any]:
-    base = {"active": True, "sub": "user-1", "sid": "sess-1", "token_use": "access_token", "aud": [RESOURCE]}
+    base = {
+        "active": True,
+        "sub": "user-1",
+        "sid": "sess-1",
+        "token_use": "access_token",
+        "client_id": "client-1",
+        "scope": "notes:read",
+        "aud": [RESOURCE],
+    }
     return {**base, **over}
 
 
@@ -364,8 +373,26 @@ def test_introspection_inactive_is_401_and_not_cached(signer: Signer, router: re
         answer(token_use="refresh_token"),
         answer(aud=["https://other.test/mcp"]),
         answer(aud=None),
+        answer(client_id="client-2"),
+        answer(client_id=None),
+        answer(scope="notes:read notes:write"),
+        answer(scope="notes:write"),
+        answer(scope=""),
+        answer(scope=None),
     ],
-    ids=["sub", "sid", "token_use", "aud", "no-aud"],
+    ids=[
+        "sub",
+        "sid",
+        "token_use",
+        "aud",
+        "no-aud",
+        "client",
+        "no-client",
+        "more-scopes",
+        "other-scopes",
+        "empty-scope",
+        "no-scope",
+    ],
 )
 def test_introspection_must_describe_this_token(
     signer: Signer, router: respx.MockRouter, reply: dict[str, Any]
@@ -374,6 +401,27 @@ def test_introspection_must_describe_this_token(
     with pytest.raises(ResourceError) as exc:
         introspecting().verify(signer.sign(claims()))
     assert exc.value.code == "invalid_token"
+
+
+def test_introspection_scopes_compare_as_sets(signer: Signer, router: respx.MockRouter) -> None:
+    router.post(INTROSPECT).respond(200, json=answer(scope="offline_access notes:read notes:read"))
+    introspecting().verify(signer.sign(claims(scp=["notes:read", "offline_access"])))
+
+
+def test_introspection_needs_the_client_id_claim(signer: Signer, router: respx.MockRouter) -> None:
+    router.post(INTROSPECT).respond(200, json=answer())
+    token = claims()
+    del token["client_id"]
+    with pytest.raises(ResourceError) as exc:
+        introspecting().verify(signer.sign(token))
+    assert exc.value.code == "invalid_token"
+
+
+def test_introspection_external_client_id_is_its_url(signer: Signer, router: respx.MockRouter) -> None:
+    url = "https://client.test/meta.json"
+    router.post(INTROSPECT).respond(200, json=answer(client_id=url))
+    got = introspecting().verify(signer.sign(claims(client_id=url, oauth_client_id="row-9")))
+    assert (got.client_id, got.oauth_client_id) == (url, "row-9")
 
 
 def test_introspection_audience_compared_canonically(signer: Signer, router: respx.MockRouter) -> None:

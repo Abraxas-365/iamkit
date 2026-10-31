@@ -99,7 +99,7 @@ func newFixture(t *testing.T, cfg Config) *fixture {
 func (f *fixture) token(edit func(jwt.MapClaims)) string {
 	now := time.Now()
 	c := jwt.MapClaims{"iss": issuer, "sub": "user-1", "aud": []string{resource}, "exp": now.Add(15 * time.Minute).Unix(), "iat": now.Unix(),
-		"environment_id": "env-1", "organization_id": "org-1", "application_id": "app-1", "resource_id": "res-1", "sid": "s-1", "purpose": "application",
+		"environment_id": "env-1", "organization_id": "org-1", "application_id": "app-1", "resource_id": "res-1", "sid": "s-1", "purpose": "application", "client_id": "client-1", "oauth_client_id": "client-1",
 		"permissions": []string{"mcp:tools:read"}, "scp": []string{"mcp:tools:read", "offline_access"}, "scope": "mcp:tools:read offline_access", "resource": resource}
 	if edit != nil {
 		edit(c)

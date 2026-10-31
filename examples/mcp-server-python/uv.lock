@@ -320,7 +320,7 @@ wheels = [
 [[package]]
 name = "iamkit"
 version = "0.1.0"
-source = { directory = "../../clients/python" }
+source = { editable = "../../clients/python" }
 dependencies = [
     { name = "httpx" },
     { name = "pyjwt", extra = ["crypto"] },
@@ -368,7 +368,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "iamkit", directory = "../../clients/python" },
+    { name = "iamkit", editable = "../../clients/python" },
     { name = "mcp", specifier = ">=1.12,<2" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]

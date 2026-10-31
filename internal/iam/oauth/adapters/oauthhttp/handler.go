@@ -883,7 +883,7 @@ func (h *Handler) session(client *oauth.Client, access oauth.Login, info oauth.S
 	session.AccessClaims.Issuer = h.issuer
 	session.AccessClaims.Audience = []string{client.Audience}
 	session.AccessClaims.IssuedAt = time.Now()
-	session.AccessClaims.Extra = map[string]interface{}{"purpose": "application", "environment_id": client.Environment.String(), "organization_id": access.Organization.String(), "application_id": client.Application.String(), "resource_id": client.Resource.String(), "permissions": access.Permissions, "sid": access.Session.String(), "oauth_client_id": client.ID.String(), "auth_time": info.Authenticated.Unix()}
+	session.AccessClaims.Extra = map[string]interface{}{"purpose": "application", "environment_id": client.Environment.String(), "organization_id": access.Organization.String(), "application_id": client.Application.String(), "resource_id": client.Resource.String(), "permissions": access.Permissions, "sid": access.Session.String(), "oauth_client_id": client.ID.String(), "client_id": client.PublicID(), "auth_time": info.Authenticated.Unix()}
 	if len(info.AMR) > 0 {
 		session.AccessClaims.Extra["amr"] = info.AMR
 	}
@@ -1044,6 +1044,10 @@ func (h *Handler) token(c *fiber.Ctx) error {
 		}
 		stored := stringList(extra["permissions"])
 		extra["permissions"] = []string(access.Permissions)
+		// RFC 9068 client_id: the id the client uses (its URL or dcr_ id
+		// for external clients), the one introspection answers. Set at
+		// every issuance, so grants older than the claim get it too.
+		extra["client_id"] = client.PublicID()
 		if session.Resource != "" || len(req.PostForm["resource"]) > 0 {
 			// RFC 8707: the grant's resource, or none at all (then the
 			// grant's applies).

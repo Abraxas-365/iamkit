@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,7 +68,7 @@ func newIntrospector(issuer string, cfg *Introspection, hc *http.Client) (*intro
 }
 
 // check reports ErrInvalidToken for an inactive token (or one IAMKit
-// describes differently from its claims) and ErrUnavailable when IAMKit
+// describes differently from its claims, see describes) and ErrUnavailable when IAMKit
 // could not answer.
 func (in *introspector) check(ctx context.Context, raw, resource string, c *Claims) error {
 	key := sha256.Sum256([]byte(raw))
@@ -88,8 +89,7 @@ func (in *introspector) check(ctx context.Context, raw, resource string, c *Clai
 	if err != nil {
 		return ErrUnavailable
 	}
-	if !answer.Active || answer.TokenUse != "access_token" || answer.Subject != c.Subject || answer.SessionID != c.SessionID ||
-		!slices.ContainsFunc(answer.Audience, func(aud string) bool { got, err := CanonicalResource(aud); return err == nil && got == resource }) {
+	if !describes(answer, resource, c) {
 		return ErrInvalidToken
 	}
 	if in.ttl > 0 {
@@ -100,6 +100,25 @@ func (in *introspector) check(ctx context.Context, raw, resource string, c *Clai
 		in.store(key, until, now)
 	}
 	return nil
+}
+
+// describes reports whether IAMKit's answer is about this token: active,
+// an access token of the same subject, session and client, with the same
+// granted scopes and the resource in its audience. An answer that differs
+// in any of them describes another token (or a grant that changed), so the
+// token is refused.
+func describes(answer authclient.Introspection, resource string, c *Claims) bool {
+	return answer.Active && answer.TokenUse == "access_token" && answer.Subject == c.Subject && answer.SessionID == c.SessionID &&
+		c.ClientID != "" && answer.ClientID == c.ClientID && sameScopes(strings.Fields(answer.Scope), c.Scopes) &&
+		slices.ContainsFunc(answer.Audience, func(aud string) bool { got, err := CanonicalResource(aud); return err == nil && got == resource })
+}
+
+// sameScopes compares two scope lists as sets.
+func sameScopes(a, b []string) bool {
+	a, b = slices.Clone(a), slices.Clone(b)
+	slices.Sort(a)
+	slices.Sort(b)
+	return slices.Equal(slices.Compact(a), slices.Compact(b))
 }
 
 // store keeps an answer, first dropping expired entries and, when still

@@ -3,6 +3,8 @@ package e2e_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -114,7 +116,8 @@ func toolText(t *testing.T, r mcpReply) string {
 // TestPythonResourceServer runs examples/mcp-server-python (FastMCP behind
 // iamkit.resource_server) against this deployment: metadata, the 401
 // challenge, a resource-flow token, tool calls, a step-up 403 and, with
-// introspection on, the 401 that follows disconnecting the client.
+// introspection on, the 401 for an answer that describes another grant and
+// the one that follows disconnecting the client.
 func TestPythonResourceServer(t *testing.T) {
 	uv, err := exec.LookPath("uv")
 	if err != nil {
@@ -243,12 +246,34 @@ func TestPythonResourceServer(t *testing.T) {
 		t.Fatalf("add_note: %d %q %s", short.Status, challenge, short.Body)
 	}
 
-	// 6. alice disconnects the client; the token is still valid locally, but
+	// 6. IAMKit describes the token as the token does (RFC 9068 client_id,
+	// scopes); an answer about another grant is refused even though the
+	// token is valid locally. The grant is edited underneath the token to
+	// make IAMKit answer for another one.
+	described := e.introspectAs(introspector["client_id"].(string), introspector["client_secret"].(string), access)
+	if c := claims(t, access); described["active"] != true || c["client_id"] != client || described["client_id"] != client || !sameSet(strings.Fields(described["scope"].(string)), scopesList(c["scp"])) {
+		t.Fatalf("introspection %v describes another token than %v", described, c)
+	}
+	signature := sha256.Sum256([]byte(access[strings.LastIndex(access, ".")+1:]))
+	key := hex.EncodeToString(signature[:])
+	var stored string
+	e.DB.Get(&stored, `SELECT data::text FROM oauth_requests WHERE kind='access' AND signature_hash=$1`, key)
+	widen := e.DB.MustExec(`UPDATE oauth_requests SET data=jsonb_set(data,'{GrantedScope}',data->'GrantedScope' || '["notes:write"]') WHERE kind='access' AND signature_hash=$1`, key)
+	if n, _ := widen.RowsAffected(); n != 1 {
+		t.Fatalf("edited %d grants", n)
+	}
+	if other := mcpPost(t, resourceURL, access, toolCall(5, "list_notes", nil)); other.Status != 401 || other.JSON["error"] != "invalid_token" {
+		t.Fatalf("answer about another grant: %d %s", other.Status, other.Body)
+	}
+	e.DB.MustExec(`UPDATE oauth_requests SET data=$2::jsonb WHERE kind='access' AND signature_hash=$1`, key, stored)
+	toolText(t, mcpPost(t, resourceURL, access, toolCall(6, "list_notes", nil)))
+
+	// 7. alice disconnects the client; the token is still valid locally, but
 	// introspection says it is not, and the server closes.
 	me := "?environment_id=" + e.EnvID + "&audience=" + url.QueryEscape(e.Audience)
 	alice := e.Login(e.AliceEmail)
 	e.Must("DELETE", "/identity/v1/me/connected-apps/"+client+me, alice, nil, 204)
-	gone := mcpPost(t, resourceURL, access, toolCall(5, "list_notes", nil))
+	gone := mcpPost(t, resourceURL, access, toolCall(7, "list_notes", nil))
 	if gone.Status != 401 || gone.JSON["error"] != "invalid_token" || !strings.Contains(gone.Header.Get("WWW-Authenticate"), `error="invalid_token"`) {
 		t.Fatalf("after disconnect: %d %q %s", gone.Status, gone.Header.Get("WWW-Authenticate"), gone.Body)
 	}

@@ -534,7 +534,9 @@ The access token is a JWT
 ([RFC 9068](https://www.rfc-editor.org/rfc/rfc9068)) with `aud` = your URL,
 `resource` = your URL (only tokens of the resource flow carry it),
 `scope` (string) and `scp` (list), `permissions`, `sub` (user),
-`organization_id`, `environment_id`, `oauth_client_id`, `sid` and the usual
+`organization_id`, `environment_id`, `client_id` (the id the client uses:
+its document URL, `dcr_` id or registered id), `oauth_client_id` (IAMKit's id
+of the client), `sid` and the usual
 `iss`/`exp`/`iat`; see [token claims](../../reference/token-claims.md).
 
 ## User consent
@@ -890,9 +892,12 @@ rs, err := resourceserver.New(resourceserver.Config{
   refused client credentials), the request gets `503` without a challenge. The
   client keeps its token and retries; the token is never admitted unchecked.
 - **Same token.** The SDK accepts the answer only when it describes this
-  token: active, an access token, the same subject and session, and the
-  server's URL in its audience. A token that fails the local checks is
-  refused before any call.
+  token: active, an access token, the same subject, session and `client_id`,
+  the same granted scopes (`scope`, compared as a set) and the server's URL in
+  its audience. Any difference is `401 invalid_token`. A token without a
+  `client_id` claim (issued before IAMKit added it) is refused while
+  introspection is on; the client refreshes and gets one. A token that fails
+  the local checks is refused before any call.
 
 ```python
 from iamkit.resource_server import IntrospectionOptions

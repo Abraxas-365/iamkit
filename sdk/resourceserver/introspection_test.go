@@ -61,8 +61,16 @@ func (r rewrite) RoundTrip(req *http.Request) (*http.Response, error) {
 	return http.DefaultTransport.RoundTrip(req)
 }
 
-func (f *introspectionFixture) active() {
-	f.set(map[string]any{"active": true, "token_use": "access_token", "sub": "user-1", "sid": "s-1", "aud": []string{"https://mcp.example.com/mcp"}})
+func (f *introspectionFixture) active() { f.set(activeAnswer(nil)) }
+
+// activeAnswer is IAMKit's answer about the fixture's token, edited.
+func activeAnswer(edit func(map[string]any)) map[string]any {
+	answer := map[string]any{"active": true, "token_use": "access_token", "sub": "user-1", "sid": "s-1", "client_id": "client-1",
+		"scope": "offline_access mcp:tools:read", "aud": []string{"https://mcp.example.com/mcp"}}
+	if edit != nil {
+		edit(answer)
+	}
+	return answer
 }
 
 func (f *introspectionFixture) set(answer map[string]any) { f.answer.Store(&answer) }
@@ -96,17 +104,45 @@ func TestIntrospection(t *testing.T) {
 	if _, err := f.server.Verify(ctx, raw); !errors.Is(err, ErrInvalidToken) {
 		t.Fatalf("inactive token: %v", err)
 	}
-	// An answer about another token, session or audience is not this one's.
-	for name, answer := range map[string]map[string]any{
-		"other subject":  {"active": true, "token_use": "access_token", "sub": "user-2", "sid": "s-1", "aud": []string{resource}},
-		"other session":  {"active": true, "token_use": "access_token", "sub": "user-1", "sid": "s-2", "aud": []string{resource}},
-		"other audience": {"active": true, "token_use": "access_token", "sub": "user-1", "sid": "s-1", "aud": []string{"https://other.example"}},
-		"refresh token":  {"active": true, "token_use": "refresh_token", "sub": "user-1", "sid": "s-1", "aud": []string{resource}},
+	// An answer about another token, session, client, grant or audience is
+	// not this one's.
+	for name, edit := range map[string]func(map[string]any){
+		"other subject":   func(a map[string]any) { a["sub"] = "user-2" },
+		"other session":   func(a map[string]any) { a["sid"] = "s-2" },
+		"other audience":  func(a map[string]any) { a["aud"] = []string{"https://other.example"} },
+		"no audience":     func(a map[string]any) { delete(a, "aud") },
+		"refresh token":   func(a map[string]any) { a["token_use"] = "refresh_token" },
+		"other client":    func(a map[string]any) { a["client_id"] = "client-2" },
+		"no client":       func(a map[string]any) { delete(a, "client_id") },
+		"fewer scopes":    func(a map[string]any) { a["scope"] = "mcp:tools:read" },
+		"more scopes":     func(a map[string]any) { a["scope"] = "mcp:tools:read mcp:tools:write offline_access" },
+		"other scopes":    func(a map[string]any) { a["scope"] = "mcp:tools:write offline_access" },
+		"no scope":        func(a map[string]any) { delete(a, "scope") },
+		"inactive, valid": func(a map[string]any) { a["active"] = false },
 	} {
-		f.set(answer)
+		f.set(activeAnswer(edit))
 		if _, err := f.server.Verify(ctx, raw); !errors.Is(err, ErrInvalidToken) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+	// Scopes compare as sets: order and repeats do not matter.
+	f.set(activeAnswer(func(a map[string]any) { a["scope"] = "mcp:tools:read offline_access mcp:tools:read" }))
+	if _, err := f.server.Verify(ctx, raw); err != nil {
+		t.Fatalf("same scopes, other order: %v", err)
+	}
+	// A token without client_id cannot be matched to the answer: refused.
+	f.active()
+	if _, err := f.server.Verify(ctx, f.token(func(c jwt.MapClaims) { delete(c, "client_id") })); !errors.Is(err, ErrInvalidToken) {
+		t.Fatalf("token without client_id: %v", err)
+	}
+	// An external client's client_id is its URL, not the row id.
+	f.set(activeAnswer(func(a map[string]any) { a["client_id"] = "https://client.example/meta.json" }))
+	external := f.token(func(c jwt.MapClaims) {
+		c["client_id"] = "https://client.example/meta.json"
+		c["oauth_client_id"] = "row-9"
+	})
+	if c, err := f.server.Verify(ctx, external); err != nil || c.ClientID != "https://client.example/meta.json" || c.OAuthClientID != "row-9" {
+		t.Fatalf("external client: %v %+v", err, c)
 	}
 	// Fails closed: IAMKit down → 503, no challenge, the token is not admitted.
 	f.answer.Store(nil)
@@ -156,7 +192,7 @@ func TestIntrospectionCache(t *testing.T) {
 	// The cache holds no answer past the token's exp (30s < CacheTTL).
 	calls := f.calls.Load()
 	now = now.Add(31 * time.Second)
-	f.server.introspect.check(ctx, raw, resource, &Claims{Subject: "user-1", SessionID: "s-1"})
+	f.server.introspect.check(ctx, raw, resource, &Claims{Subject: "user-1", SessionID: "s-1", ClientID: "client-1", Scopes: []string{"mcp:tools:read", "offline_access"}})
 	if f.calls.Load() != calls+1 {
 		t.Fatal("cache answered past the token's exp")
 	}

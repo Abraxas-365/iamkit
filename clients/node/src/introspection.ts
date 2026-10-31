@@ -27,11 +27,22 @@ export interface IntrospectionOptions {
   timeoutMs?: number;
 }
 
-/** What check compares an answer against. */
+/** What check compares an answer against: the verified token's claims. */
 export interface IntrospectedToken {
   sub: string;
   sessionId: string;
+  /** The token's client_id claim (RFC 9068). */
+  clientId: string;
+  /** The token's granted scopes. */
+  scopes: string[];
   exp: number;
+}
+
+/** Two scope lists hold the same scopes (order and repeats aside). */
+function sameScopes(a: string[], b: string[]): boolean {
+  const x = new Set(a);
+  const y = new Set(b);
+  return x.size === y.size && [...x].every((s) => y.has(s));
 }
 
 export type IntrospectionResult = "active" | "inactive" | "unavailable";
@@ -82,7 +93,20 @@ export function createIntrospector(issuer: string, options: IntrospectionOptions
       } catch {
         return "unavailable";
       }
-      if (!answer.active || answer.token_use !== "access_token" || answer.sub !== token.sub || answer.sid !== token.sessionId || !(answer.aud ?? []).some(isResource)) {
+      // The answer must describe this token: active, an access token of the
+      // same subject, session and client, with the same granted scopes and
+      // the resource in its audience; anything else is another token (or a
+      // grant that changed).
+      if (
+        !answer.active ||
+        answer.token_use !== "access_token" ||
+        answer.sub !== token.sub ||
+        answer.sid !== token.sessionId ||
+        !token.clientId ||
+        answer.client_id !== token.clientId ||
+        !sameScopes((answer.scope ?? "").split(" ").filter(Boolean), token.scopes) ||
+        !(answer.aud ?? []).some(isResource)
+      ) {
         return "inactive";
       }
       if (ttl > 0) store(key, Math.min(at + ttl, token.exp), at);

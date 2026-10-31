@@ -86,7 +86,7 @@ def build_mcp(path: str, allowed_host: str) -> FastMCP:
         return {
             "user": who.sub,
             "organization": who.organization_id,
-            "client": who.oauth_client_id,
+            "client": who.client_id,
             "scopes": list(who.scopes),
         }
 

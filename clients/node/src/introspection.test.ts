@@ -5,7 +5,7 @@ import { createResourceServer, ResourceError, type ResourceServer } from "./reso
 
 const issuer = "https://iam.example";
 const resource = "https://mcp.example.com/mcp";
-const live = { active: true, token_use: "access_token", sub: "user-1", sid: "s-1", aud: [resource] };
+const live = { active: true, token_use: "access_token", sub: "user-1", sid: "s-1", client_id: "client-1", scope: "mcp:tools:read", aud: [resource] };
 
 /** A fake IAMKit introspection endpoint answering with `answer` (undefined: 503). */
 function fakeIAMKit() {
@@ -28,7 +28,7 @@ describe("introspection", () => {
     const now = Math.floor(Date.now() / 1000);
     const c: JWTPayload = {
       iss: issuer, sub: "user-1", aud: [resource], exp: now + 900, iat: now, environment_id: "env-1", organization_id: "org-1",
-      sid: "s-1", purpose: "application", scp: ["mcp:tools:read"], resource,
+      sid: "s-1", purpose: "application", scp: ["mcp:tools:read"], resource, client_id: "client-1", oauth_client_id: "client-1",
     };
     edit(c);
     return new SignJWT(c).setProtectedHeader({ alg: "RS256", kid: "k1" }).sign(key);
@@ -59,19 +59,38 @@ describe("introspection", () => {
     await expect(rs.verify(raw)).rejects.toMatchObject({ kind: "invalid_token" });
   });
 
-  it("refuses an answer about another token", async () => {
+  it("refuses an answer about another token, client or grant", async () => {
     const iam = fakeIAMKit();
     const rs = server(iam.fetch);
     const raw = await token();
+    const { client_id: _client, scope: _scope, aud: _aud, ...bare } = live;
     for (const answer of [
       { ...live, sub: "user-2" },
       { ...live, sid: "s-2" },
       { ...live, aud: ["https://other.example"] },
+      { ...bare, client_id: "client-1", scope: "mcp:tools:read" },
       { ...live, token_use: "refresh_token" },
+      { ...live, client_id: "client-2" },
+      { ...bare, scope: "mcp:tools:read", aud: [resource] },
+      { ...live, scope: "" },
+      { ...bare, client_id: "client-1", aud: [resource] },
+      { ...live, scope: "mcp:tools:read mcp:tools:write" },
+      { ...live, scope: "mcp:tools:write" },
     ]) {
       iam.state.answer = answer;
       await expect(rs.verify(raw)).rejects.toMatchObject({ kind: "invalid_token" });
     }
+    // Scopes compare as sets.
+    iam.state.answer = { ...live, scope: "mcp:tools:read mcp:tools:read" };
+    await expect(rs.verify(raw)).resolves.toMatchObject({ clientId: "client-1" });
+    // A token without client_id cannot be matched to the answer.
+    iam.state.answer = live;
+    await expect(rs.verify(await token((c) => delete c.client_id))).rejects.toMatchObject({ kind: "invalid_token" });
+    // An external client's client_id is its URL, not the row id.
+    iam.state.answer = { ...live, client_id: "https://client.example/meta.json" };
+    await expect(
+      rs.verify(await token((c) => Object.assign(c, { client_id: "https://client.example/meta.json", oauth_client_id: "row-9" }))),
+    ).resolves.toMatchObject({ clientId: "https://client.example/meta.json", oauthClientId: "row-9" });
   });
 
   it("fails closed with 503 and no challenge", async () => {
@@ -100,7 +119,7 @@ describe("introspection", () => {
     let now = 1_000_000;
     const check = createIntrospector(issuer, { clientId: "c", clientSecret: "s", cacheTtlSec: 60, fetch: iam.fetch }, () => now);
     const same = (a: string) => a === resource;
-    const t = { sub: "user-1", sessionId: "s-1", exp: now + 30 };
+    const t = { sub: "user-1", sessionId: "s-1", clientId: "client-1", scopes: ["mcp:tools:read"], exp: now + 30 };
     expect(await check.check("raw-1", t, same)).toBe("active");
     expect(await check.check("raw-1", t, same)).toBe("active");
     expect(iam.state.calls).toBe(1);
