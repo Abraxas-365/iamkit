@@ -13,6 +13,16 @@
 
 Failures answer IAMKit's envelope ``{"error": {"code", "message"}}`` with 401 (``WWW-Authenticate: Bearer``),
 403 or 503 — never a request without verified claims.
+
+For an API that is a *resource server* (tokens issued for it, RFC 9728/8707) use :func:`require_scopes`:
+
+.. code-block:: python
+
+    rs = AsyncResourceServer(issuer=..., resource="https://api.example.com/notes", environment_id=...)
+
+    @app.get("/notes")
+    async def notes(claims: ResourceClaims = Depends(require_scopes(rs, "notes:read"))):
+        return {"user": claims.sub}
 """
 
 from __future__ import annotations
@@ -22,12 +32,15 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 
+from .._aresource_server import AsyncResourceServer
+from .._resource_core import ResourceClaims, ResourceError, bearer_token
 from ..apikeys import APIKeyValidator
 from ..errors import IAMKitError
 from ..tokens import TokenVerifier
 from ._common import Authenticator, Principal, bearer, check, error_body
+from .asgi import claims_of
 
-__all__ = ["Principal", "require_token"]
+__all__ = ["Principal", "require_scopes", "require_token"]
 
 
 def _http_error(error: IAMKitError) -> HTTPException:
@@ -79,3 +92,28 @@ def principal_of(request: Request) -> Principal | None:
     """The principal :func:`require_token` stored on the request, or ``None``."""
     value: Any = getattr(request.state, "iamkit", None)
     return value if isinstance(value, Principal) else None
+
+
+def require_scopes(server: AsyncResourceServer, *scopes: str) -> Callable[[Request], Awaitable[ResourceClaims]]:
+    """A FastAPI dependency returning the verified :class:`ResourceClaims` once every scope is granted.
+
+    It verifies the bearer token (``server.verify``) unless
+    :class:`~iamkit.integrations.asgi.ResourceServerMiddleware` already did (its claims are reused). Failures raise
+    an ``HTTPException`` with the ``WWW-Authenticate`` challenge (``resource_metadata``, and for 403 the scopes
+    to step up to).
+    """
+
+    async def dependency(request: Request) -> ResourceClaims:
+        try:
+            claims = claims_of(request.scope)
+            if claims is None:
+                claims = await server.verify(bearer_token(request.headers.get("authorization")) or "")
+            server.require(claims, *scopes)
+        except ResourceError as exc:
+            reply = server.denial(exc, scopes)
+            headers = {k: v for k, v in reply.headers if k.lower() not in ("content-type", "content-length")}
+            raise HTTPException(status_code=reply.status, detail=exc.code, headers=headers) from exc
+        request.state.iamkit = claims
+        return claims
+
+    return dependency

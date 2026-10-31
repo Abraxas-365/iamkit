@@ -1,6 +1,9 @@
-"""Generates ``src/iamkit/_aresources.py`` (async) from ``src/iamkit/_resources.py`` (sync).
+"""Generates the async twins from their sync sources:
 
-Run ``uv run python scripts/unasync.py`` after editing ``_resources.py``; ``--check`` verifies it is current.
+* ``src/iamkit/_aresources.py`` from ``src/iamkit/_resources.py``
+* ``src/iamkit/_aresource_server.py`` from ``src/iamkit/_resource_server.py``
+
+Run ``uv run python scripts/unasync.py`` after editing a source; ``--check`` verifies the twins are current.
 """
 
 from __future__ import annotations
@@ -13,8 +16,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent / "src" / "iamkit"
 SOURCE = ROOT / "_resources.py"
 TARGET = ROOT / "_aresources.py"
+RS_SOURCE = ROOT / "_resource_server.py"
+RS_TARGET = ROOT / "_aresource_server.py"
 
 HEADER = '''"""Management resources (asynchronous). GENERATED from ``_resources.py`` by ``scripts/unasync.py``."""
+'''
+RS_HEADER = '''"""Resource server (asynchronous). GENERATED from ``_resource_server.py`` by ``scripts/unasync.py``."""
 '''
 
 
@@ -42,15 +49,10 @@ def _convert(block: str) -> str:
     return block
 
 
-def transform(source: str) -> str:
-    text = source.split('"""', 2)[2]  # drop the module docstring of the source
-    text = "".join(_convert(b) for b in _blocks(text))
-    text = re.sub(r"\bCore\b", "AsyncCore", text)
-    text = text.replace("from collections.abc import Iterator,", "from collections.abc import AsyncIterator,")
-    out = HEADER + text
+def _format(out: str, target: Path) -> str:
     # keep the checked-in file in the repo's formatting (ruff format), so --check compares like with like
     formatted = subprocess.run(
-        [sys.executable, "-m", "ruff", "format", "--stdin-filename", str(TARGET), "-"],
+        [sys.executable, "-m", "ruff", "format", "--stdin-filename", str(target), "-"],
         input=out,
         capture_output=True,
         text=True,
@@ -59,15 +61,66 @@ def transform(source: str) -> str:
     return formatted.stdout
 
 
+def transform(source: str) -> str:
+    text = source.split('"""', 2)[2]  # drop the module docstring of the source
+    text = "".join(_convert(b) for b in _blocks(text))
+    text = re.sub(r"\bCore\b", "AsyncCore", text)
+    text = text.replace("from collections.abc import Iterator,", "from collections.abc import AsyncIterator,")
+    return _format(HEADER + text, TARGET)
+
+
+# The calls of the resource server that do I/O, and their awaited twins.
+_RS_CALLS = (
+    ("self._keys.get_key(", "await self._keys.aget_key("),
+    ("self._oauth.introspect(", "await self._oauth.aintrospect("),
+    ("self._check_live(", "await self._check_live("),
+    ("self._keys.close()", "await self._keys.aclose()"),
+    ("self._oauth.close()", "await self._oauth.aclose()"),
+)
+
+
+def _convert_rs(block: str) -> str:
+    match = re.match(r"(    )?def (\w+)", block)
+    if not match:
+        return block
+    does_io = any(call in block for call, _ in _RS_CALLS)
+    for call, awaited in _RS_CALLS:
+        block = block.replace(call, awaited)
+    if does_io:
+        block = re.sub(r"^((?:    )?)def ", r"\1async def ", block, count=1)
+        block = block.replace("def close(", "def aclose(")
+    return block
+
+
+def transform_resource_server(source: str) -> str:
+    text = source.split('"""', 2)[2]
+    text = "".join(_convert_rs(b) for b in _blocks(text))
+    text = re.sub(r"\bResourceServer\b(?!Base)", "AsyncResourceServer", text)
+    text = text.replace("synchronous", "asynchronous")
+    text = text.replace("claims = rs.verify(token)  ", "claims = await rs.verify(token)")
+    text = text.replace(
+        '__all__ = ["ResourceError", "AsyncResourceServer"]', '__all__ = ["AsyncResourceServer", "ResourceError"]'
+    )
+    return _format(RS_HEADER + text, RS_TARGET)
+
+
+TWINS = (
+    (SOURCE, TARGET, transform),
+    (RS_SOURCE, RS_TARGET, transform_resource_server),
+)
+
+
 def main() -> int:
-    generated = transform(SOURCE.read_text())
-    if "--check" in sys.argv:
-        if not TARGET.exists() or TARGET.read_text() != generated:
-            print("_aresources.py is stale: run `uv run python scripts/unasync.py`", file=sys.stderr)
-            return 1
-        return 0
-    TARGET.write_text(generated)
-    return 0
+    stale = False
+    for source, target, convert in TWINS:
+        generated = convert(source.read_text())
+        if "--check" in sys.argv:
+            if not target.exists() or target.read_text() != generated:
+                print(f"{target.name} is stale: run `uv run python scripts/unasync.py`", file=sys.stderr)
+                stale = True
+        else:
+            target.write_text(generated)
+    return 1 if stale else 0
 
 
 if __name__ == "__main__":

@@ -758,6 +758,39 @@ mux.Handle("/mcp", rs.Protect(http.HandlerFunc(func(w http.ResponseWriter, r *ht
 })))
 ```
 
+### Python
+
+`iamkit.resource_server` (SDK `clients/python`) is the same server for ASGI
+(`AsyncResourceServer`, FastMCP, FastAPI, Starlette) and WSGI
+(`ResourceServer`, Flask, Django):
+
+```python
+from iamkit.integrations.asgi import ResourceServerMiddleware, claims_of
+from iamkit.resource_server import AsyncResourceServer, ResourceError
+
+rs = AsyncResourceServer(
+    issuer="https://iam.example.com",
+    resource="https://mcp.example.com/mcp",
+    environment_id=environment_id,
+    scopes_supported=["notes:read"],        # = the protected resource's default_scopes
+    resource_name="Notes",
+)
+# Serves the metadata, answers 401 with resource_metadata, puts the claims in the ASGI scope.
+app = ResourceServerMiddleware(mcp.streamable_http_app(), rs)
+
+claims = claims_of(scope)                    # sub, organization_id, scopes, permissions, ...
+rs.require(claims, "notes:write")            # raises ResourceError (403 insufficient_scope)
+```
+
+In FastAPI, `require_scopes(rs, "notes:read")` (from
+`iamkit.integrations.fastapi`) is a dependency that returns the claims or
+answers the challenge; for Flask and Django wrap the WSGI app with
+`ResourceServerWSGIMiddleware`. The complete example is
+[`examples/mcp-server-python`](../../../examples/mcp-server-python): the
+official `mcp` package's FastMCP over Streamable HTTP, with
+[`scopes.py`](../../../examples/mcp-server-python/scopes.py) mapping tool names
+to scopes.
+
 A token is accepted when:
 
 - it is an RS256 JWT signed by a key of IAMKit's JWKS;
@@ -789,7 +822,7 @@ explicit `allowTokensWithoutResource: true` / `AllowTokensWithoutResource:
 true`; even then only their granted scopes count.
 
 **Step-up.** `require(claims, …scopes)` / `Require` fails with
-`insufficient_scope`, and `deny` / `Deny` answers:
+`insufficient_scope`, and `deny` / `Deny` (Python: `rs.denial(error)`, written by the middleware) answers:
 
 ```
 403 Forbidden
@@ -805,8 +838,8 @@ scopes. If the user does not hold the permission, IAMKit grants less and the
 client reports it. Give the user the permission and the next authorization
 gets it.
 
-`protect()` / `Protect` removes the `Authorization` header before your handler
-runs. Do not forward the client's token to other services.
+`protect()` / `Protect` (in Python, `ResourceServerMiddleware`) removes the
+`Authorization` header before your handler runs. Do not forward the client's token to other services.
 
 ### Stop revoked tokens at once (introspection)
 
@@ -846,11 +879,12 @@ rs, err := resourceserver.New(resourceserver.Config{
 - **Credentials.** Introspection needs a confidential client (`POST
   …/oauth-clients` without `public`) of the server's environment. Public and
   external clients cannot introspect. The secret lives only in your server.
-- **Cost.** Each request makes one call to IAMKit. `cacheTtlSec` / `CacheTTL`
-  keeps an *active* answer for at most that long, never past the token's
+- **Cost.** Each request makes one call to IAMKit. `cacheTtlSec` / `CacheTTL` /
+  `cache_ttl` keeps an *active* answer for at most that long, never past the token's
   `exp`; an inactive answer is never cached. A cache of N seconds lets a
   revoked token through for up to N seconds, so keep it short (a few seconds
-  absorbs bursts of tool calls). `maxCacheEntries` / `MaxCacheEntries` bounds
+  absorbs bursts of tool calls). `maxCacheEntries` / `MaxCacheEntries` /
+  `max_cache_entries` bounds
   it (default 10 000).
 - **Fails closed.** If IAMKit cannot answer (network error, timeout, `5xx`,
   refused client credentials), the request gets `503` without a challenge. The
@@ -859,6 +893,19 @@ rs, err := resourceserver.New(resourceserver.Config{
   token: active, an access token, the same subject and session, and the
   server's URL in its audience. A token that fails the local checks is
   refused before any call.
+
+```python
+from iamkit.resource_server import IntrospectionOptions
+
+rs = AsyncResourceServer(
+    issuer=issuer, resource=resource, environment_id=environment_id,
+    introspection=IntrospectionOptions(
+        client_id=os.environ["IAMKIT_RS_CLIENT_ID"],
+        client_secret=os.environ["IAMKIT_RS_CLIENT_SECRET"],
+        cache_ttl=0,                                    # default: ask on every request
+    ),
+)
+```
 
 Without introspection, a lower `access_token_ttl_seconds` on the protected
 resource narrows the window at the cost of more refreshes.

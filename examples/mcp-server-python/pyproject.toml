@@ -1,0 +1,39 @@
+[project]
+name = "iamkit-mcp-server-python"
+version = "0.0.0"
+description = "A remote MCP server (FastMCP, Streamable HTTP) protected by IAMKit as its OAuth 2.1 authorization server, with iamkit.resource_server"
+requires-python = ">=3.10"
+dependencies = [
+  "iamkit",
+  "mcp>=1.12,<2",
+  "uvicorn>=0.30",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.24",
+  "ruff>=0.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+iamkit = { path = "../../clients/python" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "PT"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["scopes", "server"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

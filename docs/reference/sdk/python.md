@@ -84,6 +84,15 @@ with `max_age` seconds) and 503 `UNAVAILABLE` when verification is down. An
 (`IAMKIT_API_KEYS` in Django); the principal then has `api_key` instead of
 `claims`, and MFA guards refuse keys (no session).
 
+## Resource servers (MCP)
+
+`iamkit.resource_server` protects an MCP server or API that IAMKit authorizes (RFC 9728 metadata, RFC 8707
+audience): `ResourceServer` / `AsyncResourceServer` (`metadata()`, `verify(token)`, `require(claims, *scopes)`,
+`challenge()`), `canonical_resource`, `metadata_url`, `ResourceError(status, code, www_authenticate)` and
+`IntrospectionOptions` (ask IAMKit on each request; fails closed with 503). `ResourceServerMiddleware` (ASGI),
+`ResourceServerWSGIMiddleware` and the FastAPI dependency `require_scopes` wire it in. Behaviour and test vectors
+match the Go and Node SDKs; see [Protect an MCP server](../../guides/applications/protect-mcp-server.md#verify-tokens-in-your-server).
+
 ## API keys
 
 `APIKeyValidator(base_url, environment_id, audience).validate(raw_key)` checks

@@ -100,9 +100,20 @@ Migration 024 adds per-client consent policies, per-user consents
 client's sessions in its scope at once; revoked rows stay as records until
 `oauth_consent_prune` (365 days). New events `oauth_consent.granted`,
 `.denied`, `.revoked`, `oauth_client.granted`, `.grant_revoked`; new jobs
-`client_grant_expire` and `oauth_consent_prune`. The Go and Node resource-server
+`client_grant_expire` and `oauth_consent_prune`. The Go, Node and Python resource-server
 SDKs can introspect each token (fail closed with 503). See
 [User consent](docs/guides/applications/protect-mcp-server.md#user-consent).
+
+### Python resource server
+
+`iamkit.resource_server` (`clients/python`) joins the Go and Node resource-server
+SDKs with the same behaviour and the shared canonicalization vectors:
+`canonical_resource`, `metadata_url`, `ResourceServer` / `AsyncResourceServer`
+(`metadata()`, `verify()`, `require()`, `challenge()`), `ResourceError`,
+`IntrospectionOptions`, an ASGI `ResourceServerMiddleware`, a WSGI middleware
+and the FastAPI dependency `require_scopes`. `examples/mcp-server-python` is a
+FastMCP server protected by it, and an end-to-end test runs it against IAMKit
+(including the 401 after a user disconnects the client).
 
 ## Unreleased — MCP authorization, phase (c): dynamic client registration
 

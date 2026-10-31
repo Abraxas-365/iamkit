@@ -72,6 +72,33 @@ async def invoices(
     return {"user": principal.claims.sub}
 ```
 
+## Protect an MCP server or API (resource server)
+
+`iamkit.resource_server` is the Python twin of `sdk/resourceserver` and `@iamkit/node/resource-server`: it serves
+the protected resource metadata (RFC 9728), accepts only tokens issued for your canonical URL (RFC 8707), answers
+`401`/`403` with the `WWW-Authenticate` challenge and can ask IAMKit whether each token is still live (RFC 7662,
+fails closed with `503`).
+
+```python
+from iamkit.integrations.asgi import ResourceServerMiddleware, claims_of
+from iamkit.resource_server import AsyncResourceServer, IntrospectionOptions, ResourceError
+
+rs = AsyncResourceServer(
+    issuer="https://iam.example.com",
+    resource="https://mcp.example.com/mcp",
+    environment_id=environment_id,
+    scopes_supported=["notes:read"],
+    introspection=IntrospectionOptions(client_id=rs_client_id, client_secret=rs_client_secret),  # optional
+)
+app = ResourceServerMiddleware(app, rs)  # any ASGI app: FastMCP, FastAPI, Starlette
+claims = claims_of(scope)  # inside the app; then rs.require(claims, "notes:write")
+```
+
+FastAPI: `Depends(require_scopes(rs, "notes:read"))` (`iamkit.integrations.fastapi`). Flask and Django: wrap the
+WSGI app with `ResourceServerWSGIMiddleware(app, ResourceServer(...))` (`iamkit.integrations.wsgi`). A complete
+FastMCP server is in [`examples/mcp-server-python`](../../examples/mcp-server-python). Rules and step-up:
+[Protect an MCP server](../../docs/guides/applications/protect-mcp-server.md#verify-tokens-in-your-server).
+
 ## Sign users in (authorization code + PKCE)
 
 ```python
@@ -125,7 +152,7 @@ with IAMKit("https://iam.example.com", management_key, environment_id=ENVIRONMEN
 ```sh
 cd clients/python
 uv sync
-uv run python scripts/unasync.py   # regenerates iamkit/_aresources.py after editing _resources.py
+uv run python scripts/unasync.py   # regenerates iamkit/_aresources.py and _aresource_server.py (--check fails when stale)
 uv run ruff check . && uv run ruff format --check . && uv run mypy && uv run pytest -q
 IAMKIT_CONTRACT_URL=... uv run pytest tests/contract   # against a real stack, see tests/contract/README
 ```

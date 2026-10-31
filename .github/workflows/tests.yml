@@ -56,6 +56,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # The Python resource server test runs examples/mcp-server-python with `uv run`.
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: examples/mcp-server-python/uv.lock
       - name: End-to-end tests (shard ${{ matrix.shard }}/4)
         run: bash scripts/e2e_shard.sh ${{ matrix.shard }} 4 -v
 
