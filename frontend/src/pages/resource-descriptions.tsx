@@ -7,7 +7,6 @@ import { Input } from '@/components/ui/input'
 import { DetailSection, ErrorState } from '@/components/library/patterns'
 import { MAX_DESCRIPTION, MAX_DISPLAY_NAME, type PermissionDescription } from '@/lib/descriptions'
 import { localeLabel, type Locale } from '@/lib/delivery'
-import { cn } from '@/lib/utils'
 import { t } from '@/lib/i18n'
 
 /** The default text tab: shown to readers whose language has no text. */
@@ -63,7 +62,7 @@ export function PermissionDescriptionsEditor({ base, resource, canWrite }: {
         ? <p className="text-sm text-muted-foreground">{t('This resource has no permissions yet. Add some to describe them.')}</p>
         : <>
           <div role="tablist" aria-label={t('Language')} className="flex flex-wrap gap-1">
-            {tabs.map(([code, name]) => <Button key={code || 'default'} role="tab" aria-selected={locale === code} size="xs" variant="outline" className={cn(locale === code && 'bg-muted')} onClick={() => setLocale(code)}>
+            {tabs.map(([code, name]) => <Button key={code || 'default'} role="tab" aria-selected={locale === code} size="xs" variant={locale === code ? 'secondary' : 'outline'} onClick={() => setLocale(code)}>
               {name}{count(code) > 0 && <span className="ml-1 text-muted-foreground">{count(code)}</span>}
             </Button>)}
           </div>

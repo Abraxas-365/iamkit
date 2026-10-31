@@ -128,7 +128,8 @@ export default function SignInTextsPage() {
     {sets.length > 0 && <div className="flex flex-wrap gap-2" aria-label={t('Customized')}>
       {sets.map(s => {
         const value = s.client_id ? `client:${s.client_id}` : s.organization_id ? `organization:${s.organization_id}` : ''
-        return <Button key={`${value}-${s.locale}`} size="xs" variant="outline" disabled={changed} className={cn(value === scope && s.locale === locale && 'bg-muted')} onClick={() => { setScope(value); setLocale(s.locale) }}>
+        const on = value === scope && s.locale === locale
+        return <Button key={`${value}-${s.locale}`} size="xs" variant={on ? 'secondary' : 'outline'} aria-pressed={on} disabled={changed} onClick={() => { setScope(value); setLocale(s.locale) }}>
           {label(s)} · {s.locale} <Badge variant="secondary">{Object.keys(s.texts).length}</Badge>
         </Button>
       })}
