@@ -10,6 +10,9 @@
 *.test
 coverage*
 .DS_Store
+# Editor and merge leftovers.
+*.bak
+*.orig
 /go.work
 /go.work.sum
 # Also the node_modules symlinks worktrees share (a trailing slash would

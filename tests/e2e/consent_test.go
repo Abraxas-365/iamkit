@@ -516,6 +516,32 @@ func TestAdminGrants(t *testing.T) {
 		t.Fatalf("grants with revoked = %v", list)
 	}
 
+	// A grant revoked while the consent page is open no longer covers its
+	// scopes: approving asks for them instead of issuing them.
+	race := e.Must("PUT", grants, e.Owner, fiber.Map{"scopes": []string{"mcp:tools:read"}}, 200).JSON
+	open := e.startConsent(claudeCodeID, loopback, url.Values{"scope": {"mcp:tools:read mcp:tools:write"}, "prompt": {"consent"}})
+	if op := open.Page(); !strings.Contains(op.Body, "mcp:tools:write") || strings.Contains(op.Body[:strings.Index(op.Body, "mcp:tools:write")], "<li>mcp:tools:read") {
+		t.Fatalf("prompt=consent under a grant: %s", op.Body)
+	}
+	e.Must("DELETE", grants+"/"+race["id"].(string), e.Owner, nil, 204)
+	reask := consentFlow{b: open.b, Done: open.Decide(true)}
+	if !reask.Asks() {
+		t.Fatalf("approved after the grant was revoked: %d %q", reask.Done.Status, reask.Done.Location)
+	}
+	if rp := reask.Page(); !strings.Contains(rp.Body, "mcp:tools:read") {
+		t.Fatalf("re-ask page: %s", rp.Body)
+	}
+	reasked := e.redeem(claudeCodeID, codeOf(t, reask.Decide(true), loopback))
+	if got := claims(t, reasked["access_token"].(string)); !jsonEqual(got["permissions"], []any{"mcp:tools:read", "mcp:tools:write"}) {
+		t.Fatalf("permissions after the re-ask = %v", got["permissions"])
+	}
+	e.DB.Get(&consented, `SELECT array_to_string(scopes,' ') FROM oauth_consents WHERE client_id=$1 AND revoked_at IS NULL`, row)
+	if consented != "mcp:tools:read mcp:tools:write" {
+		t.Fatalf("user consent after the re-ask = %q", consented)
+	}
+	// Leave no user consent behind: the rest checks what grants alone cover.
+	e.Must("DELETE", e.Base+"/users/"+e.Alice+"/connected-apps/"+row, e.Owner, nil, 204)
+
 	// Expiry: the job revokes it with an event and ends its sessions.
 	e.Must("PUT", grants, e.Owner, fiber.Map{"scopes": []string{"mcp:tools:read"}, "expires_at": time.Now().Add(time.Hour)}, 200)
 	expiring := e.startConsent(claudeCodeID, loopback, nil)

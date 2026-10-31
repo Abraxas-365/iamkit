@@ -741,6 +741,17 @@ func (h *Handler) finish(c *fiber.Ctx, ticket string, approve, hosted bool, logi
 				if err = tx.RecordConsent(c.UserContext(), record); err != nil {
 					return err
 				}
+				// The rest of what was asked was covered when the page was
+				// shown; a consent or administrator grant revoked since then
+				// no longer covers it, so ask for that again instead of
+				// issuing it (the approval just recorded stays).
+				agreed, err := tx.Agreed(c.UserContext(), record.Key, target.ConsentMode == oauth.ConsentModeAdminGranted)
+				if err != nil {
+					return err
+				}
+				if pending := oauth.PendingConsent(asked, agreed, false); len(pending) > 0 {
+					return &oauth.ConsentPending{Session: access.Session, Scopes: pending, Hosted: row.ConsentHosted}
+				}
 			} else {
 				agreed, err := tx.Agreed(c.UserContext(), record.Key, target.ConsentMode == oauth.ConsentModeAdminGranted)
 				if err != nil {
